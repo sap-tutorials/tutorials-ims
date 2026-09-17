@@ -68,6 +68,26 @@ const DEFAULT_TE26_WIDGET = 'WO1M8ZqF9INWQDVqfJueEsSg3eT4veku';
 const DEFAULT_TEV26_PROFILE = 'KHfXyIUaP8kwISNUh32sNyjJAYKBXYYv';
 const DEFAULT_TEV26_WIDGET = 'Zk0wC45uzrCrfscqh7YqpcF26iUuP9Rf';
 
+// All-day activities (e.g. the Developer Garage) live under a SEPARATE catalog
+// TAB in RainFocus, driven by a `tab.<name>=<attributevalue-id>` filter — NOT
+// the regular `type=session` feed (issue #2392 item 6). The tab id Tom captured
+// for Berlin was `tab.alldayactivities=1742815606768001gh9v`. RainFocus surfaces
+// a tab as an extra `search`-style body param on the SAME /api/sessions POST.
+// The exact param NAME/VALUE for the live request is not yet confirmed against
+// the real API (this ships fixture-proven — see srv/lib/teched/README.md), so
+// the per-venue all-day filter is configurable via env and left UNSET by default
+// (no filter ⇒ no all-day fetch, so prod behavior is unchanged until confirmed).
+// Berlin default is Tom's captured id; wiring the actual param name is the one
+// open item flagged in the PR.
+const DEFAULT_TE26_ALLDAY_FILTER = '1742815606768001gh9v';
+const DEFAULT_TEV26_ALLDAY_FILTER = ''; // unknown for Virtual — leave unset
+
+// RainFocus body key that carries a tab/attribute filter. The catalog SPA sends
+// the selected tab under `tab.alldayactivities`; we send the same key so the
+// endpoint returns the all-day activities section. If the live key differs this
+// is the single knob to retune (RAINFOCUS_ALLDAY_TAB_PARAM overrides it).
+const DEFAULT_ALLDAY_TAB_PARAM = 'tab.alldayactivities';
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Read a response body under a hard byte cap. Enforces the cap BEFORE
@@ -112,7 +132,7 @@ async function readCappedBody(res, label) {
 // body size. Returns the parsed JSON body. Throws on a non-"0" responseCode so
 // the caller can fail the venue softly. `fetchImpl` is the test transport seam
 // passed through to safeFetch.
-async function postSessions({ fetchImpl, profileId, widgetId, from, size, label, retries }) {
+async function postSessions({ fetchImpl, profileId, widgetId, from, size, label, retries, extraParams }) {
   const body = new URLSearchParams({
     type: 'session',
     browserTimezone: 'Europe/Berlin',
@@ -120,6 +140,13 @@ async function postSessions({ fetchImpl, profileId, widgetId, from, size, label,
     from: String(from),
     size: String(size),
   });
+  // Optional tab/attribute filter (e.g. all-day activities). Appended verbatim so
+  // a single extra body param selects the RainFocus tab (issue #2392).
+  if (extraParams && typeof extraParams === 'object') {
+    for (const [k, v] of Object.entries(extraParams)) {
+      if (v != null && v !== '') body.set(k, String(v));
+    }
+  }
   const fetchInit = {
     method: 'POST',
     headers: {
@@ -180,13 +207,13 @@ function itemsOf(json) {
 // actually returned each page, until `from >= totalSearchItems` (or the
 // empty/PAGINATION_MAX guards trip). Advancing by items.length (not the
 // requested PAGE_SIZE) means a soft-throttled PARTIAL page never skips rows.
-async function paginate({ fetchImpl, profileId, widgetId, label }) {
+async function paginate({ fetchImpl, profileId, widgetId, label, extraParams }) {
   const all = [];
   let from = 0;
   let total = Infinity;
   while (from < total && from < PAGINATION_MAX) {
     const json = await postSessions({
-      fetchImpl, profileId, widgetId, from, size: PAGE_SIZE, label, retries: MAX_RETRIES,
+      fetchImpl, profileId, widgetId, from, size: PAGE_SIZE, label, retries: MAX_RETRIES, extraParams,
     });
     const t = Number(json?.totalSearchItems);
     if (Number.isFinite(t)) total = t;
@@ -305,6 +332,7 @@ function parseSession(item, venue) {
       abstract: pick(item, 'abstract', 'description'),
       scheduledStart: start,
       scheduledEnd: end,
+      allDay: false,
       room: pick(t, 'room', 'roomName') ?? pick(item, 'room'),
       youtubeUrl: pick(item, 'youtubeUrl', 'videoURL', 'videoUrl', 'webcastUrl'),
       // Prefer a real upstream url if RainFocus ever supplies one; otherwise
@@ -319,14 +347,57 @@ function parseSession(item, venue) {
   };
 }
 
+// Parse an all-day activity item (e.g. the Developer Garage) from the separate
+// RainFocus all-day tab (issue #2392). Same item shape as a session, but MORE
+// lenient: all-day activities typically have NO `times[]` (so no
+// scheduledStart/End) and MAY lack a `code`. We synthesize a stable sessionCode
+// from the sourceId when absent so the unique-slug + upsert plumbing still works,
+// and mark `allDay: true` so the feed/UI can split them out. `room` falls back to
+// a top-level `room`/`location`/`venue` field since there is no times[].room.
+export function parseAllDayActivity(item, venue) {
+  const sourceId = pick(item, 'sessionID', 'sessionId', 'id', 'code');
+  const title = pick(item, 'title', 'name');
+  if (!sourceId || !title) return null; // invalid row — drop
+  const t = firstTime(item);
+  // All-day activities may carry no scheduledStart/End; keep whatever is present
+  // (some may list a day/room) but never require it.
+  const start = toIso(pick(t, 'utcStartTime', 'startTimestamp') ?? pick(item, 'utcStartTime'));
+  const end = toIso(pick(t, 'utcEndTime', 'endTimestamp') ?? pick(item, 'utcEndTime'));
+  const track = parseTrack(item, venue);
+  const speakers = parseSpeakers(item);
+  return {
+    session: {
+      sourceId: String(sourceId),
+      venue,
+      // sessionCode is @assert.unique-adjacent (drives the slug); fall back to a
+      // stable synthetic when the all-day row has no code.
+      sessionCode: String(pick(item, 'code', 'sessionCode') ?? `allday-${sourceId}`),
+      title: String(title),
+      abstract: pick(item, 'abstract', 'description'),
+      scheduledStart: start,
+      scheduledEnd: end,
+      allDay: true,
+      room: pick(t, 'room', 'roomName') ?? pick(item, 'room', 'location', 'venue'),
+      youtubeUrl: pick(item, 'youtubeUrl', 'videoURL', 'videoUrl', 'webcastUrl'),
+      url: pick(item, 'url', 'sessionUrl'),
+      trackSourceId: track?.sourceId ?? null,
+      speakerSourceIds: speakers.map((s) => s.sourceId),
+    },
+    track,
+    speakers,
+  };
+}
+
 /**
  * Parse a full venue payload (session items) into normalized-lite
  * session/speaker/track arrays. Speakers and tracks are embedded per session
  * and deduped by sourceId within the venue. `speakerItems` is accepted for
  * backward compatibility (a standalone speaker catalog is no longer fetched)
- * and is merged first if a caller supplies one.
+ * and is merged first if a caller supplies one. `allDayItems` are all-day
+ * activities from the separate RainFocus tab (issue #2392) — parsed leniently
+ * and marked `allDay: true`; their embedded speakers/tracks are merged too.
  */
-export function parseVenuePayload({ venue, sessionItems = [], speakerItems = [] }) {
+export function parseVenuePayload({ venue, sessionItems = [], speakerItems = [], allDayItems = [] }) {
   const sessions = [];
   const speakerById = new Map();
   const trackById = new Map();
@@ -346,20 +417,30 @@ export function parseVenuePayload({ venue, sessionItems = [], speakerItems = [] 
     });
   }
 
-  for (const item of sessionItems) {
-    const parsed = parseSession(item, venue);
-    if (!parsed) continue;
+  // Regular timed sessions, then all-day activities. A sourceId appearing in
+  // both prefers the FIRST parse (regular session wins) so a mis-tagged row
+  // never silently flips a real session to all-day.
+  const seenSourceIds = new Set();
+  const ingest = (parsed) => {
+    if (!parsed) return;
+    if (seenSourceIds.has(parsed.session.sourceId)) return;
+    seenSourceIds.add(parsed.session.sourceId);
     sessions.push(parsed.session);
     if (parsed.track && !trackById.has(parsed.track.sourceId)) trackById.set(parsed.track.sourceId, parsed.track);
     // speakers embedded on the session are the source of truth
     for (const sp of parsed.speakers) if (!speakerById.has(sp.sourceId)) speakerById.set(sp.sourceId, sp);
-  }
+  };
+
+  for (const item of sessionItems) ingest(parseSession(item, venue));
+  for (const item of allDayItems) ingest(parseAllDayActivity(item, venue));
 
   return { sessions, speakers: [...speakerById.values()], tracks: [...trackById.values()] };
 }
 
-// Resolve the per-venue { profileId, widgetId } config from opts.venues or env,
-// defaulting to the live 2026 values.
+// Resolve the per-venue { profileId, widgetId, allDayFilter } config from
+// opts.venues or env, defaulting to the live 2026 values. `allDayFilter` is the
+// RainFocus attributevalue id for the all-day-activities tab (issue #2392);
+// empty ⇒ no all-day fetch for that venue.
 function resolveVenues(opts) {
   if (opts.venues) return opts.venues;
   const env = opts.env ?? process.env;
@@ -367,10 +448,12 @@ function resolveVenues(opts) {
     BERLIN: {
       profileId: env.RAINFOCUS_TE26_PROFILE || DEFAULT_TE26_PROFILE,
       widgetId: env.RAINFOCUS_TE26_WIDGET || DEFAULT_TE26_WIDGET,
+      allDayFilter: env.RAINFOCUS_TE26_ALLDAY_FILTER ?? DEFAULT_TE26_ALLDAY_FILTER,
     },
     VIRTUAL: {
       profileId: env.RAINFOCUS_TEV26_PROFILE || DEFAULT_TEV26_PROFILE,
       widgetId: env.RAINFOCUS_TEV26_WIDGET || DEFAULT_TEV26_WIDGET,
+      allDayFilter: env.RAINFOCUS_TEV26_ALLDAY_FILTER ?? DEFAULT_TEV26_ALLDAY_FILTER,
     },
   };
 }
@@ -395,13 +478,34 @@ export async function fetchAllTechEdSessions(opts = {}) {
   const now = opts.now ?? Date.now();
   const dropPast = opts.dropPast !== false;
   const venues = resolveVenues(opts);
+  const allDayTabParam = (opts.env ?? process.env).RAINFOCUS_ALLDAY_TAB_PARAM || DEFAULT_ALLDAY_TAB_PARAM;
 
   const settled = await Promise.allSettled(
     Object.entries(venues).map(async ([venue, cfg]) => {
       const sessionItems = await paginate({
         fetchImpl, profileId: cfg.profileId, widgetId: cfg.widgetId, label: `${venue}/session`,
       });
-      return parseVenuePayload({ venue, sessionItems });
+      // All-day activities live under a separate RainFocus tab (issue #2392).
+      // This is a BEST-EFFORT extra fetch: a failure (or an unconfirmed live
+      // param) must NEVER lose the timed sessions we already have, so it is
+      // wrapped in its own try/catch and only runs when the venue has a filter
+      // id configured. Skipped entirely when allDayFilter is empty.
+      let allDayItems = [];
+      if (cfg.allDayFilter) {
+        try {
+          allDayItems = await paginate({
+            fetchImpl,
+            profileId: cfg.profileId,
+            widgetId: cfg.widgetId,
+            label: `${venue}/allday`,
+            extraParams: { [allDayTabParam]: cfg.allDayFilter },
+          });
+        } catch (err) {
+          console.warn(`[teched-fetcher] ${venue} all-day fetch failed (keeping sessions):`, err?.message ?? err);
+          allDayItems = [];
+        }
+      }
+      return parseVenuePayload({ venue, sessionItems, allDayItems });
     }),
   );
 
@@ -462,6 +566,7 @@ export async function fetchAllTechEdSessions(opts = {}) {
   let sessionList = [...sessions.values()];
   if (dropPast) {
     sessionList = sessionList.filter((s) => {
+      if (s.allDay) return true;           // all-day activities are never time-past
       if (!s.scheduledEnd) return true; // keep undated — can't prove it's past
       const end = Date.parse(s.scheduledEnd);
       return !Number.isFinite(end) || end >= now;
@@ -472,4 +577,4 @@ export async function fetchAllTechEdSessions(opts = {}) {
 }
 
 export { parseSession, buildSessionUrl };
-export default { fetchAllTechEdSessions, parseVenuePayload };
+export default { fetchAllTechEdSessions, parseVenuePayload, parseAllDayActivity };

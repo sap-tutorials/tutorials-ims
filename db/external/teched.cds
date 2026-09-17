@@ -28,6 +28,11 @@ entity TechEdSessions : cuid, managed {
   abstract          : LargeString;
   scheduledStart    : Timestamp;   // CDS Timestamp ⇒ OData Edm.DateTimeOffset
   scheduledEnd      : Timestamp;
+  // All-day activities (e.g. the Developer Garage) come from a SEPARATE RainFocus
+  // catalog tab, not the regular `type=session` feed (issue #2392 item 6). They
+  // are ingested into the SAME entity so the feed/UI reuse the session plumbing;
+  // this flag distinguishes them (they typically have no scheduledStart/End).
+  allDay            : Boolean default false;
   room              : String(200);
   youtubeUrl        : String(1000);
   url               : String(1000);

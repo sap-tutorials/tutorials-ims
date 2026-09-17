@@ -1,0 +1,55 @@
+{
+  "_note": "Fetcher-output shape ({sessions,speakers,tracks}) for the all-day-activities tab (issue #2392 item 6). DERIVED by running parseVenuePayload({venue:'BERLIN', allDayItems: <rainfocus-alldayactivities.json BERLIN items>}). Seeded (alongside teched-feed.json) by the all-day feed unit test to prove the allDay flag flows sourceId→normalize→seed→/build/teched.",
+  "sessions": [
+    {
+      "sourceId": "1786600000000001adgb",
+      "venue": "BERLIN",
+      "sessionCode": "allday-1786600000000001adgb",
+      "title": "Developer Garage",
+      "abstract": "Hands-on hardware, robotics, and IoT demos with SAP developers. Drop in any time during the day to build, tinker, and pair with SAP engineers on live gadgets.",
+      "scheduledStart": null,
+      "scheduledEnd": null,
+      "allDay": true,
+      "room": "Developer Garage (Ground Floor)",
+      "youtubeUrl": null,
+      "url": "https://www.sap.com/events/teched/berlin/flow/sap/te26/catalog/page/catalog?search=Developer%20Garage",
+      "trackSourceId": "1745939183774050devC",
+      "speakerSourceIds": [
+        "1734109533258050gara_1773259901317001te26"
+      ]
+    },
+    {
+      "sourceId": "1786600000000002expo",
+      "venue": "BERLIN",
+      "sessionCode": "EXPO01",
+      "title": "AI Showfloor Expo",
+      "abstract": "Explore partner and SAP AI booths across the show floor. Open all day, no registration required.",
+      "scheduledStart": null,
+      "scheduledEnd": null,
+      "allDay": true,
+      "room": "Show Floor Hall B",
+      "youtubeUrl": null,
+      "url": "https://www.sap.com/events/teched/berlin/flow/sap/te26/catalog/page/catalog?search=Expo",
+      "trackSourceId": "1745939183774050devC",
+      "speakerSourceIds": []
+    }
+  ],
+  "speakers": [
+    {
+      "sourceId": "1734109533258050gara_1773259901317001te26",
+      "name": "Ada Lovelace",
+      "title": "Developer Advocate",
+      "company": "SAP",
+      "bio": "<p>Ada hosts the Developer Garage.</p>",
+      "photoUrl": "https://static.rainfocus.com/sap/te26/att/1734109533258050gara/attprofile/ada.jpg"
+    }
+  ],
+  "tracks": [
+    {
+      "sourceId": "1745939183774050devC",
+      "name": "Developer community (DC)",
+      "venue": "BERLIN",
+      "description": null
+    }
+  ]
+}

@@ -147,14 +147,18 @@ const speakerOptions = computed(() => {
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 });
 
-// All facets (venue, track, speaker, query) applied in one pass to produce
-// the unified session list rendered in a single grid.
+// All facets (venue, track, speaker, query) applied in one pass. Split into
+// all-day activities (e.g. the Developer Garage — issue #2392) and timed
+// sessions so they render in distinct sections. Both honor the active filters.
 const filtered = computed(() => filterSessions(sessions.value, {
   venue: filterVenue.value,
   track: filterTrack.value,
   speaker: filterSpeaker.value,
   query: filterQuery.value,
 }));
+
+const filteredAllDay = computed(() => filtered.value.filter((s) => s.allDay === true));
+const filteredTimed = computed(() => filtered.value.filter((s) => s.allDay !== true));
 
 const visibleCount = computed(() => filtered.value.length);
 
@@ -349,11 +353,56 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, selectedRow], write
         No sessions match your filters.
       </div>
 
-      <!-- unified sessions grid -->
-      <section v-if="filtered.length" class="tsg-section" aria-label="TechEd Sessions">
+      <!-- all-day activities (e.g. the Developer Garage) — a distinct section
+           above the timed grid (issue #2392). Same card, no scheduled time. -->
+      <section v-if="filteredAllDay.length" class="tsg-section tsg-section--allday" aria-label="All-day activities">
+        <h2 class="tsg-section-title">All-day activities</h2>
         <div class="tsg-grid">
           <article
-            v-for="s in filtered"
+            v-for="s in filteredAllDay"
+            :key="s.slug"
+            class="tsg-card tsg-card--clickable tsg-card--allday"
+            role="button"
+            tabindex="0"
+            :aria-label="`Open details for ${s.title}`"
+            @click="openCard(s)"
+            @keydown="onCardKeydown($event, s)"
+          >
+            <div class="tsg-card-body">
+              <div class="tsg-badges">
+                <span class="tsg-badge tsg-badge--allday">All-day</span>
+                <span v-if="s.venue === 'BERLIN'" class="tsg-badge tsg-badge--berlin">Berlin</span>
+                <span v-else-if="s.venue === 'VIRTUAL'" class="tsg-badge tsg-badge--virtual">Virtual</span>
+                <span
+                  v-if="s.trackName"
+                  class="tsg-badge tsg-badge--track"
+                  :style="trackBadgeStyle(s.trackName)"
+                >{{ s.trackName }}</span>
+              </div>
+              <h3 class="tsg-card-title">{{ s.title }}</h3>
+              <p v-if="s.room" class="tsg-meta">{{ s.room }}</p>
+              <p v-if="s.speakerLinks?.length" class="tsg-speakers">
+                <template v-for="(sp, i) in s.speakerLinks" :key="sp.slug">
+                  <template v-if="i > 0">, </template>
+                  <a v-if="sp.authorLogin" :href="`/authors/${sp.authorLogin}/`" class="tsg-speaker-link">{{ sp.name }}</a>
+                  <span v-else>{{ sp.name }}</span>
+                </template>
+              </p>
+              <p v-if="s.abstract" class="tsg-abstract">{{ s.abstract }}</p>
+              <div class="tsg-links" @click.stop>
+                <a v-if="s.url" :href="safeHref(s.url)" target="_blank" rel="noopener noreferrer" class="tsg-link">↗ Activity page</a>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- timed sessions grid -->
+      <section v-if="filteredTimed.length" class="tsg-section" aria-label="TechEd Sessions">
+        <h2 v-if="filteredAllDay.length" class="tsg-section-title">Sessions</h2>
+        <div class="tsg-grid">
+          <article
+            v-for="s in filteredTimed"
             :key="s.slug"
             class="tsg-card tsg-card--clickable"
             role="button"
@@ -562,6 +611,7 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, selectedRow], write
 }
 .tsg-badge--berlin { background: var(--sapInformativeBackground, #e8f3ff); color: var(--sapInformativeColor, #0854a0); }
 .tsg-badge--virtual { background: var(--sapNeutralBackground, #f5f6f7); color: var(--sapContent_LabelColor, #6a6d70); }
+.tsg-badge--allday { background: var(--sapSuccessBackground, #e5f2d7); color: var(--sapPositiveColor, #256f3a); }
 /* border-color is overridden inline per-track via trackBadgeStyle(); needs border-width to render */
 .tsg-badge--track { background: var(--sapNeutralBackground, #f5f6f7); color: var(--sapContent_LabelColor, #6a6d70); border: 1px solid transparent; }
 .tsg-badge--code { background: transparent; color: var(--sapContent_LabelColor, #6a6d70); border: 1px solid var(--sapField_BorderColor, #89919a); }

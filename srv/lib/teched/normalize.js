@@ -74,6 +74,10 @@ export function normalizeSession(raw, seenSlugs, existingSlug) {
     abstract: raw.abstract ?? null,
     scheduledStart: raw.scheduledStart ?? null,
     scheduledEnd: raw.scheduledEnd ?? null,
+    // All-day activity flag (issue #2392). Part of the content hash so a session
+    // flipping to/from all-day re-hashes. Coerced to a strict boolean so a
+    // missing/undefined value is a stable `false` (never churns the hash).
+    allDay: raw.allDay === true,
     room: raw.room ?? null,
     youtubeUrl: raw.youtubeUrl ?? null,
     url: raw.url ?? null,

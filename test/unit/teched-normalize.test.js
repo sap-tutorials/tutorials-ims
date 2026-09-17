@@ -84,4 +84,21 @@ describe('normalize* row shape', () => {
     expect(tr.slug).toBe('artificial-intelligence');
     expect(tr.contentHash).toHaveLength(64);
   });
+
+  it('normalizeSession carries the allDay flag (issue #2392)', () => {
+    const timed = normalizeSession({ sourceId: 's1', sessionCode: 'DEV1', title: 'T' }, new Set());
+    // missing/undefined allDay is a stable false, never undefined
+    expect(timed.allDay).toBe(false);
+    const allday = normalizeSession(
+      { sourceId: 's2', sessionCode: 'GARAGE', title: 'Developer Garage', allDay: true },
+      new Set(),
+    );
+    expect(allday.allDay).toBe(true);
+    // allDay is part of the content hash: flipping it re-hashes
+    const flipped = normalizeSession(
+      { sourceId: 's2', sessionCode: 'GARAGE', title: 'Developer Garage', allDay: false },
+      new Set(),
+    );
+    expect(flipped.contentHash).not.toBe(allday.contentHash);
+  });
 });

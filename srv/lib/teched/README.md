@@ -85,6 +85,37 @@ via env, defaulting to the live 2026 values:
 A venue whose call returns a non-"0" `responseCode` (or otherwise throws) fails
 SOFTLY via `Promise.allSettled` — the other venue still ingests.
 
+## All-day activities (issue #2392)
+
+All-day activities (e.g. the **Developer Garage**) are NOT in the regular
+`type=session` feed — they live under a SEPARATE catalog TAB, surfaced in the
+SPA URL as `tab.alldayactivities=<attributevalue-id>` (Tom's Berlin capture:
+`tab.alldayactivities=1742815606768001gh9v`). The fetcher issues a second,
+BEST-EFFORT paginated POST to the same `/api/sessions` endpoint with that tab id
+sent as an extra body param (`tab.alldayactivities=<id>` by default), parses the
+rows leniently via `parseAllDayActivity` (they typically have NO `times[]`, so no
+`scheduledStart/End`, and MAY lack a `code` — a stable `allday-<sourceId>` code is
+synthesized), marks them `allDay: true`, and MERGES them into `data.sessions`.
+They are stored in the SAME `TechEdSessions` entity (new `allDay` Boolean column),
+so the seed/feed/UI reuse the session plumbing; the `/teched/` island renders them
+in a distinct "All-day activities" section. dropPast never drops an all-day row.
+
+Config (env, per venue; empty ⇒ no all-day fetch for that venue):
+
+| Venue | all-day filter env | default |
+| --- | --- | --- |
+| Berlin (te26)   | `RAINFOCUS_TE26_ALLDAY_FILTER`  | `1742815606768001gh9v` (Tom's capture) |
+| Virtual (tev26) | `RAINFOCUS_TEV26_ALLDAY_FILTER` | *(unset — unknown)* |
+
+The all-day body param key is `RAINFOCUS_ALLDAY_TAB_PARAM` (default
+`tab.alldayactivities`). **OPEN ITEM:** the exact live request param name/value
+for this tab is NOT yet confirmed against the real RainFocus API — the parsing,
+model, seed, feed, and UI are proven against the
+`test/fixtures/teched/rainfocus-alldayactivities.json` fixture. Confirm/tune the
+`RAINFOCUS_*_ALLDAY_FILTER` id + `RAINFOCUS_ALLDAY_TAB_PARAM` against a live
+capture (a mismatch simply yields 0 all-day rows — it never breaks the session
+ingest, which is a separate, already-proven request).
+
 ## Scheduled jobs
 
 - **`fetch-teched-sessions`** (weekly, Sun 05:43 UTC) — fetch both venues,
@@ -127,3 +158,10 @@ unchanged are skipped (`--force` bypasses the skip). Curated/lifecycle columns
 fetcher-output shape (`{sessions,speakers,tracks}`) derived by running
 `fetchAllTechEdSessions()` over that real capture. Refresh both by re-capturing
 if the upstream field shape changes.
+
+`test/fixtures/teched/rainfocus-alldayactivities.json` is a SYNTHETIC (author-
+crafted) all-day-tab capture (issue #2392) — the live request params are not yet
+confirmed, so it is hand-crafted to mirror the raw item shape (all-day rows with
+no `times[]`, one with no `code`, one with a top-level `location`).
+`teched-allday-feed.json` is its derived fetcher-output shape, seeded (alongside
+`teched-feed.json`) by the all-day feed unit test.
