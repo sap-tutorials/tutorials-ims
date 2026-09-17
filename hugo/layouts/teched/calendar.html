@@ -1,9 +1,18 @@
 {{ define "main" }}
-{{- /* Bake the full TechEd feed under #teched-data — the same blob the
-       sessions-grid island reads, so the calendar island can load without
-       a network round-trip to /build/teched on first paint. */ -}}
-<script id="teched-data" type="application/json">{{ (.Site.Data.teched) | jsonify | safeJS }}</script>
+{{/* baseof.html already wraps this block in a <main> landmark; use a plain
+     <div> here to avoid duplicate-main landmark (same pattern as list.html). */}}
 <div class="teched-page">
+  <header class="teched-page__intro">
+    <h1>{{ .Title }}</h1>
+    {{ with .Description }}<p>{{ . }}</p>{{ end }}
+    {{ partial "teched-subnav.html" (dict "activeView" "calendar") }}
+  </header>
+
+  {{/* Bake the full TechEd feed under #teched-data — the same blob the
+       sessions-grid island reads, so the calendar island can load without
+       a network round-trip to /build/teched on first paint. */}}
+  <script id="teched-data" type="application/json">{{ (.Site.Data.teched) | jsonify | safeJS }}</script>
+
   <div id="teched-calendar-mount"></div>
   <noscript>The SAP TechEd calendar requires JavaScript. <a href="/teched/">Browse sessions list</a>.</noscript>
 </div>
