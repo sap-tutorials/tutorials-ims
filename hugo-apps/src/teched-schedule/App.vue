@@ -36,6 +36,7 @@ const filters = reactive({
   venue: '',   // '' | 'BERLIN' | 'VIRTUAL'
   track: '',   // track slug
   q: '',       // free-text search
+  clubhouse: false, // Community Clubhouse (room "Community Theater")
 });
 
 type SortKey = 'title' | 'trackName' | 'scheduledStart' | 'venue';
@@ -62,13 +63,14 @@ const trackOptions = computed(() => {
   return tracks.value.filter((t) => used.has(t.slug)).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 });
 
-const hasActiveFilters = computed(() => !!(filters.venue || filters.track || filters.q));
+const hasActiveFilters = computed(() => !!(filters.venue || filters.track || filters.q || filters.clubhouse));
 
 // Apply venue filter outside filterSessions (it handles venue but we keep it consistent)
 const filtered = computed(() =>
   filterSessions(sessions.value, {
     venue: filters.venue || null,
     track: filters.track || null,
+    clubhouse: filters.clubhouse,
     query: filters.q || null,
   }),
 );
@@ -113,6 +115,7 @@ function clearFilters() {
   filters.venue = '';
   filters.track = '';
   filters.q = '';
+  filters.clubhouse = false;
 }
 
 // Convert a TechEdSession to a ScheduleRow-compatible object for DetailPanel.
@@ -229,6 +232,19 @@ defineExpose({ filters });
             <option v-for="t in trackOptions" :key="t.slug" :value="t.slug">{{ t.name }}</option>
           </select>
         </label>
+
+        <!-- Community Clubhouse toggle (issue #2392 item 5) — own block to minimise merge conflicts -->
+        <div class="ts-field">
+          <span id="ts-clubhouse-label">Clubhouse</span>
+          <button
+            type="button"
+            class="ts-toggle-btn ts-toggle-btn--clubhouse"
+            :class="{ 'ts-toggle-btn--active': filters.clubhouse }"
+            :aria-pressed="filters.clubhouse"
+            aria-labelledby="ts-clubhouse-label"
+            @click="filters.clubhouse = !filters.clubhouse"
+          >Community Clubhouse</button>
+        </div>
 
         <button
           v-if="hasActiveFilters"
@@ -388,6 +404,11 @@ defineExpose({ filters });
   background: var(--sapButton_Emphasized_Background, #0854a0);
   color: #fff;
   border-color: var(--sapButton_Emphasized_Background, #0854a0);
+}
+
+.ts-toggle-btn--clubhouse {
+  border-radius: 0.25rem;
+  white-space: nowrap;
 }
 
 .ts-btn-ghost {

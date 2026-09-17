@@ -6,16 +6,19 @@ const data: TechEdSession[] = [
     slug: 'ai-001', title: 'Build with SAP AI Core', abstract: 'Generative AI on BTP.',
     venue: 'BERLIN', track: 'ai', trackName: 'AI & Machine Learning', sessionCode: 'AI001',
     speakers: ['ada-lovelace'], speakerNames: ['Ada Lovelace'],
+    room: 'Hall A',
   },
   {
     slug: 'cap-002', title: 'CAP deep dive', abstract: 'Node.js services with CDS.',
     venue: 'VIRTUAL', track: 'cap', trackName: 'Application Development', sessionCode: 'CAP002',
     speakers: ['grace-hopper'], speakerNames: ['Grace Hopper'],
+    room: 'Community Theater',
   },
   {
     slug: 'ai-003', title: 'RAG patterns', abstract: 'Vector search and embeddings.',
     venue: 'VIRTUAL', track: 'ai', trackName: 'AI & Machine Learning', sessionCode: 'AI003',
     speakers: ['ada-lovelace', 'grace-hopper'], speakerNames: ['Ada Lovelace', 'Grace Hopper'],
+    room: '  community theater  ', // case/trim variant
   },
 ];
 
@@ -70,5 +73,44 @@ describe('filterSessions', () => {
     const copy = JSON.parse(JSON.stringify(data));
     filterSessions(data, { venue: 'BERLIN', query: 'ai' });
     expect(data).toEqual(copy);
+  });
+
+  // --- Clubhouse facet (issue #2392 item 5) -----------------------------------
+
+  it('clubhouse=true keeps only sessions whose room is "Community Theater" (case-insensitive, trimmed)', () => {
+    const result = filterSessions(data, { clubhouse: true });
+    // cap-002 has room "Community Theater"; ai-003 has "  community theater  " (trim/case variant)
+    // ai-001 has room "Hall A" — excluded
+    expect(result.map((s) => s.slug)).toEqual(['cap-002', 'ai-003']);
+  });
+
+  it('clubhouse=false leaves the full set unchanged', () => {
+    expect(filterSessions(data, { clubhouse: false })).toHaveLength(3);
+  });
+
+  it('absent clubhouse facet leaves the full set unchanged', () => {
+    expect(filterSessions(data, {})).toHaveLength(3);
+    expect(filterSessions(data)).toHaveLength(3);
+  });
+
+  it('clubhouse excludes sessions with no room or null room', () => {
+    const raw: TechEdSession[] = [
+      { slug: 'a', title: 'No room', room: null },
+      { slug: 'b', title: 'Empty room', room: '' },
+      { slug: 'c', title: 'Theater', room: 'Community Theater' },
+    ];
+    expect(filterSessions(raw, { clubhouse: true }).map((s) => s.slug)).toEqual(['c']);
+  });
+
+  it('clubhouse ANDs with track — only Community Theater sessions in the given track survive', () => {
+    // cap-002 is track 'cap' + Community Theater; ai-003 is track 'ai' + Community Theater
+    expect(filterSessions(data, { clubhouse: true, track: 'cap' }).map((s) => s.slug)).toEqual(['cap-002']);
+    expect(filterSessions(data, { clubhouse: true, track: 'ai' }).map((s) => s.slug)).toEqual(['ai-003']);
+  });
+
+  it('clubhouse ANDs with venue — only matching venue + Community Theater sessions survive', () => {
+    // cap-002 is VIRTUAL + Community Theater; ai-003 is VIRTUAL + Community Theater; ai-001 is BERLIN non-Theater
+    expect(filterSessions(data, { clubhouse: true, venue: 'VIRTUAL' }).map((s) => s.slug)).toEqual(['cap-002', 'ai-003']);
+    expect(filterSessions(data, { clubhouse: true, venue: 'BERLIN' })).toHaveLength(0);
   });
 });

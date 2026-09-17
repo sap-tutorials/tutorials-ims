@@ -10,6 +10,7 @@
 //   venue=<value>     venue filter (BERLIN | VIRTUAL)
 //   track=<slug>      track filter (by track slug)
 //   speaker=<slug>    speaker filter (by speaker slug)
+//   clubhouse=1       Community Clubhouse filter (room "Community Theater")
 //   session=<slug>    opens that session's detail panel
 //
 // Every value is validated/trimmed; empty/unrecognised values fall back to
@@ -20,6 +21,7 @@ export interface TechEdUrlState {
   readonly venue: string | null;
   readonly track: string | null;
   readonly speaker: string | null;
+  readonly clubhouse: boolean;
   readonly session: string | null;
 }
 
@@ -28,6 +30,7 @@ export const DEFAULT_URL_STATE: TechEdUrlState = Object.freeze({
   venue: null,
   track: null,
   speaker: null,
+  clubhouse: false,
   session: null,
 });
 
@@ -55,6 +58,7 @@ export function parseTechEdUrl(search: string | URLSearchParams): TechEdUrlState
     venue: normVenue(p.get('venue')),
     track: nonEmpty(p.get('track')),
     speaker: nonEmpty(p.get('speaker')),
+    clubhouse: p.get('clubhouse') === '1',
     session: nonEmpty(p.get('session')),
   };
 }
@@ -69,6 +73,7 @@ export function toTechEdQuery(state: TechEdUrlState): string {
   if (normVenue(state.venue)) p.set('venue', normVenue(state.venue)!);
   if (nonEmpty(state.track)) p.set('track', state.track!);
   if (nonEmpty(state.speaker)) p.set('speaker', state.speaker!);
+  if (state.clubhouse) p.set('clubhouse', '1');
   if (nonEmpty(state.session)) p.set('session', state.session!);
   const s = p.toString();
   return s ? `?${s}` : '';

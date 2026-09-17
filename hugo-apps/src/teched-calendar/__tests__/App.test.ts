@@ -33,7 +33,7 @@ const feed = {
       track: 'appdev',
       trackName: 'Application Development',
       sessionCode: 'CAP002',
-      room: '',
+      room: 'Community Theater',
       scheduledStart: `${WEEK_DATE}T14:00:00Z`,
       scheduledEnd: `${WEEK_DATE}T15:00:00Z`,
       url: 'https://www.sap.com/teched/virtual/cap',
@@ -159,6 +159,35 @@ describe('TechEd calendar island', () => {
 
     const searchInput = wrapper.find('input[type="search"]');
     await searchInput.setValue('node.js');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('CAP deep dive');
+    expect(wrapper.text()).not.toContain('AI on BTP');
+  });
+
+  it('Community Clubhouse toggle narrows to Community Theater sessions and deep-links (clubhouse=1)', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+
+    // Both scheduled sessions visible initially
+    expect(wrapper.text()).toContain('AI on BTP');
+    expect(wrapper.text()).toContain('CAP deep dive');
+
+    const btn = wrapper.findAll('button').find((b) => b.text() === 'Community Clubhouse')!;
+    expect(btn).toBeDefined();
+    await btn.trigger('click');
+    await flushPromises();
+
+    // Only cap-virtual (room 'Community Theater') remains; ai-berlin (Hall A) is hidden
+    expect(wrapper.text()).toContain('CAP deep dive');
+    expect(wrapper.text()).not.toContain('AI on BTP');
+    // Persisted to the URL for deep-linking / back-forward restore
+    expect(window.location.search).toContain('clubhouse=1');
+  });
+
+  it('applies deep-link clubhouse=1 on initial load', async () => {
+    window.history.replaceState({}, '', '/teched/calendar/?clubhouse=1');
+    const wrapper = mount(App);
     await flushPromises();
 
     expect(wrapper.text()).toContain('CAP deep dive');

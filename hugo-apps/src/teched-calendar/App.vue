@@ -14,6 +14,7 @@ import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { Session } from '../devtoberfest-schedule-shared/types';
 import { viewerDayKey } from '../devtoberfest-schedule-shared/format-session-time';
 import type { TechEdSession } from '../teched-sessions-grid/filter';
+import { isClubhouse } from '../teched-sessions-grid/filter';
 import { parseTechEdCalUrl, toTechEdCalQuery, type TechEdCalViewMode } from './url-state';
 
 // --- Feed shapes -----------------------------------------------------------
@@ -56,6 +57,7 @@ const selectedRow = ref<Session | null>(null);
 const filterTrack = ref('');    // track slug
 const filterVenue = ref('');    // '' | 'BERLIN' | 'VIRTUAL'
 const filterQuery = ref('');    // free text
+const filterClubhouse = ref(false); // Community Clubhouse (room "Community Theater")
 const viewMode = ref<TechEdCalViewMode>('week');
 const cursor = ref<Date>(new Date());
 // Cache raw TechEd sessions for filter options
@@ -75,6 +77,7 @@ const initialCursorIso = ref<string | null>(null);
 if (initialUrl.view) viewMode.value = initialUrl.view;
 if (initialUrl.track) filterTrack.value = initialUrl.track;
 if (initialUrl.venue) filterVenue.value = initialUrl.venue;
+if (initialUrl.clubhouse) filterClubhouse.value = true;
 
 // --- Feed loading -----------------------------------------------------------
 async function loadFeed(): Promise<TechEdFeed> {
@@ -189,6 +192,7 @@ const filteredSessions = computed<Session[]>(() => {
     const raw = rawBySlug.value.get(s.id);
     if (filterTrack.value && raw?.track !== filterTrack.value) return false;
     if (filterVenue.value && raw?.venue !== filterVenue.value) return false;
+    if (filterClubhouse.value && !(raw && isClubhouse(raw))) return false;
     if (q && !(haystackBySlug.value.get(s.id) ?? '').includes(q)) return false;
     return true;
   });
@@ -228,6 +232,7 @@ function writeUrl() {
     session: selectedRow.value?.id ?? null,
     track: filterTrack.value || null,
     venue: filterVenue.value || null,
+    clubhouse: filterClubhouse.value,
   };
   const qs = toTechEdCalQuery(state);
   window.history.replaceState({}, '', `${window.location.pathname}${qs}${window.location.hash}`);
@@ -238,6 +243,7 @@ function applyFromUrl() {
   viewMode.value = st.view ?? 'week';
   filterTrack.value = st.track ?? '';
   filterVenue.value = st.venue ?? '';
+  filterClubhouse.value = st.clubhouse;
   if (st.session) {
     const row = sessions.value.find((r) => r.id === st.session);
     selectedRow.value = row ?? null;
@@ -262,7 +268,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
 
-watch([viewMode, cursor, filterTrack, filterVenue, filterQuery, selectedRow], writeUrl);
+watch([viewMode, cursor, filterTrack, filterVenue, filterQuery, filterClubhouse, selectedRow], writeUrl);
 </script>
 
 <template>
@@ -309,6 +315,16 @@ watch([viewMode, cursor, filterTrack, filterVenue, filterQuery, selectedRow], wr
           <span class="sr-only">Search</span>
           <input type="search" v-model="filterQuery" placeholder="Search sessions…" aria-label="Search TechEd sessions" />
         </label>
+
+        <!-- Community Clubhouse toggle (issue #2392 item 5) — own block to minimise merge conflicts -->
+        <button
+          type="button"
+          class="cal-clubhouse-btn"
+          :class="{ 'cal-clubhouse-btn--active': filterClubhouse }"
+          :aria-pressed="filterClubhouse"
+          aria-label="Community Clubhouse sessions only"
+          @click="filterClubhouse = !filterClubhouse"
+        >Community Clubhouse</button>
 
         <!-- View toggle: Week / Day ONLY (no Month) -->
         <div class="cal-switch" role="tablist" aria-label="Calendar view">
@@ -408,4 +424,6 @@ watch([viewMode, cursor, filterTrack, filterVenue, filterQuery, selectedRow], wr
 .cal-unscheduled-card { display: inline-flex; align-items: center; gap: 0.4rem; border: 1px solid var(--sapList_BorderColor, #e4e7ed); border-left: 4px solid transparent; border-radius: 6px; padding: 0.4rem 0.6rem; cursor: pointer; font: inherit; text-align: left; background: var(--sapBaseColor, #fff); }
 .cal-unscheduled-name { font-size: 0.8rem; font-weight: 600; }
 .cal-unscheduled-track { font-size: 0.7rem; color: var(--sapContent_LabelColor, #6a6d70); }
+.cal-clubhouse-btn { border: 1px solid var(--sapField_BorderColor, #89919a); background: var(--sapField_Background, #fff); border-radius: 0.25rem; padding: 0.35rem 0.85rem; cursor: pointer; font: inherit; white-space: nowrap; }
+.cal-clubhouse-btn--active { background: var(--sapButton_Emphasized_Background, #0854a0); color: #fff; border-color: var(--sapButton_Emphasized_Background, #0854a0); }
 </style>

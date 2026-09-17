@@ -13,7 +13,7 @@ const feed = {
     },
     {
       slug: 'cap-virtual', title: 'CAP deep dive', abstract: 'Node.js services with CDS.',
-      venue: 'VIRTUAL', track: 'appdev', sessionCode: 'CAP002', room: '',
+      venue: 'VIRTUAL', track: 'appdev', sessionCode: 'CAP002', room: 'Community Theater',
       scheduledStart: '2026-10-21T14:00:00Z', url: 'https://www.sap.com/teched/virtual/cap',
       youtubeUrl: 'https://youtu.be/abc', speakers: ['grace-hopper'],
     },
@@ -501,6 +501,79 @@ describe('TechEd sessions grid', () => {
     const options = wrapper.find('select').findAll('option');
     const speakerTexts = options.slice(1).map((o) => o.text());
     expect(speakerTexts).toEqual(['Hopper, Amy', 'Hopper, Grace']);
+  });
+
+  // --- Community Clubhouse filter tests (issue #2392 item 5) ------------------
+
+  it('Community Clubhouse toggle is rendered in the toolbar', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+    const btn = wrapper.findAll('button').find((b) => b.text() === 'Community Clubhouse');
+    expect(btn).toBeDefined();
+  });
+
+  it('toggling Community Clubhouse shows only Community Theater sessions', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+    // Both sessions visible initially
+    expect(wrapper.findAll('article').length).toBe(2);
+
+    const btn = wrapper.findAll('button').find((b) => b.text() === 'Community Clubhouse')!;
+    await btn.trigger('click');
+    await flushPromises();
+
+    // Only cap-virtual (room: 'Community Theater') should remain
+    expect(wrapper.text()).toContain('CAP deep dive');
+    expect(wrapper.text()).not.toContain('AI on BTP');
+    expect(wrapper.findAll('article').length).toBe(1);
+  });
+
+  it('toggling Community Clubhouse off restores all sessions', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+
+    const btn = wrapper.findAll('button').find((b) => b.text() === 'Community Clubhouse')!;
+    await btn.trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('article').length).toBe(1);
+
+    await btn.trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('article').length).toBe(2);
+  });
+
+  it('Community Clubhouse filter reflects in the URL (clubhouse=1)', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+
+    const btn = wrapper.findAll('button').find((b) => b.text() === 'Community Clubhouse')!;
+    await btn.trigger('click');
+    await flushPromises();
+    expect(window.location.search).toContain('clubhouse=1');
+  });
+
+  it('clubhouse=1 deep-link activates the filter on load', async () => {
+    window.history.replaceState({}, '', '/teched/?clubhouse=1');
+    const wrapper = mount(App);
+    await flushPromises();
+    // Only the Community Theater session should appear
+    expect(wrapper.text()).toContain('CAP deep dive');
+    expect(wrapper.text()).not.toContain('AI on BTP');
+  });
+
+  it('Clear button resets the Clubhouse filter', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+
+    const btn = wrapper.findAll('button').find((b) => b.text() === 'Community Clubhouse')!;
+    await btn.trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('article').length).toBe(1);
+
+    const clearBtn = wrapper.findAll('button').find((b) => b.text() === 'Clear')!;
+    await clearBtn.trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('article').length).toBe(2);
   });
 });
 
