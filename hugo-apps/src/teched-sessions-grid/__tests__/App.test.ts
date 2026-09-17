@@ -404,5 +404,103 @@ describe('TechEd sessions grid', () => {
     expect(title).toContain('Mathematician');
     expect(title).toContain('pioneer of computing');
   });
+
+  // --- Speaker dropdown sort/display tests (#2392 item 4) ------------------
+
+  it('sorts the speaker dropdown by last name and displays "Last, First"', async () => {
+    const feedSpeakers = {
+      sessions: [
+        {
+          slug: 'multi-speaker', title: 'Panel', abstract: 'A panel session.',
+          venue: 'BERLIN', track: 'ai', sessionCode: 'P001', room: 'Hall A',
+          scheduledStart: '2026-10-20T09:00:00Z', url: 'https://www.sap.com/teched/panel',
+          youtubeUrl: '', speakers: ['ada-lovelace', 'grace-hopper', 'zoe-anders'],
+        },
+      ],
+      speakers: [
+        { slug: 'ada-lovelace', name: 'Ada Lovelace', title: 'Advocate', company: 'SAP' },
+        { slug: 'grace-hopper', name: 'Grace Hopper', title: 'Engineer', company: 'SAP' },
+        { slug: 'zoe-anders', name: 'Zoe Anders', title: 'Speaker', company: 'SAP' },
+      ],
+      tracks: [{ slug: 'ai', name: 'AI & Machine Learning', venue: 'BERLIN' }],
+    };
+    global.fetch = vi.fn(() => Promise.resolve({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: () => Promise.resolve(feedSpeakers),
+    } as any)) as any;
+
+    const wrapper = mount(App);
+    await flushPromises();
+
+    // The speaker <select> is the only <select> in the toolbar.
+    const options = wrapper.find('select').findAll('option');
+    // First option is the "All speakers" placeholder; the rest are the sorted speakers.
+    const speakerTexts = options.slice(1).map((o) => o.text());
+    // Sorted by last name: Anders, Hopper, Lovelace — shown "Last, First".
+    expect(speakerTexts).toEqual(['Anders, Zoe', 'Hopper, Grace', 'Lovelace, Ada']);
+    // The option value remains the slug (filter logic depends on it).
+    const speakerValues = options.slice(1).map((o) => (o.element as HTMLOptionElement).value);
+    expect(speakerValues).toEqual(['zoe-anders', 'grace-hopper', 'ada-lovelace']);
+  });
+
+  it('displays a single-token speaker name unchanged (no comma)', async () => {
+    const feedSingle = {
+      sessions: [
+        {
+          slug: 'solo', title: 'Solo Talk', abstract: 'One name.',
+          venue: 'VIRTUAL', track: 'ai', sessionCode: 'S001', room: '',
+          scheduledStart: '2026-10-20T09:00:00Z', url: 'https://www.sap.com/teched/solo',
+          youtubeUrl: '', speakers: ['madonna'],
+        },
+      ],
+      speakers: [{ slug: 'madonna', name: 'Madonna', title: 'Artist', company: 'SAP' }],
+      tracks: [{ slug: 'ai', name: 'AI & Machine Learning', venue: 'VIRTUAL' }],
+    };
+    global.fetch = vi.fn(() => Promise.resolve({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: () => Promise.resolve(feedSingle),
+    } as any)) as any;
+
+    const wrapper = mount(App);
+    await flushPromises();
+
+    const options = wrapper.find('select').findAll('option');
+    const speakerTexts = options.slice(1).map((o) => o.text());
+    expect(speakerTexts).toEqual(['Madonna']);
+    expect(speakerTexts[0]).not.toContain(',');
+  });
+
+  it('tie-breaks a shared last name by first name', async () => {
+    const feedTie = {
+      sessions: [
+        {
+          slug: 'hoppers', title: 'Hoppers', abstract: 'Two Hoppers.',
+          venue: 'BERLIN', track: 'ai', sessionCode: 'H001', room: 'Hall A',
+          scheduledStart: '2026-10-20T09:00:00Z', url: 'https://www.sap.com/teched/hoppers',
+          youtubeUrl: '', speakers: ['grace-hopper', 'amy-hopper'],
+        },
+      ],
+      // Insertion order deliberately puts Grace before Amy to prove the sort re-orders them.
+      speakers: [
+        { slug: 'grace-hopper', name: 'Grace Hopper', title: 'Engineer', company: 'SAP' },
+        { slug: 'amy-hopper', name: 'Amy Hopper', title: 'Engineer', company: 'SAP' },
+      ],
+      tracks: [{ slug: 'ai', name: 'AI & Machine Learning', venue: 'BERLIN' }],
+    };
+    global.fetch = vi.fn(() => Promise.resolve({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: () => Promise.resolve(feedTie),
+    } as any)) as any;
+
+    const wrapper = mount(App);
+    await flushPromises();
+
+    const options = wrapper.find('select').findAll('option');
+    const speakerTexts = options.slice(1).map((o) => o.text());
+    expect(speakerTexts).toEqual(['Hopper, Amy', 'Hopper, Grace']);
+  });
 });
 

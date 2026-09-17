@@ -138,13 +138,33 @@ function trackBadgeStyle(trackName: string | null | undefined): Record<string, s
   return { background: c.bg, borderColor: c.border, color: c.text };
 }
 
-// Speaker dropdown: only speakers that appear on a session, name-sorted.
+// Sort/display helpers for the speaker dropdown (issue #2392 item 4): sort by
+// last name, display "Last, First".
+/** Last whitespace-delimited token of the trimmed name; full name if single-token. */
+function lastNameKey(name: string): string {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : '';
+}
+/** "Last, Rest" for multi-token names; single-token names returned as-is. */
+function displayNameLastFirst(name: string): string {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return (name || '').trim();
+  const last = parts[parts.length - 1];
+  const rest = parts.slice(0, -1).join(' ');
+  return `${last}, ${rest}`;
+}
+
+// Speaker dropdown: only speakers that appear on a session, sorted by last name.
 const speakerOptions = computed(() => {
   const used = new Set<string>();
   sessions.value.forEach((s) => (s.speakers || []).forEach((slug) => used.add(slug)));
   return speakers.value
     .filter((s) => used.has(s.slug))
-    .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    .sort((a, b) =>
+      lastNameKey(a.name || '').localeCompare(lastNameKey(b.name || ''))
+      // Tie-break shared surnames by full name so ordering is deterministic.
+      || (a.name || '').localeCompare(b.name || ''),
+    );
 });
 
 // All facets (venue, track, speaker, query) applied in one pass to produce
@@ -316,7 +336,7 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, selectedRow], write
           <span>Speaker</span>
           <select v-model="filterSpeaker" aria-label="Filter by speaker">
             <option value="">All speakers</option>
-            <option v-for="sp in speakerOptions" :key="sp.slug" :value="sp.slug">{{ sp.name }}</option>
+            <option v-for="sp in speakerOptions" :key="sp.slug" :value="sp.slug">{{ displayNameLastFirst(sp.name) }}</option>
           </select>
         </label>
 
