@@ -210,10 +210,23 @@ jobs:
             # Was the requested slug among the fetch errors?
             if jq -e --arg s "$EFFECTIVE_SLUG" 'any(.[]; .slug == $s)' "$ERRORS_FILE" >/dev/null 2>&1; then
               BAD_SLUG="$EFFECTIVE_SLUG"
-              # Repo the slug came from: prefer errors.json, fall back to the
-              # dispatch payload.
-              ERR_REPO="$(jq -r --arg s "$EFFECTIVE_SLUG" 'first(.[] | select(.slug == $s) | .repo) // empty' "$ERRORS_FILE")"
-              [ -z "$ERR_REPO" ] && ERR_REPO="$SOURCE_REPO"
+              # Repo the slug came from: prefer the dispatch payload (already
+              # owner-qualified, e.g. "sap-tutorials/integration-Contribution"),
+              # fall back to errors.json — but that stores the BARE repo name
+              # (fetch-tutorials builds the raw URL as
+              # raw.githubusercontent.com/sap-tutorials/<repo>/...), so qualify
+              # it with the sap-tutorials owner when it has no "owner/" prefix.
+              # Without this, every downstream `gh api repos/<repo>` and the
+              # cross-repo `gh issue create` 404s (the 2026-09-17 verify miss).
+              ERR_REPO="$SOURCE_REPO"
+              if [ -z "$ERR_REPO" ]; then
+                ERR_REPO="$(jq -r --arg s "$EFFECTIVE_SLUG" 'first(.[] | select(.slug == $s) | .repo) // empty' "$ERRORS_FILE")"
+              fi
+              case "$ERR_REPO" in
+                */*) : ;;                       # already owner/name
+                "")  ERR_REPO="" ;;             # unknown — leave empty
+                *)   ERR_REPO="sap-tutorials/${ERR_REPO}" ;;
+              esac
               echo "bad_slug=$BAD_SLUG" >> "$GITHUB_OUTPUT"
               echo "source_repo=$ERR_REPO" >> "$GITHUB_OUTPUT"
               echo "::warning title=Author source error::Tutorial '$BAD_SLUG' could not be fetched from $ERR_REPO (missing/misnamed source file). Skipping publish for this slug; filing a per-tutorial issue on the source repo."
@@ -239,13 +252,22 @@ jobs:
         run: |
           set -uo pipefail
           AUTHOR=""
-          # Last commit that touched the tutorial's folder.
+          # Last commit that touched the tutorial's folder. `gh api` on a 404
+          # exits nonzero AND prints the error body; `2>/dev/null || true`
+          # suppresses the body and the failure so a bad response can't leak
+          # into $AUTHOR.
           AUTHOR="$(gh api "repos/${SRC_REPO}/commits?path=tutorials/${BAD_SLUG}&per_page=1" \
             --jq '.[0].author.login // empty' 2>/dev/null || true)"
           # Fallback: the author of the commit that triggered the dispatch.
           if [ -z "$AUTHOR" ] && [ -n "${DISPATCH_SHA:-}" ]; then
             AUTHOR="$(gh api "repos/${SRC_REPO}/commits/${DISPATCH_SHA}" \
               --jq '.author.login // empty' 2>/dev/null || true)"
+          fi
+          # Guard: only accept a plausible GitHub login (alphanumeric + hyphen).
+          # Defends against a jq/response mishap capturing an error object or
+          # multi-line JSON as the "author" and passing it as an assignee.
+          if ! printf '%s' "$AUTHOR" | grep -qE '^[A-Za-z0-9-]{1,39}$'; then
+            AUTHOR=""
           fi
           echo "author=$AUTHOR" >> "$GITHUB_OUTPUT"
           if [ -n "$AUTHOR" ]; then
