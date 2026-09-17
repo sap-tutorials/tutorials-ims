@@ -206,6 +206,25 @@ function pick(obj, ...keys) {
   return null;
 }
 
+// Build the public SAP TechEd event-website URL for a session from its
+// RainFocus sessionID (`sourceId`) + venue. The live catalog SPA does NOT return
+// a per-session `url` field (issue #2392), so we construct the deep link from
+// the maintainer-provided, venue-parameterized pattern:
+//   https://www.sap.com/events/teched/{berlin|virtual}/flow/sap/{te26|tev26}/catalog/page/catalog/session/{sourceId}
+// BERLIN  → path segment `berlin`,  flow `te26`.
+// VIRTUAL → path segment `virtual`, flow `tev26`.
+// Returns null when sourceId is missing or the venue is unrecognized (no guess).
+function buildSessionUrl(sourceId, venue) {
+  if (sourceId == null || sourceId === '') return null;
+  const v = String(venue ?? '').trim().toUpperCase();
+  const seg = v === 'BERLIN' ? { path: 'berlin', flow: 'te26' }
+    : v === 'VIRTUAL' ? { path: 'virtual', flow: 'tev26' }
+      : null;
+  if (!seg) return null;
+  return `https://www.sap.com/events/teched/${seg.path}/flow/sap/${seg.flow}`
+    + `/catalog/page/catalog/session/${encodeURIComponent(String(sourceId))}`;
+}
+
 function firstTime(item) {
   const times = Array.isArray(item?.times) ? item.times : [];
   return times[0] ?? {};
@@ -288,7 +307,10 @@ function parseSession(item, venue) {
       scheduledEnd: end,
       room: pick(t, 'room', 'roomName') ?? pick(item, 'room'),
       youtubeUrl: pick(item, 'youtubeUrl', 'videoURL', 'videoUrl', 'webcastUrl'),
-      url: pick(item, 'url', 'sessionUrl'),
+      // Prefer a real upstream url if RainFocus ever supplies one; otherwise
+      // construct the sap.com event-website deep link from sourceId + venue
+      // (the live catalog returns neither `url` nor `sessionUrl` — issue #2392).
+      url: pick(item, 'url', 'sessionUrl') ?? buildSessionUrl(sourceId, venue),
       trackSourceId: track?.sourceId ?? null,
       speakerSourceIds: speakers.map((s) => s.sourceId),
     },
@@ -449,4 +471,5 @@ export async function fetchAllTechEdSessions(opts = {}) {
   return { sessions: sessionList, speakers: [...speakers.values()], tracks: [...tracks.values()] };
 }
 
+export { parseSession, buildSessionUrl };
 export default { fetchAllTechEdSessions, parseVenuePayload };
