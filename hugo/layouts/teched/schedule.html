@@ -5,10 +5,7 @@
   <header class="teched-page__intro">
     <h1>{{ .Title }}</h1>
     {{ with .Description }}<p>{{ . }}</p>{{ end }}
-    <nav class="teched-page__subnav" aria-label="TechEd views">
-      <a href="/teched/" class="teched-page__subnav-link">Sessions</a>
-      <a href="/teched/schedule/" class="teched-page__subnav-link teched-page__subnav-link--active" aria-current="page">Schedule</a>
-    </nav>
+    {{ partial "teched-subnav.html" (dict "activeView" "schedule") }}
   </header>
 
   {{/* Bake the full TechEd feed as a JSON blob so the island reads it without

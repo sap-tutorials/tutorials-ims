@@ -7,11 +7,7 @@
   <header class="teched-page__intro">
     <h1>{{ .Title }}</h1>
     {{ with .Description }}<p>{{ . }}</p>{{ end }}
-    <nav class="teched-page__subnav" aria-label="TechEd views">
-      <a href="/teched/" class="teched-page__subnav-link teched-page__subnav-link--active" aria-current="page">Sessions</a>
-      <a href="/teched/schedule/" class="teched-page__subnav-link">Schedule</a>
-      <a href="/teched/calendar/" class="teched-page__subnav-link">Calendar</a>
-    </nav>
+    {{ partial "teched-subnav.html" (dict "activeView" "sessions") }}
   </header>
 
   {{/* Full feed payload for the island, which mounts into
