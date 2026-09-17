@@ -272,6 +272,29 @@ interface ErrorEntry {
   timestamp: string
 }
 
+/**
+ * Select the fetch errors that correspond to *author-requested* slugs on a
+ * slug-targeted run — the "missing/misnamed source file" class (e.g. discovery
+ * saw `tutorials/<slug>/` but `<slug>.md` 404'd because the author named the
+ * file `architecture.md`). These are author content errors, NOT infra
+ * failures: the slug never rendered, so it's already absent from `_nav.json`
+ * and the publish set, and the rebuild intentionally continues (exit 0) rather
+ * than letting one author typo fail the whole job. The CI workflow reads
+ * `errors.json` to file a per-tutorial issue against the source repo; this
+ * function is the shared, unit-testable definition of "which errored slugs are
+ * targeted skips". Returns [] when not slug-targeted (`filter` is null) so the
+ * caller emits no per-slug markers on a full rebuild.
+ *
+ * Pure over its inputs so it's testable without the filesystem/network.
+ */
+export function targetedSourceErrors(
+  errors: ErrorEntry[],
+  filter: Set<string> | null,
+): ErrorEntry[] {
+  if (!filter) return []
+  return errors.filter(e => filter.has(e.slug))
+}
+
 interface TutorialTiming {
   slug: string
   repo: string
@@ -1610,6 +1633,27 @@ async function main() {
     const errorPath = join(CACHE_DIR, 'errors.json')
     writeFileSync(errorPath, JSON.stringify(errors, null, 2), 'utf-8')
     console.log(`\nError log written to ${errorPath}`)
+
+    // A tutorial the author *requested* (slug-targeted run) but whose source
+    // markdown we could not fetch — almost always a missing/misnamed file, e.g.
+    // `tutorials/<slug>/architecture.md` instead of the required
+    // `tutorials/<slug>/<slug>.md`. These are AUTHOR content errors, not infra
+    // failures: the slug simply never rendered, so it's already absent from
+    // `_nav.json` and the publish set. We intentionally do NOT exit non-zero
+    // here — a single author typo must not fail the whole rebuild. Instead we
+    // emit an explicit, greppable marker per errored target slug so the CI
+    // workflow can file a per-tutorial issue against the source repo (assigned
+    // to / @-mentioning the author) while the rest of the build continues.
+    // The unknown-slug fail-fast above (slug absent from *discovery*) is a
+    // different case and still exits 1; this fires when discovery saw the
+    // tutorial folder but the `<slug>.md` fetch 404'd.
+    for (const e of targetedSourceErrors(errors, tutorialSlugFilter)) {
+      console.warn(
+        `[source-error] targeted slug "${e.slug}" (${e.repo}) could not be fetched: ${e.error}. ` +
+        `Expected primary markdown at tutorials/${e.slug}/${e.slug}.md — ` +
+        `SKIPPING this slug and continuing. See ${errorPath}.`,
+      )
+    }
   }
 
   // ── Prune stale tutorial-cache entries ──

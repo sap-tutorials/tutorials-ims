@@ -187,6 +187,93 @@ jobs:
           # written so the SAVE step warms it).
           CONTENT_CACHE_FAST_PATH: ${{ steps.cc.outputs.content_cache_enabled }}
 
+      # Author content-error routing (#2384). A slug-targeted QA run whose
+      # source markdown could not be fetched (missing/misnamed file, e.g.
+      # `tutorials/<slug>/architecture.md` instead of `<slug>.md`) is an AUTHOR
+      # error, not an infra failure — fetch-tutorials records it in
+      # `.tutorial-cache-qa/errors.json`, SKIPS the slug, and exits 0. Detect
+      # that here: if the effective target slug is among the fetch errors, the
+      # publish step is skipped (nothing rendered to publish → would otherwise
+      # throw the "--slug not found" exit 2 that failed the whole job) and a
+      # per-tutorial issue is filed against the source repo below. QA dispatches
+      # carry exactly ONE slug (notify-qa template), so at most one bad slug.
+      - name: Detect author source errors
+        id: source_errors
+        env:
+          EFFECTIVE_SLUG: ${{ github.event.client_payload.slug || inputs.slug }}
+          SOURCE_REPO: ${{ github.event.client_payload.repo }}
+        run: |
+          set -uo pipefail
+          ERRORS_FILE=".tutorial-cache-qa/errors.json"
+          BAD_SLUG=""
+          if [ -n "$EFFECTIVE_SLUG" ] && [ -f "$ERRORS_FILE" ]; then
+            # Was the requested slug among the fetch errors?
+            if jq -e --arg s "$EFFECTIVE_SLUG" 'any(.[]; .slug == $s)' "$ERRORS_FILE" >/dev/null 2>&1; then
+              BAD_SLUG="$EFFECTIVE_SLUG"
+              # Repo the slug came from: prefer errors.json, fall back to the
+              # dispatch payload.
+              ERR_REPO="$(jq -r --arg s "$EFFECTIVE_SLUG" 'first(.[] | select(.slug == $s) | .repo) // empty' "$ERRORS_FILE")"
+              [ -z "$ERR_REPO" ] && ERR_REPO="$SOURCE_REPO"
+              echo "bad_slug=$BAD_SLUG" >> "$GITHUB_OUTPUT"
+              echo "source_repo=$ERR_REPO" >> "$GITHUB_OUTPUT"
+              echo "::warning title=Author source error::Tutorial '$BAD_SLUG' could not be fetched from $ERR_REPO (missing/misnamed source file). Skipping publish for this slug; filing a per-tutorial issue on the source repo."
+            fi
+          fi
+          if [ -z "$BAD_SLUG" ]; then
+            echo "bad_slug=" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Resolve the tutorial's author (last committer of tutorials/<slug>/ in
+      # the source repo, falling back to the dispatched commit's author) so the
+      # per-tutorial issue can @-mention and best-effort-assign them. Uses the
+      # App token, which — after granting the App Issues:RW (#2384) — can read
+      # commits AND file issues on the -Contribution repos.
+      - name: Resolve source-error author
+        id: source_error_author
+        if: ${{ steps.source_errors.outputs.bad_slug != '' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.TUTORIAL_FETCH_TOKEN || secrets.TUTORIALS_GITHUB_TOKEN }}
+          SRC_REPO: ${{ steps.source_errors.outputs.source_repo }}
+          BAD_SLUG: ${{ steps.source_errors.outputs.bad_slug }}
+          DISPATCH_SHA: ${{ github.event.client_payload.sha }}
+        run: |
+          set -uo pipefail
+          AUTHOR=""
+          # Last commit that touched the tutorial's folder.
+          AUTHOR="$(gh api "repos/${SRC_REPO}/commits?path=tutorials/${BAD_SLUG}&per_page=1" \
+            --jq '.[0].author.login // empty' 2>/dev/null || true)"
+          # Fallback: the author of the commit that triggered the dispatch.
+          if [ -z "$AUTHOR" ] && [ -n "${DISPATCH_SHA:-}" ]; then
+            AUTHOR="$(gh api "repos/${SRC_REPO}/commits/${DISPATCH_SHA}" \
+              --jq '.author.login // empty' 2>/dev/null || true)"
+          fi
+          echo "author=$AUTHOR" >> "$GITHUB_OUTPUT"
+          if [ -n "$AUTHOR" ]; then
+            echo "Resolved author for '$BAD_SLUG': $AUTHOR"
+          else
+            echo "::notice::Could not resolve an author login for '$BAD_SLUG'; issue will fall back to the default assignee."
+          fi
+
+      # File a per-tutorial issue on the SOURCE repo, assigned to / @-mentioning
+      # the author. Cross-repo issue write requires the App token with Issues:RW
+      # (the default GITHUB_TOKEN is scoped to tutorials-ims only). If the App
+      # path is off (vars.USE_GITHUB_APP != 'true') the token is empty and the
+      # action self-warns without failing — the job still completes green.
+      - name: File author source-error issue
+        if: ${{ steps.source_errors.outputs.bad_slug != '' }}
+        continue-on-error: true
+        uses: ./.github/actions/report-rebuild-failure
+        with:
+          outcome: failure
+          channel: qa
+          repo: ${{ steps.source_errors.outputs.source_repo }}
+          slug: ${{ steps.source_errors.outputs.bad_slug }}
+          assignees: ${{ steps.source_error_author.outputs.author }}
+          run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          trigger: ${{ github.event_name }}
+          label: tutorial-source-error
+          github-token: ${{ steps.app-token.outputs.token }}
+
       # Workstream C: SAVE the generated QA content tree + sidecar so the next
       # slug-targeted QA hotfix can restore and reuse it. Runs on full (PRIME a
       # clean tree) AND slug-targeted (persist the tree with the target's new
@@ -264,6 +351,11 @@ jobs:
         run: npm run build:highlight -- --dir hugo/public-qa
 
       - name: Publish QA content to HANA
+        # Skip when the ONLY targeted slug failed to fetch (author source error,
+        # #2384): nothing rendered for it, so a slug-scoped publish would throw
+        # the "--slug not found" exit 2 and fail the whole job. A full rebuild
+        # (empty bad_slug) and a healthy slug-targeted run both publish normally.
+        if: ${{ steps.source_errors.outputs.bad_slug == '' }}
         run: npx tsx scripts/publish-content.ts --channel qa ${{ inputs.force-publish && '--force' || '' }} --initiator "ci/${{ github.run_id }}"
         env:
           CAP_QA_BASE_URL: ${{ secrets.CAP_SRV_URL_QA }}
@@ -283,6 +375,10 @@ jobs:
       # slugs — turning the silent publish-succeeded-but-empty class into a red
       # run that the failure notifier below emails on.
       - name: Verify QA publish landed rows
+        # Skipped when the publish step was skipped for an author source error
+        # (#2384) — there was no publish to verify, and the channel's existing
+        # rows are unchanged.
+        if: ${{ steps.source_errors.outputs.bad_slug == '' }}
         uses: ./.github/actions/verify-publish-landed
         with:
           base-url: ${{ secrets.CAP_SRV_URL_QA }}
@@ -300,7 +396,7 @@ jobs:
       # force-publish exclusion removed (#2346): that is exactly the
       # "push my stubborn change through" case where re-warming is needed.
       - name: Refresh QA tutorial images (slug-targeted)
-        if: ${{ github.event.client_payload.slug || inputs.slug }}
+        if: ${{ (github.event.client_payload.slug || inputs.slug) && steps.source_errors.outputs.bad_slug == '' }}
         continue-on-error: true
         run: npx tsx scripts/backfill-images.ts --channel qa --slug "${{ github.event.client_payload.slug || inputs.slug }}"
         env:
@@ -317,6 +413,10 @@ jobs:
           SLUG="${{ github.event.client_payload.slug || inputs.slug }}"
           if [ -n "$SLUG" ]; then
             echo "- **Slug filter:** $SLUG (single-tutorial refresh)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          BAD_SLUG="${{ steps.source_errors.outputs.bad_slug }}"
+          if [ -n "$BAD_SLUG" ]; then
+            echo "- **⚠️ Skipped (author source error):** \`$BAD_SLUG\` — source markdown missing/misnamed; per-tutorial issue filed on the source repo. Publish was skipped for this slug; the rest of the channel is unaffected." >> "$GITHUB_STEP_SUMMARY"
           fi
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             echo "- **Source repo:** ${{ github.event.client_payload.repository }}" >> "$GITHUB_STEP_SUMMARY"

@@ -14,6 +14,24 @@ inputs:
   channel:
     description: 'Rebuild channel/env used to dedup issues (e.g. "qa", "prod", "dev").'
     required: true
+  repo:
+    description: >-
+      Repository to file/find/close the issue in (owner/name). Defaults to the
+      repo running the workflow. Set to a source `-Contribution` repo to file a
+      per-tutorial author issue there (requires the token to have issues:write
+      on that repo — the tutorials GitHub App with Issues:RW, not the default
+      job GITHUB_TOKEN, which is scoped to the running repo only).
+    required: false
+    default: ${{ github.repository }}
+  slug:
+    description: >-
+      Optional tutorial slug. When set, the issue is per-tutorial (its own
+      dedup marker + title) rather than the channel-level aggregate. Used for
+      author content errors (missing/misnamed source file) so each tutorial
+      gets its own issue in its source repo, assigned to / @-mentioning the
+      author. Empty (default) keeps the channel-aggregate behavior (#1373).
+    required: false
+    default: ''
   run-url:
     description: 'Link to the failing (or succeeding) Actions run.'
     required: true
@@ -48,9 +66,10 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
-        REPO: ${{ github.repository }}
+        REPO: ${{ inputs.repo }}
         OUTCOME: ${{ inputs.outcome }}
         CHANNEL: ${{ inputs.channel }}
+        SLUG: ${{ inputs.slug }}
         RUN_URL: ${{ inputs.run-url }}
         TRIGGER: ${{ inputs.trigger }}
         DETAILS: ${{ inputs.details }}
@@ -60,14 +79,23 @@ runs:
       run: |
         set -uo pipefail
 
-        # Stable per-channel marker so we find the same issue across runs
-        # without depending on the exact title text.
-        MARKER="<!-- rebuild-failure-marker channel=${CHANNEL} -->"
+        # Stable dedup marker so we find the same issue across runs without
+        # depending on the exact title text. Channel-level by default; when a
+        # SLUG is given it becomes per-tutorial (a slug-scoped marker + title)
+        # so each author content error gets its own deduplicated issue in its
+        # source repo instead of collapsing onto the channel aggregate.
+        if [ -n "$SLUG" ]; then
+          MARKER="<!-- rebuild-failure-marker channel=${CHANNEL} slug=${SLUG} -->"
+          ISSUE_TITLE="🚨 tutorial source error: ${SLUG} (${CHANNEL})"
+        else
+          MARKER="<!-- rebuild-failure-marker channel=${CHANNEL} -->"
+          ISSUE_TITLE="🚨 ${CHANNEL} content rebuild failing"
+        fi
         ESCALATED_LABEL="rebuild-failure-escalated"
 
-        # Locate an existing OPEN failure issue for this channel. Search by the
-        # dedup label, then match the hidden marker in the body so per-channel
-        # issues never collide (qa vs prod). --search keeps the marker literal.
+        # Locate an existing OPEN failure issue for this channel (and slug, when
+        # set). Search by the dedup label, then match the hidden marker in the
+        # body so per-channel / per-tutorial issues never collide.
         find_open_issue() {
           gh issue list --repo "$REPO" --state open --label "$LABEL" \
             --json number,body --limit 50 \
@@ -110,22 +138,52 @@ runs:
         [ -n "$DETAILS" ] && DETAIL_LINE="- **Detail:** ${DETAILS}"
 
         if [ -z "$ISSUE_NUM" ]; then
-          # First failure of a new streak — create the issue. Assignment is what
-          # triggers GitHub's native email to the on-call owner. Build the body
-          # with a single printf (no heredoc — an unindented heredoc breaks the
-          # YAML block scalar; and per-line $(printf) would have its trailing
-          # newlines stripped by command substitution, collapsing the layout).
+          # First failure of a new streak — create the issue, then assign in a
+          # SEPARATE step. Assignment is what triggers GitHub's native email,
+          # but a per-tutorial author is often a fork contributor who is NOT
+          # assignable on the source repo — passing them to `gh issue create`
+          # would fail the WHOLE create (no issue at all). So we create first
+          # (never blocked by a bad assignee) and best-effort assign after; the
+          # @-mention in the body emails the author regardless of assignability.
+          # Body is built with a single printf (no heredoc — an unindented
+          # heredoc breaks the YAML block scalar; and per-line $(printf) would
+          # have its trailing newlines stripped by command substitution,
+          # collapsing the layout).
           DETAIL_BLOCK=""
           [ -n "$DETAIL_LINE" ] && DETAIL_BLOCK="${DETAIL_LINE}"$'\n'
-          BODY="$(printf '%s\n\n**Automated alert (#1373).** A **%s** content rebuild failed.\n\n- **Channel:** %s\n- **Trigger:** %s\n- **First failing run:** %s\n%s\nThis issue is deduplicated per channel: each additional consecutive failure adds a comment below (so the comment count is the consecutive-failure count). A subsequent successful rebuild auto-closes this issue and resets the streak.\n\nConsecutive failures: **1**\n' \
-            "$MARKER" "$CHANNEL" "$CHANNEL" "$TRIGGER" "$RUN_URL" "$DETAIL_BLOCK")"
+
+          # @-mention every assignee in the body so the author is emailed even
+          # when they can't be assigned (fork contributors on a source repo).
+          MENTION_LINE=""
+          for a in "${_A[@]}"; do
+            a="$(echo "$a" | tr -d '[:space:]')"
+            [ -n "$a" ] && MENTION_LINE="${MENTION_LINE} @${a}"
+          done
+
+          if [ -n "$SLUG" ]; then
+            # Per-tutorial author content error (missing/misnamed source file).
+            MENTION_BLOCK=""
+            [ -n "$MENTION_LINE" ] && MENTION_BLOCK="- **Author:**${MENTION_LINE}"$'\n'
+            BODY="$(printf '%s\n\n**Automated alert (#1373).** A **%s**-channel content rebuild could not fetch the source markdown for tutorial `%s`.\n\n- **Tutorial slug:** %s\n- **Channel:** %s\n- **Trigger:** %s\n- **Run:** %s\n%s%s\n**Most likely cause:** the primary tutorial markdown is missing or misnamed. It MUST be at `tutorials/%s/%s.md` (folder name and file name both equal the slug). If the file is named something else (e.g. `architecture.md`), rename it to `%s.md`.\n\nThe rebuild **skipped this tutorial and continued** — the rest of the channel published normally. Fix the source file and re-trigger the QA rebuild for this slug; a successful rebuild auto-closes this issue.\n' \
+              "$MARKER" "$CHANNEL" "$SLUG" "$SLUG" "$CHANNEL" "$TRIGGER" "$RUN_URL" "$DETAIL_BLOCK" "$MENTION_BLOCK" "$SLUG" "$SLUG" "$SLUG")"
+          else
+            BODY="$(printf '%s\n\n**Automated alert (#1373).** A **%s** content rebuild failed.\n\n- **Channel:** %s\n- **Trigger:** %s\n- **First failing run:** %s\n%s\nThis issue is deduplicated per channel: each additional consecutive failure adds a comment below (so the comment count is the consecutive-failure count). A subsequent successful rebuild auto-closes this issue and resets the streak.\n\nConsecutive failures: **1**\n' \
+              "$MARKER" "$CHANNEL" "$CHANNEL" "$TRIGGER" "$RUN_URL" "$DETAIL_BLOCK")"
+          fi
+
           NEW_URL="$(gh issue create --repo "$REPO" \
-            --title "🚨 ${CHANNEL} content rebuild failing" \
+            --title "$ISSUE_TITLE" \
             --label "$LABEL" \
-            "${ASSIGNEE_FLAGS[@]}" \
             --body "$BODY")" \
-            && echo "Filed new ${CHANNEL} rebuild-failure issue: ${NEW_URL}" \
-            || echo "::warning::Failed to create ${CHANNEL} rebuild-failure issue"
+            && echo "Filed new issue: ${NEW_URL}" \
+            || { echo "::warning::Failed to create issue in ${REPO} (title: ${ISSUE_TITLE})"; exit 0; }
+
+          # Best-effort assign — tolerate an unassignable (fork-contributor)
+          # author; the @-mention already emailed them. Never fail the step.
+          if [ "${#ASSIGNEE_FLAGS[@]}" -gt 0 ]; then
+            gh issue edit "$NEW_URL" --repo "$REPO" "${ASSIGNEE_FLAGS[@]}" >/dev/null 2>&1 \
+              || echo "::notice::Could not assign ${ASSIGNEES} on ${NEW_URL} (likely not a collaborator on ${REPO}); @-mention still notifies them."
+          fi
           exit 0
         fi
 

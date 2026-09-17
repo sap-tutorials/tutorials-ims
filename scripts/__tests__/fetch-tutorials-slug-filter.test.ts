@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseSlugFilter } from '../fetch-tutorials'
+import { parseSlugFilter, targetedSourceErrors } from '../fetch-tutorials'
 
 describe('parseSlugFilter', () => {
   it('returns null when both inputs are empty/undefined', () => {
@@ -56,5 +56,42 @@ describe('parseSlugFilter', () => {
     const filter = parseSlugFilter('  foo  ', '')
     expect(filter!.size).toBe(1)
     expect(filter!.has('foo')).toBe(true)
+  })
+})
+
+describe('targetedSourceErrors', () => {
+  const err = (slug: string, repo = 'sap-tutorials/integration-Contribution') => ({
+    slug,
+    repo,
+    error: `Failed to fetch ${slug}: 404`,
+    timestamp: '2026-09-17T10:00:00.000Z',
+  })
+
+  it('returns [] on a full rebuild (null filter) even when there are errors', () => {
+    // A full rebuild must not attribute stray fetch errors to a "targeted" author.
+    expect(targetedSourceErrors([err('composed-mcp-server')], null)).toEqual([])
+  })
+
+  it('returns [] when nothing errored', () => {
+    expect(targetedSourceErrors([], new Set(['composed-mcp-server']))).toEqual([])
+  })
+
+  it('picks only errored slugs that are in the target filter', () => {
+    const errors = [err('composed-mcp-server'), err('some-other-slug')]
+    const filter = new Set(['composed-mcp-server'])
+    const picked = targetedSourceErrors(errors, filter)
+    expect(picked.map(e => e.slug)).toEqual(['composed-mcp-server'])
+  })
+
+  it('ignores an errored slug that was NOT targeted (unrelated fetch flake)', () => {
+    const errors = [err('unrelated-slug')]
+    const filter = new Set(['composed-mcp-server'])
+    expect(targetedSourceErrors(errors, filter)).toEqual([])
+  })
+
+  it('returns every targeted slug that errored (multi-slug run)', () => {
+    const errors = [err('a'), err('b'), err('c')]
+    const filter = new Set(['a', 'c'])
+    expect(targetedSourceErrors(errors, filter).map(e => e.slug)).toEqual(['a', 'c'])
   })
 })
