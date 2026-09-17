@@ -370,5 +370,39 @@ describe('TechEd sessions grid', () => {
     expect(wrapper.text()).toContain('AI on BTP');
     expect(global.fetch).toHaveBeenCalled();
   });
+
+  // --- Bio enrichment (item 10) ----------------------------------------------
+
+  it('item 10: enrichment maps bio from RawSpeaker through to speakersEnriched', async () => {
+    const feedWithBio = {
+      ...feed,
+      speakers: [
+        { slug: 'ada-lovelace', name: 'Ada Lovelace', title: 'Advocate', company: 'SAP', bio: 'Mathematician and pioneer of computing.' },
+        { slug: 'grace-hopper', name: 'Grace Hopper', title: 'Engineer', company: 'SAP', bio: null },
+      ],
+    };
+    global.fetch = vi.fn(() => Promise.resolve({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: () => Promise.resolve(feedWithBio),
+    } as any)) as any;
+
+    const wrapper = mount(App);
+    await flushPromises();
+
+    // Open the detail panel for the first card (ai-berlin — Ada Lovelace)
+    await wrapper.findAll('article')[0].trigger('click');
+    await flushPromises();
+
+    const panel = wrapper.find('[role="dialog"]');
+    expect(panel.exists()).toBe(true);
+
+    // The speaker-name element inside the panel should carry the bio as a title
+    const speakerName = panel.find('.detail-panel__speaker-name');
+    expect(speakerName.exists()).toBe(true);
+    const title = speakerName.element.getAttribute('title') ?? '';
+    expect(title).toContain('Mathematician');
+    expect(title).toContain('pioneer of computing');
+  });
 });
 

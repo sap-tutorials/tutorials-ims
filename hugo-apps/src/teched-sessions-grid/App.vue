@@ -13,7 +13,7 @@ interface TechEdFeed { sessions: TechEdSession[]; speakers: RawSpeaker[]; tracks
 /** Per-session speaker link, pre-computed once in loadData so the template avoids double calls. */
 interface SpeakerLink { slug: string; name: string; authorLogin?: string | null; }
 /** Speaker card shape used by DetailPanel (Unit 2). */
-interface EnrichedSpeaker { id: string; name: string; role?: string; company?: string; photoUrl?: string; authorLogin?: string; }
+interface EnrichedSpeaker { id: string; name: string; role?: string; company?: string; photoUrl?: string; authorLogin?: string; bio?: string; }
 /** Enriched session carrying pre-resolved display fields. */
 interface EnrichedSession extends TechEdSession { speakerLinks?: SpeakerLink[]; speakersEnriched?: EnrichedSpeaker[]; }
 
@@ -86,7 +86,7 @@ async function loadData() {
         .map((slug) => {
           const sp = speakerBySlug.get(slug);
           if (!sp) return null;
-          return { id: sp.slug, name: sp.name, role: sp.title ?? undefined, company: sp.company ?? undefined, photoUrl: sp.photoUrl ?? undefined, authorLogin: sp.authorLogin ?? undefined };
+          return { id: sp.slug, name: sp.name, role: sp.title ?? undefined, company: sp.company ?? undefined, photoUrl: sp.photoUrl ?? undefined, authorLogin: sp.authorLogin ?? undefined, bio: sp.bio ?? undefined };
         })
         .filter(Boolean);
       return {
