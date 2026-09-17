@@ -93,10 +93,13 @@ describe('fetchAllTechEdSessions', () => {
     expect(out.sessions).toHaveLength(6);
     expect(new Set(out.sessions.map((s) => s.sourceId)).size).toBe(6);
 
-    // speakers embedded per session, deduped by speakerId within a venue
-    // (Berlin 6 distinct + Virtual 4 distinct = 10; Herzig has a venue-suffixed
-    // id so he is a distinct row per venue)
-    expect(out.speakers).toHaveLength(10);
+    // speakers embedded per session, deduped by speakerId within a venue AND
+    // then collapsed across venues by name (issue #2392): Berlin 6 + Virtual 4
+    // raw = 10, but Philipp Herzig appears in BOTH venues under different
+    // venue-suffixed ids, so cross-venue name-merge folds him to one row → 9.
+    expect(out.speakers).toHaveLength(9);
+    // exactly one "Philipp Herzig" survives the cross-venue merge
+    expect(out.speakers.filter((s) => s.name === 'Philipp Herzig')).toHaveLength(1);
 
     // tracks derived from attributevalues[attribute==='Track'], deduped by
     // rf_attributevalue_id (Keynote + AD are shared across venues)
