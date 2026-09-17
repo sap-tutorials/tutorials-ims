@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { filterSessions, type TechEdSession } from './filter';
 import { parseTechEdUrl, toTechEdQuery, type TechEdUrlState } from './url-state';
-import { buildTrackColorMap, legendFor, type TrackColor } from '../devtoberfest-sessions-calendar/track-colors';
+import { buildTrackColorMap, type TrackColor } from '../devtoberfest-sessions-calendar/track-colors';
 import RelatedSessions from './RelatedSessions.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 
@@ -124,12 +124,10 @@ const trackOptions = computed(() => {
 });
 
 // Color map over tracks that actually appear on sessions (same set as trackOptions).
-// This ensures the legend never shows phantom entries for tracks with no sessions.
 // Colors are stable across filter changes because they're built from the full used-track set.
 const colorMap = computed(() =>
   buildTrackColorMap(trackOptions.value.map((t) => ({ name: t.name }))),
 );
-const legend = computed(() => legendFor(colorMap.value));
 
 // Returns inline style for the track badge given a track name. Falls back to
 // undefined (CSS class handles neutral styling) when the name is absent.
@@ -343,14 +341,7 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, selectedRow], write
           :style="filterTrack === t.slug ? trackBadgeStyle(t.name) : undefined"
           :aria-pressed="filterTrack === t.slug"
           @click="toggleTrack(t.slug)"
-        >{{ t.name }}</button>
-      </div>
-
-      <!-- track color legend -->
-      <div v-if="legend.length" class="tsg-legend" aria-label="Track color legend">
-        <span v-for="l in legend" :key="l.trackName" class="tsg-legend-item">
-          <span class="tsg-legend-dot" :style="{ background: l.color.border }"></span>{{ l.trackName }}
-        </span>
+        ><span class="tsg-chip-dot" :style="{ background: colorMap.get(t.name)?.border }" aria-hidden="true"></span>{{ t.name }}</button>
       </div>
 
       <!-- empty -->
@@ -501,6 +492,9 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, selectedRow], write
 }
 
 .tsg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   padding: 0.2rem 0.7rem;
   border-radius: 20px;
   border: 1px solid var(--sapField_BorderColor, #89919a);
@@ -514,6 +508,14 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, selectedRow], write
   background: var(--sapInformativeBackground, #e8f3ff);
   color: var(--sapInformativeColor, #0854a0);
   border-color: var(--sapInformativeColor, #0854a0);
+}
+.tsg-chip-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
 }
 
 .tsg-section { display: flex; flex-direction: column; gap: 0.75rem; }
@@ -602,17 +604,6 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, selectedRow], write
 .tsg-link:hover { background: var(--sapHighlightColor, #0854a0); color: #fff; }
 .tsg-link--yt { color: #c4302b; border-color: #c4302b; }
 .tsg-link--yt:hover { background: #c4302b; color: #fff; }
-
-/* Track color legend */
-.tsg-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.9rem;
-  font-size: 0.75rem;
-  color: var(--sapContent_LabelColor, #6a6d70);
-}
-.tsg-legend-item { display: inline-flex; align-items: center; gap: 0.35rem; }
-.tsg-legend-dot { width: 0.7rem; height: 0.7rem; border-radius: 3px; display: inline-block; flex-shrink: 0; }
 
 .tsg-card--clickable {
   cursor: pointer;

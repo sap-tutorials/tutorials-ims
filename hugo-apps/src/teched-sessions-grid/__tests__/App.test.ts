@@ -187,35 +187,30 @@ describe('TechEd sessions grid', () => {
     expect(bc0).not.toBe(bc1);
   });
 
-  it('renders a track color legend with one entry per track', async () => {
+  it('track chips show color dots instead of a separate legend row', async () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    const legend = wrapper.find('.tsg-legend');
-    expect(legend.exists()).toBe(true);
+    // Separate legend row must be gone entirely
+    expect(wrapper.find('.tsg-legend').exists()).toBe(false);
 
-    const items = wrapper.findAll('.tsg-legend-item');
-    // There are 2 tracks in the fixture; legend should have 2 entries
-    expect(items.length).toBe(2);
+    // Each chip must contain a .tsg-chip-dot
+    const chips = wrapper.findAll('.tsg-chip');
+    expect(chips.length).toBe(feed.tracks.length);
+    for (const chip of chips) {
+      expect(chip.find('.tsg-chip-dot').exists()).toBe(true);
+    }
 
-    // Legend text contains both track names
-    expect(legend.text()).toContain('AI & Machine Learning');
-    expect(legend.text()).toContain('Application Development');
-  });
+    // Number of dots matches number of tracks in the fixture
+    const dots = wrapper.findAll('.tsg-chip-dot');
+    expect(dots.length).toBe(feed.tracks.length);
 
-  it('legend dots have distinct background colors for distinct tracks', async () => {
-    const wrapper = mount(App);
-    await flushPromises();
-
-    const dots = wrapper.findAll('.tsg-legend-dot');
-    expect(dots.length).toBe(2);
-
-    const dotBg0 = (dots[0].element as HTMLElement).style.background;
-    const dotBg1 = (dots[1].element as HTMLElement).style.background;
-
-    expect(dotBg0).toBeTruthy();
-    expect(dotBg1).toBeTruthy();
-    expect(dotBg0).not.toBe(dotBg1);
+    // Dots for distinct tracks have distinct, truthy background colors
+    const bg0 = (dots[0].element as HTMLElement).style.background;
+    const bg1 = (dots[1].element as HTMLElement).style.background;
+    expect(bg0).toBeTruthy();
+    expect(bg1).toBeTruthy();
+    expect(bg0).not.toBe(bg1);
   });
 
   // --- Detail panel tests ---------------------------------------------------
