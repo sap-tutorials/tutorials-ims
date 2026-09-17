@@ -536,6 +536,64 @@ export async function fetchAllTechEdSessions(opts = {}) {
     for (const t of r.value.tracks) if (!tracks.has(t.sourceId)) tracks.set(t.sourceId, t);
   }
 
+  // Cross-venue speaker de-duplication (issue #2392). RainFocus issues the SAME
+  // person a DISTINCT speakerId per venue catalog (te26 vs tev26), so a Berlin +
+  // Virtual speaker arrives as two records → the sessionCode-linked dropdown and
+  // detail panel show "Name" twice, and only one record tends to carry a photo.
+  // Collapse to one canonical record per identity and remap every session's
+  // speakerSourceIds to the survivor so the (session, speaker) links still
+  // resolve in seed-core. Identity = normalized full name; when two records
+  // share a name we keep the one with the richer profile (prefer a photoUrl,
+  // then a bio) and fold the other's id into the canonical id. Same-name-but-
+  // -different-person is vanishingly rare in this catalog and, if it ever
+  // occurs, merges to a single card rather than a user-facing duplicate — the
+  // safer failure. Speakers with no usable name are left untouched (keyed by id)
+  // so they can never all collapse into one blank entry.
+  const idalias = new Map();          // any speaker sourceId → canonical sourceId
+  const canonByName = new Map();      // normalized name → canonical speaker record
+  const richer = (a, b) => {          // pick the record with the richer profile
+    const score = (s) => (s.photoUrl ? 2 : 0) + (s.bio ? 1 : 0);
+    return score(b) > score(a) ? b : a;
+  };
+  for (const sp of speakers.values()) {
+    const nameKey = (sp.name || '').trim().toLowerCase();
+    if (!nameKey) { idalias.set(sp.sourceId, sp.sourceId); continue; } // keep unnamed distinct
+    const prior = canonByName.get(nameKey);
+    if (!prior) {
+      canonByName.set(nameKey, sp);
+      idalias.set(sp.sourceId, sp.sourceId);
+    } else {
+      const winner = richer(prior, sp);
+      canonByName.set(nameKey, winner);
+      // Both ids alias to the winner's id; earlier aliases pointing at the loser
+      // are rewritten in the same pass below (all ids re-resolved through idalias
+      // after the loop, so transitive chains are flattened).
+      idalias.set(prior.sourceId, winner.sourceId);
+      idalias.set(sp.sourceId, winner.sourceId);
+    }
+  }
+  // Flatten any transitive aliases (a→b, b→c) to a single hop.
+  const resolveAlias = (id) => {
+    let cur = id; const seen = new Set();
+    while (idalias.has(cur) && idalias.get(cur) !== cur && !seen.has(cur)) {
+      seen.add(cur); cur = idalias.get(cur);
+    }
+    return cur;
+  };
+  const dedupedSpeakers = new Map();
+  for (const sp of canonByName.values()) dedupedSpeakers.set(sp.sourceId, sp);
+  for (const sp of speakers.values()) {          // re-add unnamed (kept distinct)
+    if (!(sp.name || '').trim()) dedupedSpeakers.set(sp.sourceId, sp);
+  }
+  // Remap every session's speakerSourceIds to canonical ids (dedup within a
+  // session too, in case both venue records were somehow linked to one row).
+  for (const s of sessions.values()) {
+    if (Array.isArray(s.speakerSourceIds)) {
+      s.speakerSourceIds = [...new Set(s.speakerSourceIds.map(resolveAlias))];
+    }
+  }
+
+
   // TOTAL failure escalation: NO venue produced any sessions (all venues either
   // rejected or returned 0). Throw LOUD instead of returning an empty result —
   // otherwise the weekly cron ingests nothing, the content-hash/lastSeen delta
@@ -573,7 +631,7 @@ export async function fetchAllTechEdSessions(opts = {}) {
     });
   }
 
-  return { sessions: sessionList, speakers: [...speakers.values()], tracks: [...tracks.values()] };
+  return { sessions: sessionList, speakers: [...dedupedSpeakers.values()], tracks: [...tracks.values()] };
 }
 
 export { parseSession, buildSessionUrl };

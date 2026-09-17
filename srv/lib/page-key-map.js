@@ -26,6 +26,8 @@ export const IN_SCOPE_PAGES = [
   { route: '/developer-advocates/',  key: 'page-developer-advocates', file: 'developer-advocates/index.html', mimeType: 'text/html' },
   { route: '/devtoberfest/',         key: 'page-devtoberfest',        file: 'devtoberfest/index.html',   mimeType: 'text/html' },
   { route: '/teched/',               key: 'page-teched',              file: 'teched/index.html',         mimeType: 'text/html' },
+  { route: '/teched/schedule/',      key: 'page-teched-schedule',     file: 'teched/schedule/index.html', mimeType: 'text/html' },
+  { route: '/teched/calendar/',      key: 'page-teched-calendar',     file: 'teched/calendar/index.html', mimeType: 'text/html' },
   // Verb hub landing pages (#1659 Phase 2) — each is a single Hugo page
   // rendered by layouts/verb/list.html at /<verb>/index.html.
   { route: '/ai/',        key: 'page-ai',        file: 'ai/index.html',        mimeType: 'text/html' },

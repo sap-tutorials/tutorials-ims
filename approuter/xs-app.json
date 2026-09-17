@@ -702,6 +702,8 @@
     { "source": "^/learn/?(\\?.*)?$",               "target": "/content/pages/learn/$1",               "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/model/?(\\?.*)?$",               "target": "/content/pages/model/$1",               "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/operate/?(\\?.*)?$",             "target": "/content/pages/operate/$1",             "destination": "srv-api", "authenticationType": "none" },
+    { "source": "^/teched/schedule/?(\\?.*)?$",    "target": "/content/pages/teched-schedule/$1",     "destination": "srv-api", "authenticationType": "none" },
+    { "source": "^/teched/calendar/?(\\?.*)?$",    "target": "/content/pages/teched-calendar/$1",     "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/teched/?(\\?.*)?$",              "target": "/content/pages/teched/$1",              "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/sitemap\\.xml(\\?.*)?$",         "target": "/content/pages/sitemap.xml$1",          "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/index\\.xml(\\?.*)?$",           "target": "/content/pages/index.xml$1",            "destination": "srv-api", "authenticationType": "none" },
