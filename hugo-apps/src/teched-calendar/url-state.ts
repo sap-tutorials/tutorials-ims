@@ -10,6 +10,7 @@
 //   session=<slug>         opens that session's detail panel
 //   track=<trackSlug>      track filter (track slug)
 //   venue=BERLIN|VIRTUAL   venue filter
+//   clubhouse=1            Community Clubhouse filter (room "Community Theater")
 //
 // Every value is validated; anything unrecognised falls back to null.
 
@@ -21,6 +22,7 @@ export interface TechEdCalUrlState {
   readonly session: string | null;
   readonly track: string | null;
   readonly venue: string | null;
+  readonly clubhouse: boolean;
 }
 
 export const DEFAULT_TECHED_CAL_URL_STATE: TechEdCalUrlState = Object.freeze({
@@ -29,6 +31,7 @@ export const DEFAULT_TECHED_CAL_URL_STATE: TechEdCalUrlState = Object.freeze({
   session: null,
   track: null,
   venue: null,
+  clubhouse: false,
 });
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -69,6 +72,7 @@ export function parseTechEdCalUrl(search: string | URLSearchParams): TechEdCalUr
     session: nonEmpty(p.get('session')),
     track: nonEmpty(p.get('track')),
     venue,
+    clubhouse: p.get('clubhouse') === '1',
   };
 }
 
@@ -79,6 +83,7 @@ export function toTechEdCalQuery(state: TechEdCalUrlState): string {
   if (state.session) p.set('session', state.session);
   if (state.track) p.set('track', state.track);
   if (state.venue) p.set('venue', state.venue);
+  if (state.clubhouse) p.set('clubhouse', '1');
   const s = p.toString();
   return s ? `?${s}` : '';
 }

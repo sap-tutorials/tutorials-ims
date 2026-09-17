@@ -9,6 +9,9 @@
 //   venue    — 'BERLIN' | 'VIRTUAL' (exact match on session.venue)
 //   track    — track slug (exact match on session.track)
 //   speaker  — speaker slug (membership test against session.speakers)
+//   clubhouse — boolean; when true keeps only Community Clubhouse sessions,
+//              identified by session.room === "Community Theater"
+//              (case-insensitive, trimmed). There is no dedicated track/flag.
 //   query    — free text over title, abstract, resolved speaker names,
 //              speaker slugs, the resolved track name, the session code,
 //              and related Devtoberfest session titles.
@@ -49,7 +52,16 @@ export interface TechEdFilterState {
   venue?: string | null;            // '' | 'BERLIN' | 'VIRTUAL'
   track?: string | null;            // track slug
   speaker?: string | null;          // speaker slug
+  clubhouse?: boolean;              // when true, only Community Clubhouse (room "Community Theater") sessions
   query?: string | null;
+}
+
+/** Room value (lowercased) that identifies a Community Clubhouse session. */
+export const CLUBHOUSE_ROOM = 'community theater';
+
+/** True when the session is a Community Clubhouse session (room "Community Theater", case-insensitive/trimmed). */
+export function isClubhouse(s: Pick<TechEdSession, 'room'>): boolean {
+  return (s.room || '').trim().toLowerCase() === CLUBHOUSE_ROOM;
 }
 
 /** Build the lowercase search haystack for one session. */
@@ -80,6 +92,7 @@ export function filterSessions(
     if (state.venue && s.venue !== state.venue) return false;
     if (state.track && s.track !== state.track) return false;
     if (state.speaker && !(s.speakers || []).includes(state.speaker)) return false;
+    if (state.clubhouse && !isClubhouse(s)) return false;
     if (q && !haystack(s).includes(q)) return false;
     return true;
   });

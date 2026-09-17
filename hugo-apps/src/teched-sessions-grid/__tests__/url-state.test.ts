@@ -14,7 +14,7 @@ describe('parseTechEdUrl', () => {
 
   it('parses every recognised param (URL-decoded)', () => {
     const s = parseTechEdUrl('?q=hana%20cloud&venue=BERLIN&track=ai-ml&speaker=ada-lovelace&session=my-session');
-    expect(s).toEqual({ q: 'hana cloud', venue: 'BERLIN', track: 'ai-ml', speaker: 'ada-lovelace', session: 'my-session' });
+    expect(s).toEqual({ q: 'hana cloud', venue: 'BERLIN', track: 'ai-ml', speaker: 'ada-lovelace', clubhouse: false, session: 'my-session' });
   });
 
   it('normalises venue to canonical upper-case, else null', () => {
@@ -95,9 +95,38 @@ describe('toTechEdQuery', () => {
       '?q=hana%20cloud&venue=VIRTUAL&track=ai-ml&speaker=ada-lovelace',
       '?session=ai-berlin',
       '?q=cap&session=cap-virtual',
+      '?clubhouse=1',
+      '?clubhouse=1&venue=BERLIN',
     ]) {
       const state = parseTechEdUrl(search);
       expect(parseTechEdUrl(toTechEdQuery(state))).toEqual(state);
     }
+  });
+});
+
+// --- Clubhouse URL param (issue #2392 item 5) --------------------------------
+
+describe('clubhouse URL param', () => {
+  it('parses clubhouse=1 as true', () => {
+    expect(parseTechEdUrl('?clubhouse=1').clubhouse).toBe(true);
+  });
+
+  it('defaults clubhouse to false when absent', () => {
+    expect(parseTechEdUrl('').clubhouse).toBe(false);
+    expect(parseTechEdUrl('?q=cap').clubhouse).toBe(false);
+  });
+
+  it('treats clubhouse=0 and clubhouse= as false', () => {
+    expect(parseTechEdUrl('?clubhouse=0').clubhouse).toBe(false);
+    expect(parseTechEdUrl('?clubhouse=').clubhouse).toBe(false);
+  });
+
+  it('serialises clubhouse=true as clubhouse=1', () => {
+    const q = toTechEdQuery({ ...DEFAULT_URL_STATE, clubhouse: true });
+    expect(q).toContain('clubhouse=1');
+  });
+
+  it('omits clubhouse param when false', () => {
+    expect(toTechEdQuery({ ...DEFAULT_URL_STATE, clubhouse: false })).not.toContain('clubhouse');
   });
 });

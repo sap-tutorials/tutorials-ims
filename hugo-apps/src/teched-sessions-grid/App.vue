@@ -27,6 +27,7 @@ const filterQuery = ref('');
 const filterVenue = ref('');   // '' | 'BERLIN' | 'VIRTUAL'
 const filterTrack = ref('');   // track slug
 const filterSpeaker = ref(''); // speaker slug
+const filterClubhouse = ref(false); // Community Clubhouse (room "Community Theater")
 const selectedRow = ref<TechEdSession | null>(null);
 
 // --- Deep-linking ----------------------------------------------------------
@@ -41,6 +42,7 @@ if (initialUrl.q) filterQuery.value = initialUrl.q;
 if (initialUrl.venue) filterVenue.value = initialUrl.venue;
 if (initialUrl.track) filterTrack.value = initialUrl.track;
 if (initialUrl.speaker) filterSpeaker.value = initialUrl.speaker;
+if (initialUrl.clubhouse) filterClubhouse.value = true;
 
 /**
  * Load the TechEd feed. Prefers an embedded `<script id="teched-data">` JSON
@@ -174,6 +176,7 @@ const filtered = computed(() => filterSessions(sessions.value, {
   venue: filterVenue.value,
   track: filterTrack.value,
   speaker: filterSpeaker.value,
+  clubhouse: filterClubhouse.value,
   query: filterQuery.value,
 }));
 
@@ -183,7 +186,7 @@ const filteredTimed = computed(() => filtered.value.filter((s) => s.allDay !== t
 const visibleCount = computed(() => filtered.value.length);
 
 const hasActiveFilters = computed(() =>
-  !!(filterQuery.value || filterVenue.value || filterTrack.value || filterSpeaker.value),
+  !!(filterQuery.value || filterVenue.value || filterTrack.value || filterSpeaker.value || filterClubhouse.value),
 );
 
 function speakerNamesFor(s: TechEdSession): string {
@@ -233,6 +236,7 @@ function clearFilters() {
   filterVenue.value = '';
   filterTrack.value = '';
   filterSpeaker.value = '';
+  filterClubhouse.value = false;
 }
 
 // --- URL sync --------------------------------------------------------------
@@ -242,6 +246,7 @@ function currentUrlState(): TechEdUrlState {
     venue: filterVenue.value || null,
     track: filterTrack.value || null,
     speaker: filterSpeaker.value || null,
+    clubhouse: filterClubhouse.value,
     session: selectedRow.value?.slug ?? null,
   };
 }
@@ -257,6 +262,7 @@ function applyFromUrl(st: TechEdUrlState) {
   filterVenue.value = st.venue ?? '';
   filterTrack.value = st.track ?? '';
   filterSpeaker.value = st.speaker ?? '';
+  filterClubhouse.value = st.clubhouse;
   if (st.session) {
     const row = sessions.value.find((r) => r.slug === st.session);
     selectedRow.value = row ?? null;
@@ -285,7 +291,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onDocKeydown);
 });
 
-watch([filterQuery, filterVenue, filterTrack, filterSpeaker, selectedRow], writeUrl);
+watch([filterQuery, filterVenue, filterTrack, filterSpeaker, filterClubhouse, selectedRow], writeUrl);
 </script>
 
 <template>
@@ -343,6 +349,19 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, selectedRow], write
             <option v-for="sp in speakerOptions" :key="sp.slug" :value="sp.slug">{{ displayNameLastFirst(sp.name) }}</option>
           </select>
         </label>
+
+        <!-- Community Clubhouse toggle (issue #2392 item 5) — own block to minimise merge conflicts -->
+        <div class="tsg-field">
+          <span id="tsg-clubhouse-label">Clubhouse</span>
+          <button
+            type="button"
+            class="tsg-toggle-btn tsg-toggle-btn--clubhouse"
+            :class="{ 'tsg-toggle-btn--active': filterClubhouse }"
+            :aria-pressed="filterClubhouse"
+            aria-labelledby="tsg-clubhouse-label"
+            @click="filterClubhouse = !filterClubhouse"
+          >Community Clubhouse</button>
+        </div>
 
         <button
           v-if="hasActiveFilters"
@@ -536,6 +555,11 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, selectedRow], write
   background: var(--sapButton_Emphasized_Background, #0854a0);
   color: #fff;
   border-color: var(--sapButton_Emphasized_Background, #0854a0);
+}
+
+.tsg-toggle-btn--clubhouse {
+  border-radius: 0.25rem;
+  white-space: nowrap;
 }
 
 .tsg-btn-ghost {
