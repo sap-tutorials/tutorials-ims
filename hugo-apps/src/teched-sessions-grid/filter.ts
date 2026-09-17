@@ -26,6 +26,7 @@ export interface TechEdSession {
   title: string;
   abstract?: string | null;
   venue?: string | null;            // 'BERLIN' | 'VIRTUAL'
+  allDay?: boolean;                 // all-day activity (e.g. Developer Garage) — issue #2392
   track?: string | null;            // track slug
   trackName?: string | null;        // resolved track name (enriched by App for display/search)
   scheduledStart?: string | null;

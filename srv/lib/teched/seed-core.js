@@ -19,7 +19,7 @@ const TRACK_COLS = ['name', 'venue', 'description'];
 const SPEAKER_COLS = ['name', 'title', 'company', 'bio', 'photoUrl'];
 // Session source columns EXCLUDING the resolved track_ID (handled separately)
 // and the transport-only trackSourceId/speakerSourceIds carriers.
-const SESSION_COLS = ['venue', 'sessionCode', 'title', 'abstract', 'scheduledStart', 'scheduledEnd', 'room', 'youtubeUrl', 'url'];
+const SESSION_COLS = ['venue', 'sessionCode', 'title', 'abstract', 'scheduledStart', 'scheduledEnd', 'allDay', 'room', 'youtubeUrl', 'url'];
 
 function pick(row, keys) {
   const out = {};

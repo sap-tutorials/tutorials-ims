@@ -1,0 +1,86 @@
+{
+  "_note": "SYNTHETIC (author-crafted) capture of the RainFocus all-day-activities tab for SAP TechEd 2026 (issue #2392 item 6). All-day activities (e.g. the Developer Garage) live under a SEPARATE catalog tab (tab.alldayactivities=<attributevalue-id>), NOT the regular type=session feed. This fixture mirrors the raw RainFocus session-item shape (see rainfocus-search.json) but for all-day rows: they typically have NO times[] (so no scheduledStart/End), MAY lack a `code`, and MAY carry a top-level `room`/`location`. The exact live request params for this tab are NOT yet confirmed against the real API — see srv/lib/teched/README.md and the PR body. BERLIN + VIRTUAL sections mirror the two-venue response envelope.",
+  "BERLIN": {
+    "responseCode": "0",
+    "responseMessage": "Success",
+    "totalSearchItems": 2,
+    "sectionList": [
+      {
+        "total": 2,
+        "from": 0,
+        "size": 2,
+        "items": [
+          {
+            "sessionID": "1786600000000001adgb",
+            "title": "Developer Garage",
+            "type": "All-day activity",
+            "eventName": "SAP TechEd in Berlin 2026",
+            "eventCode": "te26",
+            "published": 1,
+            "abstract": "Hands-on hardware, robotics, and IoT demos with SAP developers. Drop in any time during the day to build, tinker, and pair with SAP engineers on live gadgets.",
+            "attributevalues": [
+              {
+                "attribute": "Track",
+                "value": "Developer community (DC)",
+                "rf_attributevalue_id": "1745939183774050devC",
+                "attributevalue_id": "Developer community (DC)",
+                "attributevalue_code": "1745939183539050dcXY"
+              }
+            ],
+            "room": "Developer Garage (Ground Floor)",
+            "url": "https://www.sap.com/events/teched/berlin/flow/sap/te26/catalog/page/catalog?search=Developer%20Garage",
+            "participants": [
+              {
+                "speakerId": "1734109533258050gara_1773259901317001te26",
+                "fullName": "Ada Lovelace",
+                "firstName": "Ada",
+                "lastName": "Lovelace",
+                "companyName": "SAP",
+                "globalJobtitle": "Developer Advocate",
+                "bio": "<p>Ada hosts the Developer Garage.</p>",
+                "photoURL": "https://static.rainfocus.com/sap/te26/att/1734109533258050gara/attprofile/ada.jpg",
+                "Speaker-Photo-Published": "Published",
+                "session": [ { "speakerRole": "Host" } ]
+              }
+            ]
+          },
+          {
+            "sessionID": "1786600000000002expo",
+            "code": "EXPO01",
+            "title": "AI Showfloor Expo",
+            "type": "All-day activity",
+            "eventName": "SAP TechEd in Berlin 2026",
+            "eventCode": "te26",
+            "published": 1,
+            "abstract": "Explore partner and SAP AI booths across the show floor. Open all day, no registration required.",
+            "attributevalues": [
+              {
+                "attribute": "Track",
+                "value": "Developer community (DC)",
+                "rf_attributevalue_id": "1745939183774050devC",
+                "attributevalue_id": "Developer community (DC)",
+                "attributevalue_code": "1745939183539050dcXY"
+              }
+            ],
+            "location": "Show Floor Hall B",
+            "url": "https://www.sap.com/events/teched/berlin/flow/sap/te26/catalog/page/catalog?search=Expo",
+            "participants": []
+          }
+        ]
+      }
+    ]
+  },
+  "VIRTUAL": {
+    "responseCode": "0",
+    "responseMessage": "Success",
+    "totalSearchItems": 0,
+    "sectionList": [
+      {
+        "total": 0,
+        "from": 0,
+        "size": 0,
+        "items": []
+      }
+    ]
+  }
+}

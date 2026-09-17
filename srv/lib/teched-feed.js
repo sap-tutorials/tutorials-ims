@@ -17,6 +17,11 @@ import { computeRelatedDevtoberfestByTechEd } from './teched-devtoberfest-crossl
 const { SELECT } = cds.ql;
 const NS = 'com.sap.developers.ims.external';
 
+// Single source of truth for interpreting a DB-read CDS Boolean as all-day
+// (issue #2392). HANA/SQLite surface a Boolean as native true/false, but a
+// legacy 0/1 must also read as the intended boolean — never a truthy 0 or null.
+const isAllDay = (v) => v === true || v === 1;
+
 // The real catalog is ~300 sessions/venue; 1000 sits well above that (nothing
 // dropped) but bounds the sessions query + its derived abstract LOB pass.
 const MAX_SESSIONS = 1000;
@@ -47,16 +52,25 @@ async function fetchLobColumnByIds(db, entity, lobColumn, ids) {
  * contentHash, lastExtractedHash, firstSeenAt/lastSeenAt/pinUntil, audit fields).
  */
 export async function loadTechEdFeed(db, opts = {}) {
-  const sessionWhere = {};
   const venue = String(opts.venue || '').trim().toUpperCase();
-  if (venue === 'BERLIN' || venue === 'VIRTUAL') sessionWhere.venue = venue;
-  if (opts.upcoming === true) {
-    sessionWhere.scheduledEnd = { '>=': new Date().toISOString() };
-  }
+  const venueFilter = (venue === 'BERLIN' || venue === 'VIRTUAL') ? venue : null;
 
+  // `where\`1 = 1\`` seed (mirrors mcp-teched-search.js) — lets all subsequent
+  // predicates chain uniformly with .and`...` regardless of which filters are
+  // active. Tagged-template form is required for safe ISO timestamp binding
+  // (bare string interpolation trips the CQL parser on the 'T'/'Z' in ISO-8601).
   let sessionQuery = SELECT.from(`${NS}.TechEdSessions`)
-    .columns('ID', 'slug', 'venue', 'sessionCode', 'title', 'scheduledStart', 'scheduledEnd', 'room', 'youtubeUrl', 'url', 'track_ID');
-  if (Object.keys(sessionWhere).length) sessionQuery = sessionQuery.where(sessionWhere);
+    .columns('ID', 'slug', 'venue', 'sessionCode', 'title', 'scheduledStart', 'scheduledEnd', 'allDay', 'room', 'youtubeUrl', 'url', 'track_ID')
+    .where`1 = 1`;
+  if (venueFilter) sessionQuery = sessionQuery.and`venue = ${venueFilter}`;
+  if (opts.upcoming === true) {
+    // Keep not-yet-ended sessions. All-day activities (issue #2392) are timeless
+    // — they have a NULL scheduledEnd and `SQL NULL >= <iso>` is UNKNOWN, which
+    // would silently drop them. Match the fetcher's dropPast carve-out: an all-day
+    // row (or any NULL scheduledEnd) is never "past", so OR it back in explicitly.
+    const nowIso = new Date().toISOString();
+    sessionQuery = sessionQuery.and`(scheduledEnd >= ${nowIso} or scheduledEnd is null or allDay = ${true})`;
+  }
   sessionQuery = sessionQuery.orderBy('scheduledStart', 'sessionCode').limit(MAX_SESSIONS);
   const sessionRows = await db.run(sessionQuery);
 
@@ -121,6 +135,9 @@ export async function loadTechEdFeed(db, opts = {}) {
     abstract: abstractById.get(r.ID) ?? null,
     scheduledStart: r.scheduledStart,
     scheduledEnd: r.scheduledEnd,
+    // All-day activities (issue #2392). Coerce to a strict boolean via the
+    // shared isAllDay() so the feed and any other read path agree on the rule.
+    allDay: isAllDay(r.allDay),
     room: r.room,
     youtubeUrl: r.youtubeUrl,
     url: r.url,
