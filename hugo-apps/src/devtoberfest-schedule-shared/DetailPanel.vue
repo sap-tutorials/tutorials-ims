@@ -113,6 +113,21 @@ const outlookHref = computed(() => calHref('outlook'));
 
 function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.display = 'none'; }
 
+/** Strip simple Markdown and truncate to ~300 chars for use as a tooltip title. */
+function bioTooltip(bio: string | undefined): string | undefined {
+  if (!bio) return undefined;
+  // Remove images: ![alt](url)
+  let text = bio.replace(/!\[[^\]]*\]\([^)]*\)/g, '');
+  // Unwrap links: [text](url) → text
+  text = text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+  // Strip emphasis/formatting chars: * _ ~ # >
+  text = text.replace(/[*_~#>]/g, '');
+  // Collapse whitespace
+  text = text.replace(/\s+/g, ' ').trim();
+  if (!text) return undefined;
+  return text.length > 300 ? text.slice(0, 297) + '…' : text;
+}
+
 // Abstracts are authored in Markdown; render to sanitized HTML (same
 // markdown-it + DOMPurify pipeline as the FAQ/rules islands) so authored
 // paragraphs, lists, emphasis and links display instead of collapsing to
@@ -166,7 +181,12 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
           <div v-for="sp in (row as any).speakersEnriched" :key="sp.id" class="detail-panel__speaker">
             <img v-if="sp.photoUrl" :src="sp.photoUrl" :alt="sp.name" class="detail-panel__speaker-photo" loading="lazy" @error="onSpeakerPhotoError" />
             <div class="detail-panel__speaker-meta">
-              <span class="detail-panel__speaker-name">{{ sp.name }}</span>
+              <component
+                :is="sp.authorLogin ? 'a' : 'span'"
+                v-bind="sp.authorLogin ? { href: `/authors/${sp.authorLogin}/`, class: 'detail-panel__speaker-link' } : {}"
+                class="detail-panel__speaker-name"
+                :title="bioTooltip(sp.bio)"
+              >{{ sp.name }}</component>
               <span v-if="sp.role || sp.company" class="detail-panel__speaker-role">{{ [sp.role, sp.company].filter(Boolean).join(' @ ') }}</span>
             </div>
           </div>
