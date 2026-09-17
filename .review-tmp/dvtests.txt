@@ -1,0 +1,76 @@
+hugo-apps/src/teched-calendar/__tests__/App.test.ts --- 1/2 --- TypeScript
+ 54       scheduledEnd: null,
+ 55       url: null,
+ 56       youtubeUrl: '',
+ 57       speakers: ['ada-lovelace'],
+ 58       speakerNames: ['Ada Lovelace'],
+ 59     },
+ 60   ],
+ 61   speakers: [
+ 62     { slug: 'ada-lovelace', name: 'Ada Lovelace', title: 'Advocate', company: 'SAP', photoUrl: 'https://img.example/ada.jpg' },
+ 63     { slug: 'grace-hopper', name: 'Grace Hopper', title: 'Engineer', company: 'SAP' },
+ 64   ],
+ 65   tracks: [
+
+hugo-apps/src/teched-calendar/__tests__/App.test.ts --- 2/2 --- TypeScript
+204     // The panel is controlled by selectedRow; trigger   204     // The panel is controlled by selectedRow; trigger 
+... via the unscheduled card                                 ... via the unscheduled card
+205     // which is always visible regardless of cursor dat  205     // which is always visible regardless of cursor dat
+... e.                                                       ... e.
+206     const unscheduledBtn = wrapper.findAll('button.cal-  206     const unscheduledBtn = wrapper.findAll('button.cal-
+... unscheduled-card');                                      ... unscheduled-card');
+207     if (unscheduledBtn.length) {                         207     expect(unscheduledBtn.length).toBeGreaterThan(0);
+208       await unscheduledBtn[0].trigger('click');          208     await unscheduledBtn[0].trigger('click');
+209       await flushPromises();                             209     await flushPromises();
+210       // DetailPanel renders when selectedRow is set     210     // DetailPanel renders when selectedRow is set
+211       expect(wrapper.find('.detail-panel').exists()).to  211     expect(wrapper.find('.detail-panel').exists()).toBe
+... Be(true);                                                ... (true);
+...                                                          212     // Speaker photo from enriched feed data renders (r
+...                                                          ... egression: photos were missing)
+...                                                          213     const img = wrapper.find('.detail-panel__speaker-ph
+...                                                          ... oto');
+...                                                          214     expect(img.exists()).toBe(true);
+...                                                          215     expect(img.attributes('src')).toBe('https://img.exa
+...                                                          ... mple/ada.jpg');
+212       // Close it                                        216     // Close it
+213       const closeBtn = wrapper.find('.detail-panel__clo  217     const closeBtn = wrapper.find('.detail-panel__close
+... se');                                                    ... ');
+214       await closeBtn.trigger('click');                   218     await closeBtn.trigger('click');
+215       await flushPromises();                             219     await flushPromises();
+216       expect(wrapper.find('.detail-panel').exists()).to  220     expect(wrapper.find('.detail-panel').exists()).toBe
+... Be(false);                                               ... (false);
+217     }                                                    ... 
+218   });                                                    221   });
+219                                                          222 
+220   it('shows unscheduled bucket for sessions without a s  223   it('shows unscheduled bucket for sessions without a s
+... tart time', async () => {                                ... tart time', async () => {
+
+hugo-apps/src/teched-schedule/__tests__/App.test.ts --- 1/2 --- TypeScript
+ 49     },
+ 50   ],
+ 51   speakers: [
+ 52     { slug: 'ada-lovelace', name: 'Ada Lovelace', title: 'Advocate', company: 'SAP', photoUrl: 'https://img.example/ada.jpg' },
+ 53     { slug: 'grace-hopper', name: 'Grace Hopper', title: 'Engineer', company: 'SAP' },
+ 54   ],
+ 55   tracks: [
+
+hugo-apps/src/teched-schedule/__tests__/App.test.ts --- 2/2 --- TypeScript
+229 229     expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+230 230   });
+... 231 
+... 232   it('DetailPanel renders speaker photo from enriched feed data', async () => {
+... 233     const wrapper = mount(App);
+... 234     await flushPromises();
+... 235 
+... 236     // First row (default sort) is the AI session with speaker ada-lovelace (has photoUrl).
+... 237     await wrapper.find('tbody tr').trigger('click');
+... 238     await flushPromises();
+... 239 
+... 240     const img = wrapper.find('.detail-panel__speaker-photo');
+... 241     expect(img.exists()).toBe(true);
+... 242     expect(img.attributes('src')).toBe('https://img.example/ada.jpg');
+... 243   });
+231 244 
+232 245   it('row Enter keydown opens DetailPanel', async () => {
+233 246     const wrapper = mount(App);
+

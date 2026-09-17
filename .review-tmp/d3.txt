@@ -1,0 +1,49 @@
+hugo-apps/src/teched-calendar/App.vue --- 1/3 --- Text
+ 28  *   id, kind, title, scheduledStart, trackName, trackC   28  *   id, kind, title, scheduledStart, trackName, trackC
+ .. olor (optional)                                           .. olor (optional)
+ 29  * plus speaker names as a flat string on `speakers` (t   29  * plus speaker names as a flat string on `speakers` (t
+ .. he panel reads `.name`).                                  .. he panel reads `.name`).
+ 30  */                                                       30  */
+ 31 function toCalendarSession(s: TechEdSession, speakerNam   31 function toCalendarSession(s: TechEdSession, speakerByS
+ .. eBySlug: Map<string, string>, trackColor?: string): Ses   .. lug: Map<string, RawSpeaker>, trackColor?: string): Ses
+ .. sion {                                                    .. sion {
+ 32   const speakerObjects = (s.speakers || [])               32   const speakerObjects = (s.speakers || [])
+ 33     .map((slug) => ({ id: slug, name: speakerNameBySlug   33     .map((slug) => {
+ .. .get(slug) ?? slug, role: undefined, company: undefined   .. 
+ ..  }));                                                     .. 
+ ..                                                           34       const sp = speakerBySlug.get(slug);
+ ..                                                           35       return {
+ ..                                                           36         id: slug,
+ ..                                                           37         name: sp?.name ?? slug,
+ ..                                                           38         role: sp?.title ?? undefined,
+ ..                                                           39         company: sp?.company ?? undefined,
+ ..                                                           40         photoUrl: sp?.photoUrl ?? undefined,
+ ..                                                           41         authorLogin: (sp as any)?.authorLogin ?? undefi
+ ..                                                           .. ned,
+ ..                                                           42         bio: sp?.bio ?? undefined,
+ ..                                                           43       };
+ ..                                                           44     });
+ 34   return {                                                45   return {
+ 35     id: s.slug,                                           46     id: s.slug,
+ 36     kind: 'session',                                      47     kind: 'session',
+
+hugo-apps/src/teched-calendar/App.vue --- 2/3 --- Text
+113 124     rawTracks.value = rawTrk;
+114 125 
+115 126     const speakerNameBySlug = new Map(rawSpk.map((s) => [s.slug, s.name]));
+... 127     const speakerBySlug = new Map(rawSpk.map((s) => [s.slug, s]));
+116 128     const trackBySlug = new Map(rawTrk.map((t) => [t.slug, t]));
+117 129 
+118 130     rawSessions.value = (feed.sessions || []).map((s) => ({
+
+hugo-apps/src/teched-calendar/App.vue --- 3/3 --- Text
+141                                                          153 
+142     sessions.value = rawSessions.value.map((s) => {      154     sessions.value = rawSessions.value.map((s) => {
+143       const tColor = s.trackName ? (tcMap.get(s.trackNa  155       const tColor = s.trackName ? (tcMap.get(s.trackNa
+... me)?.border) : undefined;                                ... me)?.border) : undefined;
+144       return toCalendarSession(s, speakerNameBySlug, tC  156       return toCalendarSession(s, speakerBySlug, tColor
+... olor);                                                   ... );
+145     });                                                  157     });
+146                                                          158 
+147     const ic = initialCursor();                          159     const ic = initialCursor();
+

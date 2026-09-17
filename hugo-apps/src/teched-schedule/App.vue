@@ -5,7 +5,7 @@ import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { ScheduleRow } from '../devtoberfest-schedule-shared/types';
 
 // --- Feed shapes (mirrors teched-sessions-grid/App.vue) --------------------
-interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; }
+interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; authorLogin?: string | null; }
 interface RawTrack { slug: string; name: string; venue?: string | null; description?: string | null; }
 interface TechEdFeed { sessions: TechEdSession[]; speakers: RawSpeaker[]; tracks: RawTrack[]; }
 
@@ -142,6 +142,8 @@ function toDetailRow(s: TechEdSession): ScheduleRow {
     youtubeUrl: s.youtubeUrl ?? undefined,
     sessionCode: s.sessionCode ?? undefined,
     speakers: speakerObjects as any,
+    // Enriched speaker cards (photoUrl/authorLogin) — DetailPanel prefers these.
+    speakersEnriched: (s as any).speakersEnriched ?? undefined,
   } as unknown as ScheduleRow;
 }
 
@@ -155,12 +157,22 @@ async function loadData() {
     tracks.value = rawTracks;
 
     const speakerNameBySlug = new Map(rawSpeakers.map((s) => [s.slug, s.name]));
+    const speakerBySlug = new Map(rawSpeakers.map((s) => [s.slug, s]));
     const trackNameBySlug = new Map(rawTracks.map((t) => [t.slug, t.name]));
 
     sessions.value = (feed.sessions || []).map((s) => ({
       ...s,
       trackName: s.track ? trackNameBySlug.get(s.track) ?? null : null,
       speakerNames: (s.speakers || []).map((slug) => speakerNameBySlug.get(slug)).filter(Boolean) as string[],
+      // Enrich speakers into objects (photoUrl/role/company/authorLogin/bio) so
+      // DetailPanel renders speaker photos and author links — parity with the grid.
+      speakersEnriched: (s.speakers || [])
+        .map((slug) => {
+          const sp = speakerBySlug.get(slug);
+          if (!sp) return null;
+          return { id: sp.slug, name: sp.name, role: sp.title ?? undefined, company: sp.company ?? undefined, photoUrl: sp.photoUrl ?? undefined, authorLogin: sp.authorLogin ?? undefined, bio: sp.bio ?? undefined };
+        })
+        .filter(Boolean),
     }));
   } catch (e: any) {
     error.value = e?.message ?? 'Failed to load TechEd sessions.';

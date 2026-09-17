@@ -49,7 +49,7 @@ const feed = {
     },
   ],
   speakers: [
-    { slug: 'ada-lovelace', name: 'Ada Lovelace', title: 'Advocate', company: 'SAP' },
+    { slug: 'ada-lovelace', name: 'Ada Lovelace', title: 'Advocate', company: 'SAP', photoUrl: 'https://img.example/ada.jpg' },
     { slug: 'grace-hopper', name: 'Grace Hopper', title: 'Engineer', company: 'SAP' },
   ],
   tracks: [
@@ -227,6 +227,19 @@ describe('TechEd schedule table', () => {
 
     // DetailPanel renders with the title
     expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+  });
+
+  it('DetailPanel renders speaker photo from enriched feed data', async () => {
+    const wrapper = mount(App);
+    await flushPromises();
+
+    // First row (default sort) is the AI session with speaker ada-lovelace (has photoUrl).
+    await wrapper.find('tbody tr').trigger('click');
+    await flushPromises();
+
+    const img = wrapper.find('.detail-panel__speaker-photo');
+    expect(img.exists()).toBe(true);
+    expect(img.attributes('src')).toBe('https://img.example/ada.jpg');
   });
 
   it('row Enter keydown opens DetailPanel', async () => {

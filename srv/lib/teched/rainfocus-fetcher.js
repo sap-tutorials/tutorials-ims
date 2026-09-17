@@ -418,13 +418,16 @@ export function parseVenuePayload({ venue, sessionItems = [], speakerItems = [],
   }
 
   // Regular timed sessions, then all-day activities. A sourceId appearing in
-  // both prefers the FIRST parse (regular session wins) so a mis-tagged row
-  // never silently flips a real session to all-day.
-  const seenSourceIds = new Set();
+  // both keeps the FIRST (richer, timed) parse for its data, but membership in
+  // the all-day tab is AUTHORITATIVE for the allDay flag: RainFocus lists many
+  // all-day activities (e.g. Developer Garage topics) in BOTH the main catalog
+  // and the all-day tab, so a naive "regular wins" dedup left 17/19 tagged
+  // allDay:false and the UI showed only the 2 tab-exclusive ones (issue #2392).
+  const sessionBySourceId = new Map();
   const ingest = (parsed) => {
     if (!parsed) return;
-    if (seenSourceIds.has(parsed.session.sourceId)) return;
-    seenSourceIds.add(parsed.session.sourceId);
+    if (sessionBySourceId.has(parsed.session.sourceId)) return;
+    sessionBySourceId.set(parsed.session.sourceId, parsed.session);
     sessions.push(parsed.session);
     if (parsed.track && !trackById.has(parsed.track.sourceId)) trackById.set(parsed.track.sourceId, parsed.track);
     // speakers embedded on the session are the source of truth
@@ -432,7 +435,16 @@ export function parseVenuePayload({ venue, sessionItems = [], speakerItems = [],
   };
 
   for (const item of sessionItems) ingest(parseSession(item, venue));
-  for (const item of allDayItems) ingest(parseAllDayActivity(item, venue));
+  for (const item of allDayItems) {
+    const parsed = parseAllDayActivity(item, venue);
+    if (!parsed) continue;
+    const existing = sessionBySourceId.get(parsed.session.sourceId);
+    if (existing) {
+      existing.allDay = true; // already ingested as a timed session — flip the flag
+    } else {
+      ingest(parsed);
+    }
+  }
 
   return { sessions, speakers: [...speakerById.values()], tracks: [...trackById.values()] };
 }
