@@ -55,21 +55,29 @@ export async function loadTechEdFeed(db, opts = {}) {
   const venue = String(opts.venue || '').trim().toUpperCase();
   const venueFilter = (venue === 'BERLIN' || venue === 'VIRTUAL') ? venue : null;
 
-  // `where\`1 = 1\`` seed (mirrors mcp-teched-search.js) — lets all subsequent
-  // predicates chain uniformly with .and`...` regardless of which filters are
-  // active. Tagged-template form is required for safe ISO timestamp binding
-  // (bare string interpolation trips the CQL parser on the 'T'/'Z' in ISO-8601).
+  // Build the WHERE incrementally WITHOUT a `1 = 1` seed: HANA's hdb driver
+  // rejects the numeric literals in a `where\`1 = 1\`` tagged template as bound
+  // params ("Cannot set parameter at row: 1. Argument must be a string"). The
+  // first active predicate is applied with `.where`; later ones chain via `.and`.
+  // Tagged-template form is still required for safe ISO timestamp binding (bare
+  // string interpolation trips the CQL parser on the 'T'/'Z' in ISO-8601). The
+  // all-day boolean is a SQL literal `TRUE` — a bound `${true}` also trips hdb.
   let sessionQuery = SELECT.from(`${NS}.TechEdSessions`)
-    .columns('ID', 'slug', 'venue', 'sessionCode', 'title', 'scheduledStart', 'scheduledEnd', 'allDay', 'room', 'youtubeUrl', 'url', 'track_ID')
-    .where`1 = 1`;
-  if (venueFilter) sessionQuery = sessionQuery.and`venue = ${venueFilter}`;
+    .columns('ID', 'slug', 'venue', 'sessionCode', 'title', 'scheduledStart', 'scheduledEnd', 'allDay', 'room', 'youtubeUrl', 'url', 'track_ID');
+  let seeded = false;
+  if (venueFilter) {
+    sessionQuery = sessionQuery.where`venue = ${venueFilter}`;
+    seeded = true;
+  }
   if (opts.upcoming === true) {
     // Keep not-yet-ended sessions. All-day activities (issue #2392) are timeless
     // — they have a NULL scheduledEnd and `SQL NULL >= <iso>` is UNKNOWN, which
     // would silently drop them. Match the fetcher's dropPast carve-out: an all-day
     // row (or any NULL scheduledEnd) is never "past", so OR it back in explicitly.
     const nowIso = new Date().toISOString();
-    sessionQuery = sessionQuery.and`(scheduledEnd >= ${nowIso} or scheduledEnd is null or allDay = ${true})`;
+    sessionQuery = seeded
+      ? sessionQuery.and`(scheduledEnd >= ${nowIso} or scheduledEnd is null or allDay = TRUE)`
+      : sessionQuery.where`(scheduledEnd >= ${nowIso} or scheduledEnd is null or allDay = TRUE)`;
   }
   sessionQuery = sessionQuery.orderBy('scheduledStart', 'sessionCode').limit(MAX_SESSIONS);
   const sessionRows = await db.run(sessionQuery);
