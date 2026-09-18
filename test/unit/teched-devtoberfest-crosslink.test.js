@@ -34,26 +34,39 @@ describe('buildRelatedTechEdByDtfSession (pure)', () => {
   ];
 
   it('ranks by concept-overlap count and excludes zero-overlap sessions', () => {
-    const dtf = [{ id: 'd1', slug: 'dtf-1', title: 'DTF 1', conceptIds: new Set(['c1', 'c2']) }];
+    const dtf = [{ id: 'd1', slug: 'dtf-1', sessionCode: 'DA', title: 'DTF 1', conceptIds: new Set(['c1', 'c2']) }];
     const out = buildRelatedTechEdByDtfSession(dtf, techEd);
-    const related = out.get('d1');
+    const related = out.get('DA'); // keyed by sessionCode (uppercased), NOT the KG id 'd1'
     expect(related.map((r) => r.slug)).toEqual(['te-a', 'te-b']); // te-c has 0 overlap
     expect(related[0].sharedConceptCount).toBe(2);
     expect(related[1].sharedConceptCount).toBe(1);
+  });
+
+  it('keys the output by uppercased sessionCode, not the KG session id', () => {
+    const dtf = [{ id: 'kg-uuid-xyz', sessionCode: 'da', conceptIds: new Set(['c1']) }];
+    const out = buildRelatedTechEdByDtfSession(dtf, techEd);
+    expect(out.has('DA')).toBe(true);        // normalized sessionCode
+    expect(out.has('kg-uuid-xyz')).toBe(false); // never the KG id
+  });
+
+  it('skips sessions with no sessionCode (cannot bridge to the facade)', () => {
+    const dtf = [{ id: 'd1', conceptIds: new Set(['c1']) }]; // no sessionCode
+    const out = buildRelatedTechEdByDtfSession(dtf, techEd);
+    expect(out.size).toBe(0);
   });
 
   it('caps at MAX_RELATED_SESSIONS', () => {
     const many = Array.from({ length: 6 }, (_, i) => ({
       slug: `te-${i}`, title: `T${i}`, conceptIds: new Set(['c1']),
     }));
-    const dtf = [{ id: 'd1', conceptIds: new Set(['c1']) }];
+    const dtf = [{ id: 'd1', sessionCode: 'DA', conceptIds: new Set(['c1']) }];
     const out = buildRelatedTechEdByDtfSession(dtf, many);
-    expect(out.get('d1')).toHaveLength(MAX_RELATED_SESSIONS);
+    expect(out.get('DA')).toHaveLength(MAX_RELATED_SESSIONS);
   });
 
   it('returns an empty map for empty / absent inputs (fail-open shape)', () => {
     expect(buildRelatedTechEdByDtfSession([], techEd).size).toBe(0);
-    expect(buildRelatedTechEdByDtfSession([{ id: 'd1', conceptIds: new Set(['c1']) }], []).size).toBe(0);
+    expect(buildRelatedTechEdByDtfSession([{ id: 'd1', sessionCode: 'DA', conceptIds: new Set(['c1']) }], []).size).toBe(0);
     expect(buildRelatedTechEdByDtfSession(null, techEd).size).toBe(0);
   });
 });
@@ -77,14 +90,28 @@ describe('buildRelatedDevtoberfestByTechEd (pure)', () => {
 
 describe('assembleFeed relatedTechEdSessions wiring', () => {
   const tracks = [{ ID: 't1', NAME: 'ABAP' }];
-  const sessions = [{ ID: 's1', TITLE: 'Intro', TRACK_ID: 't1', STATUS: 'Confirmed', ACTIVITY_ID: 'a1' }];
+  // Facade session: ID is the planner-facade UUID, SESSIONCODE is the shared key.
+  // These are DISTINCT namespaces from the KG DevtoberfestSessions.ID — the bug
+  // (#2312 regression) was attaching by session.ID, which never matched the
+  // crosslink map keyed by the KG id. The map is keyed by sessionCode; assembleFeed
+  // must look up by session.SESSIONCODE to bridge the seam.
+  const sessions = [{ ID: 'facade-uuid-1', SESSIONCODE: 'DA', TITLE: 'Intro', TRACK_ID: 't1', STATUS: 'Confirmed', ACTIVITY_ID: 'a1' }];
   const activities = [{ ID: 'a1', TITLE: 'Do Intro', STATUS: 'Confirmed', TASKTYPE: 'TUTORIAL', TASKSLUG: 'Intro-Slug', TRACK_ID: 't1' }];
 
-  it('attaches related TechEd sessions keyed by Devtoberfest session ID', () => {
-    const relatedTechEdBySession = new Map([['s1', [{ slug: 'te-a', title: 'TechEd A', sharedConceptCount: 2 }]]]);
+  it('attaches related TechEd sessions keyed by Devtoberfest sessionCode (bridges facade↔KG seam)', () => {
+    // Map keyed by sessionCode 'DA' — NOT the facade session ID 'facade-uuid-1'.
+    const relatedTechEdBySession = new Map([['DA', [{ slug: 'te-a', title: 'TechEd A', sharedConceptCount: 2 }]]]);
     const out = assembleFeed({ sessions, activities, tracks, editions: [], activeEditionId: null, relatedTechEdBySession });
     expect(out.sessions[0].relatedTechEdSessions).toHaveLength(1);
     expect(out.sessions[0].relatedTechEdSessions[0].slug).toBe('te-a');
+  });
+
+  it('does NOT attach when the map is (wrongly) keyed by the facade session ID', () => {
+    // Regression guard: a map keyed by the facade UUID must yield [] — proves the
+    // lookup goes through sessionCode, so the old session.ID keying can't sneak back.
+    const relatedTechEdBySession = new Map([['facade-uuid-1', [{ slug: 'te-a', sharedConceptCount: 2 }]]]);
+    const out = assembleFeed({ sessions, activities, tracks, editions: [], activeEditionId: null, relatedTechEdBySession });
+    expect(out.sessions[0].relatedTechEdSessions).toEqual([]);
   });
 
   it('defaults to an empty array when no cross-link map is supplied (flag OFF / absent)', () => {
@@ -144,11 +171,12 @@ describe('cross-link orchestrators (SQLite)', () => {
   it('computeRelatedTechEdByDtfSession ranks related TechEd sessions by overlap when flag ON', async () => {
     __setFlagForTest(FLAG, true);
     const out = await computeRelatedTechEdByDtfSession();
-    const related = out.get('d1');
+    // keyed by sessionCode (DA/DB), not the KG DevtoberfestSessions.ID (d1/d2)
+    const related = out.get('DA');
     expect(related.map((r) => r.slug)).toEqual(['teched-a', 'teched-b']);
     expect(related[0].sharedConceptCount).toBe(2);
     expect(related[1].sharedConceptCount).toBe(1);
-    expect(out.get('d2').map((r) => r.slug)).toEqual(['teched-c']);
+    expect(out.get('DB').map((r) => r.slug)).toEqual(['teched-c']);
   });
 
   it('computeRelatedTechEdByDtfSession returns empty map when flag OFF', async () => {

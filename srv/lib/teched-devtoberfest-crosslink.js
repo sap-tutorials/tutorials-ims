@@ -33,6 +33,16 @@ const FLAG = 'TECHED_DEVTOBERFEST_CROSSLINK_ENABLED';
 // Top-N related sessions attached per session (both directions).
 export const MAX_RELATED_SESSIONS = 3;
 
+// Stable key bridging the KG DevtoberfestSessions row and the planner-facade
+// Session for forward-direction attach. The KG ID and facade ID are distinct
+// UUID namespaces (the KG job mints a fresh uuid), but SESSIONCODE is copied
+// verbatim into the KG row, so it is the one identifier shared by both sides.
+// Trimmed + uppercased for match stability; empty/missing → null (skipped).
+export function dtfSessionKey(sessionCode) {
+  const v = (sessionCode ?? '').toString().trim().toUpperCase();
+  return v || null;
+}
+
 function toSet(x) {
   return x instanceof Set ? x : new Set(x || []);
 }
@@ -57,15 +67,22 @@ function byOverlapThen(keyFn) {
 /**
  * Forward direction (Devtoberfest → TechEd). PURE.
  *
+ * Keyed by the Devtoberfest session CODE (not the KG-minted DevtoberfestSessions.ID):
+ * the feed attaches by the planner-facade session's SESSIONCODE, which is a
+ * different UUID namespace from the KG ID. sessionCode is the stable identifier
+ * shared verbatim across both — see dtfSessionKey() and devtoberfest-feed.js (#2312).
+ *
  * @param {Array<{id,slug,title,sessionCode,taskSlug,conceptIds}>} dtfSessions
  * @param {Array<{slug,title,sessionCode,venue,url,conceptIds}>} techEdSessions
- * @returns {Map<string, Array>} Devtoberfest session ID → top related TechEd sessions
+ * @returns {Map<string, Array>} Devtoberfest sessionCode key → top related TechEd sessions
  */
 export function buildRelatedTechEdByDtfSession(dtfSessions, techEdSessions) {
   const out = new Map();
   if (!Array.isArray(dtfSessions) || dtfSessions.length === 0) return out;
   if (!Array.isArray(techEdSessions) || techEdSessions.length === 0) return out;
   for (const d of dtfSessions) {
+    const key = dtfSessionKey(d.sessionCode);
+    if (!key) continue;
     const cset = toSet(d.conceptIds);
     if (!cset.size) continue;
     const scored = [];
@@ -84,7 +101,7 @@ export function buildRelatedTechEdByDtfSession(dtfSessions, techEdSessions) {
     }
     if (scored.length) {
       scored.sort(byOverlapThen((x) => x.slug));
-      out.set(d.id, scored.slice(0, MAX_RELATED_SESSIONS));
+      out.set(key, scored.slice(0, MAX_RELATED_SESSIONS));
     }
   }
   return out;
