@@ -45,23 +45,33 @@ if (initialUrl.speaker) filterSpeaker.value = initialUrl.speaker;
 if (initialUrl.clubhouse) filterClubhouse.value = true;
 
 /**
- * Load the TechEd feed. Prefers an embedded `<script id="teched-data">` JSON
- * blob (baked by the /teched/ Hugo page, Unit 7) — same pattern as
- * channels-directory — and falls back to fetching the public /build/teched
- * endpoint so the island works standalone.
+ * Load the TechEd feed. Prefers the live public /build/teched endpoint so
+ * request-time fields (relatedDevtoberfestSessions — #2312 — and anything else
+ * computed per-request) are never stale; the embedded `<script id="teched-data">`
+ * JSON blob baked by the /teched/ Hugo page (Unit 7) is used only as a fallback
+ * when the fetch fails, so the island still renders offline / when CAP is down.
+ * (Before #2312's crosslink surfaced, the blob was preferred and its baked
+ * relatedDevtoberfestSessions were always empty — the fetch-first order fixes that.)
  */
-async function loadFeed(): Promise<TechEdFeed> {
+function embeddedFeed(): TechEdFeed | null {
   const el = typeof document !== 'undefined' ? document.getElementById('teched-data') : null;
   // Hugo's jsonify of a nil .Site.Data.teched emits the literal string "null" —
-  // truthy and non-empty, but JSON.parse("null") returns null, which then throws
-  // on feed.speakers below. Treat "null" as absent and fall through to /build/teched.
+  // truthy and non-empty, but JSON.parse("null") returns null. Treat as absent.
   const text = el?.textContent?.trim();
   if (text && text !== 'null') {
-    return JSON.parse(text) as TechEdFeed;
+    try { return JSON.parse(text) as TechEdFeed; } catch { /* fall through */ }
   }
-  const r = await fetch('/build/teched', { headers: { Accept: 'application/json' } });
-  if (!r.ok) throw new Error(`teched ${r.status}`);
-  return r.json();
+  return null;
+}
+
+async function loadFeed(): Promise<TechEdFeed> {
+  try {
+    const r = await fetch('/build/teched', { headers: { Accept: 'application/json' } });
+    if (r.ok) return await r.json();
+  } catch { /* fall back to the baked blob below */ }
+  const baked = embeddedFeed();
+  if (baked) return baked;
+  throw new Error('teched feed unavailable');
 }
 
 async function loadData() {
