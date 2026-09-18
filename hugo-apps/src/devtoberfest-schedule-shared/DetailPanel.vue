@@ -113,6 +113,16 @@ const outlookHref = computed(() => calHref('outlook'));
 
 function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.display = 'none'; }
 
+// Speaker → profile page link. Prefer the developer-advocate page when the
+// speaker is an advocate (richer roster page, covers advocates who never
+// authored a tutorial), else fall back to the GitHub-login author page.
+// Returns null when neither is known (plain <span>, no link).
+function speakerHref(sp: any): string | null {
+  if (sp?.advocateSlug) return `/developer-advocates/${sp.advocateSlug}/`;
+  if (sp?.authorLogin) return `/authors/${sp.authorLogin}/`;
+  return null;
+}
+
 /** Strip simple Markdown and truncate to ~300 chars for use as a tooltip title. */
 function bioTooltip(bio: string | undefined): string | undefined {
   if (!bio) return undefined;
@@ -182,8 +192,8 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
             <img v-if="sp.photoUrl" :src="sp.photoUrl" :alt="sp.name" class="detail-panel__speaker-photo" loading="lazy" @error="onSpeakerPhotoError" />
             <div class="detail-panel__speaker-meta">
               <component
-                :is="sp.authorLogin ? 'a' : 'span'"
-                v-bind="sp.authorLogin ? { href: `/authors/${sp.authorLogin}/`, class: 'detail-panel__speaker-link' } : {}"
+                :is="speakerHref(sp) ? 'a' : 'span'"
+                v-bind="speakerHref(sp) ? { href: speakerHref(sp), class: 'detail-panel__speaker-link' } : {}"
                 class="detail-panel__speaker-name"
                 :title="bioTooltip(sp.bio)"
               >{{ sp.name }}</component>
@@ -197,8 +207,8 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
             <img v-if="sp.photoUrl" :src="sp.photoUrl" :alt="sp.name" class="detail-panel__speaker-photo" loading="lazy" @error="onSpeakerPhotoError" />
             <div class="detail-panel__speaker-meta">
               <component
-                :is="sp.authorLogin ? 'a' : 'span'"
-                v-bind="sp.authorLogin ? { href: `/authors/${sp.authorLogin}/`, class: 'detail-panel__speaker-link' } : {}"
+                :is="speakerHref(sp) ? 'a' : 'span'"
+                v-bind="speakerHref(sp) ? { href: speakerHref(sp), class: 'detail-panel__speaker-link' } : {}"
                 class="detail-panel__speaker-name"
               >{{ sp.name }}</component>
               <span v-if="sp.role || sp.company" class="detail-panel__speaker-role">{{ [sp.role, sp.company].filter(Boolean).join(' @ ') }}</span>

@@ -86,4 +86,46 @@ function enrichSpeakersWithAuthorLogin(speakers, authorIndex) {
   return speakers;
 }
 
-module.exports = { normalizeName, buildNameToLoginMap, resolveAuthorLogin, enrichSpeakersWithAuthorLogin };
+/**
+ * Build a lookup map from normalized displayName → advocate slug from an
+ * advocate roster. Same 1:1 (unambiguous-only) discipline as the author map.
+ *
+ * @param {{name: string, slug: string}[]} advocates
+ * @returns {Map<string, string>}  normalized-name → slug (1:1 only)
+ */
+function buildNameToSlugMap(advocates) {
+  if (!Array.isArray(advocates)) return new Map();
+  const nameToSlugs = new Map();
+  for (const a of advocates) {
+    if (!a || typeof a !== 'object') continue;
+    const key = normalizeName(a.name);
+    if (!key || !a.slug) continue;
+    if (!nameToSlugs.has(key)) nameToSlugs.set(key, []);
+    nameToSlugs.get(key).push(a.slug);
+  }
+  const result = new Map();
+  for (const [key, slugs] of nameToSlugs) {
+    if (slugs.length === 1) result.set(key, slugs[0]);
+  }
+  return result;
+}
+
+/**
+ * Enrich speakers with `advocateSlug` (string|null) by matching name against a
+ * developer-advocate roster. The UI prefers the advocate page over the author
+ * page (issue #2392). Mutates in place AND returns the array.
+ *
+ * @template {{ name?: string|null }} T
+ * @param {T[]} speakers
+ * @param {{name: string, slug: string}[]} advocates
+ * @returns {(T & { advocateSlug: string|null })[]}
+ */
+function enrichSpeakersWithAdvocateSlug(speakers, advocates) {
+  const map = buildNameToSlugMap(advocates);
+  for (const sp of speakers) {
+    sp.advocateSlug = resolveAuthorLogin(sp.name, map); // same normalized-name lookup
+  }
+  return speakers;
+}
+
+module.exports = { normalizeName, buildNameToLoginMap, resolveAuthorLogin, enrichSpeakersWithAuthorLogin, buildNameToSlugMap, enrichSpeakersWithAdvocateSlug };

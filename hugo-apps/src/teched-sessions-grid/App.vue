@@ -7,13 +7,13 @@ import RelatedSessions from './RelatedSessions.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 
 // --- Feed shapes (see GET /build/teched in srv/server.js) ------------------
-interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; authorLogin?: string | null; }
+interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; authorLogin?: string | null; advocateSlug?: string | null; }
 interface RawTrack { slug: string; name: string; venue?: string | null; description?: string | null; }
 interface TechEdFeed { sessions: TechEdSession[]; speakers: RawSpeaker[]; tracks: RawTrack[]; }
 /** Per-session speaker link, pre-computed once in loadData so the template avoids double calls. */
-interface SpeakerLink { slug: string; name: string; authorLogin?: string | null; }
+interface SpeakerLink { slug: string; name: string; authorLogin?: string | null; advocateSlug?: string | null; }
 /** Speaker card shape used by DetailPanel (Unit 2). */
-interface EnrichedSpeaker { id: string; name: string; role?: string; company?: string; photoUrl?: string; authorLogin?: string; bio?: string; }
+interface EnrichedSpeaker { id: string; name: string; role?: string; company?: string; photoUrl?: string; authorLogin?: string; advocateSlug?: string; bio?: string; }
 /** Enriched session carrying pre-resolved display fields. */
 interface EnrichedSession extends TechEdSession { speakerLinks?: SpeakerLink[]; speakersEnriched?: EnrichedSpeaker[]; }
 
@@ -88,7 +88,7 @@ async function loadData() {
         .map((slug) => {
           const sp = speakerBySlug.get(slug);
           if (!sp) return null;
-          return { id: sp.slug, name: sp.name, role: sp.title ?? undefined, company: sp.company ?? undefined, photoUrl: sp.photoUrl ?? undefined, authorLogin: sp.authorLogin ?? undefined, bio: sp.bio ?? undefined };
+          return { id: sp.slug, name: sp.name, role: sp.title ?? undefined, company: sp.company ?? undefined, photoUrl: sp.photoUrl ?? undefined, authorLogin: sp.authorLogin ?? undefined, advocateSlug: sp.advocateSlug ?? undefined, bio: sp.bio ?? undefined };
         })
         .filter(Boolean);
       return {
@@ -98,7 +98,7 @@ async function loadData() {
         speakersEnriched: enrichedSpeakers,
         speakerLinks: (s.speakers || []).map((slug) => {
           const sp = speakerBySlug.get(slug);
-          return { slug, name: sp?.name ?? slug, authorLogin: sp?.authorLogin ?? null };
+          return { slug, name: sp?.name ?? slug, authorLogin: sp?.authorLogin ?? null, advocateSlug: sp?.advocateSlug ?? null };
         }),
       };
     });
@@ -225,6 +225,14 @@ function formatStart(iso: string | null | undefined): string {
 function safeHref(url: string | null | undefined): string {
   if (!url) return '#';
   return /^https?:\/\//i.test(url) ? url : '#';
+}
+
+// Speaker → profile page. Prefer the developer-advocate page (richer roster
+// page, covers advocates who never authored a tutorial), else the author page.
+function speakerHref(sp: { authorLogin?: string | null; advocateSlug?: string | null }): string | null {
+  if (sp.advocateSlug) return `/developer-advocates/${sp.advocateSlug}/`;
+  if (sp.authorLogin) return `/authors/${sp.authorLogin}/`;
+  return null;
 }
 
 function toggleTrack(slug: string) {
@@ -423,7 +431,7 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, filterClubhouse, se
               <p v-if="s.speakerLinks?.length" class="tsg-speakers">
                 <template v-for="(sp, i) in s.speakerLinks" :key="sp.slug">
                   <template v-if="i > 0">, </template>
-                  <a v-if="sp.authorLogin" :href="`/authors/${sp.authorLogin}/`" class="tsg-speaker-link">{{ sp.name }}</a>
+                  <a v-if="speakerHref(sp)" :href="speakerHref(sp)!" class="tsg-speaker-link">{{ sp.name }}</a>
                   <span v-else>{{ sp.name }}</span>
                 </template>
               </p>
@@ -468,7 +476,7 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, filterClubhouse, se
               <p v-if="s.speakerLinks?.length" class="tsg-speakers">
                 <template v-for="(sp, i) in s.speakerLinks" :key="sp.slug">
                   <template v-if="i > 0">, </template>
-                  <a v-if="sp.authorLogin" :href="`/authors/${sp.authorLogin}/`" class="tsg-speaker-link">{{ sp.name }}</a>
+                  <a v-if="speakerHref(sp)" :href="speakerHref(sp)!" class="tsg-speaker-link">{{ sp.name }}</a>
                   <span v-else>{{ sp.name }}</span>
                 </template>
               </p>

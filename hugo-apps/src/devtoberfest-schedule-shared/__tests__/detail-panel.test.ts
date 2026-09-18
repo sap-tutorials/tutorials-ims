@@ -63,6 +63,22 @@ describe('DetailPanel enriched speakers (TechEd)', () => {
     expect(link?.textContent).toContain('Ada Lovelace');
   });
 
+  it('#2392: advocateSlug is preferred over authorLogin → links to /developer-advocates/{slug}/', () => {
+    const { host } = mount(rowWithSpeakers([
+      { id: 'sp3', name: 'DJ Adams', authorLogin: 'qmacro', advocateSlug: 'dj-adams' },
+    ]));
+    const link = host.querySelector('a.detail-panel__speaker-link');
+    expect(link?.getAttribute('href')).toBe('/developer-advocates/dj-adams/');
+  });
+
+  it('#2392: advocate without an author login still links to the advocate page', () => {
+    const { host } = mount(rowWithSpeakers([
+      { id: 'sp4', name: 'Rekha D R', advocateSlug: 'rekha-d-r' },
+    ]));
+    const link = host.querySelector('a.detail-panel__speaker-link');
+    expect(link?.getAttribute('href')).toBe('/developer-advocates/rekha-d-r/');
+  });
+
   it('item 3: enriched speaker without authorLogin renders as a plain span, no anchor', () => {
     const { host } = mount(rowWithSpeakers([
       { id: 'sp2', name: 'Grace Hopper' },

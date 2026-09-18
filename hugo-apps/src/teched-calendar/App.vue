@@ -18,7 +18,7 @@ import { isClubhouse } from '../teched-sessions-grid/filter';
 import { parseTechEdCalUrl, toTechEdCalQuery, type TechEdCalViewMode } from './url-state';
 
 // --- Feed shapes -----------------------------------------------------------
-interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; authorLogin?: string | null; }
+interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; authorLogin?: string | null; advocateSlug?: string | null; }
 interface RawTrack { slug: string; name: string; venue?: string | null; description?: string | null; }
 interface TechEdFeed { sessions: TechEdSession[]; speakers: RawSpeaker[]; tracks: RawTrack[]; }
 
@@ -41,6 +41,7 @@ function toCalendarSession(s: TechEdSession, speakerBySlug: Map<string, RawSpeak
         company: sp?.company ?? undefined,
         photoUrl: sp?.photoUrl ?? undefined,
         authorLogin: sp?.authorLogin ?? undefined,
+        advocateSlug: sp?.advocateSlug ?? undefined,
         bio: sp?.bio ?? undefined,
       };
     });

@@ -5,7 +5,7 @@ import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { ScheduleRow } from '../devtoberfest-schedule-shared/types';
 
 // --- Feed shapes (mirrors teched-sessions-grid/App.vue) --------------------
-interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; authorLogin?: string | null; }
+interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; authorLogin?: string | null; advocateSlug?: string | null; }
 interface RawTrack { slug: string; name: string; venue?: string | null; description?: string | null; }
 interface TechEdFeed { sessions: TechEdSession[]; speakers: RawSpeaker[]; tracks: RawTrack[]; }
 
@@ -170,7 +170,7 @@ async function loadData() {
         .map((slug) => {
           const sp = speakerBySlug.get(slug);
           if (!sp) return null;
-          return { id: sp.slug, name: sp.name, role: sp.title ?? undefined, company: sp.company ?? undefined, photoUrl: sp.photoUrl ?? undefined, authorLogin: sp.authorLogin ?? undefined, bio: sp.bio ?? undefined };
+          return { id: sp.slug, name: sp.name, role: sp.title ?? undefined, company: sp.company ?? undefined, photoUrl: sp.photoUrl ?? undefined, authorLogin: sp.authorLogin ?? undefined, advocateSlug: sp.advocateSlug ?? undefined, bio: sp.bio ?? undefined };
         })
         .filter(Boolean),
     }));
