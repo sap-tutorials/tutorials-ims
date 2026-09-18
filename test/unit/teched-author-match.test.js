@@ -12,6 +12,8 @@ import {
   buildNameToLoginMap,
   resolveAuthorLogin,
   enrichSpeakersWithAuthorLogin,
+  buildNameToSlugMap,
+  enrichSpeakersWithAdvocateSlug,
 } from '../../srv/lib/teched/author-match.js';
 
 // ---------------------------------------------------------------------------
@@ -162,5 +164,46 @@ describe('enrichSpeakersWithAuthorLogin', () => {
 
   it('handles empty speakers array gracefully', () => {
     expect(() => enrichSpeakersWithAuthorLogin([], index)).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// advocate matcher (issue #2392) — name → developer-advocate slug
+// ---------------------------------------------------------------------------
+describe('buildNameToSlugMap + enrichSpeakersWithAdvocateSlug', () => {
+  const roster = [
+    { name: 'Rekha D R', slug: 'rekha-d-r' },
+    { name: 'Witalij Rudnicki', slug: 'witalij-rudnicki' },
+    { name: 'DJ Adams', slug: 'dj-adams' },
+  ];
+
+  it('maps normalized name → slug (1:1)', () => {
+    const m = buildNameToSlugMap(roster);
+    expect(m.get('rekha d r')).toBe('rekha-d-r');
+    expect(m.get('witalij rudnicki')).toBe('witalij-rudnicki');
+  });
+
+  it('excludes ambiguous names (same name → 2 slugs)', () => {
+    const m = buildNameToSlugMap([
+      { name: 'Alex Kim', slug: 'alex-kim' },
+      { name: 'Alex Kim', slug: 'alex-kim-2' },
+    ]);
+    expect(m.has('alex kim')).toBe(false);
+  });
+
+  it('enriches speakers with advocateSlug, null when unmatched', () => {
+    const speakers = [
+      { slug: 'rekha', name: 'Rekha D R' },
+      { slug: 'josh', name: 'Josh Bentley' }, // not an advocate
+    ];
+    enrichSpeakersWithAdvocateSlug(speakers, roster);
+    expect(speakers[0].advocateSlug).toBe('rekha-d-r');
+    expect(speakers[1].advocateSlug).toBeNull();
+  });
+
+  it('is fail-open: attaches null when roster is not an array', () => {
+    const speakers = [{ slug: 'rekha', name: 'Rekha D R' }];
+    enrichSpeakersWithAdvocateSlug(speakers, null);
+    expect(speakers[0].advocateSlug).toBeNull();
   });
 });
