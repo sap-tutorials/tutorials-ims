@@ -54,12 +54,12 @@ const feed = {
       scheduledEnd: null,
       url: null,
       youtubeUrl: '',
-      speakers: [],
-      speakerNames: [],
+      speakers: ['ada-lovelace'],
+      speakerNames: ['Ada Lovelace'],
     },
   ],
   speakers: [
-    { slug: 'ada-lovelace', name: 'Ada Lovelace', title: 'Advocate', company: 'SAP' },
+    { slug: 'ada-lovelace', name: 'Ada Lovelace', title: 'Advocate', company: 'SAP', photoUrl: 'https://img.example/ada.jpg' },
     { slug: 'grace-hopper', name: 'Grace Hopper', title: 'Engineer', company: 'SAP' },
   ],
   tracks: [
@@ -204,17 +204,20 @@ describe('TechEd calendar island', () => {
     // The panel is controlled by selectedRow; trigger via the unscheduled card
     // which is always visible regardless of cursor date.
     const unscheduledBtn = wrapper.findAll('button.cal-unscheduled-card');
-    if (unscheduledBtn.length) {
-      await unscheduledBtn[0].trigger('click');
-      await flushPromises();
-      // DetailPanel renders when selectedRow is set
-      expect(wrapper.find('.detail-panel').exists()).toBe(true);
-      // Close it
-      const closeBtn = wrapper.find('.detail-panel__close');
-      await closeBtn.trigger('click');
-      await flushPromises();
-      expect(wrapper.find('.detail-panel').exists()).toBe(false);
-    }
+    expect(unscheduledBtn.length).toBeGreaterThan(0);
+    await unscheduledBtn[0].trigger('click');
+    await flushPromises();
+    // DetailPanel renders when selectedRow is set
+    expect(wrapper.find('.detail-panel').exists()).toBe(true);
+    // Speaker photo from enriched feed data renders (regression: photos were missing)
+    const img = wrapper.find('.detail-panel__speaker-photo');
+    expect(img.exists()).toBe(true);
+    expect(img.attributes('src')).toBe('https://img.example/ada.jpg');
+    // Close it
+    const closeBtn = wrapper.find('.detail-panel__close');
+    await closeBtn.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.detail-panel').exists()).toBe(false);
   });
 
   it('shows unscheduled bucket for sessions without a start time', async () => {

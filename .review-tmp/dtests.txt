@@ -1,0 +1,54 @@
+test/unit/teched-allday.test.js --- JavaScript
+76     expect(timed.every((s) => s.allDay === false)).toBe(  76     expect(timed.every((s) => s.allDay === false)).toBe(
+.. true);                                                    .. true);
+77   });                                                     77   });
+78                                                           78 
+79   it('lets a regular session win when a sourceId appears  79   it('flips allDay=true when a sourceId appears in both 
+..  in both tabs', () => {                                   .. tabs (keeping the timed data)', () => {
+80     const dupId = SEARCH.BERLIN.sectionList[0].items[0].  80     const dupId = SEARCH.BERLIN.sectionList[0].items[0].
+.. sessionID;                                                .. sessionID;
+81     const { sessions } = parseVenuePayload({              81     const { sessions } = parseVenuePayload({
+82       venue: 'BERLIN',                                    82       venue: 'BERLIN',
+83       sessionItems: SEARCH.BERLIN.sectionList[0].items,   83       sessionItems: SEARCH.BERLIN.sectionList[0].items,
+84       allDayItems: [{ sessionID: dupId, title: 'Dup as a  84       allDayItems: [{ sessionID: dupId, title: 'Dup as a
+.. ll-day' }],                                               .. ll-day' }],
+85     });                                                   85     });
+86     const dup = sessions.filter((s) => s.sourceId === du  86     const dup = sessions.filter((s) => s.sourceId === du
+.. pId);                                                     .. pId);
+87     expect(dup).toHaveLength(1);                          87     expect(dup).toHaveLength(1); // still one row (riche
+..                                                           .. r timed parse kept)
+..                                                           88     // Membership in the all-day tab is authoritative: R
+..                                                           .. ainFocus lists many all-day
+..                                                           89     // activities in BOTH the main catalog and the all-d
+..                                                           .. ay tab. The flag must flip
+..                                                           90     // to true or the UI shows only tab-exclusive activi
+..                                                           .. ties (issue #2392 regression).
+88     expect(dup[0].allDay).toBe(false); // the timed sess  91     expect(dup[0].allDay).toBe(true);
+.. ion wins                                                  .. 
+89   });                                                     92   });
+90 });                                                       93 });
+91                                                           94 
+
+test/unit/teched-jobs.test.js --- 1/2 --- JavaScript
+ 66     });                                                   66     });
+ 67     expect(s.fetched).toBe(6);                            67     expect(s.fetched).toBe(6);
+ 68     expect(s.sessionsUpserted).toBe(6);                   68     expect(s.sessionsUpserted).toBe(6);
+ 69     expect(s.speakersUpserted).toBe(10);                  69     expect(s.speakersUpserted).toBe(9); // Herzig merge
+ ..                                                           .. s cross-venue (te26+tev26) → 10 raw becomes 9 (#2403 de
+ ..                                                           .. dup)
+ 70     expect(s.tracksUpserted).toBe(4);                     70     expect(s.tracksUpserted).toBe(4);
+ 71     expect(s.linksReconciled).toBe(10);                   71     expect(s.linksReconciled).toBe(10);
+ 72     expect(s.kgEnabled).toBe(false);                      72     expect(s.kgEnabled).toBe(false);
+
+test/unit/teched-jobs.test.js --- 2/2 --- JavaScript
+191     const s = await runRefreshTechEdSessions('log-1', {  191     const s = await runRefreshTechEdSessions('log-1', {
+...  fetchAllTechEdSessions: fetchAllSeam });                ...  fetchAllTechEdSessions: fetchAllSeam });
+192     expect(s.fetched).toBe(6);                           192     expect(s.fetched).toBe(6);
+193     expect(s.sessionsUpserted).toBe(6);                  193     expect(s.sessionsUpserted).toBe(6);
+194     expect(s.speakersUpserted).toBe(10);                 194     expect(s.speakersUpserted).toBe(9); // Herzig merge
+...                                                          ... s cross-venue (te26+tev26) → 10 raw becomes 9 (#2403 de
+...                                                          ... dup)
+195     expect(s.tracksUpserted).toBe(4);                    195     expect(s.tracksUpserted).toBe(4);
+196     expect(s.linksReconciled).toBe(10);                  196     expect(s.linksReconciled).toBe(10);
+197                                                          197 
+

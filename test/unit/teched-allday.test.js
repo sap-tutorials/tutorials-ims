@@ -76,7 +76,7 @@ describe('parseVenuePayload with allDayItems', () => {
     expect(timed.every((s) => s.allDay === false)).toBe(true);
   });
 
-  it('lets a regular session win when a sourceId appears in both tabs', () => {
+  it('flips allDay=true when a sourceId appears in both tabs (keeping the timed data)', () => {
     const dupId = SEARCH.BERLIN.sectionList[0].items[0].sessionID;
     const { sessions } = parseVenuePayload({
       venue: 'BERLIN',
@@ -84,8 +84,11 @@ describe('parseVenuePayload with allDayItems', () => {
       allDayItems: [{ sessionID: dupId, title: 'Dup as all-day' }],
     });
     const dup = sessions.filter((s) => s.sourceId === dupId);
-    expect(dup).toHaveLength(1);
-    expect(dup[0].allDay).toBe(false); // the timed session wins
+    expect(dup).toHaveLength(1); // still one row (richer timed parse kept)
+    // Membership in the all-day tab is authoritative: RainFocus lists many all-day
+    // activities in BOTH the main catalog and the all-day tab. The flag must flip
+    // to true or the UI shows only tab-exclusive activities (issue #2392 regression).
+    expect(dup[0].allDay).toBe(true);
   });
 });
 

@@ -66,7 +66,7 @@ describe('runFetchTechEdSessions', () => {
     });
     expect(s.fetched).toBe(6);
     expect(s.sessionsUpserted).toBe(6);
-    expect(s.speakersUpserted).toBe(10);
+    expect(s.speakersUpserted).toBe(9); // Herzig merges cross-venue (te26+tev26) → 10 raw becomes 9 (#2403 dedup)
     expect(s.tracksUpserted).toBe(4);
     expect(s.linksReconciled).toBe(10);
     expect(s.kgEnabled).toBe(false);
@@ -191,7 +191,7 @@ describe('runRefreshTechEdSessions', () => {
     const s = await runRefreshTechEdSessions('log-1', { fetchAllTechEdSessions: fetchAllSeam });
     expect(s.fetched).toBe(6);
     expect(s.sessionsUpserted).toBe(6);
-    expect(s.speakersUpserted).toBe(10);
+    expect(s.speakersUpserted).toBe(9); // Herzig merges cross-venue (te26+tev26) → 10 raw becomes 9 (#2403 dedup)
     expect(s.tracksUpserted).toBe(4);
     expect(s.linksReconciled).toBe(10);
 

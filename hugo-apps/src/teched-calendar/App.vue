@@ -18,7 +18,7 @@ import { isClubhouse } from '../teched-sessions-grid/filter';
 import { parseTechEdCalUrl, toTechEdCalQuery, type TechEdCalViewMode } from './url-state';
 
 // --- Feed shapes -----------------------------------------------------------
-interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; }
+interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; authorLogin?: string | null; }
 interface RawTrack { slug: string; name: string; venue?: string | null; description?: string | null; }
 interface TechEdFeed { sessions: TechEdSession[]; speakers: RawSpeaker[]; tracks: RawTrack[]; }
 
@@ -26,11 +26,24 @@ interface TechEdFeed { sessions: TechEdSession[]; speakers: RawSpeaker[]; tracks
  * Map a TechEd session (flat slug-based shape) into the Session interface
  * that WeekAgenda/DayAgenda consume. The key fields are:
  *   id, kind, title, scheduledStart, trackName, trackColor (optional)
- * plus speaker names as a flat string on `speakers` (the panel reads `.name`).
+ * plus an array of enriched speaker objects ({id,name,role,company,photoUrl,
+ * authorLogin,bio}) on both `speakers` and `speakersEnriched` — DetailPanel
+ * prefers `speakersEnriched` so it renders photos, author links, and bio tooltips.
  */
-function toCalendarSession(s: TechEdSession, speakerNameBySlug: Map<string, string>, trackColor?: string): Session {
+function toCalendarSession(s: TechEdSession, speakerBySlug: Map<string, RawSpeaker>, trackColor?: string): Session {
   const speakerObjects = (s.speakers || [])
-    .map((slug) => ({ id: slug, name: speakerNameBySlug.get(slug) ?? slug, role: undefined, company: undefined }));
+    .map((slug) => {
+      const sp = speakerBySlug.get(slug);
+      return {
+        id: slug,
+        name: sp?.name ?? slug,
+        role: sp?.title ?? undefined,
+        company: sp?.company ?? undefined,
+        photoUrl: sp?.photoUrl ?? undefined,
+        authorLogin: sp?.authorLogin ?? undefined,
+        bio: sp?.bio ?? undefined,
+      };
+    });
   return {
     id: s.slug,
     kind: 'session',
@@ -41,6 +54,8 @@ function toCalendarSession(s: TechEdSession, speakerNameBySlug: Map<string, stri
     trackColor: trackColor ?? undefined,
     youtubeUrl: s.youtubeUrl ?? undefined,
     speakers: speakerObjects,
+    // DetailPanel prefers `speakersEnriched` (photo + author link + bio tooltip).
+    speakersEnriched: speakerObjects,
     // TechEd-specific extras passed through for DetailPanel (via `as any`)
     ...(s.sessionCode ? { sessionCode: s.sessionCode } : {}),
     ...(s.url ? { communityEventUrl: s.url } : {}),
@@ -113,6 +128,7 @@ async function loadData() {
     rawTracks.value = rawTrk;
 
     const speakerNameBySlug = new Map(rawSpk.map((s) => [s.slug, s.name]));
+    const speakerBySlug = new Map(rawSpk.map((s) => [s.slug, s]));
     const trackBySlug = new Map(rawTrk.map((t) => [t.slug, t]));
 
     rawSessions.value = (feed.sessions || []).map((s) => ({
@@ -141,7 +157,7 @@ async function loadData() {
 
     sessions.value = rawSessions.value.map((s) => {
       const tColor = s.trackName ? (tcMap.get(s.trackName)?.border) : undefined;
-      return toCalendarSession(s, speakerNameBySlug, tColor);
+      return toCalendarSession(s, speakerBySlug, tColor);
     });
 
     const ic = initialCursor();
