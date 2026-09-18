@@ -28,7 +28,7 @@ export function toAbsoluteUrl(url, baseUrl) {
 
 // Resolve the public site base URL from admin-editable config, falling back to
 // the production site. Fail-soft: any read error → default.
-async function resolvePublicBaseUrl(db) {
+export async function resolvePublicBaseUrl(db) {
   try {
     const cfg = await db.run(SELECT.one
       .from('com.sap.developers.ims.HomepageConfig')

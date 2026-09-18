@@ -1,0 +1,52 @@
+srv/lib/teched/rainfocus-fetcher.js --- JavaScript
+418   }                                                      418   }
+419                                                          419 
+420   // Regular timed sessions, then all-day activities. A  420   // Regular timed sessions, then all-day activities. A
+...  sourceId appearing in                                   ...  sourceId appearing in
+421   // both prefers the FIRST parse (regular session wins  421   // both keeps the FIRST (richer, timed) parse for its
+... ) so a mis-tagged row                                    ...  data, but membership in
+422   // never silently flips a real session to all-day.     422   // the all-day tab is AUTHORITATIVE for the allDay fl
+...                                                          ... ag: RainFocus lists many
+...                                                          423   // all-day activities (e.g. Developer Garage topics) 
+...                                                          ... in BOTH the main catalog
+...                                                          424   // and the all-day tab, so a naive "regular wins" ded
+...                                                          ... up left 17/19 tagged
+...                                                          425   // allDay:false and the UI showed only the 2 tab-excl
+...                                                          ... usive ones (issue #2392).
+423   const seenSourceIds = new Set();                       426   const sessionBySourceId = new Map();
+424   const ingest = (parsed) => {                           427   const ingest = (parsed) => {
+425     if (!parsed) return;                                 428     if (!parsed) return;
+426     if (seenSourceIds.has(parsed.session.sourceId)) ret  429     if (sessionBySourceId.has(parsed.session.sourceId))
+... urn;                                                     ...  return;
+427     seenSourceIds.add(parsed.session.sourceId);          430     sessionBySourceId.set(parsed.session.sourceId, pars
+...                                                          ... ed.session);
+428     sessions.push(parsed.session);                       431     sessions.push(parsed.session);
+429     if (parsed.track && !trackById.has(parsed.track.sou  432     if (parsed.track && !trackById.has(parsed.track.sou
+... rceId)) trackById.set(parsed.track.sourceId, parsed.tra  ... rceId)) trackById.set(parsed.track.sourceId, parsed.tra
+... ck);                                                     ... ck);
+430     // speakers embedded on the session are the source   433     // speakers embedded on the session are the source 
+... of truth                                                 ... of truth
+431     for (const sp of parsed.speakers) if (!speakerById.  434     for (const sp of parsed.speakers) if (!speakerById.
+... has(sp.sourceId)) speakerById.set(sp.sourceId, sp);      ... has(sp.sourceId)) speakerById.set(sp.sourceId, sp);
+432   };                                                     435   };
+433                                                          436 
+434   for (const item of sessionItems) ingest(parseSession(  437   for (const item of sessionItems) ingest(parseSession(
+... item, venue));                                           ... item, venue));
+435   for (const item of allDayItems) ingest(parseAllDayAct  438   for (const item of allDayItems) {
+... ivity(item, venue));                                     ... 
+...                                                          439     const parsed = parseAllDayActivity(item, venue);
+...                                                          440     if (!parsed) continue;
+...                                                          441     const existing = sessionBySourceId.get(parsed.sessi
+...                                                          ... on.sourceId);
+...                                                          442     if (existing) {
+...                                                          443       existing.allDay = true; // already ingested as a 
+...                                                          ... timed session — flip the flag
+...                                                          444     } else {
+...                                                          445       ingest(parsed);
+...                                                          446     }
+...                                                          447   }
+436                                                          448 
+437   return { sessions, speakers: [...speakerById.values()  449   return { sessions, speakers: [...speakerById.values()
+... ], tracks: [...trackById.values()] };                    ... ], tracks: [...trackById.values()] };
+438 }                                                        450 }
+

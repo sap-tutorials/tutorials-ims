@@ -1,0 +1,213 @@
+{
+  "_note": "Fetcher-output shape ({sessions,speakers,tracks}) consumed by scripts/seed-teched.cjs --file and the seed unit test. DERIVED by running fetchAllTechEdSessions() over the REAL capture in test/fixtures/teched/rainfocus-search.json.",
+  "sessions": [
+    {
+      "sourceId": "1786103955856001msiq",
+      "venue": "BERLIN",
+      "sessionCode": "KEY100",
+      "title": "Built for the ones who build",
+      "abstract": "Imagine if you could walk into work and just build. No data pipelines. No models to teach the business. No AI cost surprises. SAP brings together AI, tools, business data, governance, agents, and a new UX layer in one in",
+      "scheduledStart": "2026-10-27T08:00:00.000Z",
+      "scheduledEnd": "2026-10-27T09:30:00.000Z",
+      "room": "Keynote Theater",
+      "youtubeUrl": null,
+      "url": null,
+      "trackSourceId": "1745939183774010keFq",
+      "speakerSourceIds": [
+        "1734109533258001oaQ3_1773259901317001te26"
+      ]
+    },
+    {
+      "sourceId": "1785940912205001gJ72",
+      "venue": "BERLIN",
+      "sessionCode": "IN202",
+      "title": "Accelerate your migration to SAP Integration Suite",
+      "abstract": "Gain the in-depth knowledge you need to migrate from the SAP Process Integration offering and SAP Process Orchestration software to SAP Integration Suite. Explore the services and tools available to you—including new AI-",
+      "scheduledStart": "2026-10-27T10:00:00.000Z",
+      "scheduledEnd": "2026-10-27T10:45:00.000Z",
+      "room": "Deep Dive Room 6",
+      "youtubeUrl": null,
+      "url": null,
+      "trackSourceId": "1745939183774003kz40",
+      "speakerSourceIds": [
+        "1753966281661001mEu4_1773259901317001te26"
+      ]
+    },
+    {
+      "sourceId": "1786525647304001OTzl",
+      "venue": "BERLIN",
+      "sessionCode": "AD262",
+      "title": "Agentic CAP: Build MCP servers and enterprise AI agents",
+      "abstract": "Learn how to turn apps based on SAP Cloud Application Programming Model (CAP) into enterprise AI agents using the model context protocol (MCP) and Agent2Agent protocol. With the integration of the SAP AI Core infrastruct",
+      "scheduledStart": "2026-10-27T10:00:00.000Z",
+      "scheduledEnd": "2026-10-27T12:00:00.000Z",
+      "room": "Hands-On Room 2",
+      "youtubeUrl": null,
+      "url": null,
+      "trackSourceId": "1745939183774002kMU7",
+      "speakerSourceIds": [
+        "1635951876257001cTdK_1773259901317001te26",
+        "1602216772383001D6kW_1773259901317001te26",
+        "1605732114298001aaGL_1773259901317001te26",
+        "1604997538270001oJsj_1773259901317001te26"
+      ]
+    },
+    {
+      "sourceId": "1788236862932001eQGI",
+      "venue": "VIRTUAL",
+      "sessionCode": "KEY100V",
+      "title": "Built for the ones who build",
+      "abstract": "Imagine if you could walk into work and just build. No data pipelines. No models to teach the business. No AI cost surprises. SAP brings together AI, tools, business data, governance, agents, and a new UX layer in one in",
+      "scheduledStart": "2026-10-27T08:00:00.000Z",
+      "scheduledEnd": "2026-10-27T09:30:00.000Z",
+      "room": "Channel 1",
+      "youtubeUrl": null,
+      "url": null,
+      "trackSourceId": "1745939183774010keFq",
+      "speakerSourceIds": [
+        "1734109533258001oaQ3_177394505920700tev26"
+      ]
+    },
+    {
+      "sourceId": "1787735938125001muyh",
+      "venue": "VIRTUAL",
+      "sessionCode": "ST134V",
+      "title": "SAP Business AI Platform: Vision, strategy, and what's next",
+      "abstract": "SAP Business AI Platform brings together AI, trusted business data, process context, and governance to help organizations build, integrate, scale, and run AI that delivers real business impact. Understand the vision, see",
+      "scheduledStart": "2026-10-27T10:00:00.000Z",
+      "scheduledEnd": "2026-10-27T10:25:00.000Z",
+      "room": "Channel 1",
+      "youtubeUrl": null,
+      "url": null,
+      "trackSourceId": "1780572314128002OZdN",
+      "speakerSourceIds": [
+        "1774949614733001H7R7_177394505920700tev26"
+      ]
+    },
+    {
+      "sourceId": "1787737071824001u9x8",
+      "venue": "VIRTUAL",
+      "sessionCode": "ST125V",
+      "title": "Building the enterprise agentic future with Joule Studio",
+      "abstract": "AI agents are reshaping how enterprises automate work, extend applications, and create new business solutions. We present the strategy and vision behind the Joule Studio solution as a key enabler of the Autonomous Enterp",
+      "scheduledStart": "2026-10-27T10:45:00.000Z",
+      "scheduledEnd": "2026-10-27T11:10:00.000Z",
+      "room": "Channel 1",
+      "youtubeUrl": null,
+      "url": null,
+      "trackSourceId": "1745939183774002kMU7",
+      "speakerSourceIds": [
+        "1787144220747001l0Be_177394505920700tev26",
+        "1761810393365001Sk8Q_177394505920700tev26"
+      ]
+    }
+  ],
+  "speakers": [
+    {
+      "sourceId": "1734109533258001oaQ3_1773259901317001te26",
+      "name": "Philipp Herzig",
+      "title": "Chief Technology Officer",
+      "company": "SAP",
+      "bio": "<p>Philipp Herzig is Chief AI Officer and Chief Technology Officer of SAP SE. In this role, Herzig leads SAP technology strategy, research, innovation, corporat",
+      "photoUrl": "https://static.rainfocus.com/sap/te26/att/1734109533258001oaQ3/attprofile/Philipp-Herzig-Feb2023_1788532803164001Iqhy.jpg"
+    },
+    {
+      "sourceId": "1753966281661001mEu4_1773259901317001te26",
+      "name": "Morten Wittrock",
+      "title": "Lead Product Manager",
+      "company": "SAP SE",
+      "bio": "Morten Wittrock is a Lead Product Manager in the SAP Integration Suite product management team at SAP, with over 20 years of experience in the SAP integration s",
+      "photoUrl": "https://static.rainfocus.com/sap/te26/att/1753966281661001mEu4/attprofile/Morten-headshot_1787312450201001Pau0.jpg"
+    },
+    {
+      "sourceId": "1635951876257001cTdK_1773259901317001te26",
+      "name": "Marc Huber",
+      "title": "Product Management",
+      "company": "SAP SE",
+      "bio": "Founder of an AI software company in Germany for predicting fresh food demands in supermarkets and bakeries. Now working in Product Management at SAP for SAP Bu",
+      "photoUrl": "https://static.rainfocus.com/sap/te26/att/1635951876257001cTdK/attprofile/Marc_Huber_1789047514874001fiY9.jpg"
+    },
+    {
+      "sourceId": "1602216772383001D6kW_1773259901317001te26",
+      "name": "Sami Lechner",
+      "title": "Product manager",
+      "company": "SAP SE",
+      "bio": null,
+      "photoUrl": null
+    },
+    {
+      "sourceId": "1605732114298001aaGL_1773259901317001te26",
+      "name": "Daniel Hutzel",
+      "title": "Chief Architect",
+      "company": "SAP SE",
+      "bio": "Joined SAP in 2004, since then went through several Chief Architect positions in SAP technology units, with focus on application frameworks. Designed Core Data ",
+      "photoUrl": null
+    },
+    {
+      "sourceId": "1604997538270001oJsj_1773259901317001te26",
+      "name": "Daniel Schlachter",
+      "title": "Software Architect",
+      "company": "SAP SE",
+      "bio": "CAP Architect / Developer\nLeading the CAP Enablement Team, which is working with internal and external development teams to use CAP to its full potential – look",
+      "photoUrl": "https://static.rainfocus.com/sap/te26/att/1604997538270001oJsj/attprofile/profile_1789397734267001wLyr.png"
+    },
+    {
+      "sourceId": "1734109533258001oaQ3_177394505920700tev26",
+      "name": "Philipp Herzig",
+      "title": "Chief Technology Officer",
+      "company": "SAP SE",
+      "bio": "<p>Philipp Herzig is Chief Technology Officer of SAP SE. In this role, Herzig leads SAP’s technology strategy, <br/>\nresearch, innovation, corporate development",
+      "photoUrl": "https://static.rainfocus.com/sap/tev26/att/1734109533258001oaQ3/attprofile/Philipp-Herzig-Feb2023_1788533084831001UhOz.jpg"
+    },
+    {
+      "sourceId": "1774949614733001H7R7_177394505920700tev26",
+      "name": "Steffen Pietsch",
+      "title": "Vice President, Head of Platform Product Management",
+      "company": "SAP SE",
+      "bio": "<p>Steffen Pietsch is globally responsible for Platform Product Management. Together with his teams, he drives innovation, further development, enablement, and ",
+      "photoUrl": "https://static.rainfocus.com/sap/te26/att/1774949614733001H7R7/attprofile/steffen-pietsch.1024x1024_1787067932527001da2e.jpg"
+    },
+    {
+      "sourceId": "1787144220747001l0Be_177394505920700tev26",
+      "name": "Sankara Narayanan",
+      "title": "SVP and Head of Product Management Joule Studio",
+      "company": "SAP LABS INDIA PVT. LTD.",
+      "bio": "Sankara Narayanan heads the Product Management for SAP Build and Joule Studio. He drives SAP's AI-first developer platform strategy across low-code, pro-code, w",
+      "photoUrl": "https://static.rainfocus.com/sap/te26/att/1787144220747001l0Be/attprofile/40920eb6-e91d-4433-8416-97d3b0ca2e03_1788241409611001QIpB.png"
+    },
+    {
+      "sourceId": "1761810393365001Sk8Q_177394505920700tev26",
+      "name": "Michael Gall",
+      "title": "SVP & Chief Product Officer for SAP Build​",
+      "company": "SAP Oesterreich GmbH",
+      "bio": null,
+      "photoUrl": null
+    }
+  ],
+  "tracks": [
+    {
+      "sourceId": "1745939183774010keFq",
+      "name": "Keynote",
+      "venue": "BERLIN",
+      "description": null
+    },
+    {
+      "sourceId": "1745939183774003kz40",
+      "name": "Integrate agents, applications, and data (IN)",
+      "venue": "BERLIN",
+      "description": null
+    },
+    {
+      "sourceId": "1745939183774002kMU7",
+      "name": "Build agents, workflows, and applications (AD)",
+      "venue": "BERLIN",
+      "description": null
+    },
+    {
+      "sourceId": "1780572314128002OZdN",
+      "name": "Architect, operate, and secure AI at scale (XP)",
+      "venue": "VIRTUAL",
+      "description": null
+    }
+  ]
+}

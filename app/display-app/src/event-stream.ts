@@ -137,7 +137,12 @@ export function useEventStream() {
     }
 
     // Connect via Socket.IO to EventStreamService
+    // Pin websocket-only transport: the default (polling→upgrade) starts with a
+    // long-polling handshake whose follow-up POST 400s behind the multi-instance
+    // CF approuter, leaving the client stuck "Reconnecting…" (#2306). The sibling
+    // clients (event-display, gameboard, app-space) already pin this.
     socket = io(`${url}/ws/event-stream`, {
+      transports: ['websocket'],
       reconnection: true,
       reconnectionDelay: 2000,
       reconnectionDelayMax: 10000,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BASE_URL, fetchWithRetry } from './smoke.config.js';
+import { BASE_URL, CONTENT_FRESH, fetchWithRetry } from './smoke.config.js';
 
 describe('SEO files', () => {
   it('serves robots.txt with sitemap reference and AI bot allowlist', async () => {
@@ -23,8 +23,13 @@ describe('SEO files', () => {
     // Data Crawling team): a catalog-only rebuild that skipped "Fetch tutorials"
     // republished the page-sitemap.xml blob with NO /tutorials/ URLs, dropping the
     // live sitemap from ~1.6k links to ~180. The sitemap MUST name tutorial pages.
-    expect(text, 'sitemap must contain /tutorials/ URLs — a sitemap without them is the wipe signature')
-      .toMatch(/<loc>https:\/\/developers\.sap\.com\/tutorials\/[^<]+<\/loc>/);
+    // Catalog-freshness: the served page-sitemap.xml BLOB is published by the
+    // rebuild-content workflow, not by a deploy — so this presence check only
+    // holds after a content rebuild (SMOKE_CONTENT_FRESH=1), not in the deploy gate.
+    if (CONTENT_FRESH) {
+      expect(text, 'sitemap must contain /tutorials/ URLs — a sitemap without them is the wipe signature')
+        .toMatch(/<loc>https:\/\/developers\.sap\.com\/tutorials\/[^<]+<\/loc>/);
+    }
   });
 
   it('301-redirects legacy AEM sitemap URLs to /sitemap.xml', async () => {
@@ -46,11 +51,18 @@ describe('SEO files', () => {
     expect(text).toMatch(/Content policy/);
   });
 
-  it('serves llms-full.txt non-empty', async () => {
+  it('serves llms-full.txt (non-empty catalog when content is fresh)', async () => {
     const res = await fetchWithRetry(`${BASE_URL}/llms-full.txt`);
     expect(res.status).toBe(200);
     const text = await res.text();
-    expect(text.length).toBeGreaterThan(10000);
+    // Catalog-freshness: the full ~1400-tutorial body is published by the
+    // rebuild-content workflow into the page-llms-full.txt BLOB, NOT by a deploy.
+    // A deploy ships only the srv fallback; the served BLOB can be stale/thin
+    // (e.g. holding just the committed test-tutorial fixture) without the deploy
+    // being broken. So gate the size check to post-rebuild runs (SMOKE_CONTENT_FRESH=1).
+    if (CONTENT_FRESH) {
+      expect(text.length).toBeGreaterThan(10000);
+    }
   });
 
   it('serves /AGENTS.md', async () => {

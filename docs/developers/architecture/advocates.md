@@ -39,6 +39,12 @@ advocate anonymizes their *learner* account.
   Returns 404 when the advocate has no photo or slug is unknown. Vue
   island falls back to `InitialsAvatar.vue`.
 
+The single-advocate route additionally attaches `sessions: { teched, devtoberfest }`
+(issue #2354) — the TechEd + Devtoberfest sessions this advocate speaks at, as
+`{ event, title, sourceUrl, track, venue, date }` cards. Omitted when empty;
+fail-open when the session feeds are cold. Matching (email for Devtoberfest,
+name for TechEd) is documented in [teched.md](../reference/teched.md#session-cards-on-author--advocate-pages-issue-2354).
+
 Both routes are mounted by [srv/routes/advocates-public.js](../../../srv/routes/advocates-public.js)
 on `cds.on('bootstrap')` in [srv/server.js](../../../srv/server.js), and
 the approuter exposes them as `authenticationType: "none"` ahead of the

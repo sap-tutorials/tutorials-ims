@@ -203,7 +203,7 @@ describe('sendFeedbackDigests — orchestration + watermark', () => {
     await INSERT.into(ImsConfig).entries({ key: 'feedback.email.lastDigestAt', value: new Date(now - 86400_000).toISOString() });
 
     const sendEmail = vi.fn().mockResolvedValue({ success: true });
-    const res = await mod.sendFeedbackDigests(null, { db: cds.db, vcap: PROD_VCAP, sendEmail, dashboardUrl: 'https://dash' });
+    const res = await mod.sendFeedbackDigests(null, { db: cds.db, vcap: PROD_VCAP, sendEmail, publicBaseUrl: 'https://developers.sap.com' });
 
     expect(res.active).not.toBe(false);
     expect(sendEmail).toHaveBeenCalledTimes(2); // owner@ + other@
@@ -213,6 +213,13 @@ describe('sendFeedbackDigests — orchestration + watermark', () => {
     expect(ownerCall.template).toBe('feedback-digest');
     expect(ownerCall.variables.feedbackListHtml).toContain('c1');
     expect(ownerCall.variables.feedbackListHtml).toContain('c2');
+    // Per-item public tutorial links (slug lowercased).
+    expect(ownerCall.variables.feedbackListHtml).toContain('https://developers.sap.com/tutorials/s-a.html');
+    expect(ownerCall.variables.feedbackListHtml).toContain('https://developers.sap.com/tutorials/s-b.html');
+    // Per-item admin deep link (router hash form, keyed by tutorial UUID).
+    expect(ownerCall.variables.feedbackListHtml).toContain('https://developers.sap.com/admin-ui/#tutorials&/tu/Tutorials(');
+    // Footer links to the feedback dashboard, not the freestyle approuter dashboard.
+    expect(ownerCall.variables.dashboardUrl).toBe('https://developers.sap.com/admin-ui/#feedback/dashboard');
 
     const wm = await SELECT.one.from(ImsConfig).where({ key: 'feedback.email.lastDigestAt' });
     expect(new Date(wm.value).getTime()).toBeGreaterThan(now - 60_000);
@@ -246,5 +253,43 @@ describe('sendFeedbackDigests — orchestration + watermark', () => {
     const { ImsConfig } = cds.entities(NS);
     const wm = await SELECT.one.from(ImsConfig).where({ key: 'feedback.email.lastDigestAt' });
     expect(wm).toBeDefined();
+  });
+});
+
+describe('renderFeedbackList — per-item public + admin links', () => {
+  const BASE = 'https://developers.sap.com';
+
+  it('always emits a public tutorial link with lowercased slug', () => {
+    const html = mod.renderFeedbackList(
+      [{ slug: 'CAP-Handlers', title: 'T', comment: 'c', submittedAt: '2026-09-16', tutorialId: null }],
+      BASE,
+    );
+    expect(html).toContain(`<a href="${BASE}/tutorials/cap-handlers.html">View tutorial</a>`);
+  });
+
+  it('emits the admin deep link (router hash form) only when tutorialId is present', () => {
+    const withId = mod.renderFeedbackList(
+      [{ slug: 's', title: 'T', comment: 'c', submittedAt: '2026-09-16', tutorialId: 'abc-123' }],
+      BASE,
+    );
+    expect(withId).toContain(`${BASE}/admin-ui/#tutorials&/tu/Tutorials(abc-123)`);
+    expect(withId).toContain('Edit in Admin UI');
+
+    const noId = mod.renderFeedbackList(
+      [{ slug: 's', title: 'T', comment: 'c', submittedAt: '2026-09-16', tutorialId: null }],
+      BASE,
+    );
+    expect(noId).not.toContain('Edit in Admin UI');
+    expect(noId).not.toContain('#tutorials&');
+  });
+
+  it('escapes title and comment', () => {
+    const html = mod.renderFeedbackList(
+      [{ slug: 's', title: '<b>x</b>', comment: 'a & "b"', submittedAt: '2026-09-16', tutorialId: null }],
+      BASE,
+    );
+    expect(html).toContain('&lt;b&gt;x&lt;/b&gt;');
+    expect(html).toContain('a &amp; &quot;b&quot;');
+    expect(html).not.toContain('<b>x</b>');
   });
 });

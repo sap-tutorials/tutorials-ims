@@ -219,7 +219,7 @@ async function _manualEventsAlways(db) {
     const nowIso = new Date().toISOString();
     const raw = await db.run(
       SELECT.from(Events)
-        .columns('name', 'startDate', 'timeZone', 'eventType')
+        .columns('name', 'startDate', 'timeZone', 'eventType', 'location', 'eventUrl', 'attendanceMode')
         .where`startDate >= ${nowIso}`
         .orderBy('startDate asc')
         .limit(6)
@@ -228,13 +228,13 @@ async function _manualEventsAlways(db) {
       title:     e.name       || '',
       startsAt:  e.startDate  || null,
       endsAt:    null,
-      location:  e.timeZone   || '',
-      url:       null,
+      location:  e.location   || e.timeZone || '',   // #2370 — dedicated field, timeZone fallback
+      url:       e.eventUrl   || null,                // #2370 — tile clickthrough
       format:    e.eventType  || '',
       register:  null,
       eventType: e.eventType  || null,
       region:    'UNKNOWN',
-      isVirtual: false,
+      isVirtual: e.attendanceMode === 'VIRTUAL',      // #2370 — HYBRID/IN_PERSON => false
     }));
   } catch (err) {
     log.warn('[events] manual Events query failed:', err.message);
@@ -295,22 +295,63 @@ async function _devtoberfestAlways(db) {
   }
 }
 
+// #2312 (Unit 10) — Upcoming SAP TechEd 2026 sessions from external.TechEdSessions.
+// Gated behind the TECHED_HOMEPAGE_ENABLED DB feature flag (default OFF,
+// fail-open) so merging this never changes the homepage until an admin flips
+// the flag. Always included / region-agnostic (like Devtoberfest). Each card
+// links to its session URL, falling back to the /teched/ landing page. Returns
+// [] when the flag is off, no upcoming sessions exist, or the query fails.
+async function _techedAlways(db) {
+  if (!isFlagEnabled('TECHED_HOMEPAGE_ENABLED')) return [];
+  try {
+    const { TechEdSessions } = cds.entities('com.sap.developers.ims.external');
+    const nowIso = new Date().toISOString();   // scheduledStart is a Timestamp
+    const rows = await db.run(
+      SELECT.from(TechEdSessions)
+        .columns('title', 'scheduledStart', 'scheduledEnd', 'venue', 'room', 'url')
+        .where`scheduledStart >= ${nowIso}`
+        .orderBy('scheduledStart asc')
+        .limit(3)
+    );
+    return (rows ?? []).map(s => {
+      const isVirtual = s.venue === 'VIRTUAL';
+      return {
+        title:     s.title || 'SAP TechEd 2026',
+        startsAt:  s.scheduledStart || null,
+        endsAt:    s.scheduledEnd   || null,
+        location:  s.room || (isVirtual ? 'Virtual' : 'Berlin'),
+        url:       s.url || '/teched/',
+        format:    'teched',
+        register:  null,
+        eventType: 'teched',
+        region:    isVirtual ? 'VIRTUAL' : 'EMEA',
+        isVirtual,
+      };
+    });
+  } catch (err) {
+    log.warn('[events] TechEdSessions query failed:', err.message);
+    return [];
+  }
+}
+
 // #1030 (2026-07-08) — Auto-pull path: merge always-on rows (manual Events +
-// Devtoberfest) with region-filtered CodeJams. Sort by start date, cap at 6.
+// Devtoberfest + TechEd) with region-filtered CodeJams. Sort by start date, cap at 6.
 //
 // Semantics (revised after 2026-07-08 field bug: AMERICAS-TZ users saw an
 // empty band because DEV had 0 AMERICAS codejams):
 //   - Manual Events → always included (admin-curated, region-agnostic)
 //   - Devtoberfest  → always included (inherently virtual/global)
+//   - TechEd        → always included when TECHED_HOMEPAGE_ENABLED is on (#2312, region-agnostic)
 //   - CodeJams      → region filter applies (spec §6.2)
 async function _communityEventsForBand(region, includeVirtual) {
   const db = await cds.connect.to('db');
-  const [manual, devtoberfest, codejams] = await Promise.all([
+  const [manual, devtoberfest, teched, codejams] = await Promise.all([
     _manualEventsAlways(db),
     _devtoberfestAlways(db),
+    _techedAlways(db),
     _codejamsForRegion(db, region, includeVirtual),
   ]);
-  const merged = [...manual, ...devtoberfest, ...codejams];
+  const merged = [...manual, ...devtoberfest, ...teched, ...codejams];
   // Sort by startsAt ascending; nulls sink to the end.
   merged.sort((a, b) => {
     const ta = a.startsAt ? new Date(a.startsAt).getTime() : Number.POSITIVE_INFINITY;
@@ -329,7 +370,7 @@ async function _legacyEventsFromEventsEntity() {
     const nowIso = new Date().toISOString();
     const raw = await db.run(
       SELECT.from(Events)
-        .columns('name', 'startDate', 'timeZone', 'eventType')
+        .columns('name', 'startDate', 'timeZone', 'eventType', 'location', 'eventUrl', 'attendanceMode')
         .where`startDate >= ${nowIso}`
         .orderBy('startDate asc')
         .limit(4)
@@ -338,13 +379,13 @@ async function _legacyEventsFromEventsEntity() {
       title:     e.name       || '',
       startsAt:  e.startDate  || null,
       endsAt:    null,
-      location:  e.timeZone   || '',
-      url:       null,
+      location:  e.location   || e.timeZone || '',   // #2370 — dedicated field, timeZone fallback
+      url:       e.eventUrl   || null,                // #2370 — tile clickthrough
       format:    e.eventType  || '',
       register:  null,
       eventType: e.eventType  || null,
       region:    'UNKNOWN',
-      isVirtual: false,
+      isVirtual: e.attendanceMode === 'VIRTUAL',      // #2370 — HYBRID/IN_PERSON => false
     }));
   } catch (err) {
     log.warn('[events] legacy Events query failed:', err.message);

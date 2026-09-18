@@ -4,7 +4,7 @@ defineEmits<{ (e: 'reset'): void }>();
 </script>
 
 <template>
-  <div class="adv-empty">
+  <div class="dev-advocate-empty">
     <ui5-illustrated-message
       :name="filtersActive ? 'NoSearchResults' : 'NoData'"
       :title-text="filtersActive ? 'No advocates match your filters' : 'No advocates published yet.'"
@@ -17,5 +17,5 @@ defineEmits<{ (e: 'reset'): void }>();
 </template>
 
 <style>
-.adv-empty { padding: 60px 24px; display: flex; justify-content: center; }
+.dev-advocate-empty { padding: 60px 24px; display: flex; justify-content: center; }
 </style>

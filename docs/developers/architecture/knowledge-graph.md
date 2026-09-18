@@ -84,6 +84,37 @@ geographic personalization (deferred to a future `Users.region` field).
 
 **Spec:** `docs/superpowers/specs/2026-07-03-765-phase4.8-community-events.md`
 
+### Devtoberfest sessions (#2311)
+
+Rich Devtoberfest Planner **sessions** (distinct from the coarse RSS
+`devtoberfest` rows in `community-event`) surfaced as `devtoberfest-session`
+graph nodes. Predicate: `presents`. TTL: 730 days (recorded sessions stay
+relevant like videos).
+
+**Source:** the cross-container facade `external.devtoberfest.*`
+(`Session` + `Sessionspeaker` → `Speaker` + `Activity`), read-only over the
+`devtoberfest-planner-db` container's `DTF_*_V1` views. No cross-container FK,
+so speaker names and the linked Activity's `TASKSLUG`/`TASKTYPE` are
+denormalized onto each row (rule D6). Requires cross-container **Leg B**
+(the `ACTIVITY_SESSION_V1` synonym + `activity_session_reader` grant) deployed
+before the job produces anything — the fetch fails closed otherwise.
+
+**Bridge edge:** when a session's Activity is a TUTORIAL, the projection emits
+an extra `devtoberfest-session :aboutTutorial tutorial` edge (lowercased slug)
+so sessions connect into the existing tutorial subgraph rather than sitting as
+isolated nodes.
+
+**Cron:** `fetch-devtoberfest-sessions`, twice-weekly on Mon+Thu 04:43 UTC.
+
+**Feature flag:** `KG_DEVTOBERFEST_SESSIONS_ENABLED` (ImsConfig key
+`flag.kg.devtoberfestSessions`, `kind:'db'`, default OFF, admin-editable via
+`/admin-ui/#featureFlags`). Double-gated with the KG master switch.
+
+**Fields:** `title`, `description` (session abstract, NCLOB), `url`,
+`sessionCode`, `youtubeUrl`, `scheduledStart`, `speakerNames`,
+`activityTaskSlug`, `activityTaskType`, plus `embedding`/`embeddingVec` for the
+semantic-search `external` corpus (backfilled by `freshness-corpus-embedding`).
+
 ## Sidebar integration (Phase 5 / #850)
 
 `SidebarPanel.vue` and `ExpandedPanel.vue` are data-driven since #850. Adding a

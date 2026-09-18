@@ -11,7 +11,7 @@ const props = defineProps<{ nodes: ExploreNode[] }>()
 const SECTION_ORDER: NodeType[] = [
   'tutorial', 'concept', 'mission', 'product', 'group', 'category', 'tag',
   'learning-journey', 'blog-post', 'discovery-mission', 'video',
-  'api-doc', 'sample', 'help-doc', 'community-event',
+  'api-doc', 'sample', 'help-doc', 'community-event', 'devtoberfest-session',
 ]
 const SECTION_LABELS: Record<NodeType, string> = {
   tutorial: 'Tutorials',
@@ -29,6 +29,7 @@ const SECTION_LABELS: Record<NodeType, string> = {
   sample: 'Samples',
   'help-doc': 'Help Docs',
   'community-event': 'Community Events',
+  'devtoberfest-session': 'Devtoberfest Sessions',
 }
 
 const groups = computed(() => {
@@ -77,6 +78,7 @@ const expanded = ref<Record<NodeType, boolean>>({
   sample: false,
   'help-doc': false,
   'community-event': false,
+  'devtoberfest-session': false,
 })
 
 function toggleSection(t: NodeType) {

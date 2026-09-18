@@ -385,3 +385,136 @@ describe('countSubstantiveWords (#311 helper)', () => {
     expect(countSubstantiveWords('See the [docs](url) for more details.')).toBe(6)
   })
 })
+
+describe('expandAiAuthoredQuestions — video source (#2345)', () => {
+  const VIDEO_PLACEHOLDER = (stepNum: number, url: string, types: 'mcq-and-text' | 'mcq-only' | 'text-only' = 'mcq-and-text') => ({
+    id: `autoauthor-${stepNum}`,
+    question: '__autoauthor_placeholder__',
+    type: 'text' as const,
+    __autoauthor: true,
+    __directiveTypes: types,
+    __videoUrl: url,
+  })
+
+  const LONG_TRANSCRIPT = Array.from({ length: 60 }, (_, i) => ({ start: i, text: `word${i}` }))
+
+  let vcache: AiQuizCache
+  beforeEach(() => {
+    vcache = { promptVersion: 'v2', modelName: 'gpt-test', entries: {} }
+  })
+
+  it('fetches transcript, calls generator with source=video, emits questions', async () => {
+    const fetchTranscript = vi.fn().mockResolvedValue({ source: 'auto', segments: LONG_TRANSCRIPT })
+    const callModel = vi.fn().mockResolvedValue({
+      toolCalls: [{ name: 'submitQuiz', arguments: JSON.stringify({
+        questions: [{ type: 'multiple-choice', question: 'Q', options: ['a','b','c','d'], correctAnswer: 'a' }],
+      })}],
+      modelName: 'gpt-test', promptTokens: 1, completionTokens: 1,
+    })
+    const stats = { calls: 0, hits: 0, errors: 0 }
+    const parsedMap = new Map<number, any[]>([[1, [VIDEO_PLACEHOLDER(1, 'https://youtu.be/dQw4w9WgXcQ')]]])
+    const stepBodies = new Map<number, string>([[1, 'short step body']])
+
+    await expandAiAuthoredQuestions(parsedMap, stepBodies, {
+      cache: vcache, callModel, onCallStats: stats, fetchTranscript, minSubstantiveWords: 0,
+    })
+
+    expect(fetchTranscript).toHaveBeenCalledWith('dQw4w9WgXcQ')
+    // Generator received the transcript text, tagged source=video.
+    const genUserMsg = callModel.mock.calls[0][0].messages.find((m: any) => m.role === 'user').content
+    expect(genUserMsg).toContain('VIDEO TRANSCRIPT')
+    expect(genUserMsg).toContain('word0')
+    expect(parsedMap.get(1)?.[0]).toMatchObject({ aiAuthored: true })
+    expect(stats).toMatchObject({ calls: 1, hits: 0, errors: 0 })
+  })
+
+  it('transcript source:none → placeholder dropped, no generator call, build continues', async () => {
+    const fetchTranscript = vi.fn().mockResolvedValue({ source: 'none', segments: [] })
+    const callModel = vi.fn()
+    const stats = { calls: 0, hits: 0, errors: 0, skips: 0 }
+    const parsedMap = new Map<number, any[]>([[1, [VIDEO_PLACEHOLDER(1, 'https://youtu.be/dQw4w9WgXcQ')]]])
+    const stepBodies = new Map<number, string>([[1, 'body']])
+
+    await expandAiAuthoredQuestions(parsedMap, stepBodies, {
+      cache: vcache, callModel, onCallStats: stats, fetchTranscript, minSubstantiveWords: 0,
+    })
+
+    expect(callModel).not.toHaveBeenCalled()
+    expect(parsedMap.get(1)).toEqual([])
+  })
+
+  it('invalid YouTube URL → placeholder dropped, no transcript fetch', async () => {
+    const fetchTranscript = vi.fn()
+    const callModel = vi.fn()
+    const stats = { calls: 0, hits: 0, errors: 0 }
+    const parsedMap = new Map<number, any[]>([[1, [VIDEO_PLACEHOLDER(1, 'https://example.com/not-a-video')]]])
+    const stepBodies = new Map<number, string>([[1, 'body']])
+
+    await expandAiAuthoredQuestions(parsedMap, stepBodies, {
+      cache: vcache, callModel, onCallStats: stats, fetchTranscript, minSubstantiveWords: 0,
+    })
+
+    expect(fetchTranscript).not.toHaveBeenCalled()
+    expect(callModel).not.toHaveBeenCalled()
+    expect(parsedMap.get(1)).toEqual([])
+  })
+
+  it('transcript below the substantive-word threshold → skipped', async () => {
+    const fetchTranscript = vi.fn().mockResolvedValue({ source: 'auto', segments: [{ start: 0, text: 'tiny' }] })
+    const callModel = vi.fn()
+    const stats = { calls: 0, hits: 0, errors: 0, skips: 0 }
+    const parsedMap = new Map<number, any[]>([[1, [VIDEO_PLACEHOLDER(1, 'https://youtu.be/dQw4w9WgXcQ')]]])
+    const stepBodies = new Map<number, string>([[1, 'body']])
+
+    await expandAiAuthoredQuestions(parsedMap, stepBodies, {
+      cache: vcache, callModel, onCallStats: stats, fetchTranscript, /* default 50-word guard */
+    })
+
+    expect(callModel).not.toHaveBeenCalled()
+    expect(parsedMap.get(1)).toEqual([])
+    expect(stats.skips).toBe(1)
+  })
+
+  it('stashes a capped transcript excerpt as __videoContext on emitted questions', async () => {
+    const fetchTranscript = vi.fn().mockResolvedValue({ source: 'auto', segments: LONG_TRANSCRIPT })
+    const callModel = vi.fn().mockResolvedValue({
+      toolCalls: [{ name: 'submitQuiz', arguments: JSON.stringify({
+        questions: [{ type: 'text', question: 'Explain X', correctAnswer: 'X answer' }],
+      })}],
+      modelName: 'gpt-test', promptTokens: 1, completionTokens: 1,
+    })
+    const parsedMap = new Map<number, any[]>([[1, [VIDEO_PLACEHOLDER(1, 'https://youtu.be/dQw4w9WgXcQ', 'text-only')]]])
+    const stepBodies = new Map<number, string>([[1, 'body']])
+
+    await expandAiAuthoredQuestions(parsedMap, stepBodies, {
+      cache: vcache, callModel, onCallStats: { calls: 0, hits: 0, errors: 0 }, fetchTranscript, minSubstantiveWords: 0,
+    })
+
+    const q = parsedMap.get(1)?.[0] as any
+    expect(typeof q.__videoContext).toBe('string')
+    expect(q.__videoContext).toContain('word0')
+  })
+
+  it('all-directive with videoUrl generates one video quiz on the first step', async () => {
+    const fetchTranscript = vi.fn().mockResolvedValue({ source: 'auto', segments: LONG_TRANSCRIPT })
+    const callModel = vi.fn().mockResolvedValue({
+      toolCalls: [{ name: 'submitQuiz', arguments: JSON.stringify({
+        questions: [{ type: 'multiple-choice', question: 'Q', options: ['a','b','c','d'], correctAnswer: 'a' }],
+      })}],
+      modelName: 'gpt-test', promptTokens: 1, completionTokens: 1,
+    })
+    const parsedMap = new Map<number, any[]>()  // no per-step placeholders
+    const stepBodies = new Map<number, string>([[1, 'b1'], [2, 'b2']])
+
+    await expandAiAuthoredQuestions(parsedMap, stepBodies, {
+      cache: vcache, callModel, onCallStats: { calls: 0, hits: 0, errors: 0 }, fetchTranscript,
+      allDirective: { types: 'mcq-and-text', present: true, videoUrl: 'https://youtu.be/dQw4w9WgXcQ' },
+      minSubstantiveWords: 0,
+    })
+
+    expect(fetchTranscript).toHaveBeenCalledTimes(1)
+    expect(callModel).toHaveBeenCalledTimes(1)  // ONE video quiz, not one per step
+    expect(parsedMap.get(1)?.[0]).toMatchObject({ aiAuthored: true })
+    expect(parsedMap.get(2) ?? []).toEqual([])
+  })
+})

@@ -161,6 +161,14 @@ const INITIAL_SECRETS = [
     rotationDocsUrl: '',
     expiresAt: null,
   },
+  {
+    key: 'PROVENANCE_SIGNING_KEY',
+    description: 'Ed25519 private key (PKCS8 PEM) that signs tutorial provenance JWS envelopes (issue #2245). Read at runtime by srv/lib/provenance-keys.js via the shared secret-resolver (credstore-first). Missing key ⇒ empty JWKS + 503 on the provenance endpoint (fail-open — content still serves). Tracked here so the presence/expiry cron surfaces a missing key. Rotate via /admin-ui/#secrets then cf restart tutorials-srv.',
+    kind: 'signing-key',
+    rotationOwner: 'thomas.jung@sap.com',
+    rotationDocsUrl: 'https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/developers/reference/tutorials-ims-gotchas.md',
+    expiresAt: null,
+  },
 ];
 
 function showBinding() {

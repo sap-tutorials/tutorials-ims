@@ -7,6 +7,13 @@ using from './event-stream-service';
 using from './knowledge-graph-service';
 using from './a2a-service';
 
+// Fold the @cap-js/ord runtime service into this project's own srv model so it
+// compiles into the production CSN (gen/srv). Without this, `cds build --production`
+// treats the plugin-provided model in node_modules as an external required service,
+// omits it from the served CSN, and the runtime never registers the ORD routes
+// (/.well-known/open-resource-discovery, /ord/v1/documents/ord-document) → 404 (#2307).
+using from '@cap-js/ord/lib/services/ord-service';
+
 annotate DeveloperService with @ORD.Extensions: {
     title: 'Developer Tutorial Progress API',
     lineOfBusiness: ['Platform Engineering'],

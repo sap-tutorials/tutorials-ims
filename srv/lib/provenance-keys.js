@@ -1,4 +1,5 @@
 import { importPKCS8, exportJWK, calculateJwkThumbprint } from 'jose';
+import { resolveSecret } from './secret-resolver.js';
 
 // Test overrides live on globalThis so all module instances in the same process
 // share them — this avoids the Windows module-duplication issue where
@@ -7,14 +8,20 @@ import { importPKCS8, exportJWK, calculateJwkThumbprint } from 'jose';
 // globalThis.__imsFeatureFlagsState__ in feature-flags/db-flags.js.
 const _g = (globalThis.__provenanceKeysState__ ??= { testPem: undefined, cache: undefined });
 
-function readPem() {
+// Resolve the PEM credstore-first (BTP Credential Store → process.env → null),
+// same seam as CONTENT_API_KEY and every other secret. Reading process.env
+// directly was a bug (#2308): the key rotated in via /admin-ui/#secrets lands in
+// the credstore, which a CF binding does NOT surface as an env var, so provenance
+// never saw it and jwks.json stayed empty. resolveSecret keeps the env fallback
+// for local/dev where PROVENANCE_SIGNING_KEY is set directly.
+async function readPem() {
   if (_g.testPem !== undefined) return _g.testPem;
-  return process.env.PROVENANCE_SIGNING_KEY || null;
+  return (await resolveSecret('PROVENANCE_SIGNING_KEY', { logTag: '[provenance-keys]' })) || null;
 }
 
 async function load() {
   if (_g.cache !== undefined) return _g.cache;
-  const pem = readPem();
+  const pem = await readPem();
   if (!pem) { _g.cache = null; return _g.cache; }
   try {
     const key = await importPKCS8(pem, 'EdDSA', { extractable: true });

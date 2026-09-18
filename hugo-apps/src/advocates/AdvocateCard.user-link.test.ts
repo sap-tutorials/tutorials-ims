@@ -78,7 +78,7 @@ describe('AdvocateCard.vue — user-link affordances', () => {
     const wrapper = mount(AdvocateCard, {
       props: { advocate: FIXTURE_UNLINKED, photoBase: '/api/advocates' },
     });
-    const pill = wrapper.find('.adv-tutorials-pill');
+    const pill = wrapper.find('.dev-advocate-tutorials-pill');
     expect(pill.exists()).toBe(false);
   });
 

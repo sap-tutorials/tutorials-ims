@@ -12,6 +12,7 @@ import { resolveDeployEnvironment } from './lib/deploy-environment.js';
 import { versionHandler } from './lib/version-handler.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
+import { loadTechEdFeed } from './lib/teched-feed.js';
 import { buildConceptsHandler } from './lib/build-concepts.js';
 import { buildTopicClustersHandler } from './lib/build-topic-clusters.js';
 import { buildTopicsGalleryHandler } from './lib/build-topics-gallery.js';
@@ -53,6 +54,7 @@ import * as advocatesPublic from './routes/advocates-public.js';
 import * as devtoberfestPublic from './routes/devtoberfest-public.js';
 import * as eventLogoPublic from './routes/event-logo-public.js';
 import * as devtoberfestSchedule from './routes/devtoberfest-schedule.js';
+import * as techedIcal from './routes/teched-ical.js';
 import * as devtoberfestScheduleCheck from './routes/devtoberfest-schedule-check.js';
 import * as devtoberfestAuth from './routes/devtoberfest-auth.js';
 import * as devtoberfestCatGame from './routes/devtoberfest-cat-game.js';
@@ -631,6 +633,29 @@ cds.on('bootstrap', (app) => {
     }
   });
 
+  // Build-time data for the Hugo /teched/ page (issue #2312) — consumed at
+  // build time by a LATER unit's fetcher. Public, unauthenticated,
+  // Cache-Control 60s. Sessions carry `venue` (BERLIN|VIRTUAL) so the page can
+  // split Berlin vs Virtual. EXPLICIT public projection — never spread the full
+  // row (drops sourceId, contentHash, lastExtractedHash, firstSeenAt,
+  // lastSeenAt, pinUntil, createdBy/modifiedBy, …).
+  app.get('/build/teched', async (req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      // Optional scoping (the page fetches all and splits client-side, so these
+      // are additive): ?venue=BERLIN|VIRTUAL; ?upcoming=true drops ended sessions.
+      const feed = await loadTechEdFeed(db, {
+        venue: req.query.venue,
+        upcoming: String(req.query.upcoming || '').toLowerCase() === 'true',
+      });
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({ ...feed, buildAt: new Date().toISOString() });
+    } catch (err) {
+      console.error('[build/teched]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Aggregate stats for the ecosystem-health radar at /channels/health/.
   // Consumed by scripts/fetch-channels-stats.ts at build time. Public, unauthenticated.
   // v1 uses ONLY reliably-populated fields: status, ownerType, category/subcategory,
@@ -734,6 +759,7 @@ cds.on('bootstrap', (app) => {
   devtoberfestPublic.register(app);
   eventLogoPublic.register(app);
   devtoberfestSchedule.register(app);
+  techedIcal.register(app);
   devtoberfestScheduleCheck.register(app);
   devtoberfestAuth.register(app);
   devtoberfestCatGame.register(app);

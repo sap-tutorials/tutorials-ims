@@ -13,11 +13,68 @@ describe('validate-answer prompt builder', () => {
     expect(PROMPT_VERSION.length).toBeGreaterThan(0);
   });
 
-  it('PROMPT_VERSION reflects the v2 semantics change (hint required on fail too)', () => {
-    // Bumped 2026-06-23: hint is REQUIRED on partial AND fail (was: partial only).
-    // Telemetry that aggregates submissions by promptVersion can distinguish
-    // pre/post-change verdict distributions to detect regression.
-    expect(PROMPT_VERSION).toBe('v2');
+  it('PROMPT_VERSION reflects the v3 semantics change (grade the idea, not the checklist)', () => {
+    // Bumped 2026-09-16 (#2348): "pass" broadened so omitting minor
+    // supporting detail is fine; "partial" narrowed to a missing distinct
+    // sub-question or a wrong core term. Telemetry that aggregates
+    // submissions by promptVersion can compare v2 vs v3 verdict distributions.
+    // (#2345 later bumped to v4 for optional video grounding — see below —
+    // so this test asserts the v3 semantics live on in the current prompt,
+    // not the exact version string.)
+    const sys = buildSystemPrompt();
+    expect(sys).toMatch(/Grade the idea, not the completeness/i);
+  });
+
+  it('PROMPT_VERSION reflects the v4 semantics change (optional video-transcript grounding)', () => {
+    // Bumped 2026-09-16 (#2345): buildUserMessage can now carry a
+    // videoContext transcript excerpt for video-sourced quizzes. Telemetry
+    // that aggregates submissions by promptVersion can compare v3 vs v4.
+    expect(PROMPT_VERSION).toBe('v4');
+  });
+
+  it('buildUserMessage OMITS the video section when videoContext is absent (byte-identical to v3 shape)', () => {
+    const without = buildUserMessage({
+      question: 'What is CAP?',
+      correctAnswer: 'Cloud Application Programming Model',
+      submittedAnswer: 'a framework',
+    });
+    expect(without).not.toMatch(/Video transcript context/i);
+    // Question then Author's expected answer, no video section between them.
+    expect(without.indexOf('Question:')).toBeLessThan(without.indexOf("Author's expected answer"));
+  });
+
+  it('buildUserMessage INSERTS the video section between question and expected answer when videoContext is present', () => {
+    const withCtx = buildUserMessage({
+      question: 'What is CAP?',
+      correctAnswer: 'Cloud Application Programming Model',
+      submittedAnswer: 'a framework',
+      videoContext: 'In this video we explain the CAP model and its layers.',
+    });
+    expect(withCtx).toMatch(/Video transcript context/i);
+    const qIdx = withCtx.indexOf('Question:');
+    const vIdx = withCtx.search(/Video transcript context/i);
+    const aIdx = withCtx.indexOf("Author's expected answer");
+    expect(qIdx).toBeLessThan(vIdx);
+    expect(vIdx).toBeLessThan(aIdx);
+    expect(withCtx).toContain('In this video we explain the CAP model');
+  });
+
+  it('buildUserMessage treats empty-string videoContext as absent', () => {
+    const empty = buildUserMessage({
+      question: 'Q', correctAnswer: 'A', submittedAnswer: 'S', videoContext: '',
+    });
+    expect(empty).not.toMatch(/Video transcript context/i);
+  });
+
+  it('system prompt grades the idea, not the completeness of the enumeration (v3)', () => {
+    // #2348: the grader was penalizing answers that conveyed the core concept
+    // but omitted an example/anecdote/supporting detail. v3 must explicitly
+    // tell the model NOT to penalize for those omissions.
+    const sys = buildSystemPrompt();
+    expect(sys).toMatch(/Grade the idea, not the completeness/i);
+    expect(sys).toMatch(/omitting (minor supporting details|examples)/i);
+    // pass should prefer over partial when uncertain (was "prefer partial" in v2).
+    expect(sys).toMatch(/uncertain between pass and partial, prefer PASS/i);
   });
 
   it('system prompt mentions verdict scale + DO-NOT-QUOTE rule', () => {

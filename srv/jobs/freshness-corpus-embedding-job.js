@@ -27,13 +27,15 @@ function encodeBlob(vec) {
   return buf;
 }
 
-async function embedEntity(db, entity, tableName, model) {
+async function embedEntity(db, entity, tableName, model, textColumn = 'description') {
   // Select only rows whose embedding BLOB is null (SQLite-safe CDS QL).
-  const rows = await SELECT.from(entity).columns('ID', 'title', 'description').where('embedding is null');
+  // `textColumn` is the source-owned NCLOB that carries the body text — most
+  // corpora call it `description`; TechEdSessions call it `abstract` (#2312).
+  const rows = await SELECT.from(entity).columns('ID', 'title', textColumn).where('embedding is null');
   let n = 0;
   for (let i = 0; i < rows.length; i += BATCH) {
     const chunk = rows.slice(i, i + BATCH);
-    const texts = chunk.map(r => `${r.title || ''}\n${r.description || ''}`.trim());
+    const texts = chunk.map(r => `${r.title || ''}\n${r[textColumn] || ''}`.trim());
     const vectors = await embed(texts, model);
     for (let j = 0; j < chunk.length; j++) {
       const vec = vectors[j];
@@ -61,21 +63,50 @@ async function embedEntity(db, entity, tableName, model) {
 }
 
 /**
- * Backfill embedding columns for ApiDocs and Samples rows that lack them.
+ * Backfill embedding columns for ApiDocs, Samples, DevtoberfestSessions, and
+ * TechEdSessions rows that lack them.
  *
  * @param {string} _logId   - caller-supplied correlation id (for future audit log)
  * @param {object} [_opts]  - reserved for future options
- * @returns {Promise<{apiDocs:number, samples:number}>}
+ * @returns {Promise<{apiDocs:number, samples:number, devtoberfestSessions:number, techedSessions:number}>}
  */
 export async function runFreshnessCorpusEmbedding(_logId, _opts) {
   const db = await cds.connect.to('db');
   const { model } = await resolveEmbeddingSettings();
-  const { ApiDocs, Samples } = cds.entities('com.sap.developers.ims.external');
+  const { ApiDocs, Samples, DevtoberfestSessions, TechEdSessions } = cds.entities('com.sap.developers.ims.external');
   try {
     const apiDocs = await embedEntity(db, ApiDocs, 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_APIDOCS', model);
     const samples = await embedEntity(db, Samples, 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_SAMPLES', model);
-    LOG.info(`[freshness-corpus] embedded apiDocs=${apiDocs} samples=${samples}`);
-    return { apiDocs, samples };
+    // #2311: embed Devtoberfest sessions for the semantic-search 'external'
+    // corpus. embedEntity is generic over title+description (session abstract).
+    // Fault-isolated: DevtoberfestSessions is a newer table that may be absent
+    // on an env without the migration, so a failure here must NOT abort the
+    // whole job or mask the apiDocs/samples counts already computed above, nor
+    // prevent the TechEd arm below from running. Log and continue with 0.
+    let devtoberfestSessions = 0;
+    try {
+      devtoberfestSessions = await embedEntity(
+        db, DevtoberfestSessions, 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_DEVTOBERFESTSESSIONS', model,
+      );
+    } catch (devtoberfestErr) {
+      LOG.warn('[freshness-corpus] DevtoberfestSessions embedding skipped:', devtoberfestErr.message);
+    }
+    // #2312 (Unit 5): embed TechEd sessions for the 'teched'/'external'/'all'
+    // corpora. Fault-isolated: TechEdSessions is a newer table that may be
+    // absent on an env without the migration, so a failure here must NOT abort
+    // the whole job or mask the apiDocs/samples/devtoberfest counts already
+    // computed above. Log and continue with 0. The body text column is
+    // `abstract`, not `description`.
+    let techedSessions = 0;
+    try {
+      techedSessions = await embedEntity(
+        db, TechEdSessions, 'COM_SAP_DEVELOPERS_IMS_EXTERNAL_TECHEDSESSIONS', model, 'abstract',
+      );
+    } catch (techedErr) {
+      LOG.warn('[freshness-corpus] TechEdSessions embedding skipped:', techedErr.message);
+    }
+    LOG.info(`[freshness-corpus] embedded apiDocs=${apiDocs} samples=${samples} devtoberfestSessions=${devtoberfestSessions} techedSessions=${techedSessions}`);
+    return { apiDocs, samples, devtoberfestSessions, techedSessions };
   } catch (err) {
     LOG.error('[freshness-corpus] embedding failed', err);
     throw err;

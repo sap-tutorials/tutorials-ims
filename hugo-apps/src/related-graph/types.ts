@@ -10,7 +10,7 @@
 // Phase 4.3 (#447 §8) adds 'discovery-mission'. Phase 4.4 (#447 §9) adds
 // 'video'. Phase 4.5 (#746) adds 'api-doc'. Phase 4.6 (#747) adds
 // 'sample'. Phase 4.7 (#748) adds 'help-doc'. Phase 4.8 (#765) adds
-// 'community-event'.
+// 'community-event'. #2311 adds 'devtoberfest-session'.
 export type NodeType =
   | 'tutorial'
   | 'concept'
@@ -27,6 +27,7 @@ export type NodeType =
   | 'sample'
   | 'help-doc'
   | 'community-event'    // Phase 4.8 (#765)
+  | 'devtoberfest-session'  // #2311
 
 export type ConceptRef = {
   slug: string
@@ -60,7 +61,7 @@ export type TutorialInfo = {
 // Phase 4.8 (#765) adds 'community-event'.
 // Mirrors the OtherResource type in srv/knowledge-graph-service.cds.
 export type OtherResource = {
-  type: 'learning-journey' | 'blog-post' | 'discovery-mission' | 'video' | 'api-doc' | 'sample' | 'help-doc' | 'community-event'   // widens per sub-phase
+  type: 'learning-journey' | 'blog-post' | 'discovery-mission' | 'video' | 'api-doc' | 'sample' | 'help-doc' | 'community-event' | 'devtoberfest-session'   // widens per sub-phase
   slug: string
   title: string
   url: string
@@ -117,6 +118,15 @@ export type OtherResource = {
   virtualOrInPerson?: string | null
   startDate?: string | null     // YYYY-MM-DD
   endDate?: string | null       // YYYY-MM-DD or null
+  // #2311: devtoberfest-session fields. All nullable. `youtubeUrl` drives
+  // the 🎥 icon; `activityTaskSlug`/`activityTaskType` carry the linked
+  // tutorial/puzzle bridge.
+  youtubeUrl?: string | null
+  speakerNames?: string | null
+  scheduledStart?: string | null   // ISO timestamp
+  sessionCode?: string | null
+  activityTaskSlug?: string | null
+  activityTaskType?: string | null
   // Phase 5 (#850): server-rendered meta string, e.g. " · by Alice · Jun 3, 2026".
   // Consumers (ResourceRow / SidebarPanel / ExpandedPanel) should render this
   // verbatim instead of computing meta client-side from per-type fields.

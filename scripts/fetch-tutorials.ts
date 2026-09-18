@@ -30,8 +30,10 @@ import { normalizeVideo } from './parsers/video.js'
 import { extractGithubLoginFromProfile } from './parsers/github-login-from-profile.js'
 import type { CatalogTutorialMeta, CategoryMeta, Mission, MissionHierarchy, HierarchyGroup, StandaloneGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
 import { QUESTION_TYPE_TEXT } from './parsers/types.js'
-import { advocateLoginToSlug, type AuthorTutorialRow } from './parsers/author-index.js'
+import { advocateLoginToSlug, normalizeAuthorLogin, type AuthorTutorialRow } from './parsers/author-index.js'
 import { writeAuthorPages } from './lib/author-pages-writer.js'
+import { matchTechEdSessions, matchDevtoberfestSessions } from '../srv/lib/session-speaker-match.js'
+import type { AuthorSessions } from './parsers/author-index.js'
 import { buildContributorsSidecar } from './parsers/contributors-sidecar.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -268,6 +270,29 @@ interface ErrorEntry {
   repo: string
   error: string
   timestamp: string
+}
+
+/**
+ * Select the fetch errors that correspond to *author-requested* slugs on a
+ * slug-targeted run — the "missing/misnamed source file" class (e.g. discovery
+ * saw `tutorials/<slug>/` but `<slug>.md` 404'd because the author named the
+ * file `architecture.md`). These are author content errors, NOT infra
+ * failures: the slug never rendered, so it's already absent from `_nav.json`
+ * and the publish set, and the rebuild intentionally continues (exit 0) rather
+ * than letting one author typo fail the whole job. The CI workflow reads
+ * `errors.json` to file a per-tutorial issue against the source repo; this
+ * function is the shared, unit-testable definition of "which errored slugs are
+ * targeted skips". Returns [] when not slug-targeted (`filter` is null) so the
+ * caller emits no per-slug markers on a full rebuild.
+ *
+ * Pure over its inputs so it's testable without the filesystem/network.
+ */
+export function targetedSourceErrors(
+  errors: ErrorEntry[],
+  filter: Set<string> | null,
+): ErrorEntry[] {
+  if (!filter) return []
+  return errors.filter(e => filter.has(e.slug))
 }
 
 interface TutorialTiming {
@@ -660,6 +685,35 @@ async function fetchSemaphoreMap(): Promise<Record<string, string>> {
   }
 }
 
+// [#2345] Transcript fetcher for the build-time AI video-quiz path. Reuses the
+// deployed, anonymous GET /api/devtoberfest/transcript?video=<id> endpoint,
+// which reads/populates the shared Transcript entity (7d/1h cache, gzip BLOB,
+// LOB-safe raw SQL) for ANY video id — it is not event-scoped in behavior, so
+// we reuse it rather than add a near-duplicate /content/transcript endpoint.
+// Returns { source:'none', segments:[] } on any failure so expandAiAuthored
+// drops the video quiz and the build never fails on a bad/unreachable video.
+async function fetchTranscriptViaHttp(
+  videoId: string,
+): Promise<{ source: 'uploaded' | 'auto' | 'none'; segments: Array<{ start: number; text: string }> }> {
+  const capBaseUrl = process.env.CAP_BASE_URL ?? 'http://localhost:4004'
+  const url = `${capBaseUrl}/api/devtoberfest/transcript?video=${encodeURIComponent(videoId)}`
+  try {
+    const res = await fetch(url)
+    if (!res.ok) {
+      console.warn(`[ai-author] transcript endpoint ${url} returned ${res.status} — dropping video quiz`)
+      return { source: 'none', segments: [] }
+    }
+    const body = await res.json() as { source?: string; segments?: Array<{ start: number; text: string }> }
+    return {
+      source: (body.source as 'uploaded' | 'auto' | 'none') ?? 'none',
+      segments: Array.isArray(body.segments) ? body.segments : [],
+    }
+  } catch (e) {
+    console.warn(`[ai-author] transcript fetch failed (${(e as Error).message}) — dropping video quiz`)
+    return { source: 'none', segments: [] }
+  }
+}
+
 async function main() {
   const totalStart = performance.now()
   const regenerateMode = process.argv.includes('--regenerate')
@@ -1041,6 +1095,9 @@ async function main() {
           // so AI never fires on top of regex-substring or other [VALIDATE_N]
           // blocks where parseBlock returned [].
           handAuthoredSteps,
+          // [#2345] video-sourced quizzes ([AUTOAUTHOR_VIDEO_*]) fetch the
+          // transcript from the deployed transcript endpoint (CAP_BASE_URL).
+          fetchTranscript: fetchTranscriptViaHttp,
         })
         saveAiQuizCache(t.slug, aiCache)
 
@@ -1105,6 +1162,13 @@ async function main() {
           for (const q of questions) {
             if (q.aiAuthored && q.type === QUESTION_TYPE_TEXT) {
               delete q.correctAnswer
+            }
+            // [#2345] __videoContext is server-only grader grounding (captured
+            // into the validate-answer sidecar above). Strip from every emitted
+            // question so the transcript excerpt never lands in public Hugo
+            // frontmatter shipped to clients.
+            if ((q as any).__videoContext !== undefined) {
+              delete (q as any).__videoContext
             }
           }
         }
@@ -1480,7 +1544,8 @@ async function main() {
 
   if (target === 'hugo') {
     try {
-      const advocates = advocateLoginToSlug(await fetchAdvocateRoster())
+      const roster = await fetchAdvocateRoster()
+      const advocates = advocateLoginToSlug(roster)
       const dataDir = join(__dirname, '..', 'hugo', channel === 'qa' ? 'data-qa' : 'data')
       // Active/published catalog slugs (lowercase) — same ACTIVE-only set the
       // navigator/browse use (status='ACTIVE' or null, srv/lib/build-catalog.js).
@@ -1496,15 +1561,20 @@ async function main() {
         channel === 'qa'
           ? undefined
           : join(__dirname, '..', 'hugo', 'static', 'author_index.json')
+      // Issue #2354: conference sessions per author (fail-open — empty map on
+      // any feed miss). Built from the same running CAP the roster came from.
+      const sessionsByLogin = await computeAuthorSessions(authorRows, roster)
       const { pagesWritten } = writeAuthorPages({
         rows: authorRows,
         advocates,
         activeSlugs,
         publishFile,
+        sessionsByLogin,
         dataFile: join(dataDir, 'author_index.json'),
         contentDir: join(getHugoContentDir(channel), 'authors'),
       })
-      console.log(`  [authors] wrote author_index.json + ${pagesWritten} author page(s)`)
+      const withSessions = [...sessionsByLogin.keys()].length
+      console.log(`  [authors] wrote author_index.json + ${pagesWritten} author page(s) (${withSessions} with sessions)`)
     } catch (err) {
       console.warn(`  [authors] emit failed: ${err instanceof Error ? err.message : err}`)
     }
@@ -1563,6 +1633,27 @@ async function main() {
     const errorPath = join(CACHE_DIR, 'errors.json')
     writeFileSync(errorPath, JSON.stringify(errors, null, 2), 'utf-8')
     console.log(`\nError log written to ${errorPath}`)
+
+    // A tutorial the author *requested* (slug-targeted run) but whose source
+    // markdown we could not fetch — almost always a missing/misnamed file, e.g.
+    // `tutorials/<slug>/architecture.md` instead of the required
+    // `tutorials/<slug>/<slug>.md`. These are AUTHOR content errors, not infra
+    // failures: the slug simply never rendered, so it's already absent from
+    // `_nav.json` and the publish set. We intentionally do NOT exit non-zero
+    // here — a single author typo must not fail the whole rebuild. Instead we
+    // emit an explicit, greppable marker per errored target slug so the CI
+    // workflow can file a per-tutorial issue against the source repo (assigned
+    // to / @-mentioning the author) while the rest of the build continues.
+    // The unknown-slug fail-fast above (slug absent from *discovery*) is a
+    // different case and still exits 1; this fires when discovery saw the
+    // tutorial folder but the `<slug>.md` fetch 404'd.
+    for (const e of targetedSourceErrors(errors, tutorialSlugFilter)) {
+      console.warn(
+        `[source-error] targeted slug "${e.slug}" (${e.repo}) could not be fetched: ${e.error}. ` +
+        `Expected primary markdown at tutorials/${e.slug}/${e.slug}.md — ` +
+        `SKIPPING this slug and continuing. See ${errorPath}.`,
+      )
+    }
   }
 
   // ── Prune stale tutorial-cache entries ──
@@ -1774,6 +1865,76 @@ async function fetchAdvocateRoster(): Promise<unknown[]> {
     console.warn(`  [authors] advocate roster fetch failed (no redirects): ${err instanceof Error ? err.message : err}`)
     return []
   }
+}
+
+async function fetchJsonSafe(path: string): Promise<any | null> {
+  try {
+    const base = process.env.CAP_BASE_URL || 'http://localhost:4004'
+    const res = await fetch(`${base}${path}`, { headers: { Accept: 'application/json' } })
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Build login → { teched, devtoberfest } session cards for author pages
+ * (issue #2354). Fetches the public TechEd (/build/teched) and Devtoberfest
+ * (/api/devtoberfest/schedule) feeds ONCE, then matches each author.
+ *
+ * Match keys: advocate-authors (in the roster) match on email + name; all other
+ * authors match on displayName (name only — the build has no DB email for
+ * non-advocate authors, and the public feeds carry no speaker email). Fully
+ * fail-open: any feed miss / fetch fault yields an empty map, so author pages
+ * never blank on a session-feed hiccup.
+ */
+async function computeAuthorSessions(
+  authorRows: AuthorTutorialRow[],
+  roster: unknown[],
+): Promise<Map<string, AuthorSessions>> {
+  const out = new Map<string, AuthorSessions>()
+  try {
+    const [techedFeed, dtfFeed] = await Promise.all([
+      fetchJsonSafe('/build/teched'),
+      fetchJsonSafe('/api/devtoberfest/schedule'),
+    ])
+    if (!techedFeed && !dtfFeed) return out
+
+    // login → { email?, name } from the advocate roster (email-match for the
+    // advocate-authors); everyone else falls back to displayName name-match.
+    const personByLogin = new Map<string, { email?: string; name: string }>()
+    if (Array.isArray(roster)) {
+      for (const a of roster as any[]) {
+        const login = a?.githubLogin ? String(a.githubLogin).toLowerCase() : null
+        if (!login) continue
+        const name = `${a.firstName || ''} ${a.lastName || ''}`.trim()
+        personByLogin.set(login, { email: a.email || undefined, name })
+      }
+    }
+
+    // Unique authors from the rows (login + displayName).
+    const displayByLogin = new Map<string, string>()
+    for (const r of authorRows) {
+      const login = normalizeAuthorLogin(r.authorProfile)
+      if (login && !displayByLogin.has(login)) displayByLogin.set(login, r.displayName || login)
+    }
+
+    for (const [login, displayName] of displayByLogin) {
+      const rosterPerson = personByLogin.get(login)
+      const person = {
+        email: rosterPerson?.email,
+        name: rosterPerson?.name || displayName,
+      }
+      const teched = techedFeed ? matchTechEdSessions(person, techedFeed) : []
+      const devtoberfest = dtfFeed ? matchDevtoberfestSessions(person, dtfFeed) : []
+      if (teched.length || devtoberfest.length) out.set(login, { teched, devtoberfest })
+    }
+  } catch (err) {
+    console.warn(`  [authors] session compute failed (pages proceed without sessions): ${err instanceof Error ? err.message : err}`)
+    return new Map()
+  }
+  return out
 }
 
 function browseIsWithinNewWindow(createdAt: string | undefined): boolean {

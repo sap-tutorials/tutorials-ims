@@ -1,0 +1,19 @@
+{{ define "main" }}
+{{/* baseof.html already wraps this block in a <main> landmark; use a plain
+     <div> here to avoid duplicate-main landmark (same pattern as list.html). */}}
+<div class="teched-page">
+  <header class="teched-page__intro">
+    <h1>{{ .Title }}</h1>
+    {{ with .Description }}<p>{{ . }}</p>{{ end }}
+    {{ partial "teched-subnav.html" (dict "activeView" "schedule") }}
+  </header>
+
+  {{/* Bake the full TechEd feed as a JSON blob so the island reads it without
+       a network round-trip — same id="teched-data" shape as list.html. */}}
+  <script id="teched-data" type="application/json">{{ (.Site.Data.teched) | jsonify | safeJS }}</script>
+
+  <div id="teched-schedule-mount"></div>
+  <noscript>The TechEd schedule table requires JavaScript.</noscript>
+</div>
+<script type="module" src="{{ partial "island-src.html" "teched-schedule" | relURL }}"></script>
+{{ end }}

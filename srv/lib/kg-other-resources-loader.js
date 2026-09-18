@@ -70,6 +70,7 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
     Samples, SampleConceptLinks,
     HelpDocs, HelpDocConceptLinks,
     CommunityEvents, CommunityEventConceptLinks,
+    DevtoberfestSessions, DevtoberfestSessionConceptLinks,
   } = cds.entities('com.sap.developers.ims.external');
 
   // Step 1: fetch all 8 overlap-link tables in parallel. Each returns
@@ -81,7 +82,7 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
   // Phase 4.8 (#765): CommunityEventConceptLinks joins to CommunityEvents;
   // no additional per-link scalar hoisting (snippet is looked up on demand
   // by consumers of the concepts payload, not the widget metaText).
-  const [journeyLinks, blogLinks, missionLinks, videoLinks, apiDocLinks, sampleLinks, helpDocLinks, communityEventLinks] =
+  const [journeyLinks, blogLinks, missionLinks, videoLinks, apiDocLinks, sampleLinks, helpDocLinks, communityEventLinks, devtoberfestSessionLinks] =
     await Promise.all([
       SELECT.from(LearningJourneyConceptLinks)
         .columns('journey_ID', 'concept_ID')
@@ -107,6 +108,9 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
       SELECT.from(CommunityEventConceptLinks)
         .columns('event_ID', 'concept_ID')
         .where({ concept_ID: { in: conceptIds } }),
+      SELECT.from(DevtoberfestSessionConceptLinks)
+        .columns('session_ID', 'concept_ID')
+        .where({ concept_ID: { in: conceptIds } }),
     ]);
 
   // Step 2: JS-side per-corpus overlap tallies (microseconds).
@@ -118,6 +122,7 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
   const sampleT  = tally(sampleLinks,  'sample_ID',  perTypeLimit);
   const helpDocT = tally(helpDocLinks, 'helpDoc_ID', perTypeLimit);
   const eventT   = tally(communityEventLinks, 'event_ID', perTypeLimit);
+  const sessionT = tally(devtoberfestSessionLinks, 'session_ID', perTypeLimit);
 
   // Anchor lookup: pick the first non-null anchor per helpDoc_ID for the
   // meta-text renderer. If none, anchor is null and only sourceLabel shows.
@@ -136,7 +141,7 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
   // have LargeString `description` columns — we deliberately exclude them
   // from the projection to keep the sidebar payload scalar-only.
   // HelpDocs is the 4th (final) LOB-locator read-site per spec §10.1.
-  const [journeys, posts, missions, videos, apiDocs, samples, helpDocs, communityEvents] = await Promise.all([
+  const [journeys, posts, missions, videos, apiDocs, samples, helpDocs, communityEvents, devtoberfestSessions] = await Promise.all([
     journeyT.topIds.length
       ? SELECT.from(LearningJourneys)
           .columns('ID', 'slug', 'title', 'url', 'level', 'durationHours')
@@ -180,6 +185,15 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
                    'scope', 'virtualOrInPerson', 'startDate', 'endDate',
                    'lastSeenAt')
           .where({ ID: { in: eventT.topIds } })
+      : Promise.resolve([]),
+    // #2311: Devtoberfest-session metadata. LOB-safe — description
+    // (LargeString/NCLOB session abstract) is deliberately excluded.
+    sessionT.topIds.length
+      ? SELECT.from(DevtoberfestSessions)
+          .columns('ID', 'slug', 'title', 'url', 'youtubeUrl', 'sessionCode',
+                   'speakerNames', 'scheduledStart', 'activityTaskSlug',
+                   'activityTaskType', 'lastSeenAt')
+          .where({ ID: { in: sessionT.topIds } })
       : Promise.resolve([]),
   ]);
 
@@ -287,6 +301,23 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
       metaText: buildEventMetaText(e),
     }));
 
+  // #2311: Devtoberfest-session wire shape. TTL-gated per-row (2yr band).
+  // metaText mirrors the config renderMeta: "by <speakers> · <YYYY-MM-DD>[ · 🎥]".
+  const sessionById = new Map(devtoberfestSessions.map((s) => [s.ID, s]));
+  const devtoberfestSessionOtherResources = sessionT.topIds
+    .map((id) => sessionById.get(id))
+    .filter(Boolean)
+    .filter((s) => isWithinTTL('devtoberfest-session', s.lastSeenAt))
+    .map((s) => ({
+      type: 'devtoberfest-session',
+      slug: s.slug, title: s.title, url: s.url,
+      youtubeUrl: s.youtubeUrl, sessionCode: s.sessionCode,
+      speakerNames: s.speakerNames, scheduledStart: s.scheduledStart,
+      activityTaskSlug: s.activityTaskSlug, activityTaskType: s.activityTaskType,
+      overlapCount: sessionT.overlapByFk.get(s.ID),
+      metaText: buildSessionMetaText(s),
+    }));
+
   // Return a Map keyed by wire `type` string. Callers either flatten the
   // values for a global top-N merge (sidebar) or keep the grouping (full
   // panel, Task 5).
@@ -299,6 +330,7 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
   byType.set('sample',            sampleOtherResources);
   byType.set('help-doc',          helpDocOtherResources);
   byType.set('community-event',   communityEventOtherResources);
+  byType.set('devtoberfest-session', devtoberfestSessionOtherResources);
   return byType;
 }
 
@@ -318,5 +350,27 @@ export function buildEventMetaText(row) {
     if (!isNaN(d.getTime())) parts.push(d.toISOString().slice(0, 10));
   }
   if (row.virtualOrInPerson === 'virtual') parts.push('🌐');
+  return parts.join(' · ');
+}
+
+/**
+ * #2311: compact one-line meta-text renderer for a Devtoberfest session.
+ * Format: `by <speakers> · <YYYY-MM-DD>[ · 🎥]`. Kept pure so callers can
+ * render offline. Mirrors the RESOURCE_TYPE_CONFIG 'devtoberfest-session'
+ * renderMeta, but self-contained (no formatDate dep) like buildEventMetaText.
+ *
+ * @param {{speakerNames?:string, scheduledStart?:string|Date, youtubeUrl?:string}} row
+ * @returns {string}
+ */
+export function buildSessionMetaText(row) {
+  const parts = [];
+  if (row.speakerNames && String(row.speakerNames).trim().length > 0) {
+    parts.push(`by ${row.speakerNames}`);
+  }
+  if (row.scheduledStart) {
+    const d = row.scheduledStart instanceof Date ? row.scheduledStart : new Date(row.scheduledStart);
+    if (!isNaN(d.getTime())) parts.push(d.toISOString().slice(0, 10));
+  }
+  if (row.youtubeUrl) parts.push('🎥');
   return parts.join(' · ');
 }

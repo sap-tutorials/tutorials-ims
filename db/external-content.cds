@@ -2,6 +2,15 @@ namespace com.sap.developers.ims.external;
 
 using { managed, cuid } from '@sap/cds/common';
 using { com.sap.developers.ims as ims } from '../db/knowledge-graph';
+// #2312 — TechEd session catalog entities share this external namespace. They
+// live in ./external/teched.cds; import here (side-effect) so they load with
+// the served model (CAP only loads db/ subfolder files reached via `using`).
+using from './external/teched';
+// #2312 (Unit 5) — semantic-search embedding columns for TechEdSessions live in
+// ./external/teched-embedding.cds (separate from the FOUNDATION file); import
+// here (side-effect) so the extend loads with the served model. Mirrors the
+// inline ApiDocs/Samples/DevtoberfestSessions embedding extends below.
+using from './external/teched-embedding';
 
 /**
  * Phase 4 per-content-type entities. Sub-phases 4.1-4.6 each add their own
@@ -519,3 +528,75 @@ extend entity Samples with {
   embedding    : LargeBinary;
   embeddingVec : Vector(1536);
 }
+
+// ============================================================================
+// Issue #2311: Devtoberfest Planner sessions as first-class graph nodes.
+// Ninth content type under the Phase 4 chassis.
+//
+// Source: the cross-container Planner facade external.devtoberfest.Session
+// (db/external/devtoberfest.cds — @cds.persistence.exists over DTF_*_V1 views
+// on devtoberfest-planner-db). Read-only, no cross-container FK enforcement,
+// so per rule D6 (docs/developers/architecture/cross-container-integration.md)
+// we store the upstream session ID as sourceId plus a DENORMALIZED speaker-name
+// snapshot rather than an FK to Speaker.
+//
+// Predicate 'presents' — semantically distinct from 'teaches'/'covers': a
+// session PRESENTS the concepts its abstract discusses.
+//
+// slug is derived 'dtf-<sessionCode-or-canonicalized-ID>' for IRI namespace
+// safety (canonicalization in srv/jobs/fetch-devtoberfest-sessions-job.js).
+//
+// activityTaskSlug/activityTaskType carry the Planner Activity's TASKSLUG/
+// TASKTYPE when the session is tied to a tutorial or puzzle. The projection
+// (srv/lib/kg-projection.js) emits an extra edge from the session node to that
+// tutorial's IRI so Devtoberfest sessions connect into the tutorial subgraph.
+//
+// embedding/embeddingVec included from the start (mirrors the ApiDocs/Samples
+// extend blocks) so the session participates in Semantic Search's 'external'
+// corpus. Backfilled by srv/jobs/freshness-corpus-embedding-job.js.
+//
+// description is LargeString (NCLOB) = the session ABSTRACT. NEVER SELECT it
+// alongside non-LOB metadata via CDS QL on HANA — LOB locators expire before
+// consumption when mixed with scalar columns (§10.1).
+// ============================================================================
+
+entity DevtoberfestSessions : cuid, managed {
+  slug              : String(120) @assert.unique;   // 'dtf-<sessionCode|canonicalized-ID>'
+  title             : String(400);
+  description       : LargeString;                  // session ABSTRACT (NCLOB — §10.1)
+  url               : String(500);                  // YouTube URL, else community-event URL
+  sourceId          : String(120);                  // upstream Planner Session.ID
+  contentHash       : String(64);
+  lastExtractedHash : String(64);                   // #708 crash-safety gate
+  firstSeenAt       : Timestamp @cds.on.insert: $now;
+  lastSeenAt        : Timestamp;
+  pinUntil          : Timestamp;                     // chassis admin override
+
+  // Session-specific:
+  sessionCode       : String(20);                    // Planner SESSIONCODE (natural key)
+  youtubeUrl        : String(500);                   // Planner YOUTUBEURL (nullable pre-recording)
+  scheduledStart    : Timestamp;                      // Planner SCHEDULEDSTART
+  speakerNames      : String(500);                    // denormalized 'First Last, First Last' (rule D6)
+  activityTaskSlug  : String(255);                    // Planner Activity.TASKSLUG (tutorial/puzzle bridge)
+  activityTaskType  : String(20);                     // Planner Activity.TASKTYPE
+
+  // Semantic-search vectors (mirrors ApiDocs/Samples). Backfilled by the
+  // freshness-corpus embedding job; nullable until then.
+  embedding         : LargeBinary;                    // raw Float32 BLOB (SQLite unit-test path)
+  embeddingVec      : Vector(1536);                   // HANA REAL_VECTOR (COSINE_SIMILARITY path)
+
+  links             : Composition of many DevtoberfestSessionConceptLinks on links.session = $self;
+}
+
+entity DevtoberfestSessionConceptLinks : cuid, managed {
+  session      : Association to DevtoberfestSessions @assert.notNull;
+  concept      : Association to ims.Concepts         @assert.notNull;
+  predicate    : String(20) default 'presents';
+  confidence   : Decimal(3, 2);                       // LLM floor 0.7
+  snippet      : String(200);                         // denormalized 'title · speakers · date'
+  extractedAt  : Timestamp;
+  modelVersion : String(40);
+}
+
+annotate DevtoberfestSessionConceptLinks with
+  @assert.unique.sessionConcept : [session, concept];

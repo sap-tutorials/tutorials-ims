@@ -15,9 +15,9 @@ import {
 } from '../../srv/lib/kg-meta-formatters.js';
 
 describe('RESOURCE_TYPE_CONFIG — registry shape', () => {
-  it('is an array with exactly 8 entries', () => {
+  it('is an array with exactly 10 entries', () => {
     expect(Array.isArray(RESOURCE_TYPE_CONFIG)).toBe(true);
-    expect(RESOURCE_TYPE_CONFIG).toHaveLength(8);
+    expect(RESOURCE_TYPE_CONFIG).toHaveLength(10);
   });
 
   it('every entry has the required fields with correct types', () => {
@@ -54,7 +54,7 @@ describe('RESOURCE_TYPE_CONFIG — registry shape', () => {
     expect(priorities).toEqual(sorted);
   });
 
-  it('type values are exactly the eight expected external types in priority order', () => {
+  it('type values are exactly the ten expected external types in priority order', () => {
     const types = RESOURCE_TYPE_CONFIG.map((e) => e.type);
     expect(types).toEqual([
       'learning-journey',    // 10
@@ -65,6 +65,8 @@ describe('RESOURCE_TYPE_CONFIG — registry shape', () => {
       'sample',              // 60
       'help-doc',            // 70
       'community-event',     // 80  ← Phase 4.8
+      'devtoberfest-session',// 90  ← #2311
+      'teched-session',      // 100 ← #2312
     ]);
   });
 

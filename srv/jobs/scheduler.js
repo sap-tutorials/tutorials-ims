@@ -969,6 +969,55 @@ export function registerJobs() {
     },
   });
 
+  // #2311: twice-weekly cron ingesting rich Devtoberfest Planner sessions
+  // (cross-container facade) into the KG as DevtoberfestSession nodes. Double-
+  // gated inside the job (KG master switch + KG_DEVTOBERFEST_SESSIONS_ENABLED)
+  // and fail-closed when Leg B isn't deployed, so it's inert until enabled.
+  // Off-minute :43 avoids the 04:31 community-events and other 04:xx slots.
+  registerJob({
+    jobName: 'fetch-devtoberfest-sessions',
+    schedule: '43 4 * * 1,4',       // Mon+Thu 04:43 UTC
+    ttlMs: 20 * 60 * 1000,           // 20 min — same band as community-events
+    description: 'Ingest Devtoberfest Planner sessions into the KG (presents concept links) and prep them for semantic search (twice-weekly, flag-gated)',
+    fn: async (logId, opts) => {
+      const { runFetchDevtoberfestSessions } = await import('./fetch-devtoberfest-sessions-job.js');
+      return runFetchDevtoberfestSessions(logId, opts);
+    },
+  });
+
+  // #2312: weekly ingest of the SAP TechEd 2026 session catalog (Berlin +
+  // Virtual) from the RainFocus /api/sessions API into the TechEd* entities.
+  // The fetch + upsert + delta core always runs; KG concept-link enrichment is
+  // double-gated (KG master switch + KG_TECHED_SESSIONS_ENABLED, default OFF)
+  // and fail-open. Sunday 05:43 UTC — off-minute :43, hour 5 is otherwise free
+  // except the Wednesday 05:17 help-docs slot, so no collision.
+  registerJob({
+    jobName: 'fetch-teched-sessions',
+    schedule: '43 5 * * 0',          // Sunday 05:43 UTC
+    ttlMs: 30 * 60 * 1000,           // 30 min — two-venue fanout + optional LLM pass
+    description: 'Fetch SAP TechEd 2026 sessions (Berlin + Virtual) from RainFocus and (flag-gated) extract covers concept links (weekly)',
+    fn: async (logId, opts) => {
+      const { runFetchTechEdSessions } = await import('./fetch-teched-sessions-job.js');
+      return runFetchTechEdSessions(logId, opts);
+    },
+  });
+
+  // #2312: every 6 h at :23 — metadata-only refresh of the TechEd catalog for
+  // the /teched/ page (title/room/time/speaker changes) with NO LLM cost. Does
+  // NOT touch contentHash/lastExtractedHash — those stay owned by the weekly
+  // fetch-teched-sessions job. Off-minute :23; fires 00:23/06:23/12:23/18:23,
+  // clear of the existing 6h :17 (refresh-community-events) and 4h :19 slots.
+  registerJob({
+    jobName: 'refresh-teched-sessions',
+    schedule: '23 */6 * * *',
+    ttlMs: 10 * 60 * 1000,           // 10 min — lightweight, no LLM cost
+    description: 'Refresh SAP TechEd session metadata for the /teched/ page — no LLM (6h cadence)',
+    fn: async (logId, opts) => {
+      const { runRefreshTechEdSessions } = await import('./refresh-teched-sessions-job.js');
+      return runRefreshTechEdSessions(logId, opts);
+    },
+  });
+
   // #2184 — weekly Semaphore taxonomy auto-sync (replaces the manual SES batch
   // load). Sunday 04:47 UTC — off-cluster from the :00/:07/:11/:13/:17/:19/:23/
   // :31/:37/:43/:57 minute grid. Gated by the SEMAPHORE_SYNC_ENABLED DB flag

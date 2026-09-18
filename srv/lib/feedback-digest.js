@@ -31,6 +31,7 @@ import cds from '@sap/cds';
 import { resolveDeployEnvironment } from './deploy-environment.js';
 import { escapeHtml } from './contributor-notifications.js';
 import { sendNotificationEmail } from './mail-client.js';
+import { resolvePublicBaseUrl } from '../jobs/homepage-link-health.js';
 
 const NS = 'com.sap.developers.ims';
 
@@ -186,14 +187,30 @@ export async function computeFeedbackDigests({ since, until }, db = cds.db) {
 /**
  * Pre-render the feedback <ul> for the digest email. Substituted as
  * ${feedbackListHtml} (resolveTemplate does not support iteration).
+ *
+ * Each item links to the public tutorial and, when the slug resolved to a
+ * tutorial (tutorialId present), a deep link into the Admin UI editor. The
+ * admin hash form `#tutorials&/tu/Tutorials(<uuid>)` is the router hash the
+ * admin shell actually consumes (#622/#1574) — NOT the OData key form.
+ *
+ * @param {Array<object>} items
+ * @param {string} baseUrl  public site origin, e.g. https://developers.sap.com
  */
-export function renderFeedbackList(items) {
+export function renderFeedbackList(items, baseUrl = '') {
+  const base = escapeHtml(String(baseUrl).replace(/\/+$/, ''));
   const lis = items.map(it => {
     const title = escapeHtml(it.title);
     const comment = escapeHtml(it.comment);
     const date = it.submittedAt ? String(it.submittedAt).slice(0, 10) : '—';
     const nps = it.npsScore != null ? ` (NPS ${escapeHtml(it.npsScore)})` : '';
-    return `<li><strong>${title}</strong> — ${date}${nps}<br/>${comment}</li>`;
+    const slug = encodeURIComponent(String(it.slug || '').toLowerCase());
+    const publicHref = `${base}/tutorials/${slug}.html`;
+    let links = `<a href="${publicHref}">View tutorial</a>`;
+    if (it.tutorialId) {
+      const adminHref = `${base}/admin-ui/#tutorials&/tu/Tutorials(${encodeURIComponent(it.tutorialId)})`;
+      links += ` · <a href="${adminHref}">Edit in Admin UI</a>`;
+    }
+    return `<li><strong>${title}</strong> — ${date}${nps}<br/>${comment}<br/>${links}</li>`;
   });
   return `<ul>${lis.join('')}</ul>`;
 }
@@ -246,7 +263,9 @@ export async function writeFeedbackWatermark(db, iso) {
  * @param {object} [deps.db]           db connection (default cds.db).
  * @param {string} [deps.vcap]         VCAP_APPLICATION override (tests).
  * @param {Function} [deps.sendEmail]  send fn (default mail-client.sendNotificationEmail).
- * @param {string} [deps.dashboardUrl] dashboard base URL for the email footer.
+ * @param {string} [deps.publicBaseUrl] public site origin override (tests); default
+ *   resolves via HomepageConfig.publicBaseUrl → https://developers.sap.com. Used to
+ *   build the footer feedback-dashboard link and the per-item tutorial/admin links.
  * @returns {Promise<{active:boolean, sent?:number, skipped?:number, failed?:number, total?:number}>}
  */
 export async function sendFeedbackDigests(logId, deps = {}) {
@@ -258,6 +277,9 @@ export async function sendFeedbackDigests(logId, deps = {}) {
     LOG.info('Owner-feedback email inactive (env/flag gate) — skipping');
     return { active: false };
   }
+
+  const publicBaseUrl = (deps.publicBaseUrl || await resolvePublicBaseUrl(db)).replace(/\/+$/, '');
+  const dashboardUrl = `${publicBaseUrl}/admin-ui/#feedback/dashboard`;
 
   const runStart = new Date().toISOString();
   // First active run has no watermark → since=runStart → empty window, no
@@ -283,8 +305,8 @@ export async function sendFeedbackDigests(logId, deps = {}) {
       variables: {
         ownerName: d.name || 'Tutorial owner',
         feedbackCount: d.items.length,
-        feedbackListHtml: renderFeedbackList(d.items),
-        dashboardUrl: deps.dashboardUrl || '',
+        feedbackListHtml: renderFeedbackList(d.items, publicBaseUrl),
+        dashboardUrl,
       },
     });
     if (result?.success) sent += 1;

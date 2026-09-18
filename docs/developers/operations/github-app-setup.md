@@ -40,6 +40,7 @@ These run once. Estimated time: 15 minutes.
      - `Contents`: **Read-only** (Phase 3 note: bump to **Read and write** only if you migrate `TUTORIALS_POC_DISPATCH_TOKEN` — needed for `repository_dispatch`)
      - `Metadata`: **Read-only** (auto-selected)
      - `Actions`: **Read and write** (runtime `workflow_dispatch` from the CAP app — Phase 2)
+     - `Issues`: **Read and write** (#2384 — lets the QA rebuild file a per-tutorial "source error" issue on the triggering `-Contribution` repo, assigned to / @-mentioning the author, when a tutorial's markdown is missing/misnamed. The default job `GITHUB_TOKEN` is scoped to `tutorials-ims` only and **cannot** write issues cross-repo, so this must come from the App.)
      - everything else: **No access**
    - **Organization permissions:** all No access
    - **Account permissions:** all No access
@@ -165,6 +166,38 @@ Each `*-Contribution` repo fires `repository_dispatch` at `tutorials-ims` via
 5. After a clean run, delete `TUTORIALS_POC_DISPATCH_TOKEN` from that repo.
 
 Roll out per-repo; each is independent.
+
+## Part 5 — Grant Issues:RW for per-tutorial source-error issues (#2384)
+
+When a slug-targeted QA rebuild can't fetch a tutorial's source markdown
+(missing/misnamed file — e.g. `tutorials/<slug>/architecture.md` instead of the
+required `<slug>.md`), `rebuild-content-qa.yml` **skips that slug, keeps the job
+green**, and files a per-tutorial issue on the **triggering `-Contribution`
+repo**, assigned to / @-mentioning the tutorial's author. That cross-repo issue
+write needs the App to hold **Issues: Read and write** — the default job
+`GITHUB_TOKEN` is scoped to `tutorials-ims` only.
+
+For an **already-registered** App (the usual case — the App exists from Parts
+1–4), granting a new permission is a two-step manual action by an org owner:
+
+1. App settings → **Permissions & events** → **Repository permissions** →
+   set `Issues` to **Read and write** → **Save changes**.
+2. GitHub then marks the change *pending* on every installation. **Re-accept**
+   it: org → **Settings → GitHub Apps → `sap-tutorials-builder` → Review
+   request**, and approve the new Issues permission. Until this is accepted the
+   installation token still lacks Issues — the workflow step self-warns and the
+   job stays green, but no author issue is filed.
+
+The App installation must already cover the `-Contribution` repos (Part 1.4 /
+Part 4 install "All repositories" or the specific Contribution repos). No token
+or secret changes are needed — the workflow files the issue with the existing
+`TUTORIALS_APP_*` token, gated on `vars.USE_GITHUB_APP == 'true'`.
+
+**Verify:** re-trigger a QA rebuild for a deliberately-misnamed slug (or wait for
+a real one). Expect the job to succeed with a `⚠️ Skipped (author source error)`
+line in the run summary, and a `tutorial-source-error`-labelled issue on the
+source repo. If no issue appears, confirm the Issues permission was *accepted*
+(step 2) and `USE_GITHUB_APP=true`.
 
 ---
 

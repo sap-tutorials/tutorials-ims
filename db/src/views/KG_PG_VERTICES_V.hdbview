@@ -144,4 +144,87 @@ VIEW "KG_PG_VERTICES_V" AS
     LABEL                                      AS "LABEL",
     'ACTIVE'                                   AS "STATUS"
   FROM "COM_SAP_DEVELOPERS_IMS_CATEGORIES"
-  WHERE SLUG IS NOT NULL;
+  WHERE SLUG IS NOT NULL
+  UNION ALL
+  -- TechEd session vertices (#2312). One row per TechEdSessions row, keyed on
+  -- SLUG. TechEdSessions.slug carries @assert.unique in db/external/teched.cds,
+  -- but that is a CAP RUNTIME check only — the delta-ingest seed
+  -- (srv/lib/teched/seed-core.js) writes via raw db.run() SELECT-then-UPSERT
+  -- keyed on sourceId (NOT slug) and bypasses the service layer, so it cannot
+  -- enforce @assert.unique. The deployed HANA table has ONLY a PRIMARY KEY on
+  -- ID (UUID), NO unique index on SLUG. A sourceId-churn / re-slug race could
+  -- therefore leave two rows sharing a SLUG, which would emit
+  -- 'teched_session:<slug>' twice and crash all three KG jobs at
+  -- KG_LOUVAIN_GRAPH runtime with [4907] range 1. Same ROW_NUMBER dedup guard
+  -- as the concept arm above keeps exactly one row per slug (most-recently-
+  -- modified wins; ID breaks ties). Defense-in-depth, mirroring the concept arm.
+  SELECT
+    "VERTEX_KEY",
+    "VERTEX_TYPE",
+    "SLUG",
+    "LABEL",
+    "STATUS"
+  FROM (
+    SELECT
+      CAST('teched_session:' || SLUG AS NVARCHAR(280)) AS "VERTEX_KEY",
+      'teched_session'                                 AS "VERTEX_TYPE",
+      SLUG                                             AS "SLUG",
+      TITLE                                            AS "LABEL",
+      'ACTIVE'                                         AS "STATUS",
+      ROW_NUMBER() OVER (
+        PARTITION BY SLUG ORDER BY MODIFIEDAT DESC, ID
+      )                                                AS "RN"
+    FROM "COM_SAP_DEVELOPERS_IMS_EXTERNAL_TECHEDSESSIONS"
+    WHERE SLUG IS NOT NULL
+  )
+  WHERE "RN" = 1
+  UNION ALL
+  -- TechEd track vertices (#2312). Added to back the session→track 'inTrack'
+  -- edge arm in KG_PG_EDGES_V — mirrors how #919 added mission/group vertices
+  -- specifically to satisfy the workspace validator for their edge arms
+  -- (an edge TARGET with no matching VERTEX_KEY is rejected at
+  -- KG_LOUVAIN_GRAPH runtime with [4907] range 3). Same raw-write /
+  -- runtime-only-@assert.unique dedup rationale as the teched_session arm.
+  SELECT
+    "VERTEX_KEY",
+    "VERTEX_TYPE",
+    "SLUG",
+    "LABEL",
+    "STATUS"
+  FROM (
+    SELECT
+      CAST('teched_track:' || SLUG AS NVARCHAR(280)) AS "VERTEX_KEY",
+      'teched_track'                                 AS "VERTEX_TYPE",
+      SLUG                                           AS "SLUG",
+      NAME                                           AS "LABEL",
+      'ACTIVE'                                       AS "STATUS",
+      ROW_NUMBER() OVER (
+        PARTITION BY SLUG ORDER BY MODIFIEDAT DESC, ID
+      )                                              AS "RN"
+    FROM "COM_SAP_DEVELOPERS_IMS_EXTERNAL_TECHEDTRACKS"
+    WHERE SLUG IS NOT NULL
+  )
+  WHERE "RN" = 1
+  UNION ALL
+  -- TechEd speaker vertices (#2312). Added to back the session→speaker
+  -- 'presentedBy' edge arm. Same dedup rationale as the teched_session arm.
+  SELECT
+    "VERTEX_KEY",
+    "VERTEX_TYPE",
+    "SLUG",
+    "LABEL",
+    "STATUS"
+  FROM (
+    SELECT
+      CAST('teched_speaker:' || SLUG AS NVARCHAR(280)) AS "VERTEX_KEY",
+      'teched_speaker'                                 AS "VERTEX_TYPE",
+      SLUG                                             AS "SLUG",
+      NAME                                             AS "LABEL",
+      'ACTIVE'                                         AS "STATUS",
+      ROW_NUMBER() OVER (
+        PARTITION BY SLUG ORDER BY MODIFIEDAT DESC, ID
+      )                                                AS "RN"
+    FROM "COM_SAP_DEVELOPERS_IMS_EXTERNAL_TECHEDSPEAKERS"
+    WHERE SLUG IS NOT NULL
+  )
+  WHERE "RN" = 1;

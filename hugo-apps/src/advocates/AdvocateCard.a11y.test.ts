@@ -8,7 +8,7 @@
 //  - the front-face name is an <h2> (page has a single <h1>; jumping to <h3>
 //    tripped axe heading-order), and the back-face name is not a second heading.
 //  - the scrollable bio is keyboard-focusable (axe scrollable-region-focusable),
-//    revealed via .adv-flipwrap:focus-within.
+//    revealed via .dev-advocate-flipwrap:focus-within.
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import AdvocateCard from './components/AdvocateCard.vue';
@@ -31,7 +31,7 @@ describe('AdvocateCard accessibility', () => {
   const wrapper = mount(AdvocateCard, { props: { advocate, photoBase: '/api/advocates' } });
 
   it('does not make the wrapper a role=button (avoids nested interactive links)', () => {
-    const wrap = wrapper.find('.adv-flipwrap');
+    const wrap = wrapper.find('.dev-advocate-flipwrap');
     expect(wrap.attributes('role')).toBeUndefined();
     expect(wrap.attributes('aria-pressed')).toBeUndefined();
     expect(wrap.attributes('tabindex')).toBeUndefined();
@@ -45,6 +45,6 @@ describe('AdvocateCard accessibility', () => {
   });
 
   it('makes the scrollable bio keyboard-focusable', () => {
-    expect(wrapper.find('.adv-bio').attributes('tabindex')).toBe('0');
+    expect(wrapper.find('.dev-advocate-bio').attributes('tabindex')).toBe('0');
   });
 });

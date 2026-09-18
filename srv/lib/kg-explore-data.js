@@ -50,6 +50,10 @@ export const SHORT_BY_TYPE = Object.freeze({
   'sample': 'sa',  // Phase 4.6 (#747).
   'help-doc': 'hd',  // Phase 4.7 (#748).
   'community-event': 'ce',   // Phase 4.8 (#765)
+  'devtoberfest-session': 'dtf',   // #2311
+  'teched-session': 'tes',   // #2312
+  'teched-speaker': 'tsp',   // #2312
+  'teched-track':   'ttr',   // #2312
 });
 
 // IRI tail-segment → (entity type, short node-id prefix). Derived from

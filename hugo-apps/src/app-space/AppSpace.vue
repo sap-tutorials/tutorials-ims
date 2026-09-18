@@ -92,8 +92,11 @@ async function loadData(): Promise<AppSpaceData | null> {
     const param = eventId.value ? `eventLegacyId=${eventId.value}` : `eventLegacyId=0`
     const res = await fetch(`/api/getAppSpaceProgress(${param})`)
     if (res.ok) {
-      isLoggedIn.value = true
       const data = await res.json()
+      // #2314: endpoint is anonymous-readable now, so a 200 no longer implies a
+      // login. Trust the server's `authenticated` flag to gate the logged-in-only
+      // realtime/confetti path (older payloads without the flag → treated as anon).
+      isLoggedIn.value = Boolean(data.authenticated)
       if (data.eventId) eventId.value = data.eventId
       return data
     }
@@ -299,17 +302,27 @@ const emptyStateMessage = computed(() => {
       <div class="hero-inner">
         <div class="hero-text">
           <img
-            v-if="logoUrl"
+            v-if="!loading && logoUrl"
             class="hero-logo"
             :src="logoUrl"
             :alt="eventName + ' logo'"
           />
-          <h1 class="hero-title">{{ eventName }}</h1>
-          <p class="hero-subtitle">Developer Garage &mdash; App Space</p>
-          <!-- #2296: eventDescription is server-rendered Markdown → safe HTML
-               (markdown-it html:false escapes raw HTML). Block element, not <p>,
-               because markdown emits its own <p> and <p>-in-<p> is invalid. -->
-          <div class="hero-desc" v-html="eventDescription"></div>
+          <!-- #2314: hold the real event name/description until the event resolves.
+               Rendering the computed default ('SAP TechEd') on mount caused a flash
+               of the wrong event before the URL eventId loaded. Skeleton keeps the
+               layout stable and avoids the swap. -->
+          <template v-if="!loading">
+            <h1 class="hero-title">{{ eventName }}</h1>
+            <p class="hero-subtitle">Developer Garage &mdash; App Space</p>
+            <!-- #2296: eventDescription is server-rendered Markdown → safe HTML
+                 (markdown-it html:false escapes raw HTML). Block element, not <p>,
+                 because markdown emits its own <p> and <p>-in-<p> is invalid. -->
+            <div class="hero-desc" v-html="eventDescription"></div>
+          </template>
+          <template v-else>
+            <div class="hero-title-skeleton" aria-hidden="true"></div>
+            <p class="hero-subtitle">Developer Garage &mdash; App Space</p>
+          </template>
         </div>
         <div class="hero-stats" v-if="tracks.length > 0">
           <div class="stat-card">
@@ -581,6 +594,17 @@ const emptyStateMessage = computed(() => {
   font-weight: 700;
   margin: 0 0 0.25rem;
   letter-spacing: -0.02em;
+}
+
+/* #2314: placeholder while the event resolves — matches .hero-title's height so
+   the hero doesn't jump when the real name swaps in. */
+.hero-title-skeleton {
+  height: 2.5rem;
+  width: min(60%, 20rem);
+  margin: 0 0 0.25rem;
+  border-radius: 0.375rem;
+  background: rgba(255, 255, 255, 0.18);
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
 .hero-subtitle {

@@ -3,7 +3,7 @@ import type { ScheduleRow } from './types';
 import { youtubeThumb, safeHref, taskHref, taskLinkLabel } from './completion';
 import { youtubeId, youtubeEmbedUrl } from './youtube';
 import { formatViewerLocal } from './format-session-time';
-import { sessionIcsHref, sessionCalendarHref } from './calendar-links';
+import { sessionIcsHref, sessionCalendarHref, techedSessionIcsHref, techedSessionCalendarHref } from './calendar-links';
 import { broadcastingTag } from './broadcasting';
 import { renderMarkdown } from '../devtoberfest-shared/render-markdown';
 import { computed, ref } from 'vue';
@@ -11,6 +11,11 @@ import { computed, ref } from 'vue';
 const props = defineProps<{
   row: ScheduleRow | null;
   editionId?: string | null;
+  // Event source. Devtoberfest rows carry kind:'session' + numeric id and use
+  // the /api/devtoberfest endpoints. TechEd rows are keyed by slug (no kind/id)
+  // and use /api/teched. Defaults to devtoberfest so existing callers are
+  // unchanged; the teched-sessions-grid passes source="teched".
+  source?: 'devtoberfest' | 'teched';
 }>();
 
 const emit = defineEmits<{
@@ -81,16 +86,57 @@ const taskLinkLabelTitle = computed(() =>
   taskLinkLabel(props.row as any).replace(/\b\w/g, (c) => c.toUpperCase()),
 );
 
-const isSession = computed(() => props.row?.kind === 'session');
-const isActivity = computed(() => props.row?.kind === 'activity');
+const isTeched = computed(() => props.source === 'teched');
+// A devtoberfest row is a session by its kind discriminator; a teched row has no
+// kind (it's a TechEdSession), so for teched the "is a session" test is implicit.
+const isSession = computed(() => isTeched.value || props.row?.kind === 'session');
+const isActivity = computed(() => !isTeched.value && props.row?.kind === 'activity');
 
 // Calendar affordances only make sense for a session that has a start time.
 const showCalendar = computed(() => isSession.value && !!(props.row as any)?.scheduledStart);
-const icsHref = computed(() => (showCalendar.value ? sessionIcsHref(props.row!.id, props.editionId) : ''));
-const googleHref = computed(() => (showCalendar.value ? sessionCalendarHref(props.row!.id, 'google', props.editionId) : ''));
-const outlookHref = computed(() => (showCalendar.value ? sessionCalendarHref(props.row!.id, 'outlook', props.editionId) : ''));
+// TechEd sessions are keyed by slug and use /api/teched; devtoberfest by id +
+// /api/devtoberfest (with optional editionId).
+const calendarKey = computed(() => (isTeched.value ? (props.row as any)?.slug : props.row?.id));
+// Single guard + source branch for all three calendar affordances.
+function calHref(to?: 'google' | 'outlook'): string {
+  if (!showCalendar.value || !calendarKey.value) return '';
+  if (isTeched.value) {
+    return to ? techedSessionCalendarHref(calendarKey.value, to) : techedSessionIcsHref(calendarKey.value);
+  }
+  return to
+    ? sessionCalendarHref(calendarKey.value, to, props.editionId)
+    : sessionIcsHref(calendarKey.value, props.editionId);
+}
+const icsHref = computed(() => calHref());
+const googleHref = computed(() => calHref('google'));
+const outlookHref = computed(() => calHref('outlook'));
 
 function onSpeakerPhotoError(ev: Event) { (ev.target as HTMLImageElement).style.display = 'none'; }
+
+// Speaker → profile page link. Prefer the developer-advocate page when the
+// speaker is an advocate (richer roster page, covers advocates who never
+// authored a tutorial), else fall back to the GitHub-login author page.
+// Returns null when neither is known (plain <span>, no link).
+function speakerHref(sp: any): string | null {
+  if (sp?.advocateSlug) return `/developer-advocates/${sp.advocateSlug}/`;
+  if (sp?.authorLogin) return `/authors/${sp.authorLogin}/`;
+  return null;
+}
+
+/** Strip simple Markdown and truncate to ~300 chars for use as a tooltip title. */
+function bioTooltip(bio: string | undefined): string | undefined {
+  if (!bio) return undefined;
+  // Remove images: ![alt](url)
+  let text = bio.replace(/!\[[^\]]*\]\([^)]*\)/g, '');
+  // Unwrap links: [text](url) → text
+  text = text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+  // Strip emphasis/formatting chars: * _ ~ # >
+  text = text.replace(/[*_~#>]/g, '');
+  // Collapse whitespace
+  text = text.replace(/\s+/g, ' ').trim();
+  if (!text) return undefined;
+  return text.length > 300 ? text.slice(0, 297) + '…' : text;
+}
 
 // Abstracts are authored in Markdown; render to sanitized HTML (same
 // markdown-it + DOMPurify pipeline as the FAQ/rules islands) so authored
@@ -121,7 +167,9 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
       </div>
-      <div v-if="embedUrl" class="detail-panel__transcript-wrap">
+      <!-- Transcript toggle is Devtoberfest-specific (/api/devtoberfest/transcript endpoint).
+           Only show it for DTF session rows — identified by row.kind === 'session'. -->
+      <div v-if="embedUrl && row.kind === 'session'" class="detail-panel__transcript-wrap">
         <button class="detail-panel__transcript-toggle" @click="toggleTranscript" :aria-expanded="transcriptOpen">
           {{ transcriptOpen ? 'Hide transcript' : 'Show transcript' }}
         </button>
@@ -139,11 +187,30 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
       </div>
 
       <div class="detail-panel__body">
-        <div v-if="(row as any).speakers && (row as any).speakers.length" class="detail-panel__speakers">
+        <div v-if="(row as any).speakersEnriched && (row as any).speakersEnriched.length" class="detail-panel__speakers">
+          <div v-for="sp in (row as any).speakersEnriched" :key="sp.id" class="detail-panel__speaker">
+            <img v-if="sp.photoUrl" :src="sp.photoUrl" :alt="sp.name" class="detail-panel__speaker-photo" loading="lazy" @error="onSpeakerPhotoError" />
+            <div class="detail-panel__speaker-meta">
+              <component
+                :is="speakerHref(sp) ? 'a' : 'span'"
+                v-bind="speakerHref(sp) ? { href: speakerHref(sp), class: 'detail-panel__speaker-link' } : {}"
+                class="detail-panel__speaker-name"
+                :title="bioTooltip(sp.bio)"
+              >{{ sp.name }}</component>
+              <span v-if="sp.role || sp.company" class="detail-panel__speaker-role">{{ [sp.role, sp.company].filter(Boolean).join(' @ ') }}</span>
+            </div>
+          </div>
+        </div>
+        <!-- DTF speaker objects: only render when speakers array contains objects (not slugs) -->
+        <div v-else-if="(row as any).speakers && (row as any).speakers.length && typeof (row as any).speakers[0] === 'object'" class="detail-panel__speakers">
           <div v-for="sp in (row as any).speakers" :key="sp.id" class="detail-panel__speaker">
             <img v-if="sp.photoUrl" :src="sp.photoUrl" :alt="sp.name" class="detail-panel__speaker-photo" loading="lazy" @error="onSpeakerPhotoError" />
             <div class="detail-panel__speaker-meta">
-              <span class="detail-panel__speaker-name">{{ sp.name }}</span>
+              <component
+                :is="speakerHref(sp) ? 'a' : 'span'"
+                v-bind="speakerHref(sp) ? { href: speakerHref(sp), class: 'detail-panel__speaker-link' } : {}"
+                class="detail-panel__speaker-name"
+              >{{ sp.name }}</component>
               <span v-if="sp.role || sp.company" class="detail-panel__speaker-role">{{ [sp.role, sp.company].filter(Boolean).join(' @ ') }}</span>
             </div>
           </div>
@@ -159,6 +226,10 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
               <span class="sg-badge" :class="`sg-badge--${formatTag.modifier}`">{{ formatTag.icon }} {{ formatTag.label }}</span>
             </dd>
           </template>
+          <template v-if="(row as any).venue">
+            <dt>Venue</dt>
+            <dd>{{ (row as any).venue }}</dd>
+          </template>
           <template v-if="(row as any).trackName">
             <dt>Track</dt>
             <dd>{{ (row as any).trackName }}</dd>
@@ -173,6 +244,10 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
               {{ formatViewerLocal((row as any).scheduledStart) }}
             </dd>
           </template>
+          <template v-if="(row as any).room">
+            <dt>Room</dt>
+            <dd>{{ (row as any).room }}</dd>
+          </template>
           <template v-if="isActivity && (row as any).points">
             <dt>Points</dt>
             <dd>{{ (row as any).points }}</dd>
@@ -184,6 +259,13 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
         </dl>
 
         <div class="detail-panel__links">
+          <a
+            v-if="(row as any).url"
+            :href="safeHref((row as any).url)"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="detail-panel__link detail-panel__link--session"
+          >Session Page</a>
           <a
             v-if="(row as any).youtubeUrl"
             :href="safeHref((row as any).youtubeUrl)"
@@ -217,6 +299,15 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
             :href="taskUrl"
             class="detail-panel__link detail-panel__link--task"
           >{{ taskLinkLabelTitle }}</a>
+        </div>
+
+        <div v-if="(row as any).relatedTechEdSessions?.length" class="detail-panel__related-teched">
+          <span class="detail-panel__related-teched-label">Related SAP TechEd sessions</span>
+          <ul class="detail-panel__related-teched-list">
+            <li v-for="ts in (row as any).relatedTechEdSessions" :key="ts.slug" class="detail-panel__related-teched-item">
+              <a :href="`/teched/?session=${encodeURIComponent(ts.slug)}`" class="detail-panel__link detail-panel__link--teched">{{ ts.title }}<template v-if="ts.sessionCode"> ({{ ts.sessionCode }})</template><template v-if="ts.venue">&thinsp;&mdash;&thinsp;{{ ts.venue }}</template></a>
+            </li>
+          </ul>
         </div>
 
         <div v-if="showCalendar" class="detail-panel__calendar">
@@ -427,6 +518,10 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
   color: #c4302b;
 }
 
+.detail-panel__link--session {
+  color: var(--sapLinkColor, #0854a0);
+}
+
 .detail-panel__complete-badge {
   display: inline-flex;
   align-items: center;
@@ -489,6 +584,15 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
   color: var(--sapTextColor, #32363a);
 }
 
+a.detail-panel__speaker-name.detail-panel__speaker-link {
+  text-decoration: underline;
+  text-decoration-color: var(--sapLinkColor, #0854a0);
+}
+
+a.detail-panel__speaker-name.detail-panel__speaker-link:hover {
+  color: var(--sapLinkColor, #0854a0);
+}
+
 .detail-panel__speaker-role {
   font-size: 0.75rem;
   color: var(--sapContent_LabelColor, #6a6d70);
@@ -496,6 +600,35 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
 
 .detail-panel__link--linkedin {
   color: #0a66c2;
+}
+
+.detail-panel__related-teched {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--sapList_BorderColor, #e4e5e7);
+}
+
+.detail-panel__related-teched-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.detail-panel__related-teched-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.detail-panel__related-teched-item {
+  margin: 0;
 }
 
 .detail-panel__enlarge {

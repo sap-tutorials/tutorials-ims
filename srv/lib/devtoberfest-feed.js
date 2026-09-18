@@ -31,9 +31,17 @@ function normalizeSlugSet(rows) {
   return set;
 }
 
-function assembleFeed({ sessions = [], activities = [], tracks = [], editions = [], activeEditionId = null, speakers = [], sessionSpeakers = [] }) {
+function assembleFeed({ sessions = [], activities = [], tracks = [], editions = [], activeEditionId = null, speakers = [], sessionSpeakers = [], relatedTechEdBySlug = new Map() }) {
   const trackById = new Map(tracks.map((t) => [t.ID, t]));
   const mapTrack = (id) => trackById.get(id) || {};
+  // Devtoberfest → TechEd cross-links (issue #2312, feature-flag gated + fail-open;
+  // an empty map — flag OFF, concept links / planner facade absent — yields []).
+  const activityById = new Map(activities.map((a) => [a.ID, a]));
+  const relatedTechEdFor = (session) => {
+    const act = session.ACTIVITY_ID ? activityById.get(session.ACTIVITY_ID) : null;
+    const taskSlug = (act?.TASKSLUG || '').toLowerCase();
+    return (taskSlug && relatedTechEdBySlug.get(taskSlug)) || [];
+  };
   const speakerById = new Map(speakers.map((sp) => [sp.ID, sp]));
   const speakersBySession = new Map();
   for (const link of sessionSpeakers) {
@@ -68,6 +76,7 @@ function assembleFeed({ sessions = [], activities = [], tracks = [], editions = 
         surveyUrl: s.SURVEYURL || '',
         speakers: speakerFor(s.ID),
         activityId: s.ACTIVITY_ID || null, status: s.STATUS,
+        relatedTechEdSessions: relatedTechEdFor(s),
       }))
       .sort(sortByWeekThenDate),
     activities: activities

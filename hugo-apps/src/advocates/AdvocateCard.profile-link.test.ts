@@ -28,7 +28,7 @@ describe('AdvocateCard "View profile" link', () => {
     const wrapper = mount(AdvocateCard, {
       props: { advocate: baseAdvocate, photoBase: '/api/advocates' },
     });
-    const link = wrapper.find('a.adv-profile');
+    const link = wrapper.find('a.dev-advocate-profile');
     expect(link.exists()).toBe(true);
     expect(link.attributes('href')).toBe('/developer-advocates/thomas-jung/');
     // In-site nav: no new-tab open, so target/rel should be absent.

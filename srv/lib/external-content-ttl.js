@@ -15,6 +15,8 @@ export const PER_TYPE_TTL_DAYS = Object.freeze({
   'sample': 365,            // 4.6
   'help-doc': 540,          // 4.7 — same band as blog-post (§3 Q9)
   'community-event': null,   // 4.8 — date-aware via endDate + 30-day grace (§7 of spec)
+  'devtoberfest-session': 730, // #2311 — 2yr; recorded sessions stay relevant like videos
+  'teched-session': null,    // #2312 — date-aware via scheduledEnd + 30-day grace (mirrors community-event)
 });
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;

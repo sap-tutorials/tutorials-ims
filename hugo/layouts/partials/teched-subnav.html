@@ -1,0 +1,9 @@
+{{/* teched-subnav.html — Shared subnav partial for TechEd views (Sessions, Schedule, Calendar).
+     Context: dict with activeView string ("sessions" | "schedule" | "calendar").
+     Renders all 3 links with the active one marked with --active class and aria-current="page".
+*/}}
+<nav class="teched-page__subnav" aria-label="TechEd views">
+  <a href="/teched/" class="teched-page__subnav-link{{ if eq .activeView "sessions" }} teched-page__subnav-link--active{{ end }}"{{ if eq .activeView "sessions" }} aria-current="page"{{ end }}>Sessions</a>
+  <a href="/teched/schedule/" class="teched-page__subnav-link{{ if eq .activeView "schedule" }} teched-page__subnav-link--active{{ end }}"{{ if eq .activeView "schedule" }} aria-current="page"{{ end }}>Schedule</a>
+  <a href="/teched/calendar/" class="teched-page__subnav-link{{ if eq .activeView "calendar" }} teched-page__subnav-link--active{{ end }}"{{ if eq .activeView "calendar" }} aria-current="page"{{ end }}>Calendar</a>
+</nav>

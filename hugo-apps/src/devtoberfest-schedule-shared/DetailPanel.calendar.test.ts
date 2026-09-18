@@ -50,4 +50,31 @@ describe('DetailPanel calendar affordances', () => {
     const hrefs = [...host.querySelectorAll('a')].map((a) => a.getAttribute('href') || '');
     expect(hrefs.some((h) => h.includes('/session/'))).toBe(false);
   });
+
+  // TechEd rows have no `kind`/`id` (keyed by slug) and use source="teched" →
+  // /api/teched endpoints. Regression for the "Add to calendar links not working"
+  // report: without source="teched" the block never rendered (kind !== 'session')
+  // and would have built hrefs off an undefined id.
+  it('offers /api/teched links for a teched-source session (keyed by slug)', () => {
+    const techedRow = {
+      slug: 'te26-101',
+      title: 'Intro to CAP',
+      scheduledStart: '2026-10-05T09:00:00.000Z',
+      scheduledEnd: '2026-10-05T10:00:00.000Z',
+      venue: 'BERLIN',
+    };
+    const { host } = mount({ row: techedRow, source: 'teched' });
+    const hrefs = [...host.querySelectorAll('a')].map((a) => a.getAttribute('href'));
+    expect(hrefs).toContain('/api/teched/session/te26-101.ics');
+    expect(hrefs).toContain('/api/teched/session/te26-101.ics?to=google');
+    expect(hrefs).toContain('/api/teched/session/te26-101.ics?to=outlook');
+    // Never falls back to the devtoberfest endpoint for a teched row.
+    expect(hrefs.some((h) => (h || '').includes('/api/devtoberfest/'))).toBe(false);
+  });
+
+  it('does not offer teched calendar links without a scheduledStart', () => {
+    const { host } = mount({ row: { slug: 'te26-x', title: 'Unscheduled' }, source: 'teched' });
+    const hrefs = [...host.querySelectorAll('a')].map((a) => a.getAttribute('href') || '');
+    expect(hrefs.some((h) => h.includes('/api/teched/session/'))).toBe(false);
+  });
 });

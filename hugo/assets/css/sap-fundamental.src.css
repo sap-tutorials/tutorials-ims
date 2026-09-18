@@ -630,6 +630,36 @@ body > main, body > .site-main { flex: 1 0 auto; }
   font-size: 0.875rem;
 }
 
+/* Session cards (issue #2354) — TechEd + Devtoberfest sessions on author +
+   advocate pages. Reuse the .next-steps-rail-card box; the badge is colored
+   per event, and a non-anchor .session-card (no source URL) drops link affordances. */
+.session-card-badge {
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+.session-card[data-event="teched"] .session-card-badge {
+  color: var(--sapInformativeColor, #0070f2);
+}
+.session-card[data-event="devtoberfest"] .session-card-badge {
+  color: var(--sapPositiveColor, #256f3a);
+}
+/* Non-link session card (session with no source URL): same box, no pointer. */
+div.session-card.next-steps-rail-card {
+  cursor: default;
+}
+div.session-card.next-steps-rail-card:hover {
+  transform: none;
+}
+div.session-card .next-steps-title {
+  color: var(--sapTextColor, #1d2d3e);
+}
+.author-page-sessions {
+  margin-top: 2rem;
+}
+.author-page-sessions > h2 {
+  font-size: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
 .next-steps-expand {
   position: absolute;
   right: 1rem;
@@ -3204,4 +3234,35 @@ a.concept-card:hover .concept-card__title {
   border-radius: 2px;
 }
 .more-from-author[open] .next-steps-grid { margin-top: 0.75rem; }
+
+/* TechEd page layout (#2355) */
+.teched-page { display: flex; flex-direction: column; gap: 1.25rem; padding: 1rem 1.5rem; }
+.teched-page__intro { display: flex; flex-direction: column; gap: 0.5rem; }
+.teched-page__subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+.teched-page__subnav-link {
+  display: inline-block;
+  padding: 0.3rem 0.85rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  color: var(--sapLinkColor, #0854a0);
+  border: 1px solid transparent;
+  transition: background 0.1s, border-color 0.1s;
+}
+.teched-page__subnav-link:hover {
+  background: var(--sapList_Hover_Background, #eaecee);
+  border-color: var(--sapField_BorderColor, #89919a);
+}
+.teched-page__subnav-link--active {
+  background: var(--sapInformativeBackground, #e8f3ff);
+  color: var(--sapInformativeColor, #0854a0);
+  border-color: var(--sapInformativeColor, #0854a0);
+  font-weight: 600;
+}
 .more-from-author-all { display: inline-block; margin-top: .75rem; font-size: .875rem; font-weight: 600; }

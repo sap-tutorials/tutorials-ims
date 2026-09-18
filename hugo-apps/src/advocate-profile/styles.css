@@ -2,51 +2,51 @@
    carries the same vibrant, saturated palette. Saturated gradients + white text
    read well in BOTH light and dark themes, which fixes the dark-mode
    light-text-on-light-hero regression (was: pale #f1f4f9 gradient + dark text). */
-.adv-profile {
-  --adv-bg-generic: linear-gradient(135deg,#0a3d91 0%,#0070f2 60%,#5aa7ff 100%);
-  --adv-bg-amer:    linear-gradient(135deg,#0070f2 0%,#6c3dff 60%,#ff6db5 100%);
-  --adv-bg-emea:    linear-gradient(135deg,#0a6ed1 0%,#1c63dc 60%,#2b9fd8 100%);
-  --adv-bg-apj:     linear-gradient(135deg,#7858d8 0%,#b056d1 60%,#f96fb0 100%);
+.dev-advocate-profile {
+  --dev-advocate-bg-generic: linear-gradient(135deg,#0a3d91 0%,#0070f2 60%,#5aa7ff 100%);
+  --dev-advocate-bg-amer:    linear-gradient(135deg,#0070f2 0%,#6c3dff 60%,#ff6db5 100%);
+  --dev-advocate-bg-emea:    linear-gradient(135deg,#0a6ed1 0%,#1c63dc 60%,#2b9fd8 100%);
+  --dev-advocate-bg-apj:     linear-gradient(135deg,#7858d8 0%,#b056d1 60%,#f96fb0 100%);
   max-width: 960px;
   margin: 0 auto;
   padding: 24px;
   font-family: var(--sapFontFamily, var(--ds-font-family, system-ui, sans-serif));
   color: var(--sapTextColor, #32363a);
 }
-.adv-profile-back {
+.dev-advocate-profile-back {
   display: inline-block;
   margin-bottom: 16px;
   color: var(--sapLinkColor, var(--ds-link, #0a6ed1));
   text-decoration: none;
 }
-.adv-profile-back:hover { text-decoration: underline; }
+.dev-advocate-profile-back:hover { text-decoration: underline; }
 
 /* Saturated gradient hero. Text anchored to white regardless of site theme —
-   mirrors the .adv-back treatment on the roster cards. */
-.adv-profile-hero {
+   mirrors the .dev-advocate-back treatment on the roster cards. */
+.dev-advocate-profile-hero {
   display: grid;
   grid-template-columns: 200px 1fr;
   gap: 24px;
   padding: 28px;
   border-radius: 16px;
-  background: var(--adv-bg-generic);
+  background: var(--dev-advocate-bg-generic);
   box-shadow: 0 10px 30px rgba(8,32,80,.18);
   margin-bottom: 24px;
   color: #fff;
 }
-.adv-profile-hero[data-region="AMERICAS"] { background: var(--adv-bg-amer); }
-.adv-profile-hero[data-region="EMEA"]     { background: var(--adv-bg-emea); }
-.adv-profile-hero[data-region="APJ"]      { background: var(--adv-bg-apj); }
+.dev-advocate-profile-hero[data-region="AMERICAS"] { background: var(--dev-advocate-bg-amer); }
+.dev-advocate-profile-hero[data-region="EMEA"]     { background: var(--dev-advocate-bg-emea); }
+.dev-advocate-profile-hero[data-region="APJ"]      { background: var(--dev-advocate-bg-apj); }
 /* Soft top-left highlight, same as the roster hero, for depth. */
-.adv-profile-hero { position: relative; overflow: hidden; }
-.adv-profile-hero::after {
+.dev-advocate-profile-hero { position: relative; overflow: hidden; }
+.dev-advocate-profile-hero::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
   background: radial-gradient(900px circle at 20% 0%, rgba(255,255,255,.28), transparent 55%);
 }
-.adv-profile-hero > * { position: relative; z-index: 1; }
+.dev-advocate-profile-hero > * { position: relative; z-index: 1; }
 
-.adv-profile-photo,
-.adv-profile-photo-fallback {
+.dev-advocate-profile-photo,
+.dev-advocate-profile-photo-fallback {
   width: 200px; height: 200px; border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
   background: rgba(255,255,255,.16); color: #fff; font-size: 56px; font-weight: 700;
@@ -54,35 +54,35 @@
   border: 3px solid rgba(255,255,255,.35);
   box-shadow: 0 8px 20px rgba(0,20,60,.25);
 }
-.adv-profile-id h1 { margin: 0 0 8px; font-size: 28px; color: #fff; }
-.adv-profile-id .adv-pron { font-size: 16px; color: rgba(255,255,255,.82); font-weight: 400; }
-.adv-profile-id .adv-role { font-size: 18px; margin-bottom: 4px; color: rgba(255,255,255,.95); }
-.adv-profile-id .adv-loc { color: rgba(255,255,255,.8); margin-bottom: 12px; }
-.adv-profile-links { list-style: none; padding: 0; margin: 0; display: flex; gap: 12px; flex-wrap: wrap; }
-.adv-profile-links a {
+.dev-advocate-profile-id h1 { margin: 0 0 8px; font-size: 28px; color: #fff; }
+.dev-advocate-profile-id .dev-advocate-pron { font-size: 16px; color: rgba(255,255,255,.82); font-weight: 400; }
+.dev-advocate-profile-id .dev-advocate-role { font-size: 18px; margin-bottom: 4px; color: rgba(255,255,255,.95); }
+.dev-advocate-profile-id .dev-advocate-loc { color: rgba(255,255,255,.8); margin-bottom: 12px; }
+.dev-advocate-profile-links { list-style: none; padding: 0; margin: 0; display: flex; gap: 12px; flex-wrap: wrap; }
+.dev-advocate-profile-links a {
   display: inline-block; padding: 6px 12px; border-radius: 999px;
   background: rgba(255,255,255,.16); color: #fff; text-decoration: none;
   font-size: 14px; font-weight: 600;
   border: 1px solid rgba(255,255,255,.22);
   transition: background .2s ease;
 }
-.adv-profile-links a:hover { background: rgba(255,255,255,.3); }
+.dev-advocate-profile-links a:hover { background: rgba(255,255,255,.3); }
 
 /* Body sections follow the site theme via the shared Horizon vars. */
-.adv-profile-bio { margin-bottom: 24px; }
-.adv-profile-bio h2,
-.adv-profile-topics h2,
-.adv-profile-tutorials h2 {
+.dev-advocate-profile-bio { margin-bottom: 24px; }
+.dev-advocate-profile-bio h2,
+.dev-advocate-profile-topics h2,
+.dev-advocate-profile-tutorials h2,
+.dev-advocate-profile-sessions h2 {
   font-size: 20px; margin: 16px 0 8px;
   color: var(--sapTextColor, #32363a);
 }
-.adv-bio-md { color: var(--sapTextColor, #32363a); }
-.adv-bio-md p { line-height: 1.6; margin: 0 0 10px; }
-.adv-bio-md a { color: var(--sapLinkColor, var(--ds-link, #0a6ed1)); }
-.adv-profile-topics ul,
-.adv-profile-tutorials ul { list-style: none; padding: 0; margin: 0; }
-.adv-profile-topics li { display: inline-block; margin: 0 8px 8px 0; }
-.adv-chip {
+.dev-advocate-bio-md { color: var(--sapTextColor, #32363a); }
+.dev-advocate-bio-md p { line-height: 1.6; margin: 0 0 10px; }
+.dev-advocate-bio-md a { color: var(--sapLinkColor, var(--ds-link, #0a6ed1)); }
+.dev-advocate-profile-topics ul { list-style: none; padding: 0; margin: 0; }
+.dev-advocate-profile-topics li { display: inline-block; margin: 0 8px 8px 0; }
+.dev-advocate-chip {
   display: inline-block; padding: 4px 10px; border-radius: 999px;
   background: var(--sapButton_Background, #eef2f7);
   color: var(--sapButton_Lite_TextColor, #0a3d91);
@@ -90,14 +90,12 @@
   text-decoration: none; font-size: 13px;
   transition: background .2s ease;
 }
-.adv-chip:hover { background: var(--sapButton_Lite_Hover_Background, #dfe6ef); }
-.adv-profile-tutorials li {
-  padding: 6px 0;
-  border-bottom: 1px solid var(--sapList_BorderColor, #eef2f7);
-}
-.adv-profile-tutorials a { color: var(--sapLinkColor, var(--ds-link, #0a6ed1)); text-decoration: none; }
-.adv-profile-tutorials a:hover { text-decoration: underline; }
-.adv-profile-island-banner {
+.dev-advocate-chip:hover { background: var(--sapButton_Lite_Hover_Background, #dfe6ef); }
+/* Tutorials + sessions render as .next-steps-* cards (issue #2354); the card
+   box/badge styling lives in the global sap-fundamental.css. */
+.dev-advocate-profile-tutorials,
+.dev-advocate-profile-sessions { margin-bottom: 24px; }
+.dev-advocate-profile-island-banner {
   padding: 12px 16px; border-radius: 8px;
   background: var(--sapInformationBackground, #fff5e6);
   color: var(--sapTextColor, #6c4a0f);
@@ -105,7 +103,7 @@
   margin: 16px 0;
 }
 @media (max-width: 720px) {
-  .adv-profile-hero { grid-template-columns: 1fr; text-align: center; }
-  .adv-profile-photo, .adv-profile-photo-fallback { margin: 0 auto; }
-  .adv-profile-links { justify-content: center; }
+  .dev-advocate-profile-hero { grid-template-columns: 1fr; text-align: center; }
+  .dev-advocate-profile-photo, .dev-advocate-profile-photo-fallback { margin: 0 auto; }
+  .dev-advocate-profile-links { justify-content: center; }
 }

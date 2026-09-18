@@ -48,7 +48,7 @@ function installFakeEmbed() {
 
 async function seedCorpora() {
   const { Tutorials, TutorialEmbedding, Concepts } = cds.entities(NS);
-  const { ApiDocs, Samples } = cds.entities(`${NS}.external`);
+  const { ApiDocs, Samples, DevtoberfestSessions, TechEdSessions } = cds.entities(`${NS}.external`);
 
   // Tutorials: alpha scores 1.0 (dim 0), beta scores 0 (dim 1 → below floor).
   await INSERT.into(Tutorials).entries([
@@ -77,6 +77,19 @@ async function seedCorpora() {
     ID: cds.utils.uuid(), slug: 'sample-y', title: 'Sample Y', url: 'https://github.com/sap/y',
     description: 'Sample description', embedding: f32buf(unitVec(1)),
   });
+  // #2311: Devtoberfest session dtf-z scores 1.0 (dim 0).
+  await INSERT.into(DevtoberfestSessions).entries({
+    ID: cds.utils.uuid(), slug: 'dtf-z', title: 'DTF Session Z', url: 'https://youtu.be/z',
+    description: 'Devtoberfest session about CAP and AI', embedding: f32buf(unitVec(0)),
+  });
+  // #2312: TechEd session teched-w scores 1.0 (dim 0). NOTE the body column is
+  // `abstract`, not `description` — exercises searchExternalSource's per-source
+  // descCol override + embedEntity's textColumn override.
+  await INSERT.into(TechEdSessions).entries({
+    ID: cds.utils.uuid(), sourceId: 'te-w', slug: 'teched-w', title: 'TechEd Session W',
+    url: 'https://www.sap.com/teched/w', abstract: 'TechEd session about CAP and BTP',
+    embedding: f32buf(unitVec(0)),
+  });
 }
 
 const WIRE_KEYS = ['slug', 'title', 'stepNumber', 'snippet', 'score', 'url', 'contentType'];
@@ -96,7 +109,7 @@ describe('clampTopK', () => {
     expect(clampTopK('nope')).toBe(5);
   });
   it('exposes the corpus contract', () => {
-    expect(VALID_CORPORA).toEqual(['tutorials', 'concepts', 'external', 'all']);
+    expect(VALID_CORPORA).toEqual(['tutorials', 'concepts', 'external', 'teched', 'all']);
     expect(DEFAULT_CORPUS).toBe('tutorials');
   });
 });
@@ -156,10 +169,22 @@ describe('semanticSearch (core module)', () => {
     expect(rows[0].snippet).toContain('concept description');
   });
 
-  it('external corpus: returns api-doc/sample refs, drops sub-floor rows', async () => {
+  it('external corpus: returns api-doc/sample/devtoberfest-session/teched-session refs, drops sub-floor rows', async () => {
     const rows = await semanticSearch({ query: 'q-ext', corpus: 'external', settings });
-    expect(rows.map((r) => r.slug)).toEqual(['api-x']); // sample-y scored 0
-    expect(rows[0]).toMatchObject({ url: 'https://api.sap.com/x', contentType: 'api-doc' });
+    // api-x, dtf-z, teched-w all score 1.0 (dim 0); sample-y scored 0 → dropped.
+    expect(rows.map((r) => r.slug).sort()).toEqual(['api-x', 'dtf-z', 'teched-w']);
+    const session = rows.find((r) => r.slug === 'dtf-z');
+    expect(session).toMatchObject({ url: 'https://youtu.be/z', contentType: 'devtoberfest-session' });
+  });
+
+  it('teched corpus: returns only teched-session refs, snippet from the abstract column', async () => {
+    const rows = await semanticSearch({ query: 'q-teched', corpus: 'teched', settings });
+    expect(rows.map((r) => r.slug)).toEqual(['teched-w']);
+    expect(rows[0]).toMatchObject({
+      title: 'TechEd Session W', url: 'https://www.sap.com/teched/w', contentType: 'teched-session',
+    });
+    expect(rows[0].score).toBeCloseTo(1, 5);
+    expect(rows[0].snippet).toContain('TechEd session about CAP');
   });
 
   it('all corpus: merges + ranks + slices to topK', async () => {

@@ -92,6 +92,31 @@ describe('generateQuiz (#208)', () => {
     expect(out.errorReason).toBe('schema');
   });
 
+  it("source: 'step' (default) labels the body as tutorial step content", async () => {
+    const callModel = vi.fn().mockResolvedValue(MODEL_RESP([
+      { type: 'text', question: 'Q', correctAnswer: 'A' },
+    ]));
+    await generateQuiz({
+      stepBody: 'body', stepNumber: 1, slug: 's', types: 'text-only', deps: { callModel },
+    });
+    const userMsg = callModel.mock.calls[0][0].messages.find(m => m.role === 'user').content;
+    expect(userMsg).toContain('TUTORIAL STEP CONTENT');
+    expect(userMsg).not.toContain('VIDEO TRANSCRIPT');
+  });
+
+  it("source: 'video' labels the body as a video transcript", async () => {
+    const callModel = vi.fn().mockResolvedValue(MODEL_RESP([
+      { type: 'text', question: 'Q', correctAnswer: 'A' },
+    ]));
+    await generateQuiz({
+      stepBody: 'transcript text', stepNumber: 1, slug: 's', types: 'text-only',
+      source: 'video', deps: { callModel },
+    });
+    const userMsg = callModel.mock.calls[0][0].messages.find(m => m.role === 'user').content;
+    expect(userMsg).toContain('VIDEO TRANSCRIPT');
+    expect(userMsg).not.toContain('TUTORIAL STEP CONTENT');
+  });
+
   it("types: 'mcq-only' includes 'multiple-choice' only in user message", async () => {
     const callModel = vi.fn().mockResolvedValue(MODEL_RESP([
       { type: 'multiple-choice', question: 'Q', options: ['a', 'b', 'c', 'd'], correctAnswer: 'a' },

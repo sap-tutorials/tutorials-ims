@@ -88,6 +88,11 @@ on:
         required: false
         type: boolean
         default: true
+      warm-images:
+        description: 'On a full rebuild, re-fetch and re-store every tutorial image through the POST /content/image byte-dedup endpoint after publish. Catches same-filename screenshot edits that are invisible to the HTML+markdown delta detector (#2346). Unchanged images report "unchanged" (dedup is content-hash-based), so only genuinely-changed bytes re-store. Best-effort (continue-on-error). Default true; set false to skip if CI time is critical.'
+        required: false
+        type: boolean
+        default: true
 
 env:
   NODE_VERSION: '22'
@@ -222,6 +227,9 @@ jobs:
           # tutorial slug (#1154 follow-up). Untrusted payload — validated below
           # against a strict slug charset before use.
           PAYLOAD_SLUG: ${{ github.event.client_payload.slug }}
+          # #2349 — tutorials deleted upstream (comma-separated). Untrusted
+          # payload; validated below against the same strict charset before use.
+          PAYLOAD_DELETED_SLUGS: ${{ github.event.client_payload.deleted_slugs }}
         run: |
           EFFECTIVE="$INPUT_MODE"
           REASON="explicit (inputs.mode=$INPUT_MODE)"
@@ -260,8 +268,39 @@ jobs:
             exit 1
           fi
 
+          # #2349 — validate deleted_slugs. Untrusted dispatch payload: accept
+          # ONLY a comma-separated list of strict lowercase slugs [a-z0-9-],
+          # reject any token with another char or malformed commas (which could
+          # corrupt the GITHUB_OUTPUT key=value line). Anything invalid → empty →
+          # the unpublish lane is skipped (safe default). workflow_dispatch has no
+          # deleted_slugs input, so this is repository_dispatch-only in practice.
+          DELETED_OK=""
+          case "$PAYLOAD_DELETED_SLUGS" in
+            *[!a-z0-9,-]* | *,, | ,* | *, ) : ;;             # bad charset / malformed commas → drop
+            "" ) : ;;                                        # none → drop
+            * ) DELETED_OK="$PAYLOAD_DELETED_SLUGS" ;;
+          esac
+
+          # #2349 — a repository_dispatch that carries deleted_slugs but NO valid
+          # changed slug (a commit that only removed tutorials) falls through to
+          # the default 'full' rebuild. That is correct-but-heavier: the deletions
+          # are handled by the dedicated unpublish step below (soft-delete), while
+          # the full rebuild republishes everything else via carry-forward. We do
+          # NOT special-case it to a lighter mode — a bespoke 'unpublish-only'
+          # mode would have to be threaded through ~20 content-step `if:` gates
+          # (fetch, Hugo build, guards, publish), and getting one wrong ships a
+          # broken pipeline. The extra wall-clock on a delete-only push is a fine
+          # trade for keeping the mode matrix small and every existing gate intact.
+          # A commit that BOTH edits and deletes keeps its slug-targeted/full mode
+          # and also runs the unpublish step.
+
           echo "effective_mode=$EFFECTIVE" >> "$GITHUB_OUTPUT"
           echo "effective_reason=$REASON" >> "$GITHUB_OUTPUT"
+
+          echo "deleted_slugs=$DELETED_OK" >> "$GITHUB_OUTPUT"
+          if [ -n "$DELETED_OK" ]; then
+            echo "::notice title=Tutorial deletions::will unpublish: $DELETED_OK"
+          fi
 
           # Content-cache master switch (Workstream C, default ON). Enabled unless
           # explicitly opted out with -f content-cache=false. Computed HERE (not
@@ -647,6 +686,24 @@ jobs:
           AUTHOR_CHANNEL: ${{ steps.env.outputs.target == 'qa' && 'qa' || 'prod' }}
         run: npx tsx scripts/seed-authors-from-deployed.ts
 
+      # [#2312] TechEd sessions feed. Writes hugo/data/teched.json from the target
+      # env's /build/teched, which the /teched/ Hugo page bakes into a
+      # <script id="teched-data"> blob and publish-content.ts commits to the
+      # page-teched HANA BLOB (page-teched is in srv/lib/page-key-map.js's
+      # IN_SCOPE_PAGES, so it republishes on every non-slug rebuild). This
+      # workflow drives /tmp/hugo directly rather than `npm run build:all` (which
+      # chains fetch-teched), so — exactly like the feed fetchers above — it must
+      # be an explicit step here. WITHOUT it, .Site.Data.teched is nil and Hugo's
+      # jsonify emits the literal string "null" → the baked+published page-teched
+      # blob carries <script id="teched-data">null</script>, crashing the island
+      # and leaving speakers unlinked (authorLogin enrichment reads author_index.json,
+      # emitted by "Fetch tutorials" above in full mode). Positioned AFTER the
+      # author-index-producing steps and BEFORE the Hugo build.
+      - name: Fetch teched
+        run: npm run fetch-teched
+        env:
+          CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
+
       - name: Build Hugo site
         run: /tmp/hugo --source hugo --minify
 
@@ -801,19 +858,47 @@ jobs:
           channel: ${{ steps.env.outputs.target }}
           min-slugs: '1'
 
-      # #2288 — same-filename image byte changes are invisible to the publish
-      # delta detector: publish hashes rendered HTML + source markdown, never the
-      # image bytes, so a screenshot edited in place (unchanged filename → unchanged
-      # /img-cdn URL) never triggers a republish and the stale image is served
-      # indefinitely. On a slug-targeted rebuild, re-warm just that tutorial's
-      # images through the content-aware ingest endpoint (POST /content/image
-      # dedups on image bytes), so changed bytes are re-stored while unchanged
-      # ones report 'unchanged'. Best-effort: a warm failure must never fail the
-      # content rebuild. Scoped to slug-targeted (not full) per #2288 decision —
-      # full rebuilds already re-warm the whole catalog elsewhere. CAP_BASE_URL is
-      # the already target-resolved srv url; the QA target needs its own key.
+      # Catalog-freshness SEO gate. The seo-files smoke assertions that a served
+      # page-* BLOB carries the FULL catalog (llms-full.txt > 10 KB, sitemap.xml
+      # names /tutorials/ URLs) are gated behind SMOKE_CONTENT_FRESH in
+      # test/smoke/seo-files.test.js — they are NOT owned by a deploy (which ships
+      # only the srv fallback) but by THIS publish. Running them here, right after
+      # a successful publish, is where they actually verify something: it catches
+      # the "publish landed but the catalog blob is thin/empty" class that
+      # /content/hashes row-count alone (verify-publish-landed above) misses.
+      # SMOKE_BASE_URL → approuter (these are approuter-served routes, not srv).
+      - name: Verify SEO catalog freshness
+        if: ${{ steps.publish.outcome == 'success' }}
+        env:
+          SMOKE_BASE_URL: ${{ steps.url.outputs.approuter_url }}
+          SMOKE_CONTENT_FRESH: '1'
+        run: npx vitest run --project smoke test/smoke/seo-files.test.js
+
+      # #2288 / #2346 — same-filename image byte changes are invisible to the
+      # publish delta detector: publish hashes rendered HTML + source markdown,
+      # never the image bytes, so a screenshot edited in place (unchanged
+      # filename → unchanged /img-cdn URL) never triggers a republish and the
+      # stale image would be served indefinitely without these steps.
+      #
+      # Two warm paths:
+      #
+      # 1. slug-targeted: re-warm just that tutorial's images (including when
+      #    force-publish is set — that is exactly the "push my stubborn change
+      #    through" case). POST /content/image dedups on image bytes; changed
+      #    bytes are re-stored, unchanged report 'unchanged'.
+      #
+      # 2. full: re-warm the whole catalog (warm-images input, default true).
+      #    No full-catalog warm existed before #2346; the prior comment claiming
+      #    "full rebuilds already re-warm the whole catalog elsewhere" was false.
+      #    catalog-only is intentionally excluded — that mode skips fetch-tutorials
+      #    entirely so no tutorial image can have changed.
+      #
+      # Best-effort: a warm failure must never fail the content rebuild.
+      # CAP_BASE_URL is the already target-resolved srv url; the QA target
+      # needs its own key.
+
       - name: Refresh tutorial images (slug-targeted)
-        if: ${{ steps.publish.outcome == 'success' && steps.mode.outputs.effective_mode == 'slug-targeted' && inputs.force-publish != true }}
+        if: ${{ steps.publish.outcome == 'success' && steps.mode.outputs.effective_mode == 'slug-targeted' }}
         continue-on-error: true
         env:
           CAP_BASE_URL:    ${{ steps.srv.outputs.srv_url }}
@@ -821,6 +906,15 @@ jobs:
           GITHUB_TOKEN:    ${{ steps.app-token.outputs.token || secrets.TUTORIALS_GITHUB_TOKEN }}
           REFRESH_SLUG:    ${{ inputs.slug || steps.mode.outputs.dispatch_slug }}
         run: npx tsx scripts/backfill-images.ts --slug "$REFRESH_SLUG"
+
+      - name: Refresh tutorial images (full catalog)
+        if: ${{ steps.publish.outcome == 'success' && steps.mode.outputs.effective_mode == 'full' && inputs.warm-images != false }}
+        continue-on-error: true
+        env:
+          CAP_BASE_URL:    ${{ steps.srv.outputs.srv_url }}
+          CONTENT_API_KEY: ${{ steps.env.outputs.target == 'qa' && secrets.CONTENT_API_KEY_QA || secrets.CONTENT_API_KEY }}
+          GITHUB_TOKEN:    ${{ steps.app-token.outputs.token || secrets.TUTORIALS_GITHUB_TOKEN }}
+        run: npx tsx scripts/backfill-images.ts
 
       - name: Purge orphan tutorials
         id: purge
@@ -834,6 +928,30 @@ jobs:
           PURGE_CAP_ABS:   '50'
           INITIATOR:       "ci/${{ github.run_id }}"
         run: npx tsx scripts/publish-content.ts --purge-orphans
+
+      # #2349 — Unpublish tutorials deleted upstream. The source-repo dispatch
+      # detected the deletions (git diff --diff-filter=D) and passed them as
+      # client_payload.deleted_slugs; the mode step validated + re-emitted them.
+      # This soft-deletes exactly those slugs via the same /content/orphan-purge
+      # endpoint the purge step uses, but with an EXPLICIT list (no orphan
+      # computation, no full-cache dependency) so it works in every mode,
+      # including slug-targeted. Gated on publish success: don't compound a
+      # failed publish with a destructive soft-delete — the deletion re-fires on
+      # the operator's rerun. Runs AFTER purge/publish. CONTENT_API_KEY is the
+      # same bearer as publish; QA target uses its own key. The 50-slug cap in
+      # the CLI guards a runaway mass-deletion commit.
+      - name: Unpublish deleted tutorials
+        id: unpublish
+        if: |
+          steps.mode.outputs.deleted_slugs != '' &&
+          steps.publish.outcome == 'success'
+        env:
+          CAP_BASE_URL:    ${{ steps.srv.outputs.srv_url }}
+          CONTENT_API_KEY: ${{ steps.env.outputs.target == 'qa' && secrets.CONTENT_API_KEY_QA || secrets.CONTENT_API_KEY }}
+          PURGE_CAP_ABS:   '50'
+          INITIATOR:       "ci/${{ github.run_id }}"
+          UNPUBLISH_SLUGS: ${{ steps.mode.outputs.deleted_slugs }}
+        run: npx tsx scripts/publish-content.ts --unpublish-slugs "$UNPUBLISH_SLUGS"
 
       # [#1659 Phase C.4] The /admin/rebuild static push is RETIRED. Content
       # rebuilds are now HANA-only: pages render against the deployed asset hashes
