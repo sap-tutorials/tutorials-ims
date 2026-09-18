@@ -31,17 +31,14 @@ function normalizeSlugSet(rows) {
   return set;
 }
 
-function assembleFeed({ sessions = [], activities = [], tracks = [], editions = [], activeEditionId = null, speakers = [], sessionSpeakers = [], relatedTechEdBySlug = new Map() }) {
+function assembleFeed({ sessions = [], activities = [], tracks = [], editions = [], activeEditionId = null, speakers = [], sessionSpeakers = [], relatedTechEdBySession = new Map() }) {
   const trackById = new Map(tracks.map((t) => [t.ID, t]));
   const mapTrack = (id) => trackById.get(id) || {};
   // Devtoberfest → TechEd cross-links (issue #2312, feature-flag gated + fail-open;
-  // an empty map — flag OFF, concept links / planner facade absent — yields []).
-  const activityById = new Map(activities.map((a) => [a.ID, a]));
-  const relatedTechEdFor = (session) => {
-    const act = session.ACTIVITY_ID ? activityById.get(session.ACTIVITY_ID) : null;
-    const taskSlug = (act?.TASKSLUG || '').toLowerCase();
-    return (taskSlug && relatedTechEdBySlug.get(taskSlug)) || [];
-  };
+  // an empty map — flag OFF, concept links absent — yields []). Keyed by
+  // Devtoberfest session ID: sessions are first-class KG nodes with their own
+  // concept links (#2311), so the match is session↔session, not via the activity.
+  const relatedTechEdFor = (session) => relatedTechEdBySession.get(session.ID) || [];
   const speakerById = new Map(speakers.map((sp) => [sp.ID, sp]));
   const speakersBySession = new Map();
   for (const link of sessionSpeakers) {
