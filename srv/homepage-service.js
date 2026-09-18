@@ -301,6 +301,14 @@ async function _devtoberfestAlways(db) {
 // the flag. Always included / region-agnostic (like Devtoberfest). Each card
 // links to its session URL, falling back to the /teched/ landing page. Returns
 // [] when the flag is off, no upcoming sessions exist, or the query fails.
+//
+// #2417 — Individual TechEd sessions are always surfaced as VIRTUAL on the band,
+// regardless of the session's physical venue (BERLIN/VIRTUAL). The band card is
+// a catalog link into the TechEd session catalog, not attendance guidance: a
+// Berlin session is still watchable online, and treating it as in-person made
+// it land in the EMEA (in-person) region section, which is wrong. Mapping every
+// session to region 'VIRTUAL' / isVirtual:true keeps them out of the physical
+// region lanes and shows them only under the "Virtual only" (or "All") filter.
 async function _techedAlways(db) {
   if (!isFlagEnabled('TECHED_HOMEPAGE_ENABLED')) return [];
   try {
@@ -314,18 +322,18 @@ async function _techedAlways(db) {
         .limit(3)
     );
     return (rows ?? []).map(s => {
-      const isVirtual = s.venue === 'VIRTUAL';
       return {
         title:     s.title || 'SAP TechEd 2026',
         startsAt:  s.scheduledStart || null,
         endsAt:    s.scheduledEnd   || null,
-        location:  s.room || (isVirtual ? 'Virtual' : 'Berlin'),
+        location:  'Virtual',
         url:       s.url || '/teched/',
         format:    'teched',
         register:  null,
         eventType: 'teched',
-        region:    isVirtual ? 'VIRTUAL' : 'EMEA',
-        isVirtual,
+        // #2417 — always VIRTUAL / region-agnostic (see fn header).
+        region:    'VIRTUAL',
+        isVirtual: true,
       };
     });
   } catch (err) {

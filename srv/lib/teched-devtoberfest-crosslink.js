@@ -2,10 +2,10 @@
 //
 // Bidirectional related-session cross-linking between Devtoberfest sessions and
 // SAP TechEd sessions, based on shared Knowledge-Graph concepts (issue #2312,
-// Unit 9). A Devtoberfest session links to a tutorial via its Activity
-// (Activity.TASKSLUG); that tutorial has TutorialConceptLinks → Concepts. A
-// TechEd session has TechEdSessionConceptLinks → the SAME Concepts registry.
-// Two sessions are "related" when their concept sets overlap; ranked by overlap
+// Unit 9). Both session types are first-class KG nodes (issue #2311): a
+// Devtoberfest session has DevtoberfestSessionConceptLinks → Concepts, a TechEd
+// session has TechEdSessionConceptLinks → the SAME Concepts registry. Two
+// sessions are "related" when their concept sets overlap; ranked by overlap
 // count, capped at the top MAX_RELATED_SESSIONS.
 //
 // GATING & FAIL-OPEN CONTRACT (mirrors the KG feature-flag convention):
@@ -13,23 +13,20 @@
 //     TECHED_DEVTOBERFEST_CROSSLINK_ENABLED (ImsConfig flag.teched.devtoberfestCrosslink,
 //     default OFF, dev-only). When OFF the orchestrators return an EMPTY map so
 //     callers attach empty related arrays.
-//   - Devtoberfest planner entities are @cds.persistence.exists cross-container
-//     facades — ABSENT on unit SQLite. Concept-link tables may also be empty.
-//     Every DB read is wrapped so a missing facade / cold KG degrades to empty
-//     arrays and NEVER throws into feed assembly or the /build/teched handler.
+//   - Both session concept-link tables are owned entities (no cross-container
+//     planner facade). They may be empty (cold KG, unit SQLite) — every DB read
+//     is wrapped so a missing/cold table degrades to empty arrays and NEVER
+//     throws into feed assembly or the /build/teched handler.
 //
 // The pure ranking helpers (buildRelated*) take pre-fetched, normalized inputs
 // and are trivially unit-testable with no cds/db access.
 
 import cds from '@sap/cds';
 import { isFlagEnabled } from './feature-flags/db-flags.js';
-import { isVisibleStatus } from './devtoberfest-feed.js';
 
 const LOG = cds.log('teched-crosslink');
 
-const KG_NS = 'com.sap.developers.ims';
 const EXT_NS = 'com.sap.developers.ims.external';
-const DTF_NS = 'external.devtoberfest';
 
 const FLAG = 'TECHED_DEVTOBERFEST_CROSSLINK_ENABLED';
 
@@ -60,16 +57,16 @@ function byOverlapThen(keyFn) {
 /**
  * Forward direction (Devtoberfest → TechEd). PURE.
  *
- * @param {Map<string, Set<string>>} tutorialConceptsBySlug lowercased tutorial slug → concept-id set
+ * @param {Array<{id,slug,title,sessionCode,taskSlug,conceptIds}>} dtfSessions
  * @param {Array<{slug,title,sessionCode,venue,url,conceptIds}>} techEdSessions
- * @returns {Map<string, Array>} lowercased tutorial slug → top related TechEd sessions
+ * @returns {Map<string, Array>} Devtoberfest session ID → top related TechEd sessions
  */
-export function buildRelatedTechEdBySlug(tutorialConceptsBySlug, techEdSessions) {
+export function buildRelatedTechEdByDtfSession(dtfSessions, techEdSessions) {
   const out = new Map();
-  if (!(tutorialConceptsBySlug instanceof Map) || tutorialConceptsBySlug.size === 0) return out;
+  if (!Array.isArray(dtfSessions) || dtfSessions.length === 0) return out;
   if (!Array.isArray(techEdSessions) || techEdSessions.length === 0) return out;
-  for (const [slug, concepts] of tutorialConceptsBySlug) {
-    const cset = toSet(concepts);
+  for (const d of dtfSessions) {
+    const cset = toSet(d.conceptIds);
     if (!cset.size) continue;
     const scored = [];
     for (const te of techEdSessions) {
@@ -87,7 +84,7 @@ export function buildRelatedTechEdBySlug(tutorialConceptsBySlug, techEdSessions)
     }
     if (scored.length) {
       scored.sort(byOverlapThen((x) => x.slug));
-      out.set(slug, scored.slice(0, MAX_RELATED_SESSIONS));
+      out.set(d.id, scored.slice(0, MAX_RELATED_SESSIONS));
     }
   }
   return out;
@@ -189,71 +186,38 @@ export function __bustTechEdCacheForTest() {
   TECHED_CACHE.inflight = null;
 }
 
-// lowercased tutorial slug → concept-id set (predicate 'teaches'), restricted to
-// the requested slug set. Tutorial slugs are lowercase-canonical (CLAUDE.md).
-async function loadTutorialConceptsBySlug(slugsLower) {
-  const set = slugsLower instanceof Set ? slugsLower : new Set(slugsLower || []);
-  if (!set.size) return new Map();
-  const { TutorialConceptLinks, Tutorials } = cds.entities(KG_NS);
-  const tuts = await SELECT.from(Tutorials).columns('ID', 'slug').where({ slug: { in: [...set] } });
-  if (!tuts.length) return new Map();
-  const idToSlug = new Map();
-  for (const t of tuts) {
-    if (t.slug) idToSlug.set(t.ID, String(t.slug).toLowerCase());
-  }
-  const tutIds = [...idToSlug.keys()];
-  const links = await SELECT.from(TutorialConceptLinks)
-    .columns('tutorial_ID', 'concept_ID')
-    .where({ tutorial_ID: { in: tutIds }, predicate: 'teaches' });
-  const map = new Map();
+// Owned Devtoberfest sessions with their FIRST-CLASS concept-id sets, read from
+// DevtoberfestSessions + DevtoberfestSessionConceptLinks (issue #2311 — sessions
+// are KG nodes in their own right, extracted by the fetch-devtoberfest-sessions
+// job). No cross-container planner facade, no Activity/tutorial walk, no edition
+// scoping — the KG ingest already tracks only the current-edition catalog. On
+// unit SQLite the tables exist but are empty, so this returns [] (fail-soft).
+// Only sessions with a non-empty concept set are returned. Metadata-only columns
+// (no LargeString `description`), so plain CDS QL is LOB-safe on HANA.
+async function loadDevtoberfestSessionsWithConcepts() {
+  const { DevtoberfestSessions, DevtoberfestSessionConceptLinks } = cds.entities(EXT_NS);
+  const sessions = await SELECT.from(DevtoberfestSessions)
+    .columns('ID', 'slug', 'title', 'sessionCode', 'activityTaskSlug');
+  if (!sessions.length) return [];
+  const links = await SELECT.from(DevtoberfestSessionConceptLinks).columns('session_ID', 'concept_ID');
+  const bySession = new Map();
   for (const l of links) {
     if (!l.concept_ID) continue;
-    const slug = idToSlug.get(l.tutorial_ID);
-    if (!slug) continue;
-    if (!map.has(slug)) map.set(slug, new Set());
-    map.get(slug).add(l.concept_ID);
+    if (!bySession.has(l.session_ID)) bySession.set(l.session_ID, new Set());
+    bySession.get(l.session_ID).add(l.concept_ID);
   }
-  return map;
-}
-
-// Visible Devtoberfest sessions carrying the concept set of the tutorial they
-// link to (via Activity.TASKSLUG). Reads the cross-container planner facades,
-// which are absent on unit SQLite — the caller's try/catch turns that into an
-// empty result (fail-soft). Scoped to the CURRENT edition (ISCURRENT) so the
-// reverse cross-links stay symmetric with the edition-scoped forward feed and
-// never surface sessions from a past Devtoberfest year. Only sessions with a
-// non-empty concept set are returned.
-async function loadDevtoberfestSessionsWithConcepts() {
-  let ext;
-  try { ext = cds.entities(DTF_NS); } catch { ext = null; }
-  if (!ext?.Session || !ext?.Activity || !ext?.Track || !ext?.Edition) return [];
-
-  const currentEdition = await SELECT.one.from(ext.Edition).columns('ID').where({ ISCURRENT: true });
-  if (!currentEdition?.ID) return [];
-  const tracks = await SELECT.from(ext.Track).columns('ID').where({ EDITION_ID: currentEdition.ID });
-  const trackIds = tracks.map((t) => t.ID);
-  if (!trackIds.length) return [];
-
-  const sessions = await SELECT.from(ext.Session)
-    .columns('ID', 'TITLE', 'SESSIONCODE', 'STATUS', 'ACTIVITY_ID')
-    .where({ TRACK_ID: { in: trackIds } });
-  const visible = sessions.filter(isVisibleStatus);
-  if (!visible.length) return [];
-  const activityIds = [...new Set(visible.map((s) => s.ACTIVITY_ID).filter(Boolean))];
-  const activities = activityIds.length
-    ? await SELECT.from(ext.Activity).columns('ID', 'TASKSLUG').where({ ID: { in: activityIds } })
-    : [];
-  const slugByActivity = new Map(
-    activities.map((a) => [a.ID, (a.TASKSLUG || '').toLowerCase()]),
-  );
-  const taskSlugs = new Set([...slugByActivity.values()].filter(Boolean));
-  const tutMap = await loadTutorialConceptsBySlug(taskSlugs);
   const out = [];
-  for (const s of visible) {
-    const taskSlug = s.ACTIVITY_ID ? slugByActivity.get(s.ACTIVITY_ID) : '';
-    const conceptIds = (taskSlug && tutMap.get(taskSlug)) || new Set();
-    if (conceptIds.size) {
-      out.push({ id: s.ID, title: s.TITLE, sessionCode: s.SESSIONCODE, taskSlug, conceptIds });
+  for (const s of sessions) {
+    const conceptIds = bySession.get(s.ID);
+    if (conceptIds?.size) {
+      out.push({
+        id: s.ID,
+        slug: s.slug,
+        title: s.title,
+        sessionCode: s.sessionCode,
+        taskSlug: (s.activityTaskSlug || '').toLowerCase(),
+        conceptIds,
+      });
     }
   }
   return out;
@@ -262,26 +226,23 @@ async function loadDevtoberfestSessionsWithConcepts() {
 // ── orchestrators (flag-gated, fail-open) ───────────────────────────────────
 
 /**
- * Forward: lowercased tutorial slug → top related TechEd sessions. Empty map
+ * Forward: Devtoberfest session ID → top related TechEd sessions. Empty map
  * when the flag is OFF, inputs are empty, or any read fails. Never throws.
  *
- * @param {Set<string>|string[]} taskSlugsLower Devtoberfest activity task slugs (lowercased)
  * @returns {Promise<Map<string, Array>>}
  */
-export async function computeRelatedTechEdBySlug(taskSlugsLower) {
+export async function computeRelatedTechEdByDtfSession() {
   try {
     if (!isFlagEnabled(FLAG)) return new Map();
-    const slugs = taskSlugsLower instanceof Set ? taskSlugsLower : new Set(taskSlugsLower || []);
-    if (!slugs.size) return new Map();
     await cds.connect.to('db');
-    const [techEd, tutMap] = await Promise.all([
+    const [techEd, dtf] = await Promise.all([
       loadTechEdSessionsWithConcepts(),
-      loadTutorialConceptsBySlug(slugs),
+      loadDevtoberfestSessionsWithConcepts(),
     ]);
-    if (!techEd.length || tutMap.size === 0) return new Map();
-    return buildRelatedTechEdBySlug(tutMap, techEd);
+    if (!techEd.length || !dtf.length) return new Map();
+    return buildRelatedTechEdByDtfSession(dtf, techEd);
   } catch (err) {
-    LOG.warn('computeRelatedTechEdBySlug failed; returning empty:', err?.message);
+    LOG.warn('computeRelatedTechEdByDtfSession failed; returning empty:', err?.message);
     return new Map();
   }
 }
