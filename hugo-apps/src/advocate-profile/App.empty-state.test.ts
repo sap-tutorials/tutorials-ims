@@ -26,7 +26,7 @@ describe('advocate-profile App.vue 404 path', () => {
     await flushPromises();
 
     expect(wrapper.text()).toMatch(/no longer listed/i);
-    expect(wrapper.find('.adv-profile-island-banner').exists()).toBe(true);
+    expect(wrapper.find('.dev-advocate-profile-island-banner').exists()).toBe(true);
   });
 
   it('renders nothing on a generic 5xx error', async () => {
@@ -38,7 +38,7 @@ describe('advocate-profile App.vue 404 path', () => {
     await flushPromises();
     await flushPromises();
 
-    expect(wrapper.find('.adv-profile-island-banner').exists()).toBe(false);
+    expect(wrapper.find('.dev-advocate-profile-island-banner').exists()).toBe(false);
     expect(wrapper.find('h2').exists()).toBe(false);
   });
 });

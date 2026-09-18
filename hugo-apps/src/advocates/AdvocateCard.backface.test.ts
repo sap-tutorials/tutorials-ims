@@ -24,6 +24,6 @@ describe('advocate flip-card backface (iOS Safari, #1607)', () => {
   })
 
   it('gives the front face an explicit rotateY(0) 3D layer for WebKit culling', () => {
-    expect(css).toMatch(/\.adv-front\s*\{[^}]*transform:\s*rotateY\(0deg\)/)
+    expect(css).toMatch(/\.dev-advocate-front\s*\{[^}]*transform:\s*rotateY\(0deg\)/)
   })
 })

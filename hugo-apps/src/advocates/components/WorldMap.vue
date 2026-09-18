@@ -16,24 +16,24 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVis));
 </script>
 
 <template>
-  <div class="adv-map" :class="{ paused }" aria-label="Filter advocates by region">
-    <span class="adv-map-label adv-map-am">AMER</span>
-    <span class="adv-map-label adv-map-eu">EMEA</span>
-    <span class="adv-map-label adv-map-ap">APJ</span>
-    <button class="adv-dot adv-dot-am"  :class="{ active: active === 'AMERICAS' }"
+  <div class="dev-advocate-map" :class="{ paused }" aria-label="Filter advocates by region">
+    <span class="dev-advocate-map-label dev-advocate-map-am">AMER</span>
+    <span class="dev-advocate-map-label dev-advocate-map-eu">EMEA</span>
+    <span class="dev-advocate-map-label dev-advocate-map-ap">APJ</span>
+    <button class="dev-advocate-dot dev-advocate-dot-am"  :class="{ active: active === 'AMERICAS' }"
             :aria-label="`Americas (${regionCounts.AMERICAS} advocates)`"
             @click="emit('pick', active === 'AMERICAS' ? 'ALL' : 'AMERICAS')"></button>
-    <button class="adv-dot adv-dot-eu"  :class="{ active: active === 'EMEA' }"
+    <button class="dev-advocate-dot dev-advocate-dot-eu"  :class="{ active: active === 'EMEA' }"
             :aria-label="`EMEA (${regionCounts.EMEA} advocates)`"
             @click="emit('pick', active === 'EMEA' ? 'ALL' : 'EMEA')"></button>
-    <button class="adv-dot adv-dot-ap"  :class="{ active: active === 'APJ' }"
+    <button class="dev-advocate-dot dev-advocate-dot-ap"  :class="{ active: active === 'APJ' }"
             :aria-label="`APJ (${regionCounts.APJ} advocates)`"
             @click="emit('pick', active === 'APJ' ? 'ALL' : 'APJ')"></button>
   </div>
 </template>
 
 <style>
-.adv-map {
+.dev-advocate-map {
   width: 220px; height: 86px; position: relative; flex-shrink: 0;
   border-radius: 8px;
   /* Real dotted-globe artwork over the elliptical region halos. The halos */
@@ -48,28 +48,28 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVis));
   background-position: center, center, center, center;
   background-repeat: no-repeat;
 }
-.adv-map-label { position: absolute; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.85); }
-.adv-map-am { top: 60%; left: 8%; }
-.adv-map-eu { top: 22%; left: 44%; }
-.adv-map-ap { top: 60%; right: 6%; }
-.adv-dot {
+.dev-advocate-map-label { position: absolute; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.85); }
+.dev-advocate-map-am { top: 60%; left: 8%; }
+.dev-advocate-map-eu { top: 22%; left: 44%; }
+.dev-advocate-map-ap { top: 60%; right: 6%; }
+.dev-advocate-dot {
   position: absolute; width: 12px; height: 12px; border-radius: 50%;
   transform: translate(-50%, -50%); cursor: pointer; padding: 0; border: 0;
   background: #fff;
 }
-.adv-dot::before {
+.dev-advocate-dot::before {
   content: ''; position: absolute; inset: -4px; border-radius: 50%;
-  background: inherit; opacity: .5; animation: adv-pulse 2.4s ease-out infinite;
+  background: inherit; opacity: .5; animation: dev-advocate-pulse 2.4s ease-out infinite;
 }
-.adv-map.paused .adv-dot::before { animation: none; opacity: 0; }
+.dev-advocate-map.paused .dev-advocate-dot::before { animation: none; opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
-  .adv-dot::before { animation: none; opacity: 0; }
+  .dev-advocate-dot::before { animation: none; opacity: 0; }
 }
-.adv-dot-am { left: 22%; top: 62%; background: #ff6db5; }
-.adv-dot-eu { left: 50%; top: 42%; background: #b056d1; }
-.adv-dot-ap { left: 80%; top: 58%; background: #2b9fd8; }
-.adv-dot.active { box-shadow: 0 0 0 3px #fff; }
-@keyframes adv-pulse {
+.dev-advocate-dot-am { left: 22%; top: 62%; background: #ff6db5; }
+.dev-advocate-dot-eu { left: 50%; top: 42%; background: #b056d1; }
+.dev-advocate-dot-ap { left: 80%; top: 58%; background: #2b9fd8; }
+.dev-advocate-dot.active { box-shadow: 0 0 0 3px #fff; }
+@keyframes dev-advocate-pulse {
   0% { transform: scale(1); opacity: .55; }
   100% { transform: scale(2.2); opacity: 0; }
 }

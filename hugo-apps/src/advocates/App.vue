@@ -83,32 +83,32 @@ load();
     @set-q="setQ"
   />
 
-  <div v-if="loading" class="adv-skel-grid" aria-hidden="true">
-    <div v-for="i in 8" :key="i" class="adv-skel-card"></div>
+  <div v-if="loading" class="dev-advocate-skel-grid" aria-hidden="true">
+    <div v-for="i in 8" :key="i" class="dev-advocate-skel-card"></div>
   </div>
-  <div v-else-if="error" class="adv-error">
+  <div v-else-if="error" class="dev-advocate-error">
     <p>Couldn't load advocates: {{ error }}</p>
-    <button class="adv-pill" @click="load">Retry</button>
+    <button class="dev-advocate-pill" @click="load">Retry</button>
   </div>
-  <div v-else-if="filtered.length" class="adv-grid">
+  <div v-else-if="filtered.length" class="dev-advocate-grid">
     <AdvocateCard v-for="a in filtered" :key="a.ID" :advocate="a" :photo-base="photoBase" />
   </div>
   <EmptyState v-else :filters-active="filtersActive" @reset="reset" />
 </template>
 
 <style>
-.adv-skel-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; padding: 24px; }
-.adv-skel-card { aspect-ratio: 4/5; border-radius: 20px;
+.dev-advocate-skel-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; padding: 24px; }
+.dev-advocate-skel-card { aspect-ratio: 4/5; border-radius: 20px;
   background: linear-gradient(90deg, #f1f4f9 0%, #e6effa 50%, #f1f4f9 100%);
   background-size: 200% 100%;
-  animation: adv-shimmer 1.4s linear infinite;
+  animation: dev-advocate-shimmer 1.4s linear infinite;
 }
-.adv-error { padding: 40px 24px; text-align: center; }
-@keyframes adv-shimmer {
+.dev-advocate-error { padding: 40px 24px; text-align: center; }
+@keyframes dev-advocate-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .adv-skel-card { animation: none; }
+  .dev-advocate-skel-card { animation: none; }
 }
 </style>

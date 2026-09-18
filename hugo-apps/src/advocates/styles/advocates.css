@@ -1,65 +1,65 @@
 :root {
-  --adv-card-radius: 20px;
-  --adv-bg-amer: linear-gradient(135deg,#0070f2 0%,#6c3dff 60%,#ff6db5 100%);
-  --adv-bg-emea: linear-gradient(135deg,#0a6ed1 0%,#1c63dc 60%,#2b9fd8 100%);
-  --adv-bg-apj:  linear-gradient(135deg,#7858d8 0%,#b056d1 60%,#f96fb0 100%);
-  --adv-back:    linear-gradient(160deg,#001a4f 0%,#0a3d91 50%,#0070f2 100%);
+  --dev-advocate-card-radius: 20px;
+  --dev-advocate-bg-amer: linear-gradient(135deg,#0070f2 0%,#6c3dff 60%,#ff6db5 100%);
+  --dev-advocate-bg-emea: linear-gradient(135deg,#0a6ed1 0%,#1c63dc 60%,#2b9fd8 100%);
+  --dev-advocate-bg-apj:  linear-gradient(135deg,#7858d8 0%,#b056d1 60%,#f96fb0 100%);
+  --dev-advocate-back:    linear-gradient(160deg,#001a4f 0%,#0a3d91 50%,#0070f2 100%);
 }
 
 /* 5-up at desktop widths; the aspect-ratio keeps the card proportional, so a
    narrower column auto-shrinks the height too. Bumps down to 4/3/2/1 at the
    same physical viewport sizes as before — the header band is ~80px tall, so
    5-up keeps card height closer to that reference. */
-.adv-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px; padding: 24px; }
-@media (max-width: 1400px) { .adv-grid { grid-template-columns: repeat(4, 1fr); } }
-@media (max-width: 1100px) { .adv-grid { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 800px)  { .adv-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 540px)  { .adv-grid { grid-template-columns: 1fr; } }
+.dev-advocate-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px; padding: 24px; }
+@media (max-width: 1400px) { .dev-advocate-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 1100px) { .dev-advocate-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 800px)  { .dev-advocate-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 540px)  { .dev-advocate-grid { grid-template-columns: 1fr; } }
 
-.adv-flipwrap { perspective: 1400px; }
-.adv-card-inner {
+.dev-advocate-flipwrap { perspective: 1400px; }
+.dev-advocate-card-inner {
   position: relative; width: 100%; aspect-ratio: 4 / 5;
   transition: transform .85s cubic-bezier(.2,.85,.25,1);
   -webkit-transform-style: preserve-3d; transform-style: preserve-3d; cursor: pointer;
 }
-.adv-flipwrap:hover .adv-card-inner,
-.adv-flipwrap:focus-within .adv-card-inner,
-.adv-flipwrap.is-flipped .adv-card-inner { transform: rotateY(180deg); }
-.adv-face {
+.dev-advocate-flipwrap:hover .dev-advocate-card-inner,
+.dev-advocate-flipwrap:focus-within .dev-advocate-card-inner,
+.dev-advocate-flipwrap.is-flipped .dev-advocate-card-inner { transform: rotateY(180deg); }
+.dev-advocate-face {
   position: absolute; inset: 0;
   /* iOS Safari (WebKit) needs the -webkit- prefix; without it the front face
      (photo) is NOT hidden on flip and shows through — mirrored — over the
      back-face text, making it unreadable on Apple devices (#1607). The
      unprefixed property alone is enough for Blink/Gecko but not WebKit. */
   -webkit-backface-visibility: hidden; backface-visibility: hidden;
-  border-radius: var(--adv-card-radius); overflow: hidden;
+  border-radius: var(--dev-advocate-card-radius); overflow: hidden;
   background: #fff; border: 1px solid #e4e4e8;
   box-shadow: 0 8px 24px rgba(8,32,80,.06);
   display: flex; flex-direction: column;
 }
 /* Explicit front-face transform gives it its own 3D layer so WebKit reliably
    applies backface culling to it (matches the working homepage flip-card). */
-.adv-front { -webkit-transform: rotateY(0deg); transform: rotateY(0deg); }
-.adv-flipwrap:hover .adv-face { box-shadow: 0 18px 44px rgba(8,32,80,.14); }
+.dev-advocate-front { -webkit-transform: rotateY(0deg); transform: rotateY(0deg); }
+.dev-advocate-flipwrap:hover .dev-advocate-face { box-shadow: 0 18px 44px rgba(8,32,80,.14); }
 
-.adv-front .adv-hero { height: 56%; position: relative; overflow: hidden; }
-.adv-front .adv-hero[data-region="AMERICAS"] { background: var(--adv-bg-amer); }
-.adv-front .adv-hero[data-region="EMEA"]      { background: var(--adv-bg-emea); }
-.adv-front .adv-hero[data-region="APJ"]       { background: var(--adv-bg-apj); }
-.adv-front .adv-hero::after {
+.dev-advocate-front .dev-advocate-hero { height: 56%; position: relative; overflow: hidden; }
+.dev-advocate-front .dev-advocate-hero[data-region="AMERICAS"] { background: var(--dev-advocate-bg-amer); }
+.dev-advocate-front .dev-advocate-hero[data-region="EMEA"]      { background: var(--dev-advocate-bg-emea); }
+.dev-advocate-front .dev-advocate-hero[data-region="APJ"]       { background: var(--dev-advocate-bg-apj); }
+.dev-advocate-front .dev-advocate-hero::after {
   content:''; position:absolute; inset:0;
   background: radial-gradient(900px circle at 25% 0%, rgba(255,255,255,.32), transparent 55%);
   pointer-events: none;
 }
 /* Initials placeholder: gradient hero + centered circle (yearbook style) */
-.adv-front .adv-initials {
+.dev-advocate-front .dev-advocate-initials {
   position: absolute; left: 50%; bottom: -44px; transform: translateX(-50%);
   width: 130px; height: 130px; border-radius: 50%; border: 5px solid #fff;
   background-position: center; background-size: cover; background-color: #cfe3ff;
   box-shadow: 0 14px 28px rgba(0,40,100,.22);
 }
 /* Real photo: full-bleed across the hero, no gradient halo wasted */
-.adv-front .adv-photo {
+.dev-advocate-front .dev-advocate-photo {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
   object-fit: cover; object-position: center 20%;
@@ -67,30 +67,30 @@
   z-index: 1;
 }
 /* When a photo is present, the radial highlight would just darken it — drop it */
-.adv-front .adv-hero:has(.adv-photo)::after { display: none; }
+.dev-advocate-front .dev-advocate-hero:has(.dev-advocate-photo)::after { display: none; }
 /* Photo cards: bump hero a touch and remove the 60px chin reserved for the circle overhang */
-.adv-front:has(.adv-photo) .adv-hero { height: 62%; }
-.adv-front:has(.adv-photo) .adv-body { padding: 14px 18px; }
+.dev-advocate-front:has(.dev-advocate-photo) .dev-advocate-hero { height: 62%; }
+.dev-advocate-front:has(.dev-advocate-photo) .dev-advocate-body { padding: 14px 18px; }
 
-.adv-front .adv-body { padding: 60px 18px 14px; text-align: center; flex: 1; display: flex; flex-direction: column; }
-.adv-name { margin: 0; font-size: 18px; }
+.dev-advocate-front .dev-advocate-body { padding: 60px 18px 14px; text-align: center; flex: 1; display: flex; flex-direction: column; }
+.dev-advocate-name { margin: 0; font-size: 18px; }
 /* Front face has a white card background regardless of site theme, so anchor
    the name color explicitly — without this, html.dark inherits near-white text
    and produces white-on-white. Back face overrides with #fff below. */
-.adv-front .adv-name { color: #1a2733; }
-.adv-front .adv-pron { color: #6b7c93; }
-.adv-pron { font-size: 12px; color: #6b7c93; margin-left: 4px; font-weight: 400; }
-.adv-role { color: #5b738b; font-size: 13px; margin-top: 4px; }
-.adv-loc  { color: #8696a8; font-size: 12px; margin-top: 2px; }
-.adv-chips { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; margin-top:14px; }
-.adv-chip { font-size:11px; padding: 3px 9px; border-radius: 999px; background:#eaf4ff; color:#0a3d91; border:1px solid #cfe3ff; }
-.adv-legend { margin-top:auto; padding-top: 12px; font-size: 11px; color:#aab5c6; letter-spacing:.08em; text-transform:uppercase; }
+.dev-advocate-front .dev-advocate-name { color: #1a2733; }
+.dev-advocate-front .dev-advocate-pron { color: #6b7c93; }
+.dev-advocate-pron { font-size: 12px; color: #6b7c93; margin-left: 4px; font-weight: 400; }
+.dev-advocate-role { color: #5b738b; font-size: 13px; margin-top: 4px; }
+.dev-advocate-loc  { color: #8696a8; font-size: 12px; margin-top: 2px; }
+.dev-advocate-chips { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; margin-top:14px; }
+.dev-advocate-chip { font-size:11px; padding: 3px 9px; border-radius: 999px; background:#eaf4ff; color:#0a3d91; border:1px solid #cfe3ff; }
+.dev-advocate-legend { margin-top:auto; padding-top: 12px; font-size: 11px; color:#aab5c6; letter-spacing:.08em; text-transform:uppercase; }
 
-.adv-back { -webkit-transform: rotateY(180deg); transform: rotateY(180deg); padding: 22px; color: #fff; background: var(--adv-back); }
-.adv-back .adv-name, .adv-back h3 { color: #fff; }
-.adv-back .adv-bio { font-size: 13px; line-height: 1.55; margin: 14px 0; flex: 1; overflow: auto; }
-.adv-links { display: flex; flex-wrap: wrap; gap: 8px; }
-.adv-iconbtn {
+.dev-advocate-back { -webkit-transform: rotateY(180deg); transform: rotateY(180deg); padding: 22px; color: #fff; background: var(--dev-advocate-back); }
+.dev-advocate-back .dev-advocate-name, .dev-advocate-back h3 { color: #fff; }
+.dev-advocate-back .dev-advocate-bio { font-size: 13px; line-height: 1.55; margin: 14px 0; flex: 1; overflow: auto; }
+.dev-advocate-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.dev-advocate-iconbtn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 34px; height: 34px; border-radius: 10px;
   background: rgba(255,255,255,.14); color: #fff;
@@ -98,21 +98,21 @@
   border: 1px solid rgba(255,255,255,.18);
   transition: background .2s ease;
 }
-.adv-iconbtn:hover { background: rgba(255,255,255,.28); }
-.adv-profile { margin-top: 14px; font-size: 12px; color: #cfe3ff; text-decoration: underline; }
+.dev-advocate-iconbtn:hover { background: rgba(255,255,255,.28); }
+.dev-advocate-profile { margin-top: 14px; font-size: 12px; color: #cfe3ff; text-decoration: underline; }
 
 /* Spec 2026-06-25-advocate-user-link-design §3:
    mailto + tutorial-count affordances on the back of the card. Minimal
    visual treatment intentional — Tom's spec §8 leaves polished UI for a
    follow-up PR; this PR just plumbs the data and gates the render. */
-.adv-email-link {
+.dev-advocate-email-link {
   display: inline-flex; align-items: center; gap: 6px;
   margin: 6px 0 10px; font-size: 13px;
   color: #cfe3ff; text-decoration: underline;
   word-break: break-all;
 }
-.adv-email-link:hover { color: #fff; }
-.adv-tutorials-pill {
+.dev-advocate-email-link:hover { color: #fff; }
+.dev-advocate-tutorials-pill {
   display: inline-block;
   margin: 0 0 10px;
   padding: 3px 10px;
@@ -124,14 +124,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .adv-card-inner { transition: opacity .25s ease; }
-  .adv-flipwrap:hover .adv-card-inner,
-  .adv-flipwrap:focus-within .adv-card-inner,
-  .adv-flipwrap.is-flipped .adv-card-inner { transform: none; }
-  .adv-flipwrap:hover .adv-front,
-  .adv-flipwrap:focus-within .adv-front,
-  .adv-flipwrap.is-flipped .adv-front { opacity: 0; pointer-events: none; }
-  .adv-flipwrap:hover .adv-back,
-  .adv-flipwrap:focus-within .adv-back,
-  .adv-flipwrap.is-flipped .adv-back { opacity: 1; transform: none; }
+  .dev-advocate-card-inner { transition: opacity .25s ease; }
+  .dev-advocate-flipwrap:hover .dev-advocate-card-inner,
+  .dev-advocate-flipwrap:focus-within .dev-advocate-card-inner,
+  .dev-advocate-flipwrap.is-flipped .dev-advocate-card-inner { transform: none; }
+  .dev-advocate-flipwrap:hover .dev-advocate-front,
+  .dev-advocate-flipwrap:focus-within .dev-advocate-front,
+  .dev-advocate-flipwrap.is-flipped .dev-advocate-front { opacity: 0; pointer-events: none; }
+  .dev-advocate-flipwrap:hover .dev-advocate-back,
+  .dev-advocate-flipwrap:focus-within .dev-advocate-back,
+  .dev-advocate-flipwrap.is-flipped .dev-advocate-back { opacity: 1; transform: none; }
 }

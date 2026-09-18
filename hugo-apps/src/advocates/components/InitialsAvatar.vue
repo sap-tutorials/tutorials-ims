@@ -7,13 +7,13 @@ const px = computed(() => (props.size || 130) + 'px');
 </script>
 
 <template>
-  <div class="adv-initials" :style="{ width: px, height: px, fontSize: 'calc(' + px + ' / 2.4)' }">
+  <div class="dev-advocate-initials" :style="{ width: px, height: px, fontSize: 'calc(' + px + ' / 2.4)' }">
     <span>{{ initials || '·' }}</span>
   </div>
 </template>
 
 <style>
-.adv-initials {
+.dev-advocate-initials {
   border-radius: 50%; border: 5px solid #fff;
   background: linear-gradient(135deg,#0070f2,#6c3dff);
   color: #fff; display: inline-flex; align-items: center; justify-content: center;

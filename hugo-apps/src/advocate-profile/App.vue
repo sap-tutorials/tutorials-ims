@@ -42,12 +42,12 @@ load();
 </script>
 
 <template>
-  <div v-if="status === 'notFound'" class="adv-profile-island-banner" role="status">
+  <div v-if="status === 'notFound'" class="dev-advocate-profile-island-banner" role="status">
     This advocate is no longer listed.
   </div>
   <template v-else-if="status === 'ok'">
-    <section v-if="sessions.length" class="adv-profile-sessions" aria-labelledby="adv-prof-sessions-h">
-      <h2 id="adv-prof-sessions-h">Sessions ({{ sessions.length }})</h2>
+    <section v-if="sessions.length" class="dev-advocate-profile-sessions" aria-labelledby="dev-advocate-prof-sessions-h">
+      <h2 id="dev-advocate-prof-sessions-h">Sessions ({{ sessions.length }})</h2>
       <div class="next-steps-rail">
         <div class="next-steps-grid">
           <SessionCard
@@ -58,8 +58,8 @@ load();
         </div>
       </div>
     </section>
-    <section v-if="authored.length" class="adv-profile-tutorials" aria-labelledby="adv-prof-authored-h">
-      <h2 id="adv-prof-authored-h">Tutorials authored ({{ authored.length }})</h2>
+    <section v-if="authored.length" class="dev-advocate-profile-tutorials" aria-labelledby="dev-advocate-prof-authored-h">
+      <h2 id="dev-advocate-prof-authored-h">Tutorials authored ({{ authored.length }})</h2>
       <div class="next-steps-rail">
         <div class="next-steps-grid">
           <a
@@ -74,8 +74,8 @@ load();
         </div>
       </div>
     </section>
-    <section v-if="contributed.length" class="adv-profile-tutorials" aria-labelledby="adv-prof-contrib-h">
-      <h2 id="adv-prof-contrib-h">Tutorials contributed to ({{ contributed.length }})</h2>
+    <section v-if="contributed.length" class="dev-advocate-profile-tutorials" aria-labelledby="dev-advocate-prof-contrib-h">
+      <h2 id="dev-advocate-prof-contrib-h">Tutorials contributed to ({{ contributed.length }})</h2>
       <div class="next-steps-rail">
         <div class="next-steps-grid">
           <a
