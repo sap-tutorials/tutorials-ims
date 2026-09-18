@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+
 defineProps<{
   earnedPoints: number;
   maxPoints: number;
@@ -6,6 +8,15 @@ defineProps<{
   isAuthenticated: boolean;
   joined?: boolean;
 }>();
+
+// Carry the current page as returnTo so the post-login redirect lands the user
+// back on the Devtoberfest page they signed in from, not the homepage (#2409).
+// login-redirect.html defaults returnTo to '/' when the param is absent, which
+// is why a bare /login link bounced Devtoberfest visitors to the homepage.
+const loginHref = computed(() => {
+  const returnTo = window.location.pathname + window.location.search;
+  return '/login?returnTo=' + encodeURIComponent(returnTo);
+});
 </script>
 
 <template>
@@ -30,7 +41,7 @@ defineProps<{
     <template v-else>
       <div class="points-banner__signin">
         <span class="points-banner__signin-text">Sign in to track your progress and earn points.</span>
-        <a href="/login" class="points-banner__signin-link">Sign in</a>
+        <a :href="loginHref" class="points-banner__signin-link">Sign in</a>
       </div>
     </template>
   </div>
