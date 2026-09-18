@@ -79,20 +79,32 @@ maintaining older workflows.
 | 11 | [Upload Files to FCMS for Developer Downloads](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials-qa/fcms-upload-file) | 10 min | How to gain access to FCMS and upload downloadable assets for your tutorial. |
 | 12 | [Introduction to the Tutorial Dashboard](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials-qa/tutorial-dashboard-intro) | 10 min | How to access the Tutorial Dashboard to monitor the health of your content. |
 
+### 7. AI-assisted authoring
+
+Optional. Once you're comfortable with hand-authored validation (step 7 above),
+these tutorials show how to let AI generate or grade your quizzes.
+
+| # | Tutorial | Time | What you'll learn |
+| --- | --- | --- | --- |
+| 13 | [Use AUTOAUTHOR to Generate Quiz Questions with AI](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials-qa/use-autoauthor-to-generate-quiz-questions) | 15 min | How the `[AUTOAUTHOR_*]` directives generate quiz questions at build time from step content — or, with `[AUTOAUTHOR_VIDEO_*]`, from a YouTube video's transcript. |
+| 14 | [Use CODECHECK to AI-Grade Reader Code](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials-qa/use-codecheck-to-ai-grade-reader-code) | 15 min | How `[CODECHECK_N]` gives readers a code editor and grades their submission against a goal you describe, not an exact string. |
+| 15 | [Use VALIDATE to AI-Grade Free-Text Answers](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials-qa/use-validate-to-ai-grade-free-text-answers) | 15 min | How `ai-judged` grading accepts open-ended answers in the reader's own words, judged against a server-side reference answer. |
+
 ---
 
 ## Notes and caveats
 
 - **16 meta tutorials are live** on the QA channel and verified reachable
   (2026-07-25).
-- **Three slugs are stale.** `use-autoauthor-to-generate-quiz-questions`,
+- **The three AI-authoring tutorials are being restored.**
+  `use-autoauthor-to-generate-quiz-questions`,
   `use-codecheck-to-ai-grade-reader-code`, and
-  `use-validate-to-ai-grade-free-text-answers` appear in the QA discovery index
-  but currently return **404** — the source markdown is no longer present in the
-  `meta-tutorials-Contribution` repo. They are omitted above. If you're expecting
-  the AI-assisted authoring tutorials (AutoAuthor / CodeCheck / Validate), check
-  with the platform team whether they've been renamed or unpublished; the
-  discovery index needs a `fetch-tutorials:qa` re-run to drop the dead entries.
+  `use-validate-to-ai-grade-free-text-answers` previously returned **404**
+  because their source markdown was missing from the
+  `meta-tutorials-Contribution` repo (only `rules.vr` remained). The markdown is
+  restored in [meta-tutorials-Contribution#11](https://github.com/sap-tutorials/meta-tutorials-Contribution/pull/11)
+  (issue #2374); once that PR merges and the QA channel rebuilds, the three
+  entries in §7 above resolve. Until then they may still 404.
 - The two **Atom** editor tutorials are legacy. New authors should use
   **VS Code + Sage** and can skip them.
 
