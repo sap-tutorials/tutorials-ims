@@ -1,25 +1,25 @@
 {{ define "main" }}
 {{ $a := .Params.advocate }}
 {{ $slug := .Params.slug }}
-<section class="adv-profile" data-slug="{{ $slug }}">
-  <a class="adv-profile-back" href="/developer-advocates/">&larr; All advocates</a>
+<section class="dev-advocate-profile" data-slug="{{ $slug }}">
+  <a class="dev-advocate-profile-back" href="/developer-advocates/">&larr; All advocates</a>
 
-  <section class="adv-profile-hero" data-region="{{ $a.region }}">
+  <section class="dev-advocate-profile-hero" data-region="{{ $a.region }}">
     {{ if $a.hasPhoto }}
-      <img class="adv-profile-photo"
+      <img class="dev-advocate-profile-photo"
            src="/api/advocates/{{ $slug }}/photo?v={{ $a.photoUpdatedAt }}"
            alt="Photo of {{ $a.firstName }} {{ $a.lastName }}" />
     {{ else }}
-      <div class="adv-profile-photo-fallback" aria-hidden="true">
+      <div class="dev-advocate-profile-photo-fallback" aria-hidden="true">
         {{ slicestr $a.firstName 0 1 }}{{ slicestr $a.lastName 0 1 }}
       </div>
     {{ end }}
-    <div class="adv-profile-id">
+    <div class="dev-advocate-profile-id">
       <h1>{{ $a.firstName }} {{ $a.lastName }}
-        {{ with $a.pronouns }}<span class="adv-pron">({{ . }})</span>{{ end }}
+        {{ with $a.pronouns }}<span class="dev-advocate-pron">({{ . }})</span>{{ end }}
       </h1>
-      {{ with $a.title }}<div class="adv-role">{{ . }}</div>{{ end }}
-      <div class="adv-loc">
+      {{ with $a.title }}<div class="dev-advocate-role">{{ . }}</div>{{ end }}
+      <div class="dev-advocate-loc">
         {{ with $a.location }}{{ . }} &middot;{{ end }} {{ $a.region }}
       </div>
       {{ with $a.links }}
@@ -29,7 +29,7 @@
       {{ $kindLabels := dict
         "SapCommunity" "SAP Community"
         "BlueSky" "Bluesky" }}
-      <ul class="adv-profile-links">
+      <ul class="dev-advocate-profile-links">
         {{ range . }}
           {{ $display := .label | default (index $kindLabels .kind) | default .kind }}
           <li><a href="{{ .url }}" target="_blank" rel="noopener" title="{{ $display }}">{{ $display }}</a></li>
@@ -40,19 +40,19 @@
   </section>
 
   {{ with $a.bioHtml }}
-  <section class="adv-profile-bio">
+  <section class="dev-advocate-profile-bio">
     <h2>About</h2>
     <!-- security-reviewed: rendered from HANA AdvocateBios; admin-supplied, sanitize-html'd at write path -->
-    <div class="adv-bio-md">{{ . | safeHTML }}</div>
+    <div class="dev-advocate-bio-md">{{ . | safeHTML }}</div>
   </section>
   {{ end }}
 
   {{ with $a.topics }}
-  <section class="adv-profile-topics">
+  <section class="dev-advocate-profile-topics">
     <h2>Topics</h2>
     <ul>
       {{ range . }}
-        <li><a class="adv-chip" href="/developer-advocates/#topic={{ .slug }}">{{ .label }}</a></li>
+        <li><a class="dev-advocate-chip" href="/developer-advocates/#topic={{ .slug }}">{{ .label }}</a></li>
       {{ end }}
     </ul>
   </section>

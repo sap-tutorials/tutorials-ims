@@ -19,23 +19,23 @@ onBeforeUnmount(() => observer?.disconnect());
 </script>
 
 <template>
-  <div v-if="visible" class="adv-sticky-mini">
-    <span class="adv-mini-title">Developer Advocates</span>
-    <span v-if="state.region !== 'ALL'" class="adv-mini-chip">{{ state.region }}</span>
-    <span v-if="state.topic  !== 'ALL'" class="adv-mini-chip">{{ state.topic }}</span>
-    <span v-if="state.q"                  class="adv-mini-chip">"{{ state.q }}"</span>
+  <div v-if="visible" class="dev-advocate-sticky-mini">
+    <span class="dev-advocate-mini-title">Developer Advocates</span>
+    <span v-if="state.region !== 'ALL'" class="dev-advocate-mini-chip">{{ state.region }}</span>
+    <span v-if="state.topic  !== 'ALL'" class="dev-advocate-mini-chip">{{ state.topic }}</span>
+    <span v-if="state.q"                  class="dev-advocate-mini-chip">"{{ state.q }}"</span>
   </div>
 </template>
 
 <style>
-.adv-sticky-mini {
+.dev-advocate-sticky-mini {
   position: fixed; top: 0; left: 0; right: 0; z-index: 50; height: 48px;
   display: flex; align-items: center; gap: 10px; padding: 0 24px;
   background: linear-gradient(120deg, #001a4f, #0a3d91);
   color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.18);
 }
-.adv-mini-title { font-weight: 600; font-size: 13px; letter-spacing: -.01em; }
-.adv-mini-chip {
+.dev-advocate-mini-title { font-weight: 600; font-size: 13px; letter-spacing: -.01em; }
+.dev-advocate-mini-chip {
   font-size: 11px; padding: 3px 9px; border-radius: 999px;
   background: rgba(255,255,255,.18); color: #fff;
 }

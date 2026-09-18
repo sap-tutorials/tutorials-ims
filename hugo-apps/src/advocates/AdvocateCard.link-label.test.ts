@@ -29,7 +29,7 @@ describe('AdvocateCard external link tooltips', () => {
     const wrapper = mount(AdvocateCard, {
       props: { advocate, photoBase: '/api/advocates' },
     });
-    const titles = wrapper.findAll('a.adv-iconbtn').map((a) => a.attributes('title'));
+    const titles = wrapper.findAll('a.dev-advocate-iconbtn').map((a) => a.attributes('title'));
     expect(titles).toContain('SAP Community');
     expect(titles).toContain('Bluesky');
     expect(titles).not.toContain('SapCommunity');
