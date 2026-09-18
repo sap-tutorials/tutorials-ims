@@ -89,7 +89,7 @@ describe('HomepageService.events() — TechEd band (#2312)', () => {
     expect(rows).toHaveLength(0);
   });
 
-  it('flag ON → upcoming TechEd session appears as an EventCard, region-agnostic', async () => {
+  it('flag ON → upcoming TechEd session appears as an EventCard, always virtual (#2417)', async () => {
     await setTechedFlag(true);
     await seedTechEd({ title: 'TechEd Berlin Keynote' });
     const svc = await cds.connect.to('HomepageService');
@@ -99,8 +99,28 @@ describe('HomepageService.events() — TechEd band (#2312)', () => {
     expect(card).toBeTruthy();
     expect(card.eventType).toBe('teched');
     expect(card.url).toBe('https://example.com/teched/session');
-    expect(card.isVirtual).toBe(false);
-    expect(card.region).toBe('EMEA');
+    // #2417 — a BERLIN (in-person) session is still surfaced as VIRTUAL on the
+    // band so it stays out of the EMEA/in-person region lanes.
+    expect(card.isVirtual).toBe(true);
+    expect(card.region).toBe('VIRTUAL');
+    expect(card.location).toBe('Virtual');
+  });
+
+  it('flag ON → BERLIN session is presented as virtual, never as an in-person card (#2417)', async () => {
+    await setTechedFlag(true);
+    await seedTechEd({ title: 'TechEd Berlin Keynote', venue: 'BERLIN', room: 'Hall A' });
+    const svc = await cds.connect.to('HomepageService');
+    // Under any filter the TechEd card is region-agnostic (always merged), but it
+    // must present as virtual — never carrying an in-person region/location that
+    // would slot it into the EMEA/in-person lane (#2417).
+    for (const region of ['ALL', 'EMEA', 'AMERICAS', 'APJ', 'VIRTUAL']) {
+      const rows = await svc.send('events', { region });
+      const card = rows.find(r => r.title === 'TechEd Berlin Keynote');
+      expect(card, `card present under ${region}`).toBeTruthy();
+      expect(card.isVirtual, `isVirtual under ${region}`).toBe(true);
+      expect(card.region, `region under ${region}`).toBe('VIRTUAL');
+      expect(card.location, `location under ${region}`).toBe('Virtual');
+    }
   });
 
   it('flag ON → url falls back to /teched/ when the session has none', async () => {
