@@ -42,3 +42,46 @@ describe('getMyFavorites', () => {
     expect([200, 401]).to.include(status);
   });
 });
+
+describe('toggleSessionFavorite', () => {
+  const S = { sapId: '__test__-fav-toggle' };
+  it('toggles insert -> delete -> insert and returns the flag', async () => {
+    await seedUser(S.sapId);
+    const call = () => project.post('/api/toggleSessionFavorite',
+      { sourceType: 'TECHED', sessionRef: 'toggle-me' }, { auth: { username: S.sapId } });
+
+    const r1 = await call();
+    expect(r1.data.favorited).to.equal(true);
+    const r2 = await call();
+    expect(r2.data.favorited).to.equal(false);
+    const r3 = await call();
+    expect(r3.data.favorited).to.equal(true);
+
+    const { SessionFavorites, Users } = cds.entities(NS);
+    const u = await SELECT.one.from(Users).where({ sapId: S.sapId });
+    const rows = await SELECT.from(SessionFavorites).where({ user_ID: u.ID, sessionRef: 'toggle-me' });
+    expect(rows.length).to.equal(1);
+  });
+
+  it('rejects a bad sourceType with 400', async () => {
+    const res = await project.post('/api/toggleSessionFavorite',
+      { sourceType: 'NOPE', sessionRef: 'x' }, { auth: { username: S.sapId } }).catch((e) => e);
+    expect(res.response?.status ?? res.status).to.equal(400);
+  });
+
+  it('rejects an empty sessionRef with 400', async () => {
+    const res = await project.post('/api/toggleSessionFavorite',
+      { sourceType: 'TECHED', sessionRef: '' }, { auth: { username: S.sapId } }).catch((e) => e);
+    expect(res.response?.status ?? res.status).to.equal(400);
+  });
+
+  it('is IDOR-safe: favorite lands on the JWT user, not any param', async () => {
+    await seedUser(S.sapId);
+    await project.post('/api/toggleSessionFavorite',
+      { sourceType: 'DEVTOBERFEST', sessionRef: 'idor-check' }, { auth: { username: S.sapId } });
+    const { SessionFavorites, Users } = cds.entities(NS);
+    const u = await SELECT.one.from(Users).where({ sapId: S.sapId });
+    const rows = await SELECT.from(SessionFavorites).where({ sessionRef: 'idor-check' });
+    expect(rows.every((r) => r.user_ID === u.ID)).to.equal(true);
+  });
+});

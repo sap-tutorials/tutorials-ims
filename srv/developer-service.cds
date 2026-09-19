@@ -172,6 +172,12 @@ service DeveloperService {
     sessionRef : String;
   };
 
+  // #2393 — toggle a session favorite for the JWT user (never a param — IDOR).
+  @(requires: 'authenticated-user')
+  action toggleSessionFavorite(sourceType : String, sessionRef : String) returns {
+    favorited : Boolean;
+  };
+
   // App Space progress (replaces AEM /bin/sapdx/tutorials/v3/progress/series)
   @(requires: 'authenticated-user')
   function getEventProgress(missionLegacyId : Integer) returns {

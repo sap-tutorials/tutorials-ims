@@ -4,7 +4,7 @@ import { getNextLegacyId } from './lib/legacy-id.js';
 import { hashIp } from './lib/feedback-salt.js';
 import { getMyCompletedTutorials, getMyInProgressTutorials } from './lib/user-progress.js';
 import { PROFILE_VOCAB } from './lib/branch/profile-fields.js';
-import { resolveUserSapId } from './lib/resolve-db-user.js';
+import { resolveUserSapId, provisionDbUser } from './lib/resolve-db-user.js';
 import { resolveUser as khorosResolveUser } from './lib/khoros-client.js';
 import * as khorosCache from './lib/khoros-cache.js';
 import { checkRateLimit } from './lib/per-user-rate-limit.js';
@@ -468,6 +468,30 @@ export default class DeveloperService extends cds.ApplicationService {
         .columns('sourceType', 'sessionRef')
         .where({ user_ID: dbUser.ID });
       return rows.map((r) => ({ sourceType: r.sourceType, sessionRef: r.sessionRef }));
+    });
+
+    this.on('toggleSessionFavorite', async (req) => {
+      const sourceType = String(req.data.sourceType || '');
+      const sessionRef = String(req.data.sessionRef || '').trim();
+      if (!['TECHED', 'DEVTOBERFEST'].includes(sourceType)) {
+        return req.reject(400, 'sourceType must be TECHED or DEVTOBERFEST');
+      }
+      if (!sessionRef) return req.reject(400, 'sessionRef is required');
+
+      const { SessionFavorites } = cds.entities('com.sap.developers.ims');
+      const dbUser = await provisionDbUser(req.user, ['ID']); // get-or-create; resolves from JWT
+      if (!dbUser) return req.reject(401, 'Unauthenticated');
+
+      const existing = await SELECT.one.from(SessionFavorites)
+        .where({ user_ID: dbUser.ID, sourceType, sessionRef });
+      if (existing) {
+        await DELETE.from(SessionFavorites).where({ ID: existing.ID });
+        return { favorited: false };
+      }
+      await INSERT.into(SessionFavorites).entries({
+        ID: cds.utils.uuid(), user_ID: dbUser.ID, sourceType, sessionRef,
+      });
+      return { favorited: true };
     });
 
     this.on('getEventProgress', async (req) => {
