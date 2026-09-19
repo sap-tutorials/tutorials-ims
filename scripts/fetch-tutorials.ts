@@ -16,9 +16,10 @@ import {
   SIDECAR_VERSION,
 } from './lib/content-cache.js'
 import { parseRulesVrEnriched, collectAiGradedSpecs, collectAllRules } from './parsers/rules.js'
-import { expandAiAuthoredQuestions, populateAiAuthoredSiblingMaps, type ExpandStats } from './lib/expand-ai-authored.js'
+import { expandAiAuthoredQuestions, populateAiAuthoredSiblingMaps, isStepSubstantive, type ExpandStats } from './lib/expand-ai-authored.js'
 import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
 import { callQuizModel } from '../srv/lib/ai-quiz-llm.js'
+import { generateChallengeSpec } from '../srv/lib/ai-challenge-spec.js'
 import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './parsers/codecheck.js'
 import { parseAssertBlocks, attachAssertSpecs } from './parsers/assert.js'
 import { computeRecommendations } from './parsers/recommendations.js'
@@ -1196,6 +1197,52 @@ async function main() {
             // the publish handler resolves against the lowercase row.
             writeFileSync(assertPath, JSON.stringify({ slug: t.slug.toLowerCase(), specs: assertSidecar }, null, 2))
           }
+        }
+      }
+
+      // [#2362] json-render challenge widget (research spike). Independent of
+      // rules.vr — the challenge grounds on the step body, not on hand-authored
+      // validation blocks. Build-time gated by the CHALLENGE_WIDGET_ENABLED env
+      // var (the DB feature flag of the same name governs whether the widget is
+      // greenlit; because tutorial HTML is baked at build time, generation is an
+      // env decision here). Attaches the answer-stripped public spec onto
+      // step.challenge (rides in <script id="tutorial-data">) and writes the
+      // freeText reference answers to a server-only sidecar for the
+      // ValidateAnswerSpecs path — mirroring the AI-quiz anti-leak seam above.
+      if (process.env.CHALLENGE_WIDGET_ENABLED === 'true') {
+        const challengeAnswers: Array<{ stepNumber: number; nodeId: string; reference: string }> = []
+        for (const step of steps) {
+          if (!isStepSubstantive(step.content ?? '')) continue
+          // Reuse the AI-quiz build cap as a shared LLM-spend ceiling across the
+          // whole build (challenge + quiz calls both count). Without this a full
+          // rebuild with the flag on would fire one model call per substantive
+          // step across every tutorial, uncapped.
+          if (globalCallStats.calls >= (Number(process.env.AI_AUTHOR_BUILD_CAP) || 200)) {
+            console.warn(`[challenge] hit AI_AUTHOR_BUILD_CAP; skipping ${t.slug} step ${step.number}`)
+            break
+          }
+          globalCallStats.calls++
+          const res = await generateChallengeSpec({
+            stepBody: step.content ?? '',
+            stepNumber: step.number,
+            slug: t.slug,
+            deps: { callModel: callQuizModel },
+          })
+          if (!res.spec) {
+            console.warn(`[challenge] ${t.slug} step ${step.number}: ${res.errorReason ?? 'empty result'}`)
+            continue
+          }
+          step.challenge = res.spec
+          for (const ra of res.referenceAnswers) {
+            challengeAnswers.push({ stepNumber: step.number, nodeId: ra.nodeId, reference: ra.reference })
+          }
+        }
+        if (challengeAnswers.length > 0) {
+          // slug lowercased: Tutorials.slug in HANA is lowercase canonical.
+          writeFileSync(
+            join(CACHE_DIR, `${t.slug.toLowerCase()}.challenge-answers.json`),
+            JSON.stringify({ slug: t.slug.toLowerCase(), answers: challengeAnswers }, null, 2),
+          )
         }
       }
 

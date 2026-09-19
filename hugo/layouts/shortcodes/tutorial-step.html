@@ -18,12 +18,14 @@
     {{- $branchPointId := "" -}}
     {{- $skipIf := "" -}}
     {{- $aiInvolved := false -}}
+    {{- $hasChallenge := false -}}
     {{- range $.Page.Params.steps -}}
       {{- if eq (print .number) $number -}}
         {{- $codeCheck = .codeCheck -}}
         {{- $branchPointId = .branchPointId -}}
         {{- $skipIf = .skipIf -}}
         {{- $aiInvolved = .aiInvolved -}}
+        {{- with .challenge }}{{ if .nodes }}{{ $hasChallenge = true }}{{ end }}{{ end -}}
       {{- end -}}
     {{- end -}}
     <div class="step-validation-mount"
@@ -33,6 +35,14 @@
          data-ai-involved="{{ if $aiInvolved }}true{{ else }}false{{ end }}"
          data-rules-block-id="rules-vr-source"
          {{- end }}></div>
+    {{/* [#2362] json-render challenge widget mount. Emitted only when this step
+         carries a challenge spec in tutorial-data (built only when the widget
+         is enabled at build time). The island queries `.step-challenge-mount`,
+         so an absent marker is a clean no-op — same idiom as the branch/skip
+         mounts below. Kept flush-left after the `}}` (no leading indentation on
+         the emitted line) so Goldmark doesn't treat it as an indented code
+         block. */}}
+    {{- if $hasChallenge }}<div class="step-challenge-mount" data-step="{{ $number }}"></div>{{ end }}
     {{- partial "codecheck-mount.html" (dict
       "slug"       $.Page.Params.slug
       "stepNumber" $number
