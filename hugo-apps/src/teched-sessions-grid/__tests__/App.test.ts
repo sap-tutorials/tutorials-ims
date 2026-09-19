@@ -116,26 +116,41 @@ describe('TechEd sessions grid', () => {
     expect(wrapper.text()).not.toContain('AI on BTP');
   });
 
-  it('reads the embedded #teched-data blob without fetching', async () => {
-    // Bake the blob the way hugo/layouts/teched/list.html does: the WHOLE feed
-    // object under id="teched-data". The island must consume it and skip the
-    // /build/teched network fallback entirely (the fallback 404 is what
-    // produced the "Could not load TechEd sessions: teched 404" bug).
+  it('prefers the live /build/teched feed over the embedded blob (no stale request-time fields)', async () => {
+    // #2312: request-time fields (relatedDevtoberfestSessions) are computed per
+    // request and are always empty in the baked blob. The island must fetch the
+    // live feed FIRST so those fields are current; the blob is fallback-only.
+    const staleFeed = { ...feed, sessions: feed.sessions.map((s: any) => ({ ...s, title: 'STALE ' + s.title })) };
+    const el = document.createElement('script');
+    el.id = 'teched-data';
+    el.type = 'application/json';
+    el.textContent = JSON.stringify(staleFeed);
+    document.body.appendChild(el);
+    // beforeEach already mocks fetch to resolve the (fresh) feed.
+
+    const wrapper = mount(App);
+    await flushPromises();
+
+    // Fresh titles from the fetch, NOT the "STALE …" blob titles.
+    expect(wrapper.text()).toContain('AI on BTP');
+    expect(wrapper.text()).not.toContain('STALE AI on BTP');
+    expect(global.fetch).toHaveBeenCalled();
+  });
+
+  it('falls back to the embedded #teched-data blob when the fetch fails', async () => {
+    // CAP down / network error: the island must still render from the baked blob.
+    global.fetch = vi.fn(() => Promise.reject(new Error('network down'))) as any;
     const el = document.createElement('script');
     el.id = 'teched-data';
     el.type = 'application/json';
     el.textContent = JSON.stringify(feed);
     document.body.appendChild(el);
-    const fetchSpy = vi.fn();
-    global.fetch = fetchSpy as any;
 
     const wrapper = mount(App);
     await flushPromises();
 
     expect(wrapper.text()).toContain('AI on BTP');
-    expect(wrapper.text()).toContain('CAP deep dive');
     expect(wrapper.findAll('article').length).toBe(2);
-    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('shows an error state when the feed fails to load', async () => {
@@ -354,10 +369,11 @@ describe('TechEd sessions grid', () => {
     expect(wrapper.text()).toContain('Ada Lovelace');
   });
 
-  it('falls back to /build/teched when #teched-data contains literal "null" (missing hugo/data/teched.json)', async () => {
+  it('renders from the live feed even when #teched-data is the literal "null" blob', async () => {
     // Hugo's jsonify of a nil .Site.Data.teched emits the string "null" — truthy
-    // and non-empty, but JSON.parse("null") returns null. loadFeed() must skip the
-    // blob and fall through to the network fetch (mocked in beforeEach to return feed).
+    // and non-empty, but JSON.parse("null") returns null. With fetch-first loading
+    // the live feed wins anyway; this guards that a "null" blob never breaks the
+    // fallback path (embeddedFeed() treats it as absent).
     const el = document.createElement('script');
     el.id = 'teched-data';
     el.type = 'application/json';

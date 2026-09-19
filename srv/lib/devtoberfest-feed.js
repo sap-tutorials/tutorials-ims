@@ -3,6 +3,16 @@
 
 const VISIBLE_STATUSES = new Set(['confirmed', 'completed']);
 
+// Forward-crosslink attach key (#2312). The KG DevtoberfestSessions.ID and the
+// planner-facade Session.ID are distinct UUID namespaces; SESSIONCODE is the one
+// identifier shared verbatim by both. Must stay in lockstep with dtfSessionKey()
+// in teched-devtoberfest-crosslink.js (kept inline here to preserve this module's
+// no-cds/db purity). Trimmed + uppercased; empty → null.
+function dtfSessionKey(sessionCode) {
+  const v = (sessionCode ?? '').toString().trim().toUpperCase();
+  return v || null;
+}
+
 // A planner Session/Activity is publicly visible only when its status is
 // Confirmed or Completed. Trimmed + case-insensitive (facade STATUS is free-text
 // String(5000)). Missing/empty status fails closed (hidden).
@@ -35,10 +45,11 @@ function assembleFeed({ sessions = [], activities = [], tracks = [], editions = 
   const trackById = new Map(tracks.map((t) => [t.ID, t]));
   const mapTrack = (id) => trackById.get(id) || {};
   // Devtoberfest → TechEd cross-links (issue #2312, feature-flag gated + fail-open;
-  // an empty map — flag OFF, concept links absent — yields []). Keyed by
-  // Devtoberfest session ID: sessions are first-class KG nodes with their own
-  // concept links (#2311), so the match is session↔session, not via the activity.
-  const relatedTechEdFor = (session) => relatedTechEdBySession.get(session.ID) || [];
+  // an empty map — flag OFF, concept links absent — yields []). Keyed by the
+  // Devtoberfest session CODE: sessions are first-class KG nodes with their own
+  // concept links (#2311), but the KG row's ID is a distinct UUID from the facade
+  // session ID, so the attach bridges on SESSIONCODE (the shared identifier).
+  const relatedTechEdFor = (session) => relatedTechEdBySession.get(dtfSessionKey(session.SESSIONCODE)) || [];
   const speakerById = new Map(speakers.map((sp) => [sp.ID, sp]));
   const speakersBySession = new Map();
   for (const link of sessionSpeakers) {
