@@ -32,6 +32,11 @@ on:
         required: false
         default: '200'
         type: string
+      challenge-widget-enabled:
+        description: '[#2362 research spike] Generate AI-authored json-render challenge panels per step and bake them into tutorial-data. DEV-only. Shares the ai-author-build-cap LLM ceiling. Default false — the widget ships dark until this is set true on a rebuild.'
+        required: false
+        default: false
+        type: boolean
       force-cap-refetch:
         description: 'Bypass the .tutorial-cache/ CAP catalog snapshot (24h TTL) and re-fetch /build/catalog fresh. Set true after fixing data the catalog reads from (publish flag, slugs, etc.) so the rebuild reflects the change in the same run instead of waiting for the cache to expire.'
         required: false
@@ -477,6 +482,12 @@ jobs:
           # AI expansion. The summary step still emits the [ai-author]
           # telemetry line so the CI invariant regex keeps matching.
           AI_AUTHOR_BUILD_CAP: ${{ inputs.ai-author-build-cap }}
+          # [#2362 research spike] When true (manual DEV dispatch only —
+          # repository_dispatch has no inputs, so this stays unset/off there),
+          # fetch-tutorials generates a json-render challenge panel per
+          # substantive step and bakes it into tutorial-data. Shares the
+          # AI_AUTHOR_BUILD_CAP ceiling above. Default off.
+          CHALLENGE_WIDGET_ENABLED: ${{ inputs.challenge-widget-enabled == true && 'true' || '' }}
           CHAT_DEPLOYMENT_ID: ${{ secrets.CHAT_DEPLOYMENT_ID }}
           # Workstream C: enable the generated-content fast path. Uses the
           # content_cache_enabled output computed in the mode step (covers
