@@ -517,6 +517,14 @@ service AdminService {
       started : Boolean;
       reason  : String;
     };
+    // #2426: operator-grade trigger for the LLM concept-definition generator.
+    // Fire-and-forget invocation of the generate-concept-definitions job with
+    // manualTrigger to bypass the feature-flag gate. Writes DRAFT definitions
+    // only — publishing still goes through the admin review gate.
+    action generateConceptDefinitions(commit: Boolean) returns {
+      started : Boolean;
+      reason  : String;
+    };
     // Phase 4.8 (#765): operator-grade CommunityEvents corpus bootstrap
     // (Khoros CodeJams + Devtoberfest RSS). Fire-and-forget invocation
     // of the twice-weekly fetch-community-events cron with

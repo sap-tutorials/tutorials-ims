@@ -833,6 +833,7 @@ entity KnowledgeGraphSettings : cuid, managed {
   mergeSimThresholdExtract   : Decimal(3, 2) @assert.range: [0.01, 1.00];
   onDemandExtractionEnabled  : Boolean default false;
   learningPathEnabled        : Boolean default false;  // learning-path reasoner, DEV-only
+  conceptDefinitionsEnabled  : Boolean default false;  // #2426 LLM concept-definition generator, DEV-first
 }
 
 entity TutorialEmbedding {

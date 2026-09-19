@@ -969,6 +969,21 @@ export function registerJobs() {
     },
   });
 
+  // #2426: weekly LLM concept-definition generator. Internally gated on the
+  // conceptDefinitionsEnabled flag (default OFF, DEV-first) — a scheduled run
+  // is a no-op until an admin enables it. Writes DRAFT definitions only;
+  // publishing goes through the admin review gate. Off-cluster minute (:37).
+  registerJob({
+    jobName: 'generate-concept-definitions',
+    schedule: '37 5 * * 4',          // Thu 05:37 UTC
+    ttlMs: 45 * 60 * 1000,
+    description: 'Generate grounded Markdown definitions for KG concepts as DRAFTs for admin review (weekly, flag-gated)',
+    fn: async (logId, opts) => {
+      const { runGenerateConceptDefinitions } = await import('./generate-concept-definitions-job.js');
+      return runGenerateConceptDefinitions(logId, opts);
+    },
+  });
+
   // #2311: twice-weekly cron ingesting rich Devtoberfest Planner sessions
   // (cross-container facade) into the KG as DevtoberfestSession nodes. Double-
   // gated inside the job (KG master switch + KG_DEVTOBERFEST_SESSIONS_ENABLED)

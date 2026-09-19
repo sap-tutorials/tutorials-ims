@@ -36,6 +36,7 @@ const DEFAULTS = {
   mergeSimThresholdExtract: 0.85,
   onDemandExtractionEnabled: false,   // #948
   learningPathEnabled: false,         // kg-learning-path
+  conceptDefinitionsEnabled: false,   // #2426
 };
 
 /** Read the singleton row, tolerant of build-pipeline contexts where
@@ -51,7 +52,7 @@ async function readRow() {
     try {
       const db = await cds.connect.to('db');
       const rows = await db.run(
-        'SELECT enabled, extractBuildCap, mergeSimThreshold, mergeSimThresholdExtract, onDemandExtractionEnabled, LEARNINGPATHENABLED ' +
+        'SELECT enabled, extractBuildCap, mergeSimThreshold, mergeSimThresholdExtract, onDemandExtractionEnabled, LEARNINGPATHENABLED, CONCEPTDEFINITIONSENABLED ' +
         'FROM COM_SAP_DEVELOPERS_IMS_KNOWLEDGEGRAPHSETTINGS LIMIT 1'
       );
       return rows?.[0] ?? null;
@@ -138,6 +139,11 @@ export async function resolveKnowledgeGraphSettings() {
       pick(row, 'learningPathEnabled', 'LEARNINGPATHENABLED')
       ?? envFlag('KNOWLEDGE_GRAPH_LEARNING_PATH_ENABLED')
       ?? DEFAULTS.learningPathEnabled
+    ),
+    conceptDefinitionsEnabled: Boolean(
+      pick(row, 'conceptDefinitionsEnabled', 'CONCEPTDEFINITIONSENABLED')
+      ?? envFlag('KG_CONCEPT_DEFINITIONS_ENABLED')
+      ?? DEFAULTS.conceptDefinitionsEnabled
     ),
   };
 

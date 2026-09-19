@@ -3222,6 +3222,34 @@ export default class AdminService extends cds.ApplicationService {
       return { started: true, reason: null };
     });
 
+    // #2426: fire-and-forget trigger for the LLM concept-definition generator.
+    // Same shape as seedHelpDocs — manualTrigger bypasses the feature-flag
+    // gate; the job writes DRAFT definitions for admin review, never publishes.
+    this.on('generateConceptDefinitions', async (req) => {
+      const commit = !!req.data?.commit;
+      if (!commit) {
+        return { started: false, reason: 'dry-run (pass commit=true to actually generate)' };
+      }
+      const userId = req.user?.id;
+      setImmediate(() => {
+        runJobByName('generate-concept-definitions', {
+          manualTrigger: true,
+          user: userId,
+        }).catch((err) => {
+          cds.log('admin-service').error(`generateConceptDefinitions job failed: ${err.message ?? err}`);
+        });
+      });
+      setImmediate(() => {
+        auditEvent('kg.concept-definitions.generate', {
+          user: userId,
+          committed: true,
+        }).catch((err) => {
+          cds.log('admin-service').warn(`generateConceptDefinitions audit emit failed: ${err.message ?? err}`);
+        });
+      });
+      return { started: true, reason: null };
+    });
+
     // Phase 4.8 (#765): operator-grade CommunityEvents corpus bootstrap
     // (Khoros CodeJams + Devtoberfest RSS). Fire-and-forget sibling of
     // seedHelpDocs — same shape, different cron. Audit emission uses the
