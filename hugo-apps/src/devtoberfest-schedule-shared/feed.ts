@@ -1,4 +1,4 @@
-import type { Feed, MyCompletions } from './types';
+import type { Feed, MyCompletions, MyFavorites } from './types';
 
 const opts: RequestInit = { headers: { Accept: 'application/json' }, credentials: 'include' };
 
@@ -86,4 +86,19 @@ export async function fetchMyCompletions(editionId?: string): Promise<MyCompleti
     if (ct && !ct.includes('application/json')) return { authenticated: false };
     return await r.json();
   } catch { return { authenticated: false }; }
+}
+
+// #2393 — the JWT user's favorited sessions (both event families). Mirrors
+// fetchMyCompletions' degrade-to-anonymous guards: 401/non-2xx/non-JSON/throw
+// all collapse to an empty, unauthenticated overlay so public pages still render.
+export async function fetchMyFavorites(): Promise<MyFavorites> {
+  try {
+    const r = await fetch('/api/getMyFavorites()', opts);
+    if (!r.ok) return { authenticated: false, favorites: [] };
+    const ct = r.headers?.get?.('content-type');
+    if (ct && !ct.includes('application/json')) return { authenticated: false, favorites: [] };
+    const body = await r.json();
+    const rows = body?.value ?? body ?? [];
+    return { authenticated: true, favorites: Array.isArray(rows) ? rows : [] };
+  } catch { return { authenticated: false, favorites: [] }; }
 }
