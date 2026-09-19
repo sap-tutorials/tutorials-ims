@@ -4,8 +4,25 @@
       <a href="/">Home</a> / <a href="/concepts/">Concepts</a> / <%= name %>
     </nav>
     <h1 class="concept-page__title"><%= name %></h1>
-    <% if (description) { %><p class="concept-page__description"><%= description %></p><% } %>
   </header>
+
+  <% if (description && description.trim()) { %>
+  <%# #2426: real explanatory prose ABOVE the link tiles — markdown rendered %>
+  <%# via renderMarkdown (markdown-it html:false, XSS-safe). Only reaches here %>
+  <%# when the description is APPROVED (gated upstream in the payload). %>
+  <section class="concept-page__definition" aria-label="Definition">
+    <%- renderMarkdown(description) %>
+  </section>
+  <% } %>
+
+  <aside class="concept-page__about">
+    <details>
+      <summary>About this page</summary>
+      <p>This page brings together SAP tutorials, documentation, and related
+         concepts for <strong><%= name %></strong>, drawn from the SAP Developer
+         knowledge graph. <a href="/concepts/">Browse all concepts</a>.</p>
+    </details>
+  </aside>
 
   <%
     // External-link card helper — mirrors the safe-URL link/no-link

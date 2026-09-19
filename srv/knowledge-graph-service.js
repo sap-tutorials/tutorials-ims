@@ -841,7 +841,7 @@ export default cds.service.impl(async function () {
   // See test/unit/kg-concepts-update-guard.test.js for the editable-surface
   // smoke test and test/hybrid/kg-graphql-write-guard.test.js for the #1230
   // anonymous-mutation regression coverage.
-  const CONCEPTS_PATCH_ALLOWLIST = new Set(['name', 'description']);
+  const CONCEPTS_PATCH_ALLOWLIST = new Set(['name', 'description', 'descriptionStatus']);
   this.before('UPDATE', 'Concepts', (req) => {
     // Assert the admin scope imperatively so anonymous PATCH returns 403
     // before the field allowlist runs.
@@ -854,7 +854,24 @@ export default cds.service.impl(async function () {
       if (key === 'createdAt' || key === 'createdBy') continue;
       if (key === 'modifiedAt' || key === 'modifiedBy') continue;
       if (CONCEPTS_PATCH_ALLOWLIST.has(key)) continue;
+      // #2426 audit fields are stamped by this handler, never client-set.
+      if (key === 'descriptionReviewedAt' || key === 'descriptionReviewedBy') {
+        return req.reject(403, `Field '${key}' is set automatically on Concepts`);
+      }
       return req.reject(403, `Field '${key}' is not editable on Concepts`);
+    }
+    // #2426: an admin editing the description by hand IS the review — mark it
+    // APPROVED and stamp the audit trail (unless the same PATCH already sets an
+    // explicit descriptionStatus, e.g. an admin flipping it back to DRAFT).
+    // Flipping descriptionStatus to APPROVED (the review action) also stamps.
+    const now = new Date().toISOString();
+    const who = req.user?.id || 'unknown';
+    if (data.description !== undefined && data.descriptionStatus === undefined) {
+      data.descriptionStatus = 'APPROVED';
+    }
+    if (data.descriptionStatus === 'APPROVED') {
+      data.descriptionReviewedAt = now;
+      data.descriptionReviewedBy = who;
     }
   });
 
@@ -1888,7 +1905,34 @@ export default cds.service.impl(async function () {
     if (!count) return req.reject(404, `Concept ${conceptId} not found`);
   });
 
-  // ─── publishAllConcepts — #1080 bulk publish ───────────────────────────
+  // ─── approveConceptDefinition / rejectConceptDefinition — #2426 ────────
+  // Bound review actions for LLM-drafted definitions. approve marks the
+  // description APPROVED (so it renders on-page) and stamps the audit trail;
+  // reject flips it back to DRAFT (stays off-page). Same binding as
+  // publishConcept (req.params[0].ID is the bound row).
+  this.on('approveConceptDefinition', 'Concepts', async (req) => {
+    const { Concepts } = cds.entities(NAMESPACE);
+    const conceptId = req.params?.[0]?.ID;
+    if (!conceptId) return req.reject(400, 'Bound action invoked without entity context');
+    const count = await UPDATE(Concepts)
+      .set({
+        descriptionStatus: 'APPROVED',
+        descriptionReviewedAt: new Date().toISOString(),
+        descriptionReviewedBy: req.user?.id ?? 'anonymous',
+      })
+      .where({ ID: conceptId });
+    if (!count) return req.reject(404, `Concept ${conceptId} not found`);
+  });
+
+  this.on('rejectConceptDefinition', 'Concepts', async (req) => {
+    const { Concepts } = cds.entities(NAMESPACE);
+    const conceptId = req.params?.[0]?.ID;
+    if (!conceptId) return req.reject(400, 'Bound action invoked without entity context');
+    const count = await UPDATE(Concepts)
+      .set({ descriptionStatus: 'DRAFT', descriptionReviewedAt: null, descriptionReviewedBy: null })
+      .where({ ID: conceptId });
+    if (!count) return req.reject(404, `Concept ${conceptId} not found`);
+  });
   //
   // Sets publishedAt=$now, publishedBy=<user> on every ACTIVE Concepts
   // row where publishedAt IS NULL. One UPDATE statement — idempotent

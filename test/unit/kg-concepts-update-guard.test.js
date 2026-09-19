@@ -62,7 +62,7 @@ describe('PATCH /graph/Concepts — editable surface', () => {
     expect(row.name).toBe('Updated Name');
   });
 
-  it('PATCH description succeeds and persists', async () => {
+  it('PATCH description succeeds, persists, and auto-approves the definition (#2426)', async () => {
     const res = await project.patch(
       `/graph/Concepts(${TEST_ID})`,
       { description: 'New description' },
@@ -71,8 +71,50 @@ describe('PATCH /graph/Concepts — editable surface', () => {
     expect([200, 204]).toContain(res.status);
 
     const { Concepts } = cds.entities('com.sap.developers.ims');
-    const row = await SELECT.one.from(Concepts).columns('description').where({ ID: TEST_ID });
+    const row = await SELECT.one.from(Concepts)
+      .columns('description', 'descriptionStatus', 'descriptionReviewedAt', 'descriptionReviewedBy')
+      .where({ ID: TEST_ID });
     expect(row.description).toBe('New description');
+    // A hand-edit IS the review: status flips to APPROVED and audit is stamped.
+    expect(row.descriptionStatus).toBe('APPROVED');
+    expect(row.descriptionReviewedAt).toBeTruthy();
+    expect(row.descriptionReviewedBy).toBeTruthy();
+  });
+
+  it('PATCH descriptionStatus=APPROVED stamps audit; client cannot set audit fields (#2426)', async () => {
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+    // Reset to DRAFT + clear audit.
+    await UPDATE(Concepts)
+      .set({ descriptionStatus: 'DRAFT', descriptionReviewedAt: null, descriptionReviewedBy: null })
+      .where({ ID: TEST_ID });
+
+    const res = await project.patch(
+      `/graph/Concepts(${TEST_ID})`,
+      { descriptionStatus: 'APPROVED' },
+      adminAuth,
+    );
+    expect([200, 204]).toContain(res.status);
+    const row = await SELECT.one.from(Concepts)
+      .columns('descriptionStatus', 'descriptionReviewedAt', 'descriptionReviewedBy')
+      .where({ ID: TEST_ID });
+    expect(row.descriptionStatus).toBe('APPROVED');
+    expect(row.descriptionReviewedAt).toBeTruthy();
+    expect(row.descriptionReviewedBy).toBeTruthy();
+
+    // The audit fields are @Common.FieldControl:#ReadOnly, so the OData
+    // adapter strips a client-supplied value before the handler runs — a
+    // forged descriptionReviewedBy is a silent no-op, not a persisted value.
+    // (The service guard also rejects it on the programmatic path.)
+    const before = await SELECT.one.from(Concepts).columns('descriptionReviewedBy').where({ ID: TEST_ID });
+    const rej = await project.patch(
+      `/graph/Concepts(${TEST_ID})`,
+      { descriptionReviewedBy: 'forged@evil.com' },
+      { ...adminAuth, validateStatus: () => true },
+    );
+    expect([200, 204]).toContain(rej.status);
+    const after = await SELECT.one.from(Concepts).columns('descriptionReviewedBy').where({ ID: TEST_ID });
+    expect(after.descriptionReviewedBy).toBe(before.descriptionReviewedBy);
+    expect(after.descriptionReviewedBy).not.toBe('forged@evil.com');
   });
 
   it('PATCH name to null succeeds (clearing allowed for editable field)', async () => {

@@ -14,9 +14,15 @@ describe('buildConceptsPayload', () => {
       cds.entities('com.sap.developers.ims')
 
     await INSERT.into(Concepts).entries([
-      { slug: 'cap-handlers', name: 'CAP handlers', description: 'desc 1',
+      { slug: 'cap-handlers', name: 'CAP handlers', description: 'desc 1', descriptionStatus: 'APPROVED',
         status: 'ACTIVE', publishedAt: new Date().toISOString(), publishedBy: 'admin@sap.com' },
-      { slug: 'cap-services', name: 'CAP services', description: 'desc 2',
+      { slug: 'cap-services', name: 'CAP services', description: 'desc 2', descriptionStatus: 'APPROVED',
+        status: 'ACTIVE', publishedAt: new Date().toISOString(), publishedBy: 'admin@sap.com' },
+      // #2426 gate fixtures: DRAFT (LLM, unreviewed) and null (never drafted)
+      // are published concepts whose description must NOT reach the payload.
+      { slug: 'draft-desc', name: 'Draft desc', description: 'unreviewed LLM text', descriptionStatus: 'DRAFT',
+        status: 'ACTIVE', publishedAt: new Date().toISOString(), publishedBy: 'admin@sap.com' },
+      { slug: 'nulldesc', name: 'Null desc', description: 'leftover text', descriptionStatus: null,
         status: 'ACTIVE', publishedAt: new Date().toISOString(), publishedBy: 'admin@sap.com' },
       { slug: 'never', name: 'never', status: 'ACTIVE' },
       { slug: 'vetoed-but-published', name: 'Vetoed', description: 'should be excluded',
@@ -50,7 +56,18 @@ describe('buildConceptsPayload', () => {
   it('returns only published concepts', async () => {
     const payload = await buildConceptsPayload(cds.db)
     const slugs = payload.concepts.map(c => c.slug).sort()
-    expect(slugs).toEqual(['cap-handlers', 'cap-services'])
+    expect(slugs).toEqual(['cap-handlers', 'cap-services', 'draft-desc', 'nulldesc'])
+  })
+
+  it('emits description only when descriptionStatus is APPROVED (#2426 gate)', async () => {
+    const payload = await buildConceptsPayload(cds.db)
+    const byslug = Object.fromEntries(payload.concepts.map(c => [c.slug, c]))
+    // APPROVED → real text
+    expect(byslug['cap-handlers'].description).toBe('desc 1')
+    // DRAFT (unreviewed LLM) → zeroed, never reaches the rendered page
+    expect(byslug['draft-desc'].description).toBe('')
+    // null (never drafted) → zeroed even though a stale column value exists
+    expect(byslug['nulldesc'].description).toBe('')
   })
 
   it('populates teaches[] with tutorials teaching the concept', async () => {

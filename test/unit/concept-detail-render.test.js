@@ -74,6 +74,51 @@ describe('renderConceptDetail', () => {
     expect(result.body).toContain('by Alice');
   });
 
+  it('renders the description as markdown in a definition section above the tiles (#2426)', () => {
+    const concept = {
+      slug: 'abap-sql',
+      name: 'ABAP SQL',
+      description: 'ABAP SQL reads and changes data. See the [ABAP Keyword Documentation](https://help.sap.com/doc/abapdocu_latest_index_htm).',
+      ...EMPTY_REL,
+    };
+    const result = renderConceptDetail(concept, EMPTY_PHASE4);
+    // markdown → HTML: the link becomes a real anchor, not literal [..](..) syntax
+    expect(result.body).toContain('<section class="concept-page__definition"');
+    expect(result.body).toContain('href="https://help.sap.com/doc/abapdocu_latest_index_htm"');
+    expect(result.body).toContain('>ABAP Keyword Documentation</a>');
+    expect(result.body).not.toContain('[ABAP Keyword Documentation]');
+    // definition section precedes the first card-grid section
+    const defIdx = result.body.indexOf('concept-page__definition');
+    const gridIdx = result.body.indexOf('concept-card-grid');
+    expect(defIdx).toBeGreaterThan(-1);
+    if (gridIdx > -1) expect(defIdx).toBeLessThan(gridIdx);
+  });
+
+  it('always renders the "About this page" affordance (#2426)', () => {
+    const concept = { slug: 'cap', name: 'CAP', description: '', ...EMPTY_REL };
+    const result = renderConceptDetail(concept, EMPTY_PHASE4);
+    expect(result.body).toContain('class="concept-page__about"');
+    expect(result.body).toContain('About this page');
+    expect(result.body).toContain('href="/concepts/"');
+    // no definition section when description is empty
+    expect(result.body).not.toContain('concept-page__definition');
+  });
+
+  it('escapes raw HTML in the markdown description — XSS safe (#2426)', () => {
+    const concept = {
+      slug: 'x',
+      name: 'X',
+      description: 'safe text <script>alert(1)</script> and <img src=x onerror=alert(2)>',
+      ...EMPTY_REL,
+    };
+    const result = renderConceptDetail(concept, EMPTY_PHASE4);
+    // markdown-it html:false escapes raw tags — no executable markup ships
+    expect(result.body).not.toContain('<script>');
+    expect(result.body).not.toContain('<img src=x onerror');
+    expect(result.body).toContain('&lt;script&gt;');
+    expect(result.body).toContain('safe text');
+  });
+
   it('emits the no-link card variant for an unsafe (non-http) url', () => {
     const concept = { slug: 'cap', name: 'CAP', description: 'x', ...EMPTY_REL };
     const phase4 = {

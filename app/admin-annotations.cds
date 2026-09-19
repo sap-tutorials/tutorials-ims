@@ -2732,7 +2732,13 @@ using KnowledgeGraphService from '../srv/knowledge-graph-service';
 annotate KnowledgeGraphService.Concepts with {
   slug            @Common.Label: 'Slug'           @Common.FieldControl: #ReadOnly;
   name            @Common.Label: 'Name';
-  description     @Common.Label: 'Description'    @Common.MultiLineText;
+  description     @Common.Label: 'Description (Markdown)'  @Common.MultiLineText;
+  // #2426 — LLM-draft review gate. Editable so an admin can flip DRAFT⇄APPROVED
+  // by hand; the approve/reject toolbar actions do it in one click + stamp audit.
+  // A hand-edit of `description` auto-sets this to APPROVED (service before-hook).
+  descriptionStatus     @Common.Label: 'Definition Status';
+  descriptionReviewedAt @Common.Label: 'Reviewed'      @Common.FieldControl: #ReadOnly;
+  descriptionReviewedBy @Common.Label: 'Reviewed By'   @Common.FieldControl: #ReadOnly;
   status          @Common.Label: 'Status'         @Common.FieldControl: #ReadOnly;
   extractionCount @Common.Label: 'Extractions'    @Common.FieldControl: #ReadOnly;
   firstSeenAt     @Common.Label: 'First Seen'     @Common.FieldControl: #ReadOnly;
@@ -2758,7 +2764,7 @@ annotate KnowledgeGraphService.Concepts with @(
     Description    : { Value: slug }
   },
 
-  UI.SelectionFields: [ status, isPublished, slug, isolated ],
+  UI.SelectionFields: [ status, isPublished, descriptionStatus, slug, isolated ],
 
   UI.LineItem: [
     { $Type: 'UI.DataField', Value: slug,            Label: 'Slug' },
@@ -2788,6 +2794,15 @@ annotate KnowledgeGraphService.Concepts with @(
       Criticality: { $edmJson: { $If: [ { $Path: 'isolated' }, 1, 0 ] } }
     },
     { $Type: 'UI.DataField', Value: extractionCount, Label: 'Extractions' },
+    // #2426 — Definition Status column. Positive(3) when APPROVED, Critical(2)
+    // when DRAFT (needs review), Neutral(0) when null (never drafted).
+    {
+      $Type: 'UI.DataField',
+      Value: descriptionStatus,
+      Label: 'Definition',
+      Criticality: { $edmJson: { $If: [ { $Eq: [ { $Path: 'descriptionStatus' }, 'APPROVED' ] }, 3,
+                     { $If: [ { $Eq: [ { $Path: 'descriptionStatus' }, 'DRAFT' ] }, 2, 0 ] } ] } }
+    },
     { $Type: 'UI.DataField', Value: lastSeenAt,      Label: 'Last Seen' },
     // ID exposed last so admins can copy the canonical UUID for paste-into-mergeConcepts
     // workflow without dominating the table layout.
@@ -2799,6 +2814,9 @@ annotate KnowledgeGraphService.Concepts with @(
       { $Type: 'UI.DataField', Value: slug,            Label: 'Slug' },
       { $Type: 'UI.DataField', Value: name,            Label: 'Name' },
       { $Type: 'UI.DataField', Value: description,     Label: 'Description' },
+      { $Type: 'UI.DataField', Value: descriptionStatus,     Label: 'Definition Status' },
+      { $Type: 'UI.DataField', Value: descriptionReviewedAt, Label: 'Reviewed' },
+      { $Type: 'UI.DataField', Value: descriptionReviewedBy, Label: 'Reviewed By' },
       { $Type: 'UI.DataField', Value: status,          Label: 'Status' },
       { $Type: 'UI.DataField', Value: extractionCount, Label: 'Extractions' },
       { $Type: 'UI.DataField', Value: firstSeenAt,     Label: 'First Seen' },
@@ -2836,6 +2854,17 @@ annotate KnowledgeGraphService.Concepts with @(
       $Type : 'UI.DataFieldForAction',
       Action: 'KnowledgeGraphService.unpublishConcept',
       Label : 'Unpublish'
+    },
+    // #2426 — one-click review of an LLM-drafted definition (bound, row-context).
+    {
+      $Type : 'UI.DataFieldForAction',
+      Action: 'KnowledgeGraphService.approveConceptDefinition',
+      Label : 'Approve Definition'
+    },
+    {
+      $Type : 'UI.DataFieldForAction',
+      Action: 'KnowledgeGraphService.rejectConceptDefinition',
+      Label : 'Reject Definition'
     }
   ],
 

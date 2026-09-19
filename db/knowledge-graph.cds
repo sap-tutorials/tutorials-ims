@@ -23,7 +23,10 @@ type EdgePredicate : String(20) enum {
 entity Concepts : cuid, managed {
   slug            : String(80) @assert.unique;     // 'cap-handlers'
   name            : String(120);                    // 'CAP Service Handlers'
-  description     : String(500);                    // LLM-generated, admin-editable
+  description     : String(5000);                   // #2426: prose definition (markdown w/ inline links). Bounded String (NOT LargeString) so it stays inline-selectable in buildConceptsPayload without a LOB locator. Admin-authored or LLM-drafted.
+  descriptionStatus : String(10);                   // #2426: null (never drafted) | 'DRAFT' (LLM, unreviewed) | 'APPROVED'. Only APPROVED renders on-page (gate in published-concepts-query.js).
+  descriptionReviewedAt : Timestamp;                // #2426: audit — set when APPROVED
+  descriptionReviewedBy : String(255);              // #2426: audit — approving admin upn
   embedding       : LargeBinary;                    // legacy raw Float32-LE BLOB (retained for rollback per #1113 spec)
   embeddingVec    : Vector(1536);                   // #1113: HANA-native REAL_VECTOR for server-side cosine
   status          : String(20) default 'ACTIVE';    // ACTIVE | MERGED | VETOED | RETIRED (#1115: orphan auto-retirement)

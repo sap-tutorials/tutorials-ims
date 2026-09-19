@@ -191,6 +191,30 @@ describe('conceptMetaDescription (#1795)', () => {
     expect(d.trim()).not.toBe('');
   });
 
+  it('strips markdown syntax from a real description before <meta> (#2426)', () => {
+    const d = conceptMetaDescription({
+      name: 'ABAP SQL',
+      description: 'ABAP SQL reads data. See the [ABAP Keyword Documentation](https://help.sap.com/x) and `SELECT` **statements**.',
+    });
+    // No markdown syntax leaks into the meta description
+    expect(d).not.toContain('](');
+    expect(d).not.toContain('](https');
+    expect(d).not.toContain('**');
+    expect(d).not.toContain('`');
+    // Link label + surrounding prose survive as plain text
+    expect(d).toContain('ABAP Keyword Documentation');
+    expect(d).toContain('SELECT');
+    expect(d).toContain('statements');
+  });
+
+  it('collapses newlines from a multi-line markdown description (#2426)', () => {
+    const d = conceptMetaDescription({ name: 'X', description: '# Heading\n\nFirst line.\n\nSecond line.' });
+    expect(d).not.toContain('\n');
+    expect(d).not.toContain('#');
+    expect(d).toContain('First line.');
+    expect(d).toContain('Second line.');
+  });
+
   it('truncates over-long descriptions to ~160 chars with an ellipsis', () => {
     const long = 'x'.repeat(400);
     const d = conceptMetaDescription({ name: 'X', description: long });

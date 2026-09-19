@@ -67,7 +67,7 @@ export async function buildConceptsPayload(db) {
   // 1. Pull the publishable concepts.
   const published = await db.run(
     SELECT.from(PublishedConcepts)
-      .columns('ID', 'slug', 'name', 'description')
+      .columns('ID', 'slug', 'name', 'description', 'descriptionStatus')
       .orderBy('slug')
   );
 
@@ -497,7 +497,11 @@ export async function buildConceptsPayload(db) {
   const concepts = published.map(c => ({
     slug: c.slug.toLowerCase(),
     name: c.name,
-    description: c.description || '',
+    // #2426: on-page definition renders ONLY when an admin has approved it.
+    // DRAFT (unreviewed LLM output) and null are zeroed here — before the text
+    // can reach the rendered BLOB, its content hash, or the <meta> synthesis —
+    // so unreviewed AI text is structurally unpublishable.
+    description: c.descriptionStatus === 'APPROVED' ? (c.description || '') : '',
     teaches: teachesByConcept[c.ID] || [],
     requires: requiresByConcept[c.ID] || [],
     requiredBy: requiredByConcept[c.ID] || [],
