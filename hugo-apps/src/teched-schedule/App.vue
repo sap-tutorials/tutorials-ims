@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive } from 'vue';
+import { ref, computed, onMounted, reactive, watch } from 'vue';
 import { filterSessions, type TechEdSession } from '../teched-sessions-grid/filter';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { ScheduleRow } from '../devtoberfest-schedule-shared/types';
+import { useAuth } from '../devtoberfest-schedule-shared/useAuth';
+import { favSet, isFavorite, toggleFavorite, loadFavorites } from '../devtoberfest-schedule-shared/favorites';
 
 // --- Feed shapes (mirrors teched-sessions-grid/App.vue) --------------------
 interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; authorLogin?: string | null; advocateSlug?: string | null; }
@@ -37,7 +39,10 @@ const filters = reactive({
   track: '',   // track slug
   q: '',       // free-text search
   clubhouse: false, // Community Clubhouse (room "Community Theater")
+  favorites: false, // #2393 — favorites-only (auth-gated)
 });
+
+const { isAuthenticated } = useAuth();
 
 type SortKey = 'title' | 'trackName' | 'scheduledStart' | 'venue';
 const sortKey = ref<SortKey>('scheduledStart');
@@ -63,7 +68,7 @@ const trackOptions = computed(() => {
   return tracks.value.filter((t) => used.has(t.slug)).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 });
 
-const hasActiveFilters = computed(() => !!(filters.venue || filters.track || filters.q || filters.clubhouse));
+const hasActiveFilters = computed(() => !!(filters.venue || filters.track || filters.q || filters.clubhouse || filters.favorites));
 
 // Apply venue filter outside filterSessions (it handles venue but we keep it consistent)
 const filtered = computed(() =>
@@ -71,6 +76,8 @@ const filtered = computed(() =>
     venue: filters.venue || null,
     track: filters.track || null,
     clubhouse: filters.clubhouse,
+    favorites: filters.favorites,
+    favKeys: favSet.value,
     query: filters.q || null,
   }),
 );
@@ -116,6 +123,7 @@ function clearFilters() {
   filters.track = '';
   filters.q = '';
   filters.clubhouse = false;
+  filters.favorites = false;
 }
 
 // Convert a TechEdSession to a ScheduleRow-compatible object for DetailPanel.
@@ -182,6 +190,12 @@ async function loadData() {
 }
 
 onMounted(() => loadData());
+
+// #2393 — load the user's favorites once authenticated; clear the facet if anonymous.
+watch(isAuthenticated, (authed) => {
+  if (authed) loadFavorites();
+  else filters.favorites = false;
+}, { immediate: true });
 
 defineExpose({ filters });
 </script>
@@ -258,6 +272,19 @@ defineExpose({ filters });
           >Community Clubhouse</button>
         </div>
 
+        <!-- #2393 — favorites-only facet, auth-gated -->
+        <div v-if="isAuthenticated" class="ts-field">
+          <span id="ts-fav-label">Favorites</span>
+          <button
+            type="button"
+            class="ts-toggle-btn ts-toggle-btn--fav"
+            :class="{ 'ts-toggle-btn--active': filters.favorites }"
+            :aria-pressed="filters.favorites"
+            aria-labelledby="ts-fav-label"
+            @click="filters.favorites = !filters.favorites"
+          >★ Favorites only</button>
+        </div>
+
         <button
           v-if="hasActiveFilters"
           type="button"
@@ -278,6 +305,7 @@ defineExpose({ filters });
         <table class="ts-table">
           <thead>
             <tr>
+              <th v-if="isAuthenticated" class="ts-fav-col" aria-label="Favorite"></th>
               <th @click="setSort('venue')"><button type="button" class="ts-sort-btn">Venue{{ sortIcon('venue') }}</button></th>
               <th @click="setSort('title')"><button type="button" class="ts-sort-btn">Title{{ sortIcon('title') }}</button></th>
               <th @click="setSort('trackName')"><button type="button" class="ts-sort-btn">Track{{ sortIcon('trackName') }}</button></th>
@@ -295,6 +323,16 @@ defineExpose({ filters });
               tabindex="0"
               @keydown.enter="selectedRow = toDetailRow(s)"
             >
+              <td v-if="isAuthenticated" class="ts-fav-col">
+                <button
+                  type="button"
+                  class="ts-fav-star"
+                  :class="{ 'is-fav': isFavorite('TECHED', s.slug) }"
+                  :aria-pressed="isFavorite('TECHED', s.slug)"
+                  :aria-label="isFavorite('TECHED', s.slug) ? 'Remove from favorites' : 'Add to favorites'"
+                  @click.stop.prevent="toggleFavorite('TECHED', s.slug)"
+                >★</button>
+              </td>
               <td>
                 <span
                   class="ts-venue-badge"
@@ -422,6 +460,27 @@ defineExpose({ filters });
   border-radius: 0.25rem;
   white-space: nowrap;
 }
+
+.ts-toggle-btn--fav {
+  border-radius: 0.25rem;
+  white-space: nowrap;
+}
+
+/* #2393 — favorite star column in the schedule table */
+.ts-fav-col { width: 2.5rem; text-align: center; }
+.ts-fav-star {
+  border: none;
+  background: transparent;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.25rem;
+}
+.ts-fav-star:hover { background: var(--sapButton_Lite_Hover_Background, rgba(0,0,0,0.06)); }
+.ts-fav-star.is-fav { color: var(--sapButton_Emphasized_Background, #0854a0); }
+.ts-fav-star:focus-visible { outline: 2px solid var(--sapContent_FocusColor, #0854a0); outline-offset: 1px; }
 
 .ts-btn-ghost {
   padding: 0.4rem 0.9rem;
