@@ -22,6 +22,7 @@ export interface TechEdUrlState {
   readonly track: string | null;
   readonly speaker: string | null;
   readonly clubhouse: boolean;
+  readonly fav: boolean;
   readonly session: string | null;
 }
 
@@ -31,6 +32,7 @@ export const DEFAULT_URL_STATE: TechEdUrlState = Object.freeze({
   track: null,
   speaker: null,
   clubhouse: false,
+  fav: false,
   session: null,
 });
 
@@ -59,6 +61,7 @@ export function parseTechEdUrl(search: string | URLSearchParams): TechEdUrlState
     track: nonEmpty(p.get('track')),
     speaker: nonEmpty(p.get('speaker')),
     clubhouse: p.get('clubhouse') === '1',
+    fav: p.get('fav') === '1',
     session: nonEmpty(p.get('session')),
   };
 }
@@ -74,6 +77,7 @@ export function toTechEdQuery(state: TechEdUrlState): string {
   if (nonEmpty(state.track)) p.set('track', state.track!);
   if (nonEmpty(state.speaker)) p.set('speaker', state.speaker!);
   if (state.clubhouse) p.set('clubhouse', '1');
+  if (state.fav) p.set('fav', '1');
   if (nonEmpty(state.session)) p.set('session', state.session!);
   const s = p.toString();
   return s ? `?${s}` : '';

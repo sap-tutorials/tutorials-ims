@@ -5,4 +5,5 @@ export interface Activity { id: string; kind: 'activity'; title: string; week?: 
 export interface Speaker { id: string; name: string; role?: string; company?: string; bio?: string; photoUrl?: string; authorLogin?: string | null }
 export interface Feed { activeEditionId: string | null; editions: Edition[]; sessions: Session[]; activities: Activity[] }
 export interface MyCompletions { authenticated: boolean; joined?: boolean; completedSlugs?: string[]; earnedPoints?: number; maxPoints?: number; completedActivityIds?: string[] }
+export interface MyFavorites { authenticated: boolean; favorites: Array<{ sourceType: string; sessionRef: string }> }
 export type ScheduleRow = (Session | Activity) & { complete?: boolean };

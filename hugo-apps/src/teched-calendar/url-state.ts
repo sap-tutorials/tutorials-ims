@@ -23,6 +23,7 @@ export interface TechEdCalUrlState {
   readonly track: string | null;
   readonly venue: string | null;
   readonly clubhouse: boolean;
+  readonly fav: boolean;
 }
 
 export const DEFAULT_TECHED_CAL_URL_STATE: TechEdCalUrlState = Object.freeze({
@@ -32,6 +33,7 @@ export const DEFAULT_TECHED_CAL_URL_STATE: TechEdCalUrlState = Object.freeze({
   track: null,
   venue: null,
   clubhouse: false,
+  fav: false,
 });
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -73,6 +75,7 @@ export function parseTechEdCalUrl(search: string | URLSearchParams): TechEdCalUr
     track: nonEmpty(p.get('track')),
     venue,
     clubhouse: p.get('clubhouse') === '1',
+    fav: p.get('fav') === '1',
   };
 }
 
@@ -84,6 +87,7 @@ export function toTechEdCalQuery(state: TechEdCalUrlState): string {
   if (state.track) p.set('track', state.track);
   if (state.venue) p.set('venue', state.venue);
   if (state.clubhouse) p.set('clubhouse', '1');
+  if (state.fav) p.set('fav', '1');
   const s = p.toString();
   return s ? `?${s}` : '';
 }

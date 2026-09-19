@@ -248,3 +248,24 @@ Author (`/authors/<login>/`) and Developer-Advocate (`/developer-advocates/<slug
 **Fail-open everywhere:** the cross-container Devtoberfest planner facades are absent on unit SQLite and the feeds can be cold — every read degrades to empty session arrays and never throws, so neither page type blanks on a session hiccup.
 
 The card is one shared design: `hugo/layouts/partials/session-card.html` (authors, SSR) and `hugo-apps/src/advocate-profile/SessionCard.vue` (advocates, Vue) render the same `{ event, title, sourceUrl, track, venue, date }` DTO with the `.next-steps-*` card classes. Advocate tutorial links, previously a `<ul>`, are now the same card grid.
+
+---
+
+## Favorite sessions (issue #2393)
+
+A signed-in user can favorite TechEd **and** Devtoberfest sessions, and filter any view to "favorites only". Anonymous visitors see neither the star nor the filter — the feature is fully auth-gated and fails open to the normal (unfiltered) view.
+
+**Data model** — one user-scoped entity `com.sap.developers.ims.SessionFavorites` (`db/schema.cds`): `cuid, managed` + `user` (Association to Users), `sourceType` (enum `TECHED | DEVTOBERFEST`), `sessionRef` (String 200). Discriminator + loose `sessionRef` because the two event families key differently — TechEd favorites store the session **slug**; Devtoberfest store the planner facade **ID** (`String(36)`). Same pattern as `TaskRecords`' `taskType`+`taskLegacyId`. Favorite = a row exists; unfavorite = row deleted (no soft-delete). `@assert.unique.favorite: [user, sourceType, sessionRef]` blocks dup triples. GDPR: `db/audit-logging.cds` annotates it `@PersonalData … cascade: 'delete'` so DSR erasure cascades — **any new per-user entity needs this or it's silently missed**.
+
+**Service ops** (`DeveloperService`, `srv/developer-service.{cds,js}`), both `@requires: 'authenticated-user'`, user always resolved from the JWT in-handler (never a param — IDOR):
+- `function getMyFavorites() returns array of { sourceType; sessionRef }` — only the caller's rows; anonymous is blocked by the guard (401), which the client degrades to an empty overlay.
+- `action toggleSessionFavorite(sourceType, sessionRef) returns { favorited : Boolean }` — idempotent insert/delete toggle; validates `sourceType ∈ {TECHED,DEVTOBERFEST}` and non-empty `sessionRef` (else 400); `provisionDbUser(req.user, ['ID'])` get-or-creates the row owner. IDOR-safe: covered by a unit test asserting the row lands on the JWT user.
+
+**Client** — a shared reactive store `hugo-apps/src/devtoberfest-schedule-shared/favorites.ts`: a module-singleton `favSet: Ref<Set<string>>` keyed `"${sourceType}:${sessionRef}"`, with `isFavorite`, `loadFavorites` (seeds from `fetchMyFavorites` in `feed.ts` — 401/non-2xx/non-JSON/throw all degrade to `{authenticated:false, favorites:[]}`), and an **optimistic** `toggleFavorite` (mutates the Set, POSTs, reverts on failure). One singleton means favoriting in the grid reflects instantly in the schedule/calendar with no reload.
+
+**UI reach** — auth-gated star + "★ Favorites only" filter across all views:
+- **TechEd** grid (`teched-sessions-grid`), schedule (`teched-schedule`), calendar (`teched-calendar`) — the grid & schedule get a per-card/row star; all three get the filter. The grid persists the facet as `fav=1` in the URL (`filter.ts` gains `favorites`/`favKeys`, `url-state.ts` gains `fav`); the calendar persists `fav=1` via its own `url-state.ts`.
+- **Devtoberfest** schedule, sessions-grid, sessions-calendar — star on the session rows/cards (sessions only — activities aren't favoritable), filter in all three.
+- **Calendars have no per-entry star** (TechEd + Devtoberfest): the week/day agenda cells render via the *shared* `WeekAgenda`/`DayAgenda` components used by both families; favoriting is done from the grid/schedule and the shared `favSet` reflects into the calendar filter. This keeps the shared agenda components untouched.
+
+Tests: `test/unit/session-favorites*.test.js` (model + service, in-memory SQLite), `hugo-apps/src/devtoberfest-schedule-shared/__tests__/favorites.test.ts` (store), and the TechEd `filter.test.ts`/`url-state.test.ts` favorites cases.

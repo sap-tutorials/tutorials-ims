@@ -280,6 +280,18 @@ entity UserLearningPreferences : managed {
                          };
 }
 
+// #2393 — per-user favorited event sessions. Discriminator + loose sessionRef
+// because TechEd (owned TechEdSessions, keyed by slug) and Devtoberfest
+// (cross-container facade external.devtoberfest.Session, key ID String(36))
+// have different identity schemes — same pattern as TaskRecords' taskType+taskLegacyId.
+// Favorite = a row exists; unfavorite = row deleted (no soft-delete/status).
+@assert.unique.favorite: [user, sourceType, sessionRef]
+entity SessionFavorites : cuid, managed {
+  user       : Association to Users @mandatory;
+  sourceType : String @mandatory enum { TECHED; DEVTOBERFEST; };
+  sessionRef : String(200) @mandatory;
+}
+
 entity DeveloperEnvironmentTabs : cuid, LegacyKeyed {
   user                      : Association to Users;
   tabName                   : String(255);
