@@ -3,7 +3,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { filterSessions, type TechEdSession } from './filter';
 import { parseTechEdUrl, toTechEdQuery, type TechEdUrlState } from './url-state';
 import { buildTrackColorMap, type TrackColor } from '../devtoberfest-sessions-calendar/track-colors';
-import RelatedSessions from './RelatedSessions.vue';
+import RelatedSessions from '../devtoberfest-schedule-shared/RelatedSessions.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 
 // --- Feed shapes (see GET /build/teched in srv/server.js) ------------------
