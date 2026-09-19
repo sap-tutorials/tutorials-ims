@@ -8,6 +8,7 @@ import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { Feed, ScheduleRow } from '../devtoberfest-schedule-shared/types';
 import { formatViewerLocal } from '../devtoberfest-schedule-shared/format-session-time';
+import { favSet, isFavorite, toggleFavorite, loadFavorites } from '../devtoberfest-schedule-shared/favorites';
 
 const loading = ref(true);
 const error = ref('');
@@ -27,6 +28,7 @@ const filters = reactive({
   track: '',
   format: '',
   q: '',
+  favorites: false, // #2393 — favorites-only (auth-gated; sessions only)
 });
 
 type SortKey = 'kind' | 'title' | 'trackName' | 'week' | 'scheduledStart' | 'points';
@@ -68,6 +70,7 @@ const filtered = computed(() => {
     if (filters.type && r.kind !== filters.type) return false;
     if (filters.track && (r as any).trackName !== filters.track) return false;
     if (!matchesFormat((r as any).broadcastingPreference, filters.format)) return false;
+    if (filters.favorites && !(r.kind === 'session' && isFavorite('DEVTOBERFEST', r.id))) return false;
     if (q && !r.title.toLowerCase().includes(q)) return false;
     return true;
   });
@@ -101,6 +104,7 @@ async function loadData(edition?: string) {
     feed.value = feedData;
     editionId.value = edition ?? feedData.activeEditionId;
     isAuthenticated.value = myData.authenticated;
+    if (isAuthenticated.value) loadFavorites(); // #2393
     const merged = mergeCompletion(feedData, myData);
     rows.value = merged.rows;
     joined.value = merged.joined;
@@ -124,6 +128,7 @@ function clearFilters() {
   filters.track = '';
   filters.format = '';
   filters.q = '';
+  filters.favorites = false;
 }
 
 onMounted(() => loadData());
@@ -200,7 +205,16 @@ defineExpose({ filters });
           </select>
         </label>
         <button
-          v-if="filters.week || filters.type || filters.track || filters.format || filters.q"
+          v-if="isAuthenticated"
+          type="button"
+          class="sched-btn sched-btn-ghost"
+          :class="{ 'sched-btn--active': filters.favorites }"
+          :aria-pressed="filters.favorites"
+          aria-label="Favorite sessions only"
+          @click="filters.favorites = !filters.favorites"
+        >★ Favorites only</button>
+        <button
+          v-if="filters.week || filters.type || filters.track || filters.format || filters.q || filters.favorites"
           class="sched-btn sched-btn-ghost"
           @click="clearFilters"
         >Clear</button>
@@ -291,6 +305,15 @@ defineExpose({ filters });
                 >→</a>
               </td>
               <td v-if="isAuthenticated">
+                <button
+                  v-if="row.kind === 'session'"
+                  type="button"
+                  class="sched-fav-star"
+                  :class="{ 'is-fav': isFavorite('DEVTOBERFEST', row.id) }"
+                  :aria-pressed="isFavorite('DEVTOBERFEST', row.id)"
+                  :aria-label="isFavorite('DEVTOBERFEST', row.id) ? 'Remove from favorites' : 'Add to favorites'"
+                  @click.stop.prevent="toggleFavorite('DEVTOBERFEST', row.id)"
+                >★</button>
                 <span v-if="row.complete" class="sched-done" aria-label="Completed">✓</span>
               </td>
             </tr>
@@ -389,6 +412,26 @@ defineExpose({ filters });
   color: var(--sapLinkColor, #0854a0);
   border: 1px solid var(--sapField_BorderColor, #89919a);
 }
+
+/* #2393 — favorites-only toggle: outline when off, emphasized when on */
+.sched-btn--active {
+  background: var(--sapButton_Emphasized_Background, #0854a0);
+  color: #fff;
+}
+.sched-fav-star {
+  border: none;
+  background: transparent;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+  margin-right: 0.25rem;
+}
+.sched-fav-star:hover { background: var(--sapButton_Lite_Hover_Background, rgba(0,0,0,0.06)); }
+.sched-fav-star.is-fav { color: var(--sapButton_Emphasized_Background, #0854a0); }
+.sched-fav-star:focus-visible { outline: 2px solid var(--sapContent_FocusColor, #0854a0); outline-offset: 1px; }
 
 .sched-count {
   margin-left: auto;

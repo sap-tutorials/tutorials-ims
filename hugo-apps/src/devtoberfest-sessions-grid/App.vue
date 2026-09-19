@@ -8,6 +8,7 @@ import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { Feed, ScheduleRow } from '../devtoberfest-schedule-shared/types';
 import { formatViewerLocal } from '../devtoberfest-schedule-shared/format-session-time';
+import { favSet, isFavorite, toggleFavorite, loadFavorites } from '../devtoberfest-schedule-shared/favorites';
 import { parseSessionsUrl, toSessionsQuery, type SessionsUrlState } from './url-state';
 
 const loading = ref(true);
@@ -25,6 +26,7 @@ const filterQuery = ref('');
 const filterWeek = ref('');
 const filterTrack = ref('');
 const filterFormat = ref('');
+const favOnly = ref(false); // #2393 — favorites-only (auth-gated)
 
 // --- Deep-linking (issue #2030) -------------------------------------------
 // The page URL is the source of truth on first load. We parse it once, apply
@@ -53,6 +55,7 @@ async function loadData(edition?: string) {
     feed.value = feedData;
     editionId.value = edition ?? feedData.activeEditionId;
     isAuthenticated.value = myData.authenticated;
+    if (isAuthenticated.value) loadFavorites(); // #2393
     const merged = mergeCompletion(feedData, myData);
     joined.value = merged.joined;
     // Sessions grid: only session rows
@@ -97,6 +100,7 @@ const filtered = computed(() => {
     if (filterWeek.value && r.week !== filterWeek.value) return false;
     if (filterTrack.value && (r as any).trackName !== filterTrack.value) return false;
     if (!matchesFormat((r as any).broadcastingPreference, filterFormat.value)) return false;
+    if (favOnly.value && !isFavorite('DEVTOBERFEST', r.id)) return false;
     if (!sessionMatchesQuery(r, filterQuery.value)) return false;
     return true;
   });
@@ -107,6 +111,7 @@ function clearFilters() {
   filterWeek.value = '';
   filterTrack.value = '';
   filterFormat.value = '';
+  favOnly.value = false;
 }
 
 function onThumbError(ev: Event) {
@@ -234,7 +239,16 @@ watch([filterQuery, filterWeek, filterTrack, filterFormat, editionId, selectedRo
           </select>
         </label>
         <button
-          v-if="filterQuery || filterWeek || filterTrack || filterFormat"
+          v-if="isAuthenticated"
+          type="button"
+          class="sg-btn sg-btn-ghost"
+          :class="{ 'sg-btn--active': favOnly }"
+          :aria-pressed="favOnly"
+          aria-label="Favorite sessions only"
+          @click="favOnly = !favOnly"
+        >★ Favorites only</button>
+        <button
+          v-if="filterQuery || filterWeek || filterTrack || filterFormat || favOnly"
           class="sg-btn sg-btn-ghost"
           @click="clearFilters"
         >Clear</button>
@@ -256,6 +270,15 @@ watch([filterQuery, filterWeek, filterTrack, filterFormat, editionId, selectedRo
           class="sg-card"
           :class="{ 'sg-card--complete': session.complete && isAuthenticated }"
         >
+          <button
+            v-if="isAuthenticated"
+            type="button"
+            class="sg-fav-star"
+            :class="{ 'is-fav': isFavorite('DEVTOBERFEST', session.id) }"
+            :aria-pressed="isFavorite('DEVTOBERFEST', session.id)"
+            :aria-label="isFavorite('DEVTOBERFEST', session.id) ? 'Remove from favorites' : 'Add to favorites'"
+            @click.stop.prevent="toggleFavorite('DEVTOBERFEST', session.id)"
+          >★</button>
           <!-- thumbnail -->
           <div class="sg-thumb-wrap">
             <template v-if="youtubeThumb((session as any).youtubeUrl)">
@@ -455,7 +478,33 @@ watch([filterQuery, filterWeek, filterTrack, filterFormat, editionId, selectedRo
   border-radius: 8px;
   background: var(--sapBaseColor, #fff);
   overflow: hidden;
+  position: relative; /* #2393 — anchor for .sg-fav-star */
 }
+
+/* #2393 — favorites toggle button + per-card star */
+.sg-btn--active {
+  background: var(--sapButton_Emphasized_Background, #0854a0);
+  color: #fff;
+}
+.sg-fav-star {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 2;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--sapContent_LabelColor, #6a6d70);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.sg-fav-star:hover { background: #fff; }
+.sg-fav-star.is-fav { color: var(--sapButton_Emphasized_Background, #0854a0); }
+.sg-fav-star:focus-visible { outline: 2px solid var(--sapContent_FocusColor, #0854a0); outline-offset: 1px; }
 
 .sg-card--complete {
   border-color: var(--sapSuccessBorderColor, #5cb85c);
