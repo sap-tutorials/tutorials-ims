@@ -1,5 +1,6 @@
 import { ref, type Ref } from 'vue';
 import { fetchMyFavorites } from './feed';
+import { csrfFetch } from '@shared/csrf-fetch';
 
 // #2393 — shared favorites store. One module-singleton reactive Set of
 // composite keys, shared across every island mounted on the page, so favoriting
@@ -25,7 +26,7 @@ export async function toggleFavorite(sourceType: string, sref: string): Promise<
   if (had) next.delete(key); else next.add(key);
   favSet.value = next;
   try {
-    const r = await fetch('/api/toggleSessionFavorite', {
+    const r = await csrfFetch('/api/toggleSessionFavorite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       credentials: 'include',
