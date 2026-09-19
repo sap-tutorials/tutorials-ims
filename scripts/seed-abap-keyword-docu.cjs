@@ -83,6 +83,7 @@ async function main() {
     let concept;
     try {
       concept = await db.run(
+        // slug-canonical: seed.conceptSlug is a hardcoded lowercase constant in SEEDS
         SELECT.one.from(Concepts).columns('ID', 'slug').where({ slug: seed.conceptSlug })
       );
     } catch (err) {
@@ -110,6 +111,7 @@ async function main() {
 
     await db.tx(async (tx) => {
       // Upsert the HelpDocs row (unique on slug).
+      // slug-canonical: `slug` is built by helpDocSlug() which lowercases
       const existingDoc = await tx.run(SELECT.one.from(HelpDocs).columns('ID').where({ slug }));
       let helpDocId = existingDoc?.ID;
       if (helpDocId) {
@@ -118,11 +120,12 @@ async function main() {
           sourceId: seed.htm, contentHash, lastSeenAt: now,
         }).where({ ID: helpDocId }));
       } else {
-        const inserted = await tx.run(INSERT.into(HelpDocs).entries({
+        await tx.run(INSERT.into(HelpDocs).entries({
           slug, source: SOURCE, title: seed.title, description: seed.snippet,
           url, sourceId: seed.htm, contentHash, product: PRODUCT, lastSeenAt: now,
         }));
         // Fetch the generated ID (cuid) back by slug.
+        // slug-canonical: `slug` is built by helpDocSlug() which lowercases
         helpDocId = (await tx.run(SELECT.one.from(HelpDocs).columns('ID').where({ slug }))).ID;
       }
 
