@@ -13,7 +13,7 @@
 //   - relatedDevtoberfestSessions survives the enrichment ...s spread in App.vue
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
-import RelatedSessions from '../RelatedSessions.vue';
+import RelatedSessions from '../../devtoberfest-schedule-shared/RelatedSessions.vue';
 import App from '../App.vue';
 import { filterSessions } from '../filter';
 
