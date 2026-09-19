@@ -5,6 +5,8 @@ import { parseTechEdUrl, toTechEdQuery, type TechEdUrlState } from './url-state'
 import { buildTrackColorMap, type TrackColor } from '../devtoberfest-sessions-calendar/track-colors';
 import RelatedSessions from './RelatedSessions.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
+import { useAuth } from '../devtoberfest-schedule-shared/useAuth';
+import { favSet, isFavorite, toggleFavorite, loadFavorites } from '../devtoberfest-schedule-shared/favorites';
 
 // --- Feed shapes (see GET /build/teched in srv/server.js) ------------------
 interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; authorLogin?: string | null; advocateSlug?: string | null; }
@@ -28,7 +30,10 @@ const filterVenue = ref('');   // '' | 'BERLIN' | 'VIRTUAL'
 const filterTrack = ref('');   // track slug
 const filterSpeaker = ref(''); // speaker slug
 const filterClubhouse = ref(false); // Community Clubhouse (room "Community Theater")
+const favOnly = ref(false); // #2393 — "show favorites only" (auth-gated)
 const selectedRow = ref<TechEdSession | null>(null);
+
+const { isAuthenticated } = useAuth();
 
 // --- Deep-linking ----------------------------------------------------------
 // The page URL is the source of truth on first load. Parse it once and apply
@@ -43,6 +48,7 @@ if (initialUrl.venue) filterVenue.value = initialUrl.venue;
 if (initialUrl.track) filterTrack.value = initialUrl.track;
 if (initialUrl.speaker) filterSpeaker.value = initialUrl.speaker;
 if (initialUrl.clubhouse) filterClubhouse.value = true;
+if (initialUrl.fav) favOnly.value = true;
 
 /**
  * Load the TechEd feed. Prefers the live public /build/teched endpoint so
@@ -187,6 +193,8 @@ const filtered = computed(() => filterSessions(sessions.value, {
   track: filterTrack.value,
   speaker: filterSpeaker.value,
   clubhouse: filterClubhouse.value,
+  favorites: favOnly.value,
+  favKeys: favSet.value,
   query: filterQuery.value,
 }));
 
@@ -196,7 +204,7 @@ const filteredTimed = computed(() => filtered.value.filter((s) => s.allDay !== t
 const visibleCount = computed(() => filtered.value.length);
 
 const hasActiveFilters = computed(() =>
-  !!(filterQuery.value || filterVenue.value || filterTrack.value || filterSpeaker.value || filterClubhouse.value),
+  !!(filterQuery.value || filterVenue.value || filterTrack.value || filterSpeaker.value || filterClubhouse.value || favOnly.value),
 );
 
 function speakerNamesFor(s: TechEdSession): string {
@@ -255,6 +263,7 @@ function clearFilters() {
   filterTrack.value = '';
   filterSpeaker.value = '';
   filterClubhouse.value = false;
+  favOnly.value = false;
 }
 
 // --- URL sync --------------------------------------------------------------
@@ -265,6 +274,7 @@ function currentUrlState(): TechEdUrlState {
     track: filterTrack.value || null,
     speaker: filterSpeaker.value || null,
     clubhouse: filterClubhouse.value,
+    fav: favOnly.value,
     session: selectedRow.value?.slug ?? null,
   };
 }
@@ -281,6 +291,7 @@ function applyFromUrl(st: TechEdUrlState) {
   filterTrack.value = st.track ?? '';
   filterSpeaker.value = st.speaker ?? '';
   filterClubhouse.value = st.clubhouse;
+  favOnly.value = st.fav;
   if (st.session) {
     const row = sessions.value.find((r) => r.slug === st.session);
     selectedRow.value = row ?? null;
@@ -300,6 +311,7 @@ onMounted(async () => {
   window.addEventListener('popstate', onPopState);
   window.addEventListener('keydown', onDocKeydown);
   await loadData();
+  if (isAuthenticated.value) loadFavorites();
   applied = true;
   writeUrl();
 });
@@ -309,7 +321,14 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onDocKeydown);
 });
 
-watch([filterQuery, filterVenue, filterTrack, filterSpeaker, filterClubhouse, selectedRow], writeUrl);
+watch([filterQuery, filterVenue, filterTrack, filterSpeaker, filterClubhouse, favOnly, selectedRow], writeUrl);
+
+// Late auth resolution (auth-resolved fires after mount): pull favorites once
+// the user is known; clear the facet if they turn out anonymous.
+watch(isAuthenticated, (authed) => {
+  if (authed) loadFavorites();
+  else favOnly.value = false;
+});
 </script>
 
 <template>
@@ -381,6 +400,19 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, filterClubhouse, se
           >Community Clubhouse</button>
         </div>
 
+        <!-- #2393 — favorites-only facet, auth-gated (hidden when anonymous) -->
+        <div v-if="isAuthenticated" class="tsg-field">
+          <span id="tsg-fav-label">Favorites</span>
+          <button
+            type="button"
+            class="tsg-toggle-btn tsg-toggle-btn--fav"
+            :class="{ 'tsg-toggle-btn--active': favOnly }"
+            :aria-pressed="favOnly"
+            aria-labelledby="tsg-fav-label"
+            @click="favOnly = !favOnly"
+          >★ Favorites only</button>
+        </div>
+
         <button
           v-if="hasActiveFilters"
           type="button"
@@ -436,6 +468,15 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, filterClubhouse, se
                   :style="trackBadgeStyle(s.trackName)"
                 >{{ s.trackName }}</span>
               </div>
+              <button
+                v-if="isAuthenticated"
+                type="button"
+                class="tsg-fav-star"
+                :class="{ 'is-fav': isFavorite('TECHED', s.slug) }"
+                :aria-pressed="isFavorite('TECHED', s.slug)"
+                :aria-label="isFavorite('TECHED', s.slug) ? 'Remove from favorites' : 'Add to favorites'"
+                @click.stop.prevent="toggleFavorite('TECHED', s.slug)"
+              >★</button>
               <h3 class="tsg-card-title">{{ s.title }}</h3>
               <p v-if="s.room" class="tsg-meta">{{ s.room }}</p>
               <p v-if="s.speakerLinks?.length" class="tsg-speakers">
@@ -479,6 +520,15 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, filterClubhouse, se
                 >{{ s.trackName }}</span>
                 <span v-if="s.sessionCode" class="tsg-badge tsg-badge--code">{{ s.sessionCode }}</span>
               </div>
+              <button
+                v-if="isAuthenticated"
+                type="button"
+                class="tsg-fav-star"
+                :class="{ 'is-fav': isFavorite('TECHED', s.slug) }"
+                :aria-pressed="isFavorite('TECHED', s.slug)"
+                :aria-label="isFavorite('TECHED', s.slug) ? 'Remove from favorites' : 'Add to favorites'"
+                @click.stop.prevent="toggleFavorite('TECHED', s.slug)"
+              >★</button>
               <h3 class="tsg-card-title">{{ s.title }}</h3>
               <p v-if="formatStart(s.scheduledStart)" class="tsg-meta">
                 {{ formatStart(s.scheduledStart) }}<template v-if="s.room"> · {{ s.room }}</template>
@@ -580,6 +630,33 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, filterClubhouse, se
   white-space: nowrap;
 }
 
+.tsg-toggle-btn--fav {
+  border-radius: 0.25rem;
+  white-space: nowrap;
+}
+
+/* #2393 — per-card favorite star, pinned top-right so it never displaces the
+   badge/title flow. The card is position:relative (below) as the anchor. */
+.tsg-fav-star {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.tsg-fav-star:hover { background: var(--sapButton_Lite_Hover_Background, rgba(0,0,0,0.06)); }
+.tsg-fav-star.is-fav { color: var(--sapButton_Emphasized_Background, #0854a0); }
+.tsg-fav-star:focus-visible { outline: 2px solid var(--sapContent_FocusColor, #0854a0); outline-offset: 1px; }
+
 .tsg-btn-ghost {
   padding: 0.4rem 0.9rem;
   border-radius: 0.25rem;
@@ -651,6 +728,7 @@ watch([filterQuery, filterVenue, filterTrack, filterSpeaker, filterClubhouse, se
   border-radius: 8px;
   background: var(--sapBaseColor, #fff);
   overflow: hidden;
+  position: relative; /* #2393 — anchor for .tsg-fav-star */
 }
 
 .tsg-card-body {
