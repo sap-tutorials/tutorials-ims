@@ -489,6 +489,13 @@
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-rating" }}" defer></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "code-check" }}" defer></script>{{ end }}
 <script type="module" src="{{ partial "island-src.html" "validation" }}" defer></script>
+{{/* [#2362] json-render challenge widget island — loaded only when at least
+     one step on this page carries a challenge spec (built only when the widget
+     is enabled at build time), so tutorials without a challenge ship no extra
+     script fetch. */}}
+{{- $hasChallenge := false -}}
+{{- range .Params.steps }}{{ with .challenge }}{{ if .nodes }}{{ $hasChallenge = true }}{{ end }}{{ end }}{{ end -}}
+{{ if and $hasChallenge (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "challenge-render" }}" defer></script>{{ end }}
 {{ if not site.Params.previewMode }}<script type="module" src="{{ partial "island-src.html" "tutorial-branches" }}" defer></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "related-graph" }}" defer></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "learning-path" }}" defer></script>{{ end }}

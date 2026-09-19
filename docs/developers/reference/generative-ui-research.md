@@ -120,7 +120,38 @@ A minimal, fully-tested proof of the json-render model — **no build-pipeline o
 
 What this deliberately does **not** do (out of spike scope): wire a Vite entry / island manifest / Hugo shortcode mount, call a live model, or touch the production quiz path. Promoting the widget to a rendered island is the follow-on if the model is greenlit.
 
-**Verify:** `npx vitest run --project unit test/lib/ai-challenge-spec.test.js hugo-apps/src/challenge-render/ChallengeRenderer.test.ts` (18 assertions incl. anti-leak). Full render on a page would additionally need `npm run fetch-tutorials` + `npm run dev` after the island is wired.
+**Verify:** `npx vitest run --project unit test/lib/ai-challenge-spec.test.js hugo-apps/src/challenge-render/ChallengeRenderer.test.ts` (anti-leak, catalog enforcement, render). Full render on a page would additionally need `npm run fetch-tutorials` + `npm run dev` after the island is wired.
+
+---
+
+## Wireup (#2362 follow-on) — now human-testable
+
+The spike above is now wired end-to-end so a human can see the panel on a real tutorial page. Added on top of the POC files:
+
+| File | Role |
+| --- | --- |
+| `hugo-apps/src/challenge-render/main.ts` | Island entry. Reads each step's `challenge` spec from `<script id="tutorial-data">` and mounts `ChallengeRenderer.vue` on every `.step-challenge-mount`. Modeled on `validation/main.ts` (same double-parse guard). |
+| `hugo-apps/vite.config.ts` | New `challenge-render` rollup entry — the island manifest picks it up automatically (`scripts/build-island-manifest.cjs` is generic). |
+| `hugo/layouts/shortcodes/tutorial-step.html` | Emits `.step-challenge-mount` per step **only** when that step carries a challenge spec (branch-mount idiom). Must stay flush-left after the `}}` or Goldmark renders it as an indented code block. |
+| `hugo/layouts/tutorials/u1-object-page.html` | Injects the `challenge-render` island `<script>` only when the page has at least one challenge (no dead fetch otherwise). |
+| `scripts/parsers/types.ts` | `TutorialStep.challenge?: { nodes[] }` — the public, answer-stripped spec that rides in `tutorial-data`. |
+| `scripts/parsers/render-frontmatter.ts` | Serializes `step.challenge` into the Hugo frontmatter step (the field is allow-listed, so it must be added explicitly or it's silently dropped and the widget never renders). |
+| `scripts/fetch-tutorials.ts` | Build-time generation pass, gated by the `CHALLENGE_WIDGET_ENABLED` **env var**: for each substantive step, calls `generateChallengeSpec` with the existing `callQuizModel` wrapper (AI Core), attaches the public spec onto `step.challenge`, and writes freeText reference answers to a `<slug>.challenge-answers.json` sidecar (anti-leak, mirrors the AI-quiz path). Shares the `AI_AUTHOR_BUILD_CAP` LLM-spend ceiling. |
+| `hugo-apps/src/challenge-render/main.test.ts`, `scripts/parsers/__tests__/render-frontmatter-challenge.test.ts` | Island render tests + a regression test that `step.challenge` survives frontmatter serialization. |
+
+**Build-time env vs DB flag.** Tutorial HTML is baked at build time and served from HANA BLOBs, so *whether a challenge is generated and baked into the page* is a build-time decision — gated by the `CHALLENGE_WIDGET_ENABLED` env var during `fetch-tutorials`. The DB feature flag of the same name (`flag.challengeWidget`, admin UI, default OFF, DEV-only) remains the greenlight/kill record and admin control of record; the registry description was corrected to state this (it previously said "no env var").
+
+**Admin UI visibility.** The flag already appears in the admin Feature Flag Viewer with no extra wiring — `srv/lib/feature-flags/resolve.js` synthesizes a row for **every** registry entry and nothing filters by `status`/`category`. If it wasn't visible, the running `tutorials-srv` predated the registry entry — redeploy CAP; there is no second place to register it.
+
+**Verify (render):**
+```bash
+npm run build:apps && node scripts/build-island-manifest.cjs   # emits challenge-render + manifest
+# add a `challenge:` block to a step in a cached/fixture tutorial, then:
+hugo --source hugo --minify
+# the rendered page carries `.step-challenge-mount` + the challenge-render <script>,
+# the panel mounts live (heading/prose/mcq/freeText), freeText `reference` is absent (anti-leak).
+```
+Verified: the generator emits the spec (`ai-challenge-spec.test.js`), `renderHugoFrontmatter` serializes `step.challenge` into the Hugo frontmatter step (`render-frontmatter-challenge.test.ts` — the regression that a code review caught was omitting this), and the shortcode + layout + island render it from that frontmatter into a live panel (browser-checked against a built `test-tutorial` whose step frontmatter carries a `challenge:` block — the exact shape `renderHugoFrontmatter` now produces): heading/prose/mcq/freeText all render, freeText `reference` is absent (anti-leak), and it's a clean no-op (no mount, no script) without.
 
 ---
 

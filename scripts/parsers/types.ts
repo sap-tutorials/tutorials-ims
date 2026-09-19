@@ -111,6 +111,13 @@ export interface TutorialStep {
   validation?: ValidationQuestion[]
   codeCheck?: PublicCodeCheckSpec
 
+  // [#2362] json-render challenge widget — the public UI spec authored by the
+  // AI (srv/lib/ai-challenge-spec.js) and rendered by the challenge-render
+  // island. Reference answers for freeText nodes are NOT here (anti-leak):
+  // they ride in the <slug>.challenge-answers.json sidecar. Present only in
+  // builds where CHALLENGE_WIDGET_ENABLED was set.
+  challenge?: { nodes: Array<Record<string, unknown>> }
+
   // Issue #172 PR 3 — step-level branches (populated by branches.ts pre-pass
   // before parseV2Steps walks the rewritten body; merged onto the parent step
   // entry by index in scripts/fetch-tutorials.ts).
