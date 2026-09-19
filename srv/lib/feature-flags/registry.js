@@ -54,6 +54,13 @@ export const FEATURE_FLAGS = [
     howToChange: adminTile('knowledgeGraph', '#knowledgeGraph', 'Toggle learning-path reasoner in the Knowledge Graph settings tile'),
   },
   {
+    key: 'KG_CONCEPT_DEFINITIONS_ENABLED', label: 'KG concept-definition generator', category: 'Knowledge Graph',
+    kind: 'db-setting', entity: 'KnowledgeGraphSettings', column: 'conceptDefinitionsEnabled', resolver: 'kg',
+    valueType: 'boolean', default: false, issue: '#2426', status: 'dev-only',
+    description: 'LLM-authored, grounded concept definitions (#2426). Gates the generate-concept-definitions scheduled job. DB-driven config (KnowledgeGraphSettings.conceptDefinitionsEnabled); no env var. DEV-only, default OFF, fail-open.',
+    howToChange: adminTile('knowledgeGraph', '#knowledgeGraph', 'Toggle the concept-definition generator in the Knowledge Graph settings tile'),
+  },
+  {
     key: 'KG_ONDEMAND_ENABLED', label: 'KG on-demand extraction',
     category: 'Knowledge Graph', kind: 'db-setting', entity: 'KnowledgeGraphSettings',
     column: 'onDemandExtractionEnabled', resolver: 'kg', envVar: 'KG_ONDEMAND_ENABLED',
