@@ -113,4 +113,25 @@ describe('filterSessions', () => {
     expect(filterSessions(data, { clubhouse: true, venue: 'VIRTUAL' }).map((s) => s.slug)).toEqual(['cap-002', 'ai-003']);
     expect(filterSessions(data, { clubhouse: true, venue: 'BERLIN' })).toHaveLength(0);
   });
+
+  it('filters to favorites only (#2393)', () => {
+    const favKeys = new Set(['TECHED:ai-001']);
+    expect(filterSessions(data, { favorites: true, favKeys }).map((s) => s.slug)).toEqual(['ai-001']);
+  });
+
+  it('favorites AND venue combine (#2393)', () => {
+    const favKeys = new Set(['TECHED:ai-001', 'TECHED:ai-003']);
+    const out = filterSessions(data, { favorites: true, favKeys, venue: 'VIRTUAL' });
+    expect(out.map((s) => s.slug)).toEqual(['ai-003']);
+    expect(out.every((s) => s.venue === 'VIRTUAL')).toBe(true);
+    expect(out.every((s) => favKeys.has(`TECHED:${s.slug}`))).toBe(true);
+  });
+
+  it('favorites off ignores favKeys (#2393)', () => {
+    expect(filterSessions(data, { favorites: false, favKeys: new Set() })).toHaveLength(data.length);
+  });
+
+  it('favorites on with no favKeys yields nothing (#2393)', () => {
+    expect(filterSessions(data, { favorites: true })).toHaveLength(0);
+  });
 });
