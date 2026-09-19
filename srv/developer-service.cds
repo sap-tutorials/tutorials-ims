@@ -164,6 +164,14 @@ service DeveloperService {
     lastTouchedAt         : DateTime;
   };
 
+  // #2393 — the caller's favorited sessions (both event families). Anonymous is
+  // blocked by the guard (401); the island degrades that to an empty overlay.
+  @(requires: 'authenticated-user')
+  function getMyFavorites() returns array of {
+    sourceType : String;
+    sessionRef : String;
+  };
+
   // App Space progress (replaces AEM /bin/sapdx/tutorials/v3/progress/series)
   @(requires: 'authenticated-user')
   function getEventProgress(missionLegacyId : Integer) returns {

@@ -459,6 +459,17 @@ export default class DeveloperService extends cds.ApplicationService {
       return getMyInProgressTutorials(req.user);
     });
 
+    this.on('getMyFavorites', async (req) => {
+      const { SessionFavorites } = cds.entities('com.sap.developers.ims');
+      const sapId = resolveUserSapId(req.user);
+      const dbUser = sapId ? await SELECT.one.from(dbUsers).columns('ID').where({ sapId }) : null;
+      if (!dbUser) return [];
+      const rows = await SELECT.from(SessionFavorites)
+        .columns('sourceType', 'sessionRef')
+        .where({ user_ID: dbUser.ID });
+      return rows.map((r) => ({ sourceType: r.sourceType, sessionRef: r.sessionRef }));
+    });
+
     this.on('getEventProgress', async (req) => {
       const { missionLegacyId } = req.data;
       const user = req.user;
