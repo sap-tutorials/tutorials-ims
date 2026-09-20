@@ -145,6 +145,12 @@ const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
     '(com.sap.developers.ims.qa) does not load, and srv-qa has no runtime reader of ' +
     'ValidateAnswerSpecs (author preview re-parses rules.vr live). The publish CLI skips this ' +
     'step for channel=qa. Re-evaluate only if QA gains a runtime /api/validate-answer surface.',
+  'POST /content/challenge-answers':
+    'Challenge-widget freeText reference answers (#2441). Same rationale as validate-answer-specs ' +
+    'above: srv-qa has no ChallengeAnswers entity (the QA model com.sap.developers.ims.qa does not ' +
+    'load it), so a POST would 404/500, and there is no QA runtime reader (no /api/challenge-grade ' +
+    'on srv-qa). The publish CLI already skips this step for channel=qa (scripts/publish-content.ts: ' +
+    '"[challenge-answers] skipped"). Re-evaluate only if QA gains a runtime /api/challenge-grade surface.',
   'POST /content/publish-contributors':
     'Contributor sidecar publish (#WS2). Same rationale as validate-answer-specs above: srv-qa ' +
     'has no ContributorCache entity (the QA model com.sap.developers.ims.qa does not load it), ' +
