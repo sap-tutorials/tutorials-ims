@@ -53,3 +53,67 @@ const nodes = computed(() => (props.spec?.nodes ?? []).filter((n) => KNOWN.has(n
     </template>
   </section>
 </template>
+
+<style scoped>
+/* Horizon design tokens with hex fallbacks — matches the Validation island's
+   conventions (bordered card, rem spacing). */
+.challenge-panel {
+  border: 1px solid var(--sapNeutralBorderColor, #e5e5e5);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  background-color: var(--sapNeutralBackground, rgba(120, 143, 166, 0.04));
+}
+.challenge-heading {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+.challenge-prose {
+  margin: 0 0 1rem;
+}
+.challenge-mcq {
+  border: 1px solid var(--sapNeutralBorderColor, #e5e5e5);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin: 0 0 1rem;
+}
+.challenge-mcq legend {
+  font-weight: 600;
+  padding: 0 0.25rem;
+}
+/* Each radio + label on its own line — the core fix for the run-together bug. */
+.challenge-option {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.375rem 0;
+  cursor: pointer;
+}
+.challenge-option input {
+  flex-shrink: 0;
+}
+.challenge-freetext {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin: 0 0 0.5rem;
+}
+.challenge-freetext label {
+  font-weight: 600;
+}
+.challenge-freetext textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem;
+  border: 1px solid var(--sapField_BorderColor, #89919a);
+  border-radius: 0.375rem;
+  font: inherit;
+  resize: vertical;
+}
+.challenge-ai-note {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--sapContent_LabelColor, #556b82);
+}
+</style>

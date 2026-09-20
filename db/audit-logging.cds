@@ -180,3 +180,12 @@ annotate ims.DeveloperEnvironmentLinks with @PersonalData: {
 } {
   tab @PersonalData.FieldSemantics: 'DataSubjectID';
 };
+
+// #2393 — SessionFavorites are personal (user FK); cascade-delete on
+// user anonymization mirrors the UserLearningPreferences pattern.
+annotate ims.SessionFavorites with @PersonalData: {
+  EntitySemantics: 'DataSubjectDetails',
+  cascade        : 'delete'
+} {
+  user @PersonalData.FieldSemantics: 'DataSubjectID';
+};

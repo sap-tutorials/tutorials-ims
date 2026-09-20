@@ -14,6 +14,8 @@ import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { Session } from '../devtoberfest-schedule-shared/types';
 import { viewerDayKey } from '../devtoberfest-schedule-shared/format-session-time';
 import type { TechEdSession } from '../teched-sessions-grid/filter';
+import { useAuth } from '../devtoberfest-schedule-shared/useAuth';
+import { favSet, isFavorite, loadFavorites } from '../devtoberfest-schedule-shared/favorites';
 import { isClubhouse } from '../teched-sessions-grid/filter';
 import { parseTechEdCalUrl, toTechEdCalQuery, type TechEdCalViewMode } from './url-state';
 
@@ -74,6 +76,7 @@ const filterTrack = ref('');    // track slug
 const filterVenue = ref('');    // '' | 'BERLIN' | 'VIRTUAL'
 const filterQuery = ref('');    // free text
 const filterClubhouse = ref(false); // Community Clubhouse (room "Community Theater")
+const favOnly = ref(false); // #2393 — favorites-only (auth-gated)
 const viewMode = ref<TechEdCalViewMode>('week');
 const cursor = ref<Date>(new Date());
 // Cache raw TechEd sessions for filter options
@@ -94,6 +97,9 @@ if (initialUrl.view) viewMode.value = initialUrl.view;
 if (initialUrl.track) filterTrack.value = initialUrl.track;
 if (initialUrl.venue) filterVenue.value = initialUrl.venue;
 if (initialUrl.clubhouse) filterClubhouse.value = true;
+if (initialUrl.fav) favOnly.value = true;
+
+const { isAuthenticated } = useAuth();
 
 // --- Feed loading -----------------------------------------------------------
 async function loadFeed(): Promise<TechEdFeed> {
@@ -210,6 +216,7 @@ const filteredSessions = computed<Session[]>(() => {
     if (filterTrack.value && raw?.track !== filterTrack.value) return false;
     if (filterVenue.value && raw?.venue !== filterVenue.value) return false;
     if (filterClubhouse.value && !(raw && isClubhouse(raw))) return false;
+    if (favOnly.value && !isFavorite('TECHED', s.id)) return false;
     if (q && !(haystackBySlug.value.get(s.id) ?? '').includes(q)) return false;
     return true;
   });
@@ -250,6 +257,7 @@ function writeUrl() {
     track: filterTrack.value || null,
     venue: filterVenue.value || null,
     clubhouse: filterClubhouse.value,
+    fav: favOnly.value,
   };
   const qs = toTechEdCalQuery(state);
   window.history.replaceState({}, '', `${window.location.pathname}${qs}${window.location.hash}`);
@@ -261,6 +269,7 @@ function applyFromUrl() {
   filterTrack.value = st.track ?? '';
   filterVenue.value = st.venue ?? '';
   filterClubhouse.value = st.clubhouse;
+  favOnly.value = st.fav;
   if (st.session) {
     const row = sessions.value.find((r) => r.id === st.session);
     selectedRow.value = row ?? null;
@@ -279,13 +288,20 @@ function onPopState() { applyFromUrl(); }
 onMounted(async () => {
   window.addEventListener('popstate', onPopState);
   await loadData();
+  if (isAuthenticated.value) loadFavorites();
   applied = true;
   writeUrl();
 });
 
 onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
 
-watch([viewMode, cursor, filterTrack, filterVenue, filterQuery, filterClubhouse, selectedRow], writeUrl);
+watch([viewMode, cursor, filterTrack, filterVenue, filterQuery, filterClubhouse, favOnly, selectedRow], writeUrl);
+
+// #2393 — pull favorites once authenticated; clear the facet if anonymous.
+watch(isAuthenticated, (authed) => {
+  if (authed) loadFavorites();
+  else favOnly.value = false;
+});
 </script>
 
 <template>
@@ -342,6 +358,17 @@ watch([viewMode, cursor, filterTrack, filterVenue, filterQuery, filterClubhouse,
           aria-label="Community Clubhouse sessions only"
           @click="filterClubhouse = !filterClubhouse"
         >Community Clubhouse</button>
+
+        <!-- #2393 — favorites-only toggle, auth-gated -->
+        <button
+          v-if="isAuthenticated"
+          type="button"
+          class="cal-clubhouse-btn cal-fav-btn"
+          :class="{ 'cal-clubhouse-btn--active': favOnly }"
+          :aria-pressed="favOnly"
+          aria-label="Favorite sessions only"
+          @click="favOnly = !favOnly"
+        >★ Favorites only</button>
 
         <!-- View toggle: Week / Day ONLY (no Month) -->
         <div class="cal-switch" role="tablist" aria-label="Calendar view">

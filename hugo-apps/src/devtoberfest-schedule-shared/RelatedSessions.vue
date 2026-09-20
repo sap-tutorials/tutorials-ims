@@ -1,12 +1,13 @@
 <script setup lang="ts">
-// hugo-apps/src/teched-sessions-grid/RelatedSessions.vue
+// hugo-apps/src/devtoberfest-schedule-shared/RelatedSessions.vue
 //
 // Self-contained presentational block that renders a "Related Devtoberfest
-// sessions" list for a TechEd session detail context.
+// sessions" list for a TechEd session context. Shared between the teched grid
+// cards (App.vue) and the shared DetailPanel, so it lives in the shared dir.
 //
 // Fails open: renders nothing when relatedDevtoberfestSessions is empty or
 // absent (i.e. when TECHED_DEVTOBERFEST_CROSSLINK_ENABLED DB flag is OFF).
-import type { RelatedDevtoberfestSession } from './filter';
+import type { RelatedDevtoberfestSession } from '../teched-sessions-grid/filter';
 
 defineProps<{
   sessions: RelatedDevtoberfestSession[] | undefined | null;

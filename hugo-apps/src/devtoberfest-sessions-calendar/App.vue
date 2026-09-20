@@ -5,6 +5,7 @@ import { fetchFeed, fetchMyCompletions } from '../devtoberfest-schedule-shared/f
 import { mergeCompletion } from '../devtoberfest-schedule-shared/completion';
 import { broadcastingTag, matchesFormat, FORMAT_FILTER_OPTIONS } from '../devtoberfest-schedule-shared/broadcasting';
 import { useAuth } from '../devtoberfest-schedule-shared/useAuth';
+import { isFavorite, loadFavorites } from '../devtoberfest-schedule-shared/favorites';
 import EditionPicker from '../devtoberfest-schedule-shared/EditionPicker.vue';
 import PointsBanner from '../devtoberfest-schedule-shared/PointsBanner.vue';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
@@ -35,6 +36,7 @@ const joined = ref(false);
 const selectedRow = ref<ScheduleRow | null>(null);
 const filterTrack = ref('');
 const filterFormat = ref('');
+const favOnly = ref(false); // #2393 — favorites-only (auth-gated)
 const viewMode = ref<ViewMode>('month');
 const cursor = ref<Date>(new Date());
 
@@ -147,6 +149,7 @@ const filteredSessions = computed<Session[]>(() => {
   return base.filter((r) => {
     if (filterTrack.value && (r as any).trackName !== filterTrack.value) return false;
     if (!matchesFormat((r as any).broadcastingPreference, filterFormat.value)) return false;
+    if (favOnly.value && !isFavorite('DEVTOBERFEST', r.id)) return false;
     return true;
   });
 });
@@ -241,6 +244,12 @@ onMounted(async () => {
 onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
 
 watch([viewMode, cursor, filterTrack, filterFormat, editionId, selectedRow], writeUrl);
+
+// #2393 — pull favorites once authenticated; clear the facet if anonymous.
+watch(isAuthenticated, (authed) => {
+  if (authed) loadFavorites();
+  else favOnly.value = false;
+}, { immediate: true });
 </script>
 
 <template>
@@ -289,6 +298,15 @@ watch([viewMode, cursor, filterTrack, filterFormat, editionId, selectedRow], wri
             <option v-for="opt in FORMAT_FILTER_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </label>
+        <button
+          v-if="isAuthenticated"
+          type="button"
+          class="cal-fav-btn"
+          :class="{ active: favOnly }"
+          :aria-pressed="favOnly"
+          aria-label="Favorite sessions only"
+          @click="favOnly = !favOnly"
+        >★ Favorites only</button>
         <div class="cal-switch" role="tablist">
           <button :class="{ active: viewMode === 'month' }" @click="viewMode = 'month'">Month</button>
           <button :class="{ active: viewMode === 'week' }" @click="viewMode = 'week'">Week</button>
@@ -356,6 +374,9 @@ watch([viewMode, cursor, filterTrack, filterFormat, editionId, selectedRow], wri
 .cal-switch button { border: none; background: var(--sapField_Background, #fff); padding: 0.35rem 0.9rem; cursor: pointer; font: inherit; border-left: 1px solid var(--sapList_BorderColor, #e4e7ed); }
 .cal-switch button:first-child { border-left: none; }
 .cal-switch button.active { background: var(--sapButton_Emphasized_Background, #0a6ed1); color: #fff; }
+/* #2393 — favorites-only toggle */
+.cal-fav-btn { border: 1px solid var(--sapField_BorderColor, #89919a); background: var(--sapField_Background, #fff); padding: 0.35rem 0.9rem; cursor: pointer; font: inherit; border-radius: 0.25rem; white-space: nowrap; color: inherit; }
+.cal-fav-btn.active { background: var(--sapButton_Emphasized_Background, #0a6ed1); color: #fff; }
 .cal-legend { display: flex; flex-wrap: wrap; gap: 0.9rem; font-size: 0.75rem; color: var(--sapContent_LabelColor, #6a6d70); }
 .cal-legend-item { display: inline-flex; align-items: center; gap: 0.35rem; }
 .cal-legend-dot { width: 0.7rem; height: 0.7rem; border-radius: 3px; display: inline-block; }

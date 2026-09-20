@@ -54,6 +54,13 @@ export const FEATURE_FLAGS = [
     howToChange: adminTile('knowledgeGraph', '#knowledgeGraph', 'Toggle learning-path reasoner in the Knowledge Graph settings tile'),
   },
   {
+    key: 'KG_CONCEPT_DEFINITIONS_ENABLED', label: 'KG concept-definition generator', category: 'Knowledge Graph',
+    kind: 'db-setting', entity: 'KnowledgeGraphSettings', column: 'conceptDefinitionsEnabled', resolver: 'kg',
+    valueType: 'boolean', default: false, issue: '#2426', status: 'dev-only',
+    description: 'LLM-authored, grounded concept definitions (#2426). Gates the generate-concept-definitions scheduled job. DB-driven config (KnowledgeGraphSettings.conceptDefinitionsEnabled); no env var. DEV-only, default OFF, fail-open.',
+    howToChange: adminTile('knowledgeGraph', '#knowledgeGraph', 'Toggle the concept-definition generator in the Knowledge Graph settings tile'),
+  },
+  {
     key: 'KG_ONDEMAND_ENABLED', label: 'KG on-demand extraction',
     category: 'Knowledge Graph', kind: 'db-setting', entity: 'KnowledgeGraphSettings',
     column: 'onDemandExtractionEnabled', resolver: 'kg', envVar: 'KG_ONDEMAND_ENABLED',
@@ -418,7 +425,7 @@ export const FEATURE_FLAGS = [
     key: 'CHALLENGE_WIDGET_ENABLED', label: 'AI challenge widget (json-render POC)', category: 'Content',
     kind: 'db', imsConfigKey: 'flag.challengeWidget',
     valueType: 'boolean', default: false, issue: '#2362', status: 'dev-only',
-    description: 'Research spike (#2362): AI-authored json-render challenge panel per tutorial step. The model emits a constrained UI spec (srv/lib/ai-challenge-spec.js) rendered by a generic Vue catalog (hugo-apps/src/challenge-render). Anti-leak: reference answers are stripped from the public spec and returned separately for the ValidateAnswerSpecs sidecar. DB-driven config (ImsConfig key flag.challengeWidget); no env var. Default OFF, DEV-only, fail-open.',
+    description: 'Research spike (#2362): AI-authored json-render challenge panel per tutorial step. The model emits a constrained UI spec (srv/lib/ai-challenge-spec.js) rendered by a generic Vue catalog (hugo-apps/src/challenge-render). Anti-leak: reference answers are stripped from the public spec and returned separately for the ValidateAnswerSpecs sidecar. Because tutorial HTML is baked at build time, GENERATION is gated by the CHALLENGE_WIDGET_ENABLED build-time env var (scripts/fetch-tutorials.ts); this DB flag is the greenlight/kill record and admin control of record. Default OFF, DEV-only, fail-open.',
     howToChange: featureFlagUpsert('CHALLENGE_WIDGET_ENABLED', 'flag.challengeWidget'),
   },
   // ---- Edge cache ----

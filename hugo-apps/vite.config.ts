@@ -299,6 +299,7 @@ export default defineConfig({
         'code-check': resolve(__dirname, 'src/code-check/main.ts'),
         browse: resolve(__dirname, 'src/browse/main.ts'),
         'validation': resolve(__dirname, 'src/validation/main.ts'),
+        'challenge-render': resolve(__dirname, 'src/challenge-render/main.ts'),
         'tutorial-branches': resolve(__dirname, 'src/tutorial-branches/main.ts'),
         // [#251] Renamed from `tutorial` → `tutorial-referred` to avoid a path
         // collision with Hugo's `js.Build` output for `hugo/assets/js/tutorial.ts`,

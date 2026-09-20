@@ -14,7 +14,7 @@ describe('parseTechEdUrl', () => {
 
   it('parses every recognised param (URL-decoded)', () => {
     const s = parseTechEdUrl('?q=hana%20cloud&venue=BERLIN&track=ai-ml&speaker=ada-lovelace&session=my-session');
-    expect(s).toEqual({ q: 'hana cloud', venue: 'BERLIN', track: 'ai-ml', speaker: 'ada-lovelace', clubhouse: false, session: 'my-session' });
+    expect(s).toEqual({ q: 'hana cloud', venue: 'BERLIN', track: 'ai-ml', speaker: 'ada-lovelace', clubhouse: false, fav: false, session: 'my-session' });
   });
 
   it('normalises venue to canonical upper-case, else null', () => {
@@ -128,5 +128,12 @@ describe('clubhouse URL param', () => {
 
   it('omits clubhouse param when false', () => {
     expect(toTechEdQuery({ ...DEFAULT_URL_STATE, clubhouse: false })).not.toContain('clubhouse');
+  });
+
+  it('round-trips the fav flag (#2393)', () => {
+    expect(parseTechEdUrl('?fav=1').fav).toBe(true);
+    expect(parseTechEdUrl('').fav).toBe(false);
+    expect(toTechEdQuery({ ...DEFAULT_URL_STATE, fav: true })).toContain('fav=1');
+    expect(toTechEdQuery({ ...DEFAULT_URL_STATE, fav: false })).not.toContain('fav');
   });
 });

@@ -66,7 +66,8 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     // #2311 adds fetch-devtoberfest-sessions    (50 -> 51)
     // #2312 adds fetch-teched-sessions           (51 -> 52)
     // #2312 adds refresh-teched-sessions         (52 -> 53)
-    expect(_getJobRegistry().size).toBe(53);
+    // #2426 adds generate-concept-definitions      (53 -> 54)
+    expect(_getJobRegistry().size).toBe(54);
     const names = [..._getJobRegistry().keys()];
     expect(names).toContain('fetch-help-docs');
     expect(names).toContain('fetch-community-events');

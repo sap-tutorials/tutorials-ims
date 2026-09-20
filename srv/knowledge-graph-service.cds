@@ -104,7 +104,7 @@ service KnowledgeGraphService {
   @readonly
   @cds.query.limit: 200
   entity PublishedConcepts as projection on ims.Concepts {
-    ID, slug, name, description, publishedAt, publishedBy, status
+    ID, slug, name, description, descriptionStatus, publishedAt, publishedBy, status
   } where publishedAt is not null and status = 'ACTIVE';
 
   /**
@@ -418,6 +418,15 @@ extend entity KnowledgeGraphService.Concepts with actions {
 
   @requires : 'KnowledgeGraph.Admin'
   action unpublishConcept();
+
+  // #2426: one-click review of an LLM-drafted definition. approve → the
+  // description renders on-page (descriptionStatus='APPROVED' + audit stamp);
+  // reject → back to 'DRAFT' (stays off-page). Mirrors publishConcept binding.
+  @requires : 'KnowledgeGraph.Admin'
+  action approveConceptDefinition();
+
+  @requires : 'KnowledgeGraph.Admin'
+  action rejectConceptDefinition();
 };
 
 // #918 — virtual `isolated` flag populated by the after('READ', 'Concepts')

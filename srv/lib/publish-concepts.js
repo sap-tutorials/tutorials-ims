@@ -48,7 +48,7 @@ const META_DESC_MAX = 160; // Google truncates around 155–160 chars.
 
 export function conceptMetaDescription(concept) {
   const real = (concept.description || '').trim();
-  if (real) return truncateDescription(real);
+  if (real) return truncateDescription(stripMarkdown(real));
   const name = concept.name;
   const n = Array.isArray(concept.teaches) ? concept.teaches.length : 0;
   const synthesized = n > 0
@@ -60,6 +60,23 @@ export function conceptMetaDescription(concept) {
 function truncateDescription(s) {
   if (s.length <= META_DESC_MAX) return s;
   return `${s.slice(0, META_DESC_MAX - 1).trimEnd()}…`;
+}
+
+// #2426: concept descriptions are now markdown. The <meta name=description>
+// must be plain text — strip the common inline markdown so we don't ship
+// `**bold**` / `[label](url)` syntax into <head> (SEO regression, cf. #1795).
+// Lightweight and self-contained: this runs at publish time on short strings,
+// and does not need a full markdown parse.
+function stripMarkdown(s) {
+  return String(s)
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')          // images
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')        // links → label
+    .replace(/`([^`]+)`/g, '$1')                    // inline code
+    .replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, '$1')   // bold / italic
+    .replace(/^#{1,6}\s+/gm, '')                    // ATX headings
+    .replace(/^>\s?/gm, '')                          // blockquotes
+    .replace(/\s+/g, ' ')                            // collapse whitespace/newlines
+    .trim();
 }
 
 /**

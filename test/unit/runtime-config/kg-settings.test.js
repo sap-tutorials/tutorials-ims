@@ -38,7 +38,24 @@ describe('resolveKnowledgeGraphSettings (#463)', () => {
       mergeSimThresholdExtract: 0.85,
       onDemandExtractionEnabled: false,
       learningPathEnabled: false,
+      conceptDefinitionsEnabled: false,
     });
+  });
+
+  it('resolves conceptDefinitionsEnabled from env then DB (#2426)', async () => {
+    process.env.KG_CONCEPT_DEFINITIONS_ENABLED = 'true';
+    let s = await resolveKnowledgeGraphSettings();
+    expect(s.conceptDefinitionsEnabled).toBe(true);
+    delete process.env.KG_CONCEPT_DEFINITIONS_ENABLED;
+
+    const { KnowledgeGraphSettings } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(KnowledgeGraphSettings).entries({
+      ID: '20000000-0000-0000-0000-00000000c426',
+      conceptDefinitionsEnabled: true,
+    });
+    _resetCacheForTests();
+    s = await resolveKnowledgeGraphSettings();
+    expect(s.conceptDefinitionsEnabled).toBe(true);
   });
 
   it('falls through to env vars when DB row absent', async () => {

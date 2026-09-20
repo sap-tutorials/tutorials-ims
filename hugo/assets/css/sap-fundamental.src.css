@@ -2764,6 +2764,50 @@ html.dark .chroma .nd { color: #e2c5ff; font-weight: bold; }
   vertical-align: bottom;
 }
 
+/* #2426: explanatory definition prose rendered ABOVE the link-tile sections,
+   so a concept page leads with what the concept IS, not a wall of tiles.
+   Markdown-rendered (renderMarkdown), so style the generated block elements. */
+.concept-page__definition {
+  margin: 0 0 1.75rem;
+  max-width: 70ch;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--sapTextColor, #223);
+}
+.concept-page__definition > :first-child { margin-top: 0; }
+.concept-page__definition > :last-child { margin-bottom: 0; }
+.concept-page__definition p { margin: 0 0 0.75rem; }
+.concept-page__definition a {
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+}
+.concept-page__definition a:hover,
+.concept-page__definition a:focus-visible { text-decoration: underline; }
+.concept-page__definition code {
+  font-family: var(--sapFontMonoFamily, monospace);
+  font-size: 0.9em;
+  background: var(--sapNeutralBackground, #eef0f3);
+  padding: 0.05em 0.35em;
+  border-radius: 3px;
+}
+
+/* #2426: "About this page" — a collapsed explainer answering "what is this
+   tool" without competing with the content. Muted, small, non-intrusive. */
+.concept-page__about {
+  margin: 0 0 1.5rem;
+  font-size: 0.9rem;
+}
+.concept-page__about summary {
+  cursor: pointer;
+  color: var(--sapContent_LabelColor, #555);
+}
+.concept-page__about p {
+  margin: 0.5rem 0 0;
+  max-width: 70ch;
+  color: var(--sapContent_LabelColor, #555);
+  line-height: 1.5;
+}
+
 /* ==========================================================================
    KG widget redesign (#850) — sidebar row icons, expanded panel dialog,
    sidebar fade-during-expand, reduced-motion respect.

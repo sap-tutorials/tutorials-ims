@@ -53,6 +53,8 @@ export interface TechEdFilterState {
   track?: string | null;            // track slug
   speaker?: string | null;          // speaker slug
   clubhouse?: boolean;              // when true, only Community Clubhouse (room "Community Theater") sessions
+  favorites?: boolean;              // when true, only the user's favorites (#2393)
+  favKeys?: Set<string>;            // favorite keys shaped "TECHED:<slug>" (#2393)
   query?: string | null;
 }
 
@@ -93,6 +95,7 @@ export function filterSessions(
     if (state.track && s.track !== state.track) return false;
     if (state.speaker && !(s.speakers || []).includes(state.speaker)) return false;
     if (state.clubhouse && !isClubhouse(s)) return false;
+    if (state.favorites && !(state.favKeys?.has(`TECHED:${s.slug}`))) return false;
     if (q && !haystack(s).includes(q)) return false;
     return true;
   });

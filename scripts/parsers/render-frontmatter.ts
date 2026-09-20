@@ -138,6 +138,10 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
       if (s.skipIf)              entry.skipIf        = s.skipIf
       if (s.skipLabel)           entry.skipLabel     = s.skipLabel
       if (s.skipReason)          entry.skipReason    = s.skipReason
+      // [#2362] json-render challenge widget — the answer-stripped public spec
+      // attached by fetch-tutorials' challenge pass. Must be serialized here or
+      // .Params.steps[].challenge is dropped and the widget never renders.
+      if (s.challenge?.nodes?.length) entry.challenge = s.challenge
       return entry
     }),
   }

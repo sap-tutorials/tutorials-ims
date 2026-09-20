@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { renderMarkdown } from './markdown.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_PATH = join(__dirname, 'templates', 'concept-detail.ejs');
@@ -70,6 +71,7 @@ export function renderConceptDetail(concept, phase4) {
     helpDocs: p4.helpDocs || [],
     communityEvents: p4.communityEvents || [],
     escapeHtml,
+    renderMarkdown,
   };
   // Wrap in <main> so the served concept page has a top-level landmark. The
   // __shell__ chrome only provides a <!-- MAIN --> marker (its own <main> was

@@ -6,6 +6,7 @@ import { formatViewerLocal } from './format-session-time';
 import { sessionIcsHref, sessionCalendarHref, techedSessionIcsHref, techedSessionCalendarHref } from './calendar-links';
 import { broadcastingTag } from './broadcasting';
 import { renderMarkdown } from '../devtoberfest-shared/render-markdown';
+import RelatedSessions from './RelatedSessions.vue';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{
@@ -309,6 +310,14 @@ const formatTag = computed(() => broadcastingTag((props.row as any)?.broadcastin
             </li>
           </ul>
         </div>
+
+        <!-- Reverse direction (TechEd → Devtoberfest): mirrors the block shown on
+             /teched/ grid cards (App.vue). Guarded to teched rows; RelatedSessions
+             itself fails open on an empty/absent list. -->
+        <RelatedSessions
+          v-if="isTeched && (row as any).relatedDevtoberfestSessions?.length"
+          :sessions="(row as any).relatedDevtoberfestSessions"
+        />
 
         <div v-if="showCalendar" class="detail-panel__calendar">
           <span class="detail-panel__calendar-label">Add to calendar</span>
