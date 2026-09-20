@@ -266,8 +266,22 @@ function buildSanitizeOpts(options: StripDangerousHtmlOptions = {}): sanitizeHtm
             // Off-allowlist host — drop it.
             return { tagName: '', attribs: {} }
           }
-          // Host is allowlisted, proceed.
-          return { tagName, attribs }
+          // Host is allowlisted, proceed — but defer the load. Video embeds
+          // inside collapsed steps (step 2+ start `hidden` = display:none) load
+          // their iframe at 0×0, so YouTube (and other providers) pick a
+          // low-res poster keyed to that zero size and never upgrade when the
+          // step expands (#2362-adjacent). Move `src` → `data-src` and mark the
+          // iframe; tutorial.ts swaps it back to `src` when the step body
+          // becomes visible, so the iframe sizes correctly and the provider
+          // serves a full-resolution poster. Also avoids eagerly loading every
+          // buried video on page load. The intro video (partials/tutorial-video
+          // .html) is a separate, always-visible template and is untouched.
+          const { src: validatedSrc, ...rest } = attribs
+          const existingClass = rest.class ? `${rest.class} lazy-embed` : 'lazy-embed'
+          return {
+            tagName,
+            attribs: { ...rest, class: existingClass, 'data-src': validatedSrc },
+          }
         } catch (e) {
           // Relative URLs or malformed URLs fail to parse.
           // allowedIframeRelativeUrls: false will strip them, but the
