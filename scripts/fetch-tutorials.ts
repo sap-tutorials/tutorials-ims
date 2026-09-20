@@ -20,6 +20,8 @@ import { expandAiAuthoredQuestions, populateAiAuthoredSiblingMaps, isStepSubstan
 import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
 import { callQuizModel } from '../srv/lib/ai-quiz-llm.js'
 import { generateChallengeSpec } from '../srv/lib/ai-challenge-spec.js'
+import { PROMPT_VERSION as CHALLENGE_PROMPT_VERSION } from '../srv/lib/ai-challenge-spec.js'
+import { loadChallengeSpecCache, saveChallengeSpecCache, hashKey as challengeHashKey } from './lib/challenge-spec-cache.js'
 import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './parsers/codecheck.js'
 import { parseAssertBlocks, attachAssertSpecs } from './parsers/assert.js'
 import { computeRecommendations } from './parsers/recommendations.js'
@@ -1211,8 +1213,35 @@ async function main() {
       // ValidateAnswerSpecs path — mirroring the AI-quiz anti-leak seam above.
       if (process.env.CHALLENGE_WIDGET_ENABLED === 'true') {
         const challengeAnswers: Array<{ stepNumber: number; nodeId: string; reference: string }> = []
+        // [#2441 gate 2] Per-slug spec cache mirroring the AI-quiz cache above.
+        // A HIT reconstructs step.challenge + the reference sidecar with no model
+        // call. Keyed by step number; stepHash folds in the challenge prompt
+        // version so a PROMPT_VERSION bump invalidates every entry.
+        const chCache = loadChallengeSpecCache(t.slug)
+        let challengeCacheHits = 0
         for (const step of steps) {
-          if (!isStepSubstantive(step.content ?? '')) continue
+          const entryKey = String(step.number)
+          if (!isStepSubstantive(step.content ?? '')) {
+            // Stale entry cleanup: a step that is no longer substantive drops its
+            // cached spec (mirrors the AI-quiz expander's delete-on-empty).
+            delete chCache.entries[entryKey]
+            continue
+          }
+          const stepHash = challengeHashKey({
+            stepBody: step.content ?? '',
+            promptVersion: CHALLENGE_PROMPT_VERSION,
+            modelName: chCache.modelName,
+          })
+          const hit = chCache.entries[entryKey]
+          if (hit && hit.stepHash === stepHash) {
+            // Cache HIT — no model call, no cap consumption.
+            challengeCacheHits++
+            step.challenge = hit.spec as typeof step.challenge
+            for (const ra of hit.referenceAnswers) {
+              challengeAnswers.push({ stepNumber: step.number, nodeId: ra.nodeId, reference: ra.reference })
+            }
+            continue
+          }
           // Reuse the AI-quiz build cap as a shared LLM-spend ceiling across the
           // whole build (challenge + quiz calls both count). Without this a full
           // rebuild with the flag on would fire one model call per substantive
@@ -1236,6 +1265,25 @@ async function main() {
           for (const ra of res.referenceAnswers) {
             challengeAnswers.push({ stepNumber: step.number, nodeId: ra.nodeId, reference: ra.reference })
           }
+          // Adopt the model name from the first successful call so the cache
+          // header records which model produced these specs. A subsequent build
+          // on a different model → stepHash mismatch → regenerate.
+          if (res.modelName) chCache.modelName = res.modelName
+          chCache.promptVersion = CHALLENGE_PROMPT_VERSION
+          chCache.entries[entryKey] = {
+            stepHash: challengeHashKey({
+              stepBody: step.content ?? '',
+              promptVersion: CHALLENGE_PROMPT_VERSION,
+              modelName: chCache.modelName,
+            }),
+            generatedAt: new Date().toISOString(),
+            spec: res.spec,
+            referenceAnswers: res.referenceAnswers,
+          }
+        }
+        saveChallengeSpecCache(t.slug, chCache)
+        if (challengeCacheHits > 0) {
+          console.log(`[challenge] ${t.slug}: ${challengeCacheHits} spec cache hit(s)`)
         }
         if (challengeAnswers.length > 0) {
           // slug lowercased: Tutorials.slug in HANA is lowercase canonical.

@@ -11,6 +11,7 @@ import { chunk, runConcurrent } from './lib/publish-batcher.js';
 import { collectCodeCheckSpecs, publishCodeCheckSpecs } from './lib/publish-codecheck.js';
 import { collectAssertSpecs, publishAssertSpecs } from './lib/publish-asserts.js';
 import { publishValidateAnswerSpecs } from './lib/publish-validate-answer.js';
+import { publishChallengeAnswers } from './lib/publish-challenge-answers.js';
 import { publishContributors } from './publish/publish-contributors.js';
 import { publishValidationRules } from './publish/publish-validation-rules.js';
 import { computeOrphans, enforceCap, formatStepSummary } from './lib/purge-orphans.js';
@@ -1629,6 +1630,30 @@ async function main() {
       // Don't process.exit(1) on failures — non-fatal per spec.
     } catch (err) {
       console.error('[publish-content] validate-answer spec publish failed (non-fatal):', formatErrorChain(err));
+    }
+  }
+
+  // --- challenge-answers sidecar publish (non-fatal auxiliary step, #2441) ---
+  // Uploads challenge-widget freeText reference answers. QA channel skips for
+  // the same reason as validate-answer (#1375): srv-qa has no ChallengeAnswers
+  // entity or /api/challenge-grade route, so every POST would 500.
+  if (channel === 'qa') {
+    log('[challenge-answers] skipped (channel=qa — no runtime reader on srv-qa)');
+  } else {
+    try {
+      const cacheDir = join(process.cwd(), '.tutorial-cache');
+      const chResult = await publishChallengeAnswers({
+        cacheDir,
+        baseUrl: opts.baseUrl,
+        apiKey: opts.apiKey,
+      });
+      log(`[challenge-answers] published ${chResult.published} sidecars, ${chResult.failures.length} failures`);
+      for (const f of chResult.failures) {
+        console.warn(`[challenge-answers]   - ${f.slug}: ${f.status} ${f.body.slice(0, 200)}`);
+      }
+      // Don't process.exit(1) on failures — non-fatal.
+    } catch (err) {
+      console.error('[publish-content] challenge-answers publish failed (non-fatal):', formatErrorChain(err));
     }
   }
 
