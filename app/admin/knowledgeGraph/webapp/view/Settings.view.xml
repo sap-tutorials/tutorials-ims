@@ -35,6 +35,16 @@
         </f:SimpleForm>
       </Panel>
 
+      <Panel headerText="{i18n>togglesHeader}" class="sapUiSmallMarginBottom">
+        <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
+          <Label text="{i18n>fieldLearningPathEnabled}" />
+          <Switch state="{settings>/learningPathEnabled}" />
+
+          <Label text="{i18n>fieldConceptDefinitionsEnabled}" />
+          <Switch state="{settings>/conceptDefinitionsEnabled}" />
+        </f:SimpleForm>
+      </Panel>
+
       <HBox justifyContent="End">
         <Button text="{i18n>buttonReload}" press=".onReload" />
         <Button text="{i18n>buttonSave}" type="Emphasized" press=".onSave"

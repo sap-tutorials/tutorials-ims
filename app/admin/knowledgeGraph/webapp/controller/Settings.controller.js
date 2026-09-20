@@ -12,6 +12,8 @@ sap.ui.define([
       var oJSON = new JSONModel({
         enabled: false,
         onDemandExtractionEnabled: false,
+        learningPathEnabled: false,
+        conceptDefinitionsEnabled: false,
         extractBuildCap: null,
         mergeSimThreshold: null,
         mergeSimThresholdExtract: null
@@ -34,6 +36,8 @@ sap.ui.define([
           oModel.setData({
             enabled: !!data.enabled,
             onDemandExtractionEnabled: !!data.onDemandExtractionEnabled,
+            learningPathEnabled: !!data.learningPathEnabled,
+            conceptDefinitionsEnabled: !!data.conceptDefinitionsEnabled,
             extractBuildCap: data.extractBuildCap != null ? data.extractBuildCap : null,
             mergeSimThreshold: data.mergeSimThreshold != null ? data.mergeSimThreshold : null,
             mergeSimThresholdExtract: data.mergeSimThresholdExtract != null ? data.mergeSimThresholdExtract : null
@@ -56,6 +60,8 @@ sap.ui.define([
       var body = {
         enabled: !!data.enabled,
         onDemandExtractionEnabled: !!data.onDemandExtractionEnabled,
+        learningPathEnabled: !!data.learningPathEnabled,
+        conceptDefinitionsEnabled: !!data.conceptDefinitionsEnabled,
         extractBuildCap: cap,
         mergeSimThreshold: t1,
         mergeSimThresholdExtract: t2
