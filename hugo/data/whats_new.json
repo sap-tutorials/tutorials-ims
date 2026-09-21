@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-20T12:51:40.301Z",
+  "generatedAt": "2026-09-21T20:40:40.319Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,110 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2449",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2449,
+      "title": "Devtoberfest gameboard recognizes joined players (email match)",
+      "summary": "The Devtoberfest arcade and gameboard now reliably recognize players who've joined, showing their score and level instead of prompting them to join again.",
+      "category": "Fix",
+      "mergedAt": "2026-09-21T20:27:44Z",
+      "week": "2026-W39",
+      "weekStart": "2026-09-21",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2449"
+    },
+    {
+      "id": "tutorials-ims#2448",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2448,
+      "title": "Release 1.29.0 → main (production)",
+      "summary": "Production release 1.29.0.",
+      "category": "Maintenance",
+      "mergedAt": "2026-09-21T16:59:54Z",
+      "week": "2026-W39",
+      "weekStart": "2026-09-21",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2448"
+    },
+    {
+      "id": "tutorials-ims#2447",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2447,
+      "title": "fix(gameboard): expose SAP_ID on GAMEBOARD_PARTICIPANT_V1 (arcade 'Join the Fest' for joined users)",
+      "summary": "Internal identifier added to the Devtoberfest participant view for gameboard matching.",
+      "category": "Maintenance",
+      "mergedAt": "2026-09-21T16:19:48Z",
+      "week": "2026-W39",
+      "weekStart": "2026-09-21",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2447"
+    },
+    {
+      "id": "tutorials-ims#2444",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2444,
+      "title": "Interactive challenge grading",
+      "summary": "Tutorial challenge widgets now grade free-text and multiple-choice answers inline with immediate feedback.",
+      "category": "Feature",
+      "mergedAt": "2026-09-20T21:22:04Z",
+      "week": "2026-W38",
+      "weekStart": "2026-09-14",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2444"
+    },
+    {
+      "id": "tutorials-ims#2445",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2445,
+      "title": "Sharper tutorial step videos",
+      "summary": "Video thumbnails inside collapsed tutorial steps now load at full resolution.",
+      "category": "Fix",
+      "mergedAt": "2026-09-20T21:05:55Z",
+      "week": "2026-W38",
+      "weekStart": "2026-09-14",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2445"
+    },
+    {
+      "id": "tutorials-ims#2442",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2442,
+      "title": "Knowledge-graph learning-path controls",
+      "summary": "Administrators can toggle knowledge-graph learning paths and concept definitions from the admin console.",
+      "category": "Feature",
+      "mergedAt": "2026-09-20T18:14:52Z",
+      "week": "2026-W38",
+      "weekStart": "2026-09-14",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2442"
+    },
+    {
+      "id": "tutorials-ims#2438",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2438,
+      "title": "Release 1.28.0 → main (production)",
+      "summary": "Production release 1.28.0.",
+      "category": "Maintenance",
+      "mergedAt": "2026-09-20T13:15:58Z",
+      "week": "2026-W38",
+      "weekStart": "2026-09-14",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2438"
+    },
+    {
+      "id": "tutorials-ims#2437",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2437,
+      "title": "chore(release): 1.28.0 — What's New digest + version bump",
+      "summary": "Version bump and What's New digest for the 1.28.0 release.",
+      "category": "Maintenance",
+      "mergedAt": "2026-09-20T13:04:11Z",
+      "week": "2026-W38",
+      "weekStart": "2026-09-14",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2437"
+    },
     {
       "id": "tutorials-ims#2436",
       "repo": "tutorials-ims",
