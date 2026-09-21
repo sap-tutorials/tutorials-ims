@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-21T16:46:42.927Z",
+  "generatedAt": "2026-09-21T20:51:17.093Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,32 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2449",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2449,
+      "title": "Devtoberfest gameboard recognizes joined players (email match)",
+      "summary": "The Devtoberfest arcade and gameboard now reliably recognize players who've joined, showing their score and level instead of prompting them to join again.",
+      "category": "Fix",
+      "mergedAt": "2026-09-21T20:27:44Z",
+      "week": "2026-W39",
+      "weekStart": "2026-09-21",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2449"
+    },
+    {
+      "id": "tutorials-ims#2448",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2448,
+      "title": "Release 1.29.0 → main (production)",
+      "summary": "Production release 1.29.0.",
+      "category": "Maintenance",
+      "mergedAt": "2026-09-21T16:59:54Z",
+      "week": "2026-W39",
+      "weekStart": "2026-09-21",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2448"
+    },
     {
       "id": "tutorials-ims#2447",
       "repo": "tutorials-ims",

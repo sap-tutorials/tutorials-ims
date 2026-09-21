@@ -1,6 +1,7 @@
 VIEW "GAMEBOARD_PARTICIPANT_V1" AS
   SELECT r."USER_ID"                              AS "USER_ID",
          u."SAPID"                                AS "SAP_ID",
+         LOWER(u."EMAIL")                         AS "EMAIL",
          u."FIRSTNAME"                            AS "FIRST_NAME",
          LEFT(COALESCE(u."LASTNAME", ''), 1)      AS "LAST_INITIAL",
          u."KHOROSID"                             AS "COMMUNITY_ID",
