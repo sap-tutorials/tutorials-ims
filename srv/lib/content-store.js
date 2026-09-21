@@ -2032,7 +2032,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       // PR #591: `sources` is the per-slug gzipped raw markdown side of the
       // payload — destructure + forward it to appendToSession so source
       // hashes get persisted alongside content hashes.
-      const { sessionId, files, metadata, bodyTexts, branchSpecs, sources, sourceCommits } = req.body || {};
+      const { sessionId, files, metadata, bodyTexts, branchSpecs, sources, sourceCommits, sourceRepos } = req.body || {};
       if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
       const droppedFiles = dropCatalogSlugs(files);
       dropCatalogSlugs(metadata);
@@ -2040,10 +2040,11 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       dropCatalogSlugs(branchSpecs);
       dropCatalogSlugs(sources);
       dropCatalogSlugs(sourceCommits);
+      dropCatalogSlugs(sourceRepos);
       if (droppedFiles.length) {
         LOG.warn(`[content/publish/append] dropped ${droppedFiles.length} catalog slug(s)`);
       }
-      const result = await sessionHelpers.appendToSession({ sessionId, files, metadata, bodyTexts, branchSpecs, sources, sourceCommits });
+      const result = await sessionHelpers.appendToSession({ sessionId, files, metadata, bodyTexts, branchSpecs, sources, sourceCommits, sourceRepos });
       res.status(202).json(result);
     } catch (err) {
       const code = err.statusCode || 500;
