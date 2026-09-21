@@ -27,6 +27,24 @@ document.addEventListener('click', (e) => {
   if (printBtn) { void printTutorial(); return }
 })
 
+// --- Lazy video embeds (#2362-adjacent) ---
+// Step iframes (YouTube/Vimeo/openSAP/sapvideo) are emitted by the parser with
+// `src` moved to `data-src` + a `lazy-embed` class (scripts/parsers/sanitize-
+// html.ts). Reason: steps 2+ start `hidden` (display:none), so an eagerly-
+// loaded iframe initializes at 0×0 and the provider picks a low-resolution
+// poster keyed to that size — which it never upgrades when the step expands.
+// Swapping data-src → src only once the body is visible lets the iframe size
+// correctly and the provider serve a full-res poster (and avoids loading every
+// buried video up front). Idempotent: an already-activated iframe has no
+// data-src, so re-reveal is a no-op.
+function activateLazyEmbeds(root: ParentNode) {
+  root.querySelectorAll<HTMLIFrameElement>('iframe.lazy-embed[data-src]').forEach((frame) => {
+    frame.src = frame.dataset.src!
+    delete frame.dataset.src
+    frame.classList.remove('lazy-embed')
+  })
+}
+
 function toggleCodeBlock(btn: HTMLButtonElement) {
   const block = btn.closest('.code-block')
   if (!block) return
@@ -49,6 +67,7 @@ function toggleStep(header: HTMLElement) {
   if (!body) return
   const icon = step.querySelector('.step-toggle-icon')
   body.hidden = !body.hidden
+  if (!body.hidden) activateLazyEmbeds(body)
   if (icon) icon.textContent = body.hidden ? '+' : '—'
   updateActiveTocItem()
 }
@@ -60,6 +79,7 @@ function expandStep(stepNum: string): HTMLElement | null {
   if (!body) return step
   if (body.hidden) {
     body.hidden = false
+    activateLazyEmbeds(body)
     const icon = step.querySelector('.step-toggle-icon')
     if (icon) icon.textContent = '—'
     updateActiveTocItem()
@@ -83,7 +103,7 @@ function expandAllSteps() {
   document.querySelectorAll('.tutorial-step').forEach(step => {
     const body = step.querySelector('.step-body') as HTMLElement
     const icon = step.querySelector('.step-toggle-icon')
-    if (body) body.hidden = false
+    if (body) { body.hidden = false; activateLazyEmbeds(body) }
     if (icon) icon.textContent = '—'
   })
   updateActiveTocItem()
@@ -508,6 +528,10 @@ function preparePrintImages(timeoutMs = 5000): Promise<void> {
 }
 
 async function printTutorial(): Promise<void> {
+  // Activate every deferred video embed first: print.css expands all steps, but
+  // a still-collapsed step's iframe carries only data-src, so it would print
+  // blank. activateLazyEmbeds is idempotent and cheap on already-live iframes.
+  activateLazyEmbeds(document)
   await preparePrintImages()
   window.print()
 }
@@ -546,4 +570,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initStepHashNavigation()
   initPrintDeepLink()
   initMermaid()
+  // Activate embeds in any step that is open on load (step 1 is expanded by
+  // default) so its video sizes correctly and gets a full-res poster.
+  document.querySelectorAll<HTMLElement>('.tutorial-step .step-body:not([hidden])')
+    .forEach(activateLazyEmbeds)
 })

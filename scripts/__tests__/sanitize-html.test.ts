@@ -388,6 +388,21 @@ describe('video + vimeo support', () => {
     const out = stripDangerousHtml('<iframe src="https://evil.example/x"></iframe>')
     expect(out).not.toContain('evil.example')
   })
+  // #2362-adjacent: defer allowlisted iframe loads so videos buried in
+  // collapsed steps don't init at 0×0 (→ low-res provider poster). tutorial.ts
+  // swaps data-src → src when the step body becomes visible.
+  it('defers an allowlisted iframe load: src → data-src + lazy-embed class', () => {
+    const out = stripDangerousHtml('<iframe src="https://www.youtube.com/embed/abc123DEFG_"></iframe>')
+    expect(out).toContain('data-src="https://www.youtube.com/embed/abc123DEFG_"')
+    expect(out).toContain('lazy-embed')
+    // No live src remains — the load is deferred to the client.
+    expect(out).not.toMatch(/\ssrc="https:\/\/www\.youtube\.com/)
+  })
+  it('appends lazy-embed to an existing iframe class', () => {
+    const out = stripDangerousHtml('<iframe class="wide" src="https://player.vimeo.com/video/123"></iframe>')
+    expect(out).toMatch(/class="[^"]*\bwide\b[^"]*"/)
+    expect(out).toMatch(/class="[^"]*\blazy-embed\b[^"]*"/)
+  })
 })
 
   // #1102: opt-in `data:` image URLs for the VSCode author-preview endpoint.

@@ -42,11 +42,15 @@ if (dataEl) {
 
   const stepByNum = new Map(steps.map((s) => [s.number, s]));
 
+  // Tutorial slug for the grade endpoint — same source the validation island
+  // uses (document.documentElement.dataset.pageSlug), lowercased.
+  const slug = (document.documentElement.dataset.pageSlug ?? '').toLowerCase();
+
   document.querySelectorAll('.step-challenge-mount').forEach((el) => {
     const host = el as HTMLElement;
     const stepNum = Number(host.dataset.step ?? 0);
     const step = stepByNum.get(stepNum);
     if (!step?.challenge?.nodes?.length) return;
-    createApp(ChallengeRenderer, { spec: step.challenge }).mount(host);
+    createApp(ChallengeRenderer, { spec: step.challenge, slug, stepNumber: stepNum }).mount(host);
   });
 }

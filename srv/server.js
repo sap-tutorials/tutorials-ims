@@ -82,12 +82,15 @@ import { defaultLoadStepText } from './lib/code-check-step-loader.js';
 import { codeCheckSpecPublishHandler } from './lib/code-check-spec-publish.js';
 import { assertSpecPublishHandler } from './lib/assert-spec-publish.js';
 import { publishValidateAnswerSpecs } from './lib/validate-answer-spec-publish.js';
+import { publishChallengeAnswers } from './lib/challenge-answer-publish.js';
 import { publishContributors } from './lib/contributors-publish.js';
 import { publishValidationRules } from './lib/validation-rules-publish.js';
 import { resolveSearchSettings } from './lib/runtime-config/search-settings.js';
 import { resolveTenantSettings } from './lib/runtime-config/tenant-settings.js';
 import { makeValidateAnswerHandler } from './lib/validate-answer-handler.js';
 import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
+import { makeChallengeGradeHandler } from './lib/challenge-grade-handler.js';
+import { defaultLoadChallengeAnswer } from './lib/challenge-grade-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
 import { classifyRebuildMode, resolveSlugForEntity, resolveSlugsForTagRename, TAG_REVERSE_LOOKUP_CAP } from './lib/_classify-rebuild-mode.js';
 import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
@@ -990,6 +993,15 @@ cds.on('bootstrap', (app) => {
     publishValidateAnswerSpecs
   );
 
+  // REPLACE-per-slug handler for ChallengeAnswers (challenge-widget freeText
+  // reference answers, #2441). Same auth guard and body parser as the
+  // validate-answer-specs sibling it mirrors.
+  app.post('/content/challenge-answers',
+    express.json({ limit: '5mb' }),
+    contentAuthMiddleware,
+    publishChallengeAnswers
+  );
+
   // REPLACE-per-slug handler for TutorialContributors (WS2 #task-6).
   // Same auth guard and body parser as the validate-answer-specs sibling.
   app.post('/content/publish-contributors',
@@ -1483,6 +1495,20 @@ cds.on('bootstrap', (app) => {
     express.json({ limit: '64kb' }),
     _apiContextMw, _apiAuthMw,
     (req, res, next) => Promise.resolve(validateAnswerHandler(req, res)).catch(next)
+  );
+
+  // Challenge-widget freeText AI grader (#2441). Same auth + rate-limit shape
+  // as /api/validate-answer, which it mirrors; gated on the flag.challengeWidget
+  // ImsConfig kill switch inside the dispatch (fail-open). defaultCallModel is
+  // reused as-is; the loader reads ChallengeAnswers.
+  const challengeGradeHandler = makeChallengeGradeHandler({
+    callModel: defaultCallModel,
+    loadAnswer: defaultLoadChallengeAnswer,
+  });
+  app.post('/api/challenge-grade',
+    express.json({ limit: '64kb' }),
+    _apiContextMw, _apiAuthMw,
+    (req, res, next) => Promise.resolve(challengeGradeHandler(req, res)).catch(next)
   );
 
   // Per-IP rate limit for the public /search endpoint. Mounted in 'bootstrap'

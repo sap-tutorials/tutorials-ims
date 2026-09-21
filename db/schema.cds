@@ -950,6 +950,22 @@ entity ValidateAnswerSpecs : managed {
   videoContext      : LargeString;
 }
 
+// Author-supplied free-text reference answers for challenge-widget freeText
+// nodes, per (tutorial, step, nodeId). Populated by the publish-content
+// pipeline from the <slug>.challenge-answers.json sidecar; read by
+// srv/lib/challenge-grade-tool.js at runtime. Server-only — `reference` lives
+// ONLY here (anti-leak): ai-challenge-spec.js strips it from the public spec
+// so the grader's reference answer never enters the tutorial-data JSON shipped
+// to clients. MCQ answerIndex is public (client-graded) and NOT stored here.
+// Mirrors ValidateAnswerSpecs (the AI-quiz path this subsystem clones). [#2441]
+entity ChallengeAnswers : managed {
+  key tutorial   : Association to Tutorials;
+  key stepNumber : Integer;
+  key nodeId     : String(40);
+  prompt         : LargeString;
+  reference      : LargeString @mandatory;
+}
+
 // Full parsed rules.vr rule set for a tutorial, persisted at publish time.
 // Unlike ValidateAnswerSpecs (AI-graded only), this holds ALL rule types so
 // the admin Validation Questions facet can display the complete rule set.
