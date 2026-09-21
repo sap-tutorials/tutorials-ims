@@ -40,6 +40,7 @@ aspect ContentFilesAspect : managed {
   sourceContent             : LargeBinary;
   sourceHash                : Sha256;
   sourceCommit              : String(64);   // git commit SHA of source .md at publish time (#2245); null for pre-2245 rows
+  sourceRepo                : String(255);  // owner/name of the GitHub repo the source came from (e.g. "sap-tutorials/developer-advocates"); null for pre-guard rows. Used by the public-namespace -Contribution publish guard.
 }
 
 aspect ContentManifestAspect : managed {
