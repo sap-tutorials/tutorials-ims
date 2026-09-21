@@ -174,6 +174,34 @@ export function createSessionHelpers({ namespace }) {
     }
     const writeSlugs = slugs.filter((s) => !blockedSet.has(s));
 
+    // The guard must exclude blocked slugs from EVERY public write path, not
+    // just the ContentFiles BLOB. metadata/bodyTexts/branchSpecs feed the
+    // Tutorials / TutorialMeta / Steps upserts, which surface in the public
+    // catalog/browse/sitemap — a blocked slug left in those maps would create
+    // a catalog-visible (dead-link) public row despite its BLOB being dropped.
+    // Sweep the UNION of all four maps' keys so a blocked slug present in
+    // metadata/bodyTexts/branchSpecs but absent from `files` is still caught.
+    // On the QA namespace isPublicNamespace is false, so this is a no-op.
+    if (isPublicNamespace) {
+      const metaKeys = new Set([
+        ...Object.keys(metadata),
+        ...Object.keys(bodyTexts),
+        ...Object.keys(branchSpecs),
+      ]);
+      for (const s of metaKeys) {
+        const repo = sourceRepos[s];
+        if (typeof repo === 'string' && repo.endsWith('-Contribution')) {
+          if (!blockedSet.has(s)) {
+            console.warn(`[content-publish] BLOCKED -Contribution slug (metadata) from public namespace: ${s} (repo=${sourceRepos[s]})`);
+            blockedSet.add(s);
+          }
+          delete metadata[s];
+          delete bodyTexts[s];
+          delete branchSpecs[s];
+        }
+      }
+    }
+
     const entries = [];
     let totalSizeBytes = 0;
     const batchHasher = createHash('sha256');
@@ -328,7 +356,7 @@ export function createSessionHelpers({ namespace }) {
     return {
       slugsAccepted: writeSlugs.length,
       writtenSlugs: writeSlugs,
-      blockedContributionSlugs,
+      blockedContributionSlugs: [...blockedSet],
       totalSizeBytes,
       batchHash: batchHasher.digest('hex')
     };

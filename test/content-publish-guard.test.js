@@ -37,14 +37,14 @@ function html(s) {
   ).toString('base64');
 }
 
-async function beginAndAppend(helpers, { files, sourceRepos }) {
+async function beginAndAppend(helpers, { files, sourceRepos, metadata }) {
   const { sessionId } = await helpers.beginPublishSession({
     trigger: 'unit-test',
     hugoVersion: '0.147.0',
     expectedSlugCount: Object.keys(files).length,
     initiator: 'unit-test',
   });
-  return helpers.appendToSession({ sessionId, files, sourceRepos });
+  return helpers.appendToSession({ sessionId, files, sourceRepos, metadata });
 }
 
 function writtenList(res) {
@@ -53,7 +53,7 @@ function writtenList(res) {
 
 describe('public-namespace -Contribution publish guard', () => {
   let publicHelpers, qaHelpers;
-  let PublicContentFiles, PublicContentManifest, PublicPipelineLog, PublicJobLocks;
+  let PublicContentFiles, PublicContentManifest, PublicPipelineLog, PublicJobLocks, PublicTutorials;
   let QaContentFiles, QaContentManifest, QaPipelineLog, QaJobLocks;
 
   beforeAll(async () => {
@@ -73,6 +73,7 @@ describe('public-namespace -Contribution publish guard', () => {
       ContentManifest: PublicContentManifest,
       PipelineLog: PublicPipelineLog,
       JobLocks: PublicJobLocks,
+      Tutorials: PublicTutorials,
     } = cds.entities(PUBLIC_NS));
     ({
       ContentFiles: QaContentFiles,
@@ -87,6 +88,7 @@ describe('public-namespace -Contribution publish guard', () => {
     await DELETE.from(PublicContentManifest);
     await DELETE.from(PublicPipelineLog);
     await DELETE.from(PublicJobLocks);
+    await DELETE.from(PublicTutorials);
     await DELETE.from(QaContentFiles);
     await DELETE.from(QaContentManifest);
     await DELETE.from(QaPipelineLog);
@@ -140,5 +142,51 @@ describe('public-namespace -Contribution publish guard', () => {
     const legacy = await SELECT.one.from(PublicContentFiles).where({ slug: 'legacy-slug' });
     expect(legacy, 'legacy-slug row written').toBeTruthy();
     expect(legacy.sourceRepo, 'null sourceRepo persisted as null').toBeNull();
+  });
+
+  it('public namespace: blocked -Contribution slug creates NO Tutorials metadata row', async () => {
+    // Regression for the metadata write-path bypass: dropping the ContentFiles
+    // BLOB is not enough — a blocked slug left in `metadata` would still upsert a
+    // catalog-visible (dead-link) public Tutorials row. The guard must strip
+    // blocked slugs from metadata too.
+    const res = await beginAndAppend(publicHelpers, {
+      files: { 'good-slug': html('ok'), 'qa-slug': html('qa') },
+      sourceRepos: {
+        'good-slug': 'sap-tutorials/developer-advocates',
+        'qa-slug': 'sap-tutorials/developer-advocates-Contribution',
+      },
+      metadata: {
+        'good-slug': { title: 'Good Tutorial', steps: [{ title: 'Step 1' }] },
+        'qa-slug': { title: 'QA Tutorial', steps: [{ title: 'Step 1' }] },
+      },
+    });
+
+    expect(res.blockedContributionSlugs).toContain('qa-slug');
+
+    // The good slug's Tutorials row must exist; the blocked slug's must NOT.
+    const goodTut = await SELECT.one.from(PublicTutorials).where({ slug: 'good-slug' });
+    const qaTut = await SELECT.one.from(PublicTutorials).where({ slug: 'qa-slug' });
+    expect(goodTut, 'good-slug Tutorials row written').toBeTruthy();
+    expect(qaTut, 'qa-slug Tutorials row NOT written (metadata guarded)').toBeFalsy();
+  });
+
+  it('public namespace: metadata-only blocked slug (absent from files) is guarded', async () => {
+    // A blocked slug present in metadata but NOT in files must still be caught —
+    // the guard sweeps the union of files+metadata keys, not just files.
+    const res = await beginAndAppend(publicHelpers, {
+      files: { 'good-slug': html('ok') },
+      sourceRepos: {
+        'good-slug': 'sap-tutorials/developer-advocates',
+        'ghost-slug': 'sap-tutorials/developer-advocates-Contribution',
+      },
+      metadata: {
+        'good-slug': { title: 'Good Tutorial', steps: [{ title: 'Step 1' }] },
+        'ghost-slug': { title: 'Ghost Tutorial', steps: [{ title: 'Step 1' }] },
+      },
+    });
+
+    expect(res.blockedContributionSlugs).toContain('ghost-slug');
+    const ghostTut = await SELECT.one.from(PublicTutorials).where({ slug: 'ghost-slug' });
+    expect(ghostTut, 'ghost-slug Tutorials row NOT written').toBeFalsy();
   });
 });
