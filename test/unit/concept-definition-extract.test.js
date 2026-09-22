@@ -28,6 +28,38 @@ describe('applyPostValidation (#2426)', () => {
   it('rejects over-long output', () => {
     expect(applyPostValidation('x'.repeat(1300)).reason).toBe('too-long');
   });
+
+  // #2440: fluent LLM refusals ("the concept name was not provided…") are
+  // non-null, in-range and clean-termed, so length+terminology checks pass them
+  // through. They were bulk-approved and shipped to prod. Reject them explicitly.
+  it('rejects refusal signatures as reason="refusal" (#2440)', () => {
+    const refusals = [
+      'The concept name was not provided, so a precise definition cannot be determined. Based on the available sources, SAP BTP is a platform.',
+      'The sources do not contain sufficient information to define a specific SAP developer concept, as the concept name is missing.',
+      'The concept name was not provided and the supplied source snippets do not define a single identifiable concept for this entry.',
+      'The sources do not contain sufficient information to define the concept "undefined." The sources cover unrelated topics.',
+      'A precise definition cannot be determined from the available source snippets provided for this concept entry here.',
+      // Real prod phrasings observed across the live batch-2440 rows (#2440):
+      'The concept provided is undefined and no valid concept name was supplied. The available source snippets cover SAP HANA development topics.',
+      'The provided sources do not contain enough information to define a specific concept, as the concept name is listed as "undefined." The sources cover registering SAP systems.',
+      'The concept provided is **undefined** and cannot be documented. The supplied sources cover a range of SAP HANA Cloud connectivity tutorials.',
+      'The provided sources do not contain enough information to write a grounded definition for an undefined concept. Please supply a valid concept name.',
+      'The concept name provided is "undefined," which does not correspond to a identifiable SAP developer concept supported by the given source snippets.',
+      // The #2426 bulk-run also swept in "valid name, thin grounding" refusals:
+      'The provided sources do not contain sufficient information about "Placeholder Property Handling" in UI5 to write a grounded definition.',
+      'The provided sources do not contain any information about UI5 Semantic Colors and States. The only source available describes a unit testing tutorial step for UI5.',
+    ];
+    for (const def of refusals) {
+      const r = applyPostValidation(def);
+      expect(r.definition, def).toBeNull();
+      expect(r.reason, def).toBe('refusal');
+    }
+  });
+
+  it('does not misclassify a legitimate definition as a refusal (#2440)', () => {
+    const def = 'The SAP Destination service lets applications retrieve connection and configuration details for remote systems, so developers avoid hardcoding endpoints and credentials.';
+    expect(applyPostValidation(def).reason).toBeNull();
+  });
 });
 
 describe('generateConceptDefinition (#2426)', () => {
@@ -51,5 +83,19 @@ describe('generateConceptDefinition (#2426)', () => {
     const r = await generateConceptDefinition({ callModel, concept, grounding });
     expect(r.definition).toBeNull();
     expect(r.reason).toBe('stale-terminology');
+  });
+
+  // #2440 root cause: concept.name arrived as undefined (HANA uppercase key
+  // read as lowercase), so the prompt said "CONCEPT: undefined" and the model
+  // refused. Never send the model a blank/undefined name — fail loud instead.
+  it('refuses to generate when concept.name is missing (#2440)', async () => {
+    let called = false;
+    const callModel = async () => { called = true; return { verdict: { definition: 'x'.repeat(60) } }; };
+    for (const bad of [{ slug: 'abap-sql' }, { slug: 'abap-sql', name: '' }, { slug: 'abap-sql', name: '   ' }, { slug: 'abap-sql', name: undefined }]) {
+      const r = await generateConceptDefinition({ callModel, concept: bad, grounding });
+      expect(r.definition, JSON.stringify(bad)).toBeNull();
+      expect(r.reason, JSON.stringify(bad)).toBe('no-name');
+    }
+    expect(called, 'model must not be called with a missing name').toBe(false);
   });
 });
