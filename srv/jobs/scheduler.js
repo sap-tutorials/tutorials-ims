@@ -170,7 +170,26 @@ async function runWithLock(jobName, durationMs, fn, opts = {}) {
   try {
     result = await fn(logId);
     const summary = formatJobSummary(jobName, result);
-    await logPipelineEnd(logId, 'SUCCESS', summary);
+    // A job may fail-shut by RETURNING { ok:false, error } rather than throwing
+    // (e.g. semaphore-tag-sync on a bad fetch). Treat that as a failed run so the
+    // PipelineLog STATUS and JobLastRun.lastSuccessAt/lastErrorAt reflect reality
+    // — otherwise a no-op/errored run is mislogged SUCCESS and looks healthy.
+    if (result && typeof result === 'object' && result.ok === false) {
+      outcome = 'error';
+      errorMessage = result.error ? String(result.error) : `${jobName} returned ok:false`;
+      LOG.error(`Job ${jobName} returned failure:`, errorMessage);
+      await logPipelineEnd(logId, 'FAILED', summary, errorMessage);
+      void alerting.raise({
+        eventType: 'ScheduledJobFailed',
+        severity: 'ERROR',
+        category: 'ALERT',
+        subject: `Scheduled job failed: ${jobName}`,
+        body: errorMessage,
+        resource: { resourceName: jobName, resourceType: 'job' }
+      }); // fail-open, non-blocking
+    } else {
+      await logPipelineEnd(logId, 'SUCCESS', summary);
+    }
   } catch (err) {
     outcome = 'error';
     errorMessage = err.message ?? String(err);

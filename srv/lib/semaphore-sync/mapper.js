@@ -161,6 +161,9 @@ export function mapAllTerms(data, opts = {}) {
       titlePath: deriveTitlePath(term),
       isActualTag,
       isInterestItem,
+      // Raw SES classes, carried through for the applier's Tier-2 intake gate
+      // and the dry-run class histogram (job). Not persisted to Tags.
+      classes: Array.isArray(term.classes) ? term.classes.map(String) : [],
     };
 
     // De-dupe on semaphoreId (last write wins) — SES should be unique but be safe.
