@@ -164,6 +164,57 @@ describe('AdminService.JobControls', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────
+  // #2478 — a job that FAIL-SHUTS by RETURNING { ok:false } (rather than
+  // throwing) must be recorded as a failed run, not mislogged SUCCESS.
+  // Regression guard for the semaphore-tag-sync "no new tags, but green"
+  // symptom: the chassis now inspects the runner's return value.
+  // ─────────────────────────────────────────────────────────────────
+  it('records a FAILED run when the fn returns { ok:false } (not a throw)', async () => {
+    const jobName = nextJobName();
+    registerOne(jobName, async () => ({ ok: false, error: 'fetch HTTP 500' }));
+    await callRunJob(jobName);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    const { JobLastRun, PipelineLog } = cds.entities('com.sap.developers.ims');
+    const row = await SELECT.one.from(JobLastRun).where({ jobName });
+    expect(row).toBeTruthy();
+    // Failure path: lastErrorAt + message set, lastSuccessAt untouched (null).
+    expect(row.lastErrorAt).toBeTruthy();
+    expect(row.lastSuccessAt).toBeFalsy();
+    expect(row.lastErrorMessage).toBe('fetch HTTP 500');
+    // The PipelineLog end row for this run is FAILED, not SUCCESS.
+    const plog = await SELECT.from(PipelineLog)
+      .where({ pipelineType: 'SCHEDULED_JOB' });
+    const mine = plog.filter(p => (p.metadata ?? '').includes(jobName));
+    expect(mine.length).toBeGreaterThan(0);
+    expect(mine.every(p => p.status === 'FAILED')).toBe(true);
+  });
+
+  it('falls back to a generic error message when ok:false carries no error', async () => {
+    const jobName = nextJobName();
+    registerOne(jobName, async () => ({ ok: false }));
+    await callRunJob(jobName);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    const { JobLastRun } = cds.entities('com.sap.developers.ims');
+    const row = await SELECT.one.from(JobLastRun).where({ jobName });
+    expect(row.lastErrorAt).toBeTruthy();
+    expect(row.lastErrorMessage).toContain('returned ok:false');
+  });
+
+  it('still records SUCCESS when the fn returns { ok:true }', async () => {
+    const jobName = nextJobName();
+    registerOne(jobName, async () => ({ ok: true, inserted: 3 }));
+    await callRunJob(jobName);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    const { JobLastRun } = cds.entities('com.sap.developers.ims');
+    const row = await SELECT.one.from(JobLastRun).where({ jobName });
+    expect(row.lastSuccessAt).toBeTruthy();
+    expect(row.lastErrorAt).toBeFalsy();
+  });
+
+  // ─────────────────────────────────────────────────────────────────
   // #750: nextRunsIso (forward-visibility window for the Board tile)
   // ─────────────────────────────────────────────────────────────────
 

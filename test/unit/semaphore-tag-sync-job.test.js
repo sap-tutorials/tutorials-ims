@@ -66,28 +66,39 @@ describe('runSemaphoreTagSync', () => {
     expect(await SELECT.from(Tags)).toHaveLength(0);
   });
 
-  it('dryRun default: reports the plan without writing', async () => {
+  it('dryRun default: reports the plan (with class histogram) without writing', async () => {
     __setFlagForTest('SEMAPHORE_SYNC_ENABLED', true);
-    await setConfig(db, { 'semaphore.sync.interestItemClasses': 'IndustryCluster' });
     const res = await runSemaphoreTagSync(null, { _deps: okDeps() });
     expect(res.ok).toBe(true);
     expect(res.dryRun).toBe(true);
-    expect(res).toMatchObject({ fetched: 2, mapped: 2, inserted: 2, updated: 0 });
+    // Intake is off by default (no intakeClasses) → both unmatched terms are
+    // counted skippedIntake, nothing inserted. The histogram surfaces the real
+    // class distribution so the FILTER/intakeClasses can be chosen from data.
+    expect(res).toMatchObject({ fetched: 2, mapped: 2, inserted: 0, updated: 0, skippedIntake: 2 });
+    expect(res.classHistogram).toContain('SoftwareProduct=1');
+    expect(res.classHistogram).toContain('IndustryCluster=1');
+    expect(res.intakeClasses).toBe('(none — adopt-only)');
     expect(await SELECT.from(Tags)).toHaveLength(0); // dry run wrote nothing
   });
 
-  it('writes tags when dryRun is disabled', async () => {
+  it('writes only allowlisted new tags (inert) when dryRun is disabled', async () => {
     __setFlagForTest('SEMAPHORE_SYNC_ENABLED', true);
     await setConfig(db, {
       'semaphore.sync.dryRun': 'false',
-      'semaphore.sync.interestItemClasses': 'IndustryCluster',
+      // Only SoftwareProduct terms are admitted; IndustryCluster (Retail) is skipped.
+      'semaphore.sync.intakeClasses': 'SoftwareProduct',
     });
     const res = await runSemaphoreTagSync(null, { _deps: okDeps() });
-    expect(res).toMatchObject({ ok: true, dryRun: false, inserted: 2 });
+    expect(res).toMatchObject({ ok: true, dryRun: false, inserted: 1, skippedIntake: 1 });
     const tags = await SELECT.from(Tags);
-    expect(tags).toHaveLength(2);
-    const retail = tags.find((t) => t.semaphoreId === 's2');
-    expect(retail.isInterestItem).toBe(true);
+    expect(tags).toHaveLength(1);
+    const s4 = tags.find((t) => t.semaphoreId === 's1');
+    expect(s4.name).toBe('sap s 4hana');
+    // New intake rows always land inert, awaiting editor curation.
+    expect(s4.isActualTag).toBe(false);
+    expect(s4.isInterestItem).toBe(false);
+    // The non-allowlisted term was not written.
+    expect(tags.find((t) => t.semaphoreId === 's2')).toBeUndefined();
   });
 
   it('fails shut on a fetch error — writes nothing', async () => {
