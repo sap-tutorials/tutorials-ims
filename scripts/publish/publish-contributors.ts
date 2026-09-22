@@ -1,104 +1,141 @@
 // scripts/publish/publish-contributors.ts
 // Non-fatal auxiliary publish step for issue #WS2.
-// Walks `cacheDir` for `*.contributors.json` sidecar files emitted by
-// scripts/fetch-tutorials.ts and POSTs each one to
-// /content/publish-contributors (Task 6 REPLACE handler).
+// Reads `*.contributors.json` sidecar files from `cacheDir` (emitted by
+// scripts/fetch-tutorials.ts) and publishes them to CAP.
 //
 // Auth: CONTENT_API_KEY via contentAuthMiddleware (Authorization: Bearer).
 // Failures are NON-FATAL — captured and returned to the caller.
 //
-// Perf (#2462): historically this walked the ENTIRE cache and POSTed every
-// sidecar sequentially on every publish — O(full catalog) sequential HTTP
-// round-trips even for a single-slug hotfix. Two fixes:
-//   1. `slugs` filter — when the caller passes the changed-slug set (delta /
-//      slug-targeted publish), only that slug's sidecar is POSTed. A one-slug
-//      hotfix drops from ~1,400 POSTs to ≤1. Omitting `slugs` (full publish)
-//      preserves the whole-cache walk.
-//   2. runConcurrent — the remaining POSTs run at bounded concurrency instead
-//      of one-at-a-time, cutting full-publish wall-clock ~CONCURRENCYx.
+// Perf history:
+//   #2462 — was O(full catalog) sequential per-file POSTs on every publish.
+//           Added a `slugs` filter (publish only changed slugs) + concurrency.
+//   #2463 — bulk endpoint: the surviving sidecars are sent as batched
+//           { items: [...] } POSTs instead of one request per file.
+//   #2464 — delta-skip by hash: fetch the server's {slug: hash} feed and drop
+//           any sidecar whose canonical hash already matches the stored rows,
+//           so a full publish re-sends only genuinely-changed sidecars.
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { runConcurrent } from '../lib/publish-batcher.js'
+import { runConcurrent, chunk } from '../lib/publish-batcher.js'
+import { hashContributors } from '../../srv/lib/sidecar-hash.js'
 
 const SUFFIX = '.contributors.json'
 const CONCURRENCY = 6
+// Slugs per bulk POST. Bounded so each request body stays modest and one failed
+// batch loses only BATCH slugs, not the whole publish.
+const BATCH = 200
+
+interface SidecarItem { slug: string; contributors: unknown[] }
+
+/** Resolve the candidate sidecar filenames (slug-filtered or whole-cache). */
+function resolveFiles(cacheDir: string, slugs?: string[]): string[] {
+  if (slugs) {
+    const wanted = new Set(slugs.map((s) => `${s}${SUFFIX}`))
+    let present: Set<string>
+    try {
+      present = new Set(readdirSync(cacheDir).filter((f) => f.endsWith(SUFFIX)))
+    } catch {
+      return []
+    }
+    return [...wanted].filter((f) => present.has(f))
+  }
+  try {
+    return readdirSync(cacheDir).filter((f) => f.endsWith(SUFFIX))
+  } catch {
+    return []
+  }
+}
 
 /**
- * Walk cacheDir for *.contributors.json sidecar files (optionally filtered to a
- * changed-slug set), POST each one to /content/publish-contributors at bounded
- * concurrency.
+ * Fetch the server's {slug: hash} contributor feed (#2464). Fails soft to `{}`
+ * (publish everything) on any error, 404 (route not deployed yet), or 503.
+ */
+async function fetchRemoteHashes(baseUrl: string, apiKey: string): Promise<Record<string, string>> {
+  try {
+    const res = await fetch(`${baseUrl}/content/contributor-hashes`, {
+      headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {},
+    })
+    if (!res.ok) return {}
+    return (await res.json()) as Record<string, string>
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Publish contributor sidecars.
  *
- * @param opts.cacheDir  Tutorial cache dir (e.g. .tutorial-cache)
- * @param opts.baseUrl   CAP base URL
- * @param opts.apiKey    CONTENT_API_KEY value
- * @param opts.slugs     Optional changed-slug allowlist. When provided, only
- *                       `<slug>.contributors.json` sidecars for these slugs are
- *                       published. When omitted, the whole cache is published.
- * @returns { published, total }
+ * @param opts.slugs  Optional changed-slug allowlist. When provided, only those
+ *                    slugs' sidecars are considered. When omitted, the whole
+ *                    cache is considered (then hash-filtered).
+ * @returns { published, total, skipped } — published = slugs sent; skipped =
+ *          dropped because their hash already matched; total = candidates that
+ *          had a readable sidecar.
  */
 export async function publishContributors(opts: {
   cacheDir: string
   baseUrl: string
   apiKey: string
   slugs?: string[]
-}): Promise<{ published: number; total: number }> {
+}): Promise<{ published: number; total: number; skipped: number }> {
   const { cacheDir, baseUrl, apiKey, slugs } = opts
+  const files = resolveFiles(cacheDir, slugs)
+  if (files.length === 0) return { published: 0, total: 0, skipped: 0 }
 
-  let files: string[]
-  if (slugs) {
-    // Slug-targeted: only publish sidecars for changed slugs that actually have
-    // a cached sidecar file. This is the #2462 fix that returns a single-slug
-    // hotfix to O(changed) instead of O(full catalog).
-    const wanted = new Set(slugs.map((s) => `${s}${SUFFIX}`))
-    let present: Set<string>
-    try {
-      present = new Set(readdirSync(cacheDir).filter((f) => f.endsWith(SUFFIX)))
-    } catch {
-      return { published: 0, total: 0 }
-    }
-    files = [...wanted].filter((f) => present.has(f))
-  } else {
-    try {
-      files = readdirSync(cacheDir).filter((f) => f.endsWith(SUFFIX))
-    } catch {
-      return { published: 0, total: 0 }
-    }
-  }
-
-  // One self-contained, non-throwing task per file (runConcurrent aborts the
-  // whole batch on the first thrown error; these steps are non-fatal, so each
-  // task swallows its own error and reports a boolean).
-  const tasks = files.map((f) => async (): Promise<boolean> => {
-    const filePath = join(cacheDir, f)
+  // Read + parse each sidecar. Unreadable/malformed files are skipped (non-fatal).
+  const items: SidecarItem[] = []
+  for (const f of files) {
     let raw: string
     try {
-      raw = readFileSync(filePath, 'utf8')
+      raw = readFileSync(join(cacheDir, f), 'utf8')
     } catch {
-      return false
+      continue
     }
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed && parsed.slug && Array.isArray(parsed.contributors)) {
+        items.push({ slug: String(parsed.slug), contributors: parsed.contributors })
+      }
+    } catch {
+      console.warn(`[publish-contributors] malformed sidecar skipped: ${f}`)
+    }
+  }
+  const total = items.length
+  if (total === 0) return { published: 0, total: 0, skipped: 0 }
 
+  // #2464 — drop sidecars whose canonical hash already matches the server.
+  const remote = await fetchRemoteHashes(baseUrl, apiKey)
+  const changed = items.filter((it) => {
+    const local = hashContributors(it.contributors as any[])
+    return remote[it.slug.toLowerCase()] !== local
+  })
+  const skipped = total - changed.length
+  if (changed.length === 0) return { published: 0, total, skipped }
+
+  // #2463 — send survivors as batched bulk POSTs at bounded concurrency. Each
+  // batch task is non-throwing (runConcurrent aborts the whole run on a throw).
+  const batches = chunk(changed, BATCH)
+  const tasks = batches.map((batch) => async (): Promise<number> => {
     let res: Response
     try {
-      res = await fetch(`${baseUrl}/content/publish-contributors`, {
+      res = await fetch(`${baseUrl}/content/publish-contributors-bulk`, {
         method: 'POST',
-        headers: {
-          'authorization': `Bearer ${apiKey}`,
-          'content-type': 'application/json',
-        },
-        body: raw,
+        headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ items: batch }),
       })
     } catch (err) {
-      console.warn(`[publish-contributors] network error for ${f}:`, (err as Error).message)
-      return false
+      console.warn('[publish-contributors] bulk network error:', (err as Error).message)
+      return 0
     }
-
-    if (res.ok) return true
-    console.warn(`[publish-contributors] ${f} -> ${res.status}`)
-    return false
+    if (!res.ok) {
+      console.warn(`[publish-contributors] bulk -> ${res.status}`)
+      return 0
+    }
+    return batch.length
   })
 
-  const results = await runConcurrent(tasks, CONCURRENCY)
-  const published = results.filter(Boolean).length
-  return { published, total: files.length }
+  const counts = await runConcurrent(tasks, CONCURRENCY)
+  const published = counts.reduce((a, b) => a + b, 0)
+  return { published, total, skipped }
 }

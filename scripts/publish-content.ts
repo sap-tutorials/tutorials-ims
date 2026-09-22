@@ -1697,7 +1697,7 @@ async function main() {
         cacheDir, baseUrl: opts.baseUrl, apiKey: opts.apiKey,
         ...(mode === 'delta' ? { slugs: targetSlugs } : {}),
       });
-      log(`[publish-contributors] published ${r.published}/${r.total}`);
+      log(`[publish-contributors] published ${r.published}/${r.total} (${r.skipped} unchanged)`);
     } catch (err) {
       console.error('[publish-content] contributors publish failed (non-fatal):', formatErrorChain(err));
     }
@@ -1716,7 +1716,7 @@ async function main() {
         cacheDir, baseUrl: opts.baseUrl, apiKey: opts.apiKey,
         ...(mode === 'delta' ? { slugs: targetSlugs } : {}),
       });
-      log(`[publish-validation-rules] published ${r.published}/${r.total}`);
+      log(`[publish-validation-rules] published ${r.published}/${r.total} (${r.skipped} unchanged)`);
     } catch (err) {
       console.error('[publish-content] validation-rules publish failed (non-fatal):', formatErrorChain(err));
     }

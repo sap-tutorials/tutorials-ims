@@ -163,6 +163,23 @@ const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
     'reader. The publish CLI already skips this step for channel=qa ' +
     '(scripts/publish-content.ts: "[publish-validation-rules] skipped"). Re-evaluate only if ' +
     'QA gains a validation-rules reader.',
+  'POST /content/publish-contributors-bulk':
+    'Bulk contributor sidecar publish (#2463). Same srv-only rationale as the single-slug ' +
+    'POST /content/publish-contributors above — srv-qa has no ContributorCache entity and no ' +
+    'QA reader; the publish CLI skips both on channel=qa. Batched form to collapse the per-file ' +
+    'POST loop on full publishes.',
+  'POST /content/publish-validation-rules-bulk':
+    'Bulk validation-rules sidecar publish (#2463). Same srv-only rationale as the single-slug ' +
+    'POST /content/publish-validation-rules above — srv-qa has no ValidationRules entity and no ' +
+    'QA reader; the CLI skips both on channel=qa.',
+  'GET /content/contributor-hashes':
+    'Contributor sidecar hash feed (#2464). Public-read like /content/hashes; lets the publish ' +
+    'CLI skip unchanged contributor sidecars. srv-only for the same reason as the contributor ' +
+    'publish routes — srv-qa has no ContributorCache entity (the handler fails soft to {} there, ' +
+    'but the route is intentionally not wired on srv-qa, which has no contributor content surface).',
+  'GET /content/validation-rule-hashes':
+    'Validation-rules sidecar hash feed (#2464). Public-read companion to contributor-hashes ' +
+    'above; srv-only for the same reason — srv-qa has no ValidationRules entity or reader.',
   'GET /content/authors/:login':
     'CAP-served /authors/{login}/ pages (#1659 Phase C) — a public prod content surface that ' +
     'aggregates across published tutorials, not tutorial-draft author preview. Same rationale ' +
