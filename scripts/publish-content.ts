@@ -1690,7 +1690,13 @@ async function main() {
   } else {
     try {
       const cacheDir = join(process.cwd(), '.tutorial-cache');
-      const r = await publishContributors({ cacheDir, baseUrl: opts.baseUrl, apiKey: opts.apiKey });
+      // #2462 — in delta (slug-targeted) mode, publish only the changed slugs'
+      // sidecars instead of walking the whole cache (~O(catalog) sequential
+      // POSTs). force/heal keep the full-cache walk (slugs omitted).
+      const r = await publishContributors({
+        cacheDir, baseUrl: opts.baseUrl, apiKey: opts.apiKey,
+        ...(mode === 'delta' ? { slugs: targetSlugs } : {}),
+      });
       log(`[publish-contributors] published ${r.published}/${r.total}`);
     } catch (err) {
       console.error('[publish-content] contributors publish failed (non-fatal):', formatErrorChain(err));
@@ -1704,7 +1710,12 @@ async function main() {
   } else {
     try {
       const cacheDir = join(process.cwd(), '.tutorial-cache');
-      const r = await publishValidationRules({ cacheDir, baseUrl: opts.baseUrl, apiKey: opts.apiKey });
+      // #2462 — same slug-targeted filter as contributors. Most changed slugs
+      // have no rules sidecar, so a delta publish is typically zero POSTs here.
+      const r = await publishValidationRules({
+        cacheDir, baseUrl: opts.baseUrl, apiKey: opts.apiKey,
+        ...(mode === 'delta' ? { slugs: targetSlugs } : {}),
+      });
       log(`[publish-validation-rules] published ${r.published}/${r.total}`);
     } catch (err) {
       console.error('[publish-content] validation-rules publish failed (non-fatal):', formatErrorChain(err));
