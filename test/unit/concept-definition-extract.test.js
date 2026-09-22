@@ -28,6 +28,29 @@ describe('applyPostValidation (#2426)', () => {
   it('rejects over-long output', () => {
     expect(applyPostValidation('x'.repeat(1300)).reason).toBe('too-long');
   });
+
+  // #2440: fluent LLM refusals ("the concept name was not provided…") are
+  // non-null, in-range and clean-termed, so length+terminology checks pass them
+  // through. They were bulk-approved and shipped to prod. Reject them explicitly.
+  it('rejects refusal signatures as reason="refusal" (#2440)', () => {
+    const refusals = [
+      'The concept name was not provided, so a precise definition cannot be determined. Based on the available sources, SAP BTP is a platform.',
+      'The sources do not contain sufficient information to define a specific SAP developer concept, as the concept name is missing.',
+      'The concept name was not provided and the supplied source snippets do not define a single identifiable concept for this entry.',
+      'The sources do not contain sufficient information to define the concept "undefined." The sources cover unrelated topics.',
+      'A precise definition cannot be determined from the available source snippets provided for this concept entry here.',
+    ];
+    for (const def of refusals) {
+      const r = applyPostValidation(def);
+      expect(r.definition, def).toBeNull();
+      expect(r.reason, def).toBe('refusal');
+    }
+  });
+
+  it('does not misclassify a legitimate definition as a refusal (#2440)', () => {
+    const def = 'The SAP Destination service lets applications retrieve connection and configuration details for remote systems, so developers avoid hardcoding endpoints and credentials.';
+    expect(applyPostValidation(def).reason).toBeNull();
+  });
 });
 
 describe('generateConceptDefinition (#2426)', () => {
@@ -51,5 +74,19 @@ describe('generateConceptDefinition (#2426)', () => {
     const r = await generateConceptDefinition({ callModel, concept, grounding });
     expect(r.definition).toBeNull();
     expect(r.reason).toBe('stale-terminology');
+  });
+
+  // #2440 root cause: concept.name arrived as undefined (HANA uppercase key
+  // read as lowercase), so the prompt said "CONCEPT: undefined" and the model
+  // refused. Never send the model a blank/undefined name — fail loud instead.
+  it('refuses to generate when concept.name is missing (#2440)', async () => {
+    let called = false;
+    const callModel = async () => { called = true; return { verdict: { definition: 'x'.repeat(60) } }; };
+    for (const bad of [{ slug: 'abap-sql' }, { slug: 'abap-sql', name: '' }, { slug: 'abap-sql', name: '   ' }, { slug: 'abap-sql', name: undefined }]) {
+      const r = await generateConceptDefinition({ callModel, concept: bad, grounding });
+      expect(r.definition, JSON.stringify(bad)).toBeNull();
+      expect(r.reason, JSON.stringify(bad)).toBe('no-name');
+    }
+    expect(called, 'model must not be called with a missing name').toBe(false);
   });
 });
