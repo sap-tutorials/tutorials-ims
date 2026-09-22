@@ -14,6 +14,11 @@ const feed = {
 };
 
 beforeEach(() => {
+  // #2461 wired deep-linking: App parses window.location.search on mount and
+  // writeUrl() calls history.replaceState. jsdom/happy-dom share one window
+  // across tests in a file, so a prior test's query string leaks into the next
+  // mount's initial filter state. Reset the URL before every test.
+  window.history.replaceState({}, '', window.location.pathname);
   global.fetch = vi.fn((url: string) =>
     Promise.resolve({
       ok: true,
