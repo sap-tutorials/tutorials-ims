@@ -11,7 +11,7 @@ import { buildICS, buildEventICS, addToCalendarLinks } from '../lib/devtoberfest
 import { buildRSS } from '../lib/devtoberfest-rss.js';
 import { resolveUser } from '../lib/resolve-user.js';
 import { resolveUserSapId } from '../lib/resolve-db-user.js';
-import { getMyCompletedTutorials } from '../lib/user-progress.js';
+import { getMyCompletedTutorialsForPoints } from '../lib/user-progress.js';
 import { fetchTranscript } from '../lib/devtoberfest-transcript.js';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { isJoinedCurrentEvent } from '../lib/devtoberfest-registration.js';
@@ -234,9 +234,14 @@ async function myCompletionsHandler(req, res) {
     let completedSlugSet = new Set();
     let completedActivityIds = [];
     if (joined) {
-      // Use the canonical helper — it resolves legacyId→slug internally and
-      // handles COMPLETED + SUPERSEDED rows for both TUTORIAL and PUZZLE types.
-      const rows = await getMyCompletedTutorials(user);
+      // Devtoberfest points gate: count ONLY genuinely-COMPLETED tutorial-level
+      // records (status='COMPLETED'), NOT the /me "ever-completed" set which
+      // includes SUPERSEDED rows. A reset flips a partial IN_PROGRESS tutorial
+      // row to SUPERSEDED with its completionDate preserved; the SUPERSEDED-
+      // including helper mis-counted that as a completion and awarded full
+      // points for a tutorial the user never finished (issue #2446). This helper
+      // matches the GAMEBOARD_COMPLETION_V1 semantic.
+      const rows = await getMyCompletedTutorialsForPoints(user);
       const windowed = filterCompletionsWithinWindow(rows, editionWindow.start, editionWindow.end);
       completedSlugSet = normalizeSlugSet(windowed);
       ({ earnedPoints, completedActivityIds } = completedActivityPoints(activities, completedSlugSet));
