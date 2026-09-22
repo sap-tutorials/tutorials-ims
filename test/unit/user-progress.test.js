@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import path from 'node:path';
 import cds from '@sap/cds';
-import { getUserProgress, getProgressLookup, getMyCompletedTutorials, getMyInProgressTutorials } from '../../srv/lib/user-progress.js';
+import { getUserProgress, getProgressLookup, getMyCompletedTutorials, getMyCompletedTutorialsForPoints, getMyInProgressTutorials } from '../../srv/lib/user-progress.js';
 
 const schemaPath = path.join(process.cwd(), 'db', 'schema.cds');
 
@@ -308,6 +308,71 @@ describe('user-progress', () => {
       expect(slugs).not.toContain('cap-mission');        // mission, not tutorial
       expect(slugs).not.toContain('beginner-group');     // group, not tutorial
       expect(slugs).not.toContain('fiori-elements');     // untouched control
+    });
+  });
+
+  describe('getMyCompletedTutorialsForPoints', () => {
+    // Devtoberfest points gate: SUPERSEDED rows must NOT count. Seed a SUPERSEDED
+    // tutorial (the issue #2446 shape: one step of a multi-step tutorial, then
+    // reset → the partial TUTORIAL row is flipped to SUPERSEDED with completionDate
+    // preserved) scoped to THIS block so the shared getUserProgress/getProgressLookup
+    // fixtures (which intentionally treat SUPERSEDED as "ever-completed") stay intact.
+    beforeEach(async () => {
+      const { TaskRecords } = cds.entities('com.sap.developers.ims');
+      await INSERT.into(TaskRecords).entries({
+        ID: 'aaaaaaaa-0000-0000-0000-000000000009',
+        user_ID: USER_ID,
+        taskLegacyId: 103,            // fiori-elements
+        taskType: 'TUTORIAL',
+        status: 'SUPERSEDED',
+        progress: 10,
+        modifiedAt: '2026-05-15T09:00:00Z',
+        completionDate: '2026-05-15T09:00:00Z',
+        titleSnapshot: 'Fiori Elements'
+      });
+    });
+
+    it('returns an empty array for anonymous users', async () => {
+      const result = await getMyCompletedTutorialsForPoints({ id: 'anonymous' });
+      expect(result).toEqual([]);
+    });
+
+    it('returns an empty array when user.id maps to no Users row', async () => {
+      const result = await getMyCompletedTutorialsForPoints({ id: 'unknown-uuid' });
+      expect(result).toEqual([]);
+    });
+
+    it('EXCLUDES SUPERSEDED tutorial rows (issue #2446 — points must not be awarded for a reset partial)', async () => {
+      // Sanity: the /me helper DOES include the SUPERSEDED row (contrast).
+      const meRows = await getMyCompletedTutorials({ id: USER_UUID });
+      expect(meRows.map(r => r.slug)).toContain('fiori-elements');
+      // The points gate must NOT.
+      const result = await getMyCompletedTutorialsForPoints({ id: USER_UUID });
+      expect(result.map(r => r.slug)).not.toContain('fiori-elements');
+    });
+
+    it('returns only genuinely-COMPLETED tutorials and puzzles', async () => {
+      const result = await getMyCompletedTutorialsForPoints({ id: USER_UUID });
+      const slugs = result.map(r => r.slug).sort();
+      // 2 COMPLETED tutorials + 1 COMPLETED puzzle; NO superseded/in-progress/
+      // mission/group/step/control rows.
+      expect(slugs).toEqual(['btp-trial', 'cap-getting-started', 'cryptic-crossword']);
+    });
+
+    it('excludes in-progress, mission, group, and control rows', async () => {
+      const result = await getMyCompletedTutorialsForPoints({ id: USER_UUID });
+      const slugs = result.map(r => r.slug);
+      expect(slugs).not.toContain('cap-events');         // in-progress
+      expect(slugs).not.toContain('cap-cds-modeling');   // in-progress
+      expect(slugs).not.toContain('cap-mission');        // mission
+      expect(slugs).not.toContain('beginner-group');     // group
+      expect(slugs).not.toContain('fiori-elements');     // superseded / control
+    });
+
+    it('orders rows by completionDate descending', async () => {
+      const result = await getMyCompletedTutorialsForPoints({ id: USER_UUID });
+      // puzzle 2026-06-01 > btp-trial 2026-05-10 > cap-getting-started 2026-04-01
+      expect(result.map(r => r.slug)).toEqual(['cryptic-crossword', 'btp-trial', 'cap-getting-started']);
     });
   });
 

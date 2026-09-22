@@ -1027,6 +1027,13 @@ async function main() {
         if (ghMeta.lastCommitSha) {
           writeFileSync(join(CACHE_DIR, `${t.slug.toLowerCase()}.commit-sha`), ghMeta.lastCommitSha, 'utf-8')
         }
+        // Emit the source-repo sidecar (owner/name) alongside .commit-sha so
+        // publish-content can carry sourceRepo into the publish payload for the
+        // public-namespace -Contribution guard. `t.repo` is the bare repo name;
+        // the owner is always the `sap-tutorials` org, so compose the full name.
+        if (t.repo) {
+          writeFileSync(join(CACHE_DIR, `${t.slug.toLowerCase()}.source-repo`), `sap-tutorials/${t.repo}`, 'utf-8')
+        }
         cacheHits++
         console.log(`${label} [cached]`)
       } else {
@@ -1040,6 +1047,13 @@ async function main() {
         // the append body's sourceCommits map.
         if (ghMeta.lastCommitSha) {
           writeFileSync(join(CACHE_DIR, `${t.slug.toLowerCase()}.commit-sha`), ghMeta.lastCommitSha, 'utf-8')
+        }
+        // Emit the source-repo sidecar (owner/name) alongside .commit-sha so
+        // publish-content can carry sourceRepo into the publish payload for the
+        // public-namespace -Contribution guard. `t.repo` is the bare repo name;
+        // the owner is always the `sap-tutorials` org, so compose the full name.
+        if (t.repo) {
+          writeFileSync(join(CACHE_DIR, `${t.slug.toLowerCase()}.source-repo`), `sap-tutorials/${t.repo}`, 'utf-8')
         }
 
         if (cacheStatus === 'cached') cacheHits++

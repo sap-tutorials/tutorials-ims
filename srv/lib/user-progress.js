@@ -251,6 +251,99 @@ export async function getMyCompletedTutorials(user) {
   return rows;
 }
 
+// Returns the user's GENUINELY-completed tasks for the Devtoberfest points gate.
+//
+// Distinct from getMyCompletedTutorials on purpose: the /me page counts SUPERSEDED
+// rows as "ever completed" (a reset-then-recomplete still shows in the timeline —
+// see Task 7, #600), but the Devtoberfest schedule must award points ONLY for
+// currently-COMPLETED tutorial-level records. A user who did one step of a
+// multi-step tutorial gets a taskType='TUTORIAL', status='IN_PROGRESS' row; on
+// reset that row is flipped to SUPERSEDED (with its completionDate preserved).
+// The SUPERSEDED-including query then mis-counts it as a completion and awards the
+// activity's full points even though the tutorial was never finished (issue #2446:
+// Andrei Vishnevsky showed "Scavenger Hunt – Bonus" ✓/600pts with one SUPERSEDED
+// step and zero COMPLETED tutorial rows). This helper matches the
+// GAMEBOARD_COMPLETION_V1 semantic: status='COMPLETED' only, tutorial-level task
+// types only (no STEP). KTT_LESSON is excluded — Devtoberfest activities are
+// TUTORIAL / PUZZLE / PETOBERFEST.
+export async function getMyCompletedTutorialsForPoints(user) {
+  const dbUserId = await resolveDbUserId(user);
+  if (!dbUserId) return [];
+
+  const { TaskRecords, Tutorials, Puzzles, Petoberfests } = cds.entities('com.sap.developers.ims');
+
+  const records = await SELECT.from(TaskRecords)
+    .columns('taskLegacyId', 'taskType', 'completionDate', 'modifiedAt', 'titleSnapshot', 'attemptNumber')
+    .where({
+      user_ID: dbUserId,
+      taskType: { in: ['TUTORIAL', 'PUZZLE', 'PETOBERFEST'] },
+      status: 'COMPLETED'
+    });
+  if (records.length === 0) return [];
+
+  const tutorialIds = [];
+  const puzzleIds = [];
+  const petoberfestIds = [];
+  for (const r of records) {
+    if (r.taskType === 'TUTORIAL') tutorialIds.push(r.taskLegacyId);
+    else if (r.taskType === 'PUZZLE') puzzleIds.push(r.taskLegacyId);
+    else if (r.taskType === 'PETOBERFEST') petoberfestIds.push(r.taskLegacyId);
+  }
+
+  const [tutorials, puzzles, petoberfests] = await Promise.all([
+    tutorialIds.length
+      ? SELECT.from(Tutorials)
+          .columns('legacyId', 'slug', 'title', 'primaryTag', 'experienceTag', 'averageTimeToComplete')
+          .where({ legacyId: { in: tutorialIds } })
+      : [],
+    puzzleIds.length
+      ? SELECT.from(Puzzles)
+          .columns('legacyId', 'slug', 'title', 'primaryTag', 'experienceTag', 'averageTimeToComplete')
+          .where({ legacyId: { in: puzzleIds } })
+      : [],
+    petoberfestIds.length
+      ? SELECT.from(Petoberfests)
+          .columns('legacyId', 'slug', 'title')
+          .where({ legacyId: { in: petoberfestIds } })
+      : []
+  ]);
+
+  const tutorialMeta = new Map(tutorials.map(t => [t.legacyId, t]));
+  const puzzleMeta = new Map(puzzles.map(p => [p.legacyId, p]));
+  const petoberfestMeta = new Map(petoberfests.map(p => [p.legacyId, p]));
+
+  const rows = [];
+  for (const r of records) {
+    const kind = r.taskType === 'PUZZLE' ? 'puzzle'
+      : r.taskType === 'PETOBERFEST' ? 'petoberfest'
+      : 'tutorial';
+    const meta = kind === 'puzzle'
+      ? puzzleMeta.get(r.taskLegacyId)
+      : kind === 'petoberfest'
+      ? petoberfestMeta.get(r.taskLegacyId)
+      : tutorialMeta.get(r.taskLegacyId);
+    if (!meta?.slug) continue;
+    rows.push({
+      kind,
+      slug: meta.slug,
+      title: meta.title || r.titleSnapshot || meta.slug,
+      primaryTag: meta.primaryTag || null,
+      experienceTag: meta.experienceTag || null,
+      averageTimeToComplete: typeof meta.averageTimeToComplete === 'number' ? meta.averageTimeToComplete : null,
+      completionDate: r.completionDate || r.modifiedAt || null,
+      attemptNumber: typeof r.attemptNumber === 'number' ? r.attemptNumber : 1
+    });
+  }
+
+  rows.sort((a, b) => {
+    const at = a.completionDate ? new Date(a.completionDate).getTime() : 0;
+    const bt = b.completionDate ? new Date(b.completionDate).getTime() : 0;
+    return bt - at;
+  });
+
+  return rows;
+}
+
 // Returns the user's IN_PROGRESS ("partial") tutorials for the /me Recent
 // Activity timeline, so a signed-in user can resume where they left off
 // (issue #2146). Shape mirrors getMyCompletedTutorials — same kind/slug/title/

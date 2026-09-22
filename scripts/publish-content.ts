@@ -271,6 +271,28 @@ export function buildSourceCommitsPayload(
   return result;
 }
 
+/**
+ * Parallel to buildSourceCommitsPayload: reads `<slug>.source-repo` sidecars
+ * (owner/name of the GitHub repo the source came from) written by
+ * fetch-tutorials. Keyed by ORIGINAL-CASE slug so the server's
+ * sourceRepos[slug] lookup lands on the correct entry; the file lookup uses
+ * slug.toLowerCase() to match the lowercase-canonical sidecar filename.
+ * Feeds the public-namespace -Contribution publish guard.
+ */
+export function buildSourceReposPayload(
+  slugs: string[],
+  cacheDir: string,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const slug of slugs) {
+    const repoPath = join(cacheDir, `${slug.toLowerCase()}.source-repo`);
+    if (!existsSync(repoPath)) continue;
+    const repo = readFileSync(repoPath, 'utf-8').trim();
+    if (repo) result[slug] = repo;
+  }
+  return result;
+}
+
 const TUTORIAL_MAIN_RE = /<main\b[^>]*class\s*=\s*["']?[^"'>]*\btutorial-main\b[^"'>]*["']?[^>]*>([\s\S]*?)<\/main>/i;
 const BODY_RE = /<body\b[^>]*>([\s\S]*?)<\/body>/i;
 const STRIP_BLOCKS_RE = /<(script|style|nav|footer|aside)\b[^>]*>[\s\S]*?<\/\1>/gi;
@@ -1366,6 +1388,9 @@ async function main() {
   const sourceCommitsAll = buildSourceCommitsPayload(tutorialOnlySlugs, cacheDir);
   log(`Source commit SHA payload: ${Object.keys(sourceCommitsAll).length}/${tutorialOnlySlugs.length} slugs have commit SHAs`);
 
+  const sourceReposAll = buildSourceReposPayload(tutorialOnlySlugs, cacheDir);
+  log(`Source repo payload: ${Object.keys(sourceReposAll).length}/${tutorialOnlySlugs.length} slugs have source repos`);
+
   // __nav__ / __404__ / __shell__ ride along on the first batch (these are
   // small and the server happily accepts them mixed with regular slugs).
   const sidecarKeys = await collectSidecars(opts.hugoDir, payload, log, channel);
@@ -1414,6 +1439,7 @@ async function main() {
           // (no .commit-sha sidecar exists for __shell__ etc.) which is fine
           // — the server stores null for missing entries.
           sourceCommits: pickEntries(sourceCommitsAll, batch),
+          sourceRepos: pickEntries(sourceReposAll, batch),
         }),
         {
           attempts: 3, backoffMs: [1000, 3000, 9000],
