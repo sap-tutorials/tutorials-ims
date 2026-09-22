@@ -27,11 +27,19 @@ const MAX_GROUNDING_ITEMS = 8;     // cap the prompt payload
 const REFUSAL_PATTERNS = Object.freeze([
   /concept name was not provided/i,
   /\bno concept name\b/i,
+  /no valid concept name/i,
+  /concept name (?:provided )?is\s+\**["“]?undefined/i,
+  /concept provided is\s+\**["“]?undefined/i,
   /sources do not contain sufficient information/i,
+  /do not contain enough information/i,
   /cannot be determined/i,
+  /cannot be documented/i,
+  /cannot be written/i,
   /insufficient information/i,
   /do not (?:define|describe) a single/i,
+  /(?:for|define) an undefined concept/i,
   /concept ["“]?undefined["”]?/i,
+  /(?:please )?(?:supply|provide) a valid concept name/i,
 ]);
 
 // Bare `{type, required, properties}` — defaultCallModel wraps it into the

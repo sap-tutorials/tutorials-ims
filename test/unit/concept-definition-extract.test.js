@@ -39,6 +39,12 @@ describe('applyPostValidation (#2426)', () => {
       'The concept name was not provided and the supplied source snippets do not define a single identifiable concept for this entry.',
       'The sources do not contain sufficient information to define the concept "undefined." The sources cover unrelated topics.',
       'A precise definition cannot be determined from the available source snippets provided for this concept entry here.',
+      // Real prod phrasings observed across the live batch-2440 rows (#2440):
+      'The concept provided is undefined and no valid concept name was supplied. The available source snippets cover SAP HANA development topics.',
+      'The provided sources do not contain enough information to define a specific concept, as the concept name is listed as "undefined." The sources cover registering SAP systems.',
+      'The concept provided is **undefined** and cannot be documented. The supplied sources cover a range of SAP HANA Cloud connectivity tutorials.',
+      'The provided sources do not contain enough information to write a grounded definition for an undefined concept. Please supply a valid concept name.',
+      'The concept name provided is "undefined," which does not correspond to a identifiable SAP developer concept supported by the given source snippets.',
     ];
     for (const def of refusals) {
       const r = applyPostValidation(def);
