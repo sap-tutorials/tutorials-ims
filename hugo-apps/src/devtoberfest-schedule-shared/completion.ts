@@ -91,5 +91,12 @@ export function mergeCompletion(feed: Feed, my: MyCompletions) {
     earnedPoints: my?.authenticated ? my.earnedPoints || 0 : 0,
     maxPoints: my?.authenticated ? my.maxPoints || feed.activities.reduce((n, a) => n + (a.points || 0), 0) : feed.activities.reduce((n, a) => n + (a.points || 0), 0),
     completedActivityIds,
+    // Authoritative completed-activity count from the backend (issue #2455). The
+    // feed may not carry a display row for every completed activity (edition
+    // scope / hidden statuses), so ticked rows under-count. Prefer the server's
+    // count; fall back to completedActivityIds length, then 0 for anon.
+    completeCount: my?.authenticated
+      ? (my.completedActivityCount ?? (my.completedActivityIds?.length || 0))
+      : 0,
   };
 }

@@ -18,6 +18,7 @@ const feed = ref<Feed | null>(null);
 const sessions = ref<ScheduleRow[]>([]);
 const earnedPoints = ref(0);
 const maxPoints = ref(0);
+const completeCount = ref(0);
 const isAuthenticated = ref(false);
 const joined = ref(false);
 const selectedRow = ref<ScheduleRow | null>(null);
@@ -62,6 +63,7 @@ async function loadData(edition?: string) {
     sessions.value = merged.rows.filter((r) => r.kind === 'session');
     earnedPoints.value = merged.earnedPoints;
     maxPoints.value = merged.maxPoints;
+    completeCount.value = merged.completeCount;
 
     // Session deep-link: open its detail panel (first load only).
     if (pendingSession) {
@@ -93,7 +95,7 @@ const trackOptions = computed(() => {
   return Array.from(set).sort();
 });
 
-const completeCount = computed(() => sessions.value.filter((r) => r.complete).length);
+
 
 const filtered = computed(() => {
   return sessions.value.filter((r) => {

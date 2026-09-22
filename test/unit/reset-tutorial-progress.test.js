@@ -135,15 +135,56 @@ describe('resetTutorialProgress handler — happy path', () => {
     expect(live[0].progress).toBe(0);
   });
 
-  it('idempotent no-op when user has never touched the tutorial', async () => {
+  it('rejects a second reset when the tutorial has not been re-completed (409)', async () => {
     cds.context = { user: new cds.User({ id: 'sap-u1' }) };
     const { DeveloperService } = cds.services;
-    // First call superseded everything; second call should be a no-op (only the new
-    // attempt-2 TUTORIAL row exists as live state, so it gets superseded into attempt-3 IN_PROGRESS).
+    // First reset succeeds (seed left a COMPLETED attempt-1). It leaves the
+    // tutorial IN_PROGRESS at attempt 2 — there is nothing COMPLETED to reset,
+    // so a second reset must reject (issue #2446 guard).
     await DeveloperService.send({ event: 'resetTutorialProgress', data: { slug: 'reset-happy-path' } });
-    const result2 = await DeveloperService.send({ event: 'resetTutorialProgress', data: { slug: 'reset-happy-path' } });
-    expect(result2.supersededRecordCount).toBe(1);
-    expect(result2.newAttemptNumber).toBe(3);
+    cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+    await expect(
+      DeveloperService.send({ event: 'resetTutorialProgress', data: { slug: 'reset-happy-path' } })
+    ).rejects.toMatchObject({ code: 409 });
+  });
+
+  it('rejects reset of a partially-completed tutorial with 409 (issue #2446)', async () => {
+    // Regression guard for #2446: a user completed only step 1 (tutorial still
+    // IN_PROGRESS) then called reset via the API/MCP. The old handler allowed it
+    // — superseding the live step row WITHOUT clearing step status, leaving the
+    // schedule/points view inconsistent. Reset must require a COMPLETED tutorial.
+    const { Users, Tutorials, Steps, TaskRecords } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(TaskRecords).where({ user_ID: 'u1' });
+    await DELETE.from(Steps).where({ tutorial_ID: 't1' });
+    await DELETE.from(Tutorials).where({ ID: 't1' });
+    await DELETE.from(Users).where({ ID: 'u1' });
+
+    await INSERT.into(Users).entries({ ID: 'u1', uuid: 'u1', sapId: 'sap-u1', legacyId: 1001 });
+    await INSERT.into(Tutorials).entries({ ID: 't1', slug: 'partial-tut', title: 'Partial', legacyId: 2001, stepCount: 3 });
+    await INSERT.into(Steps).entries([
+      { ID: 's1', tutorial_ID: 't1', stepOrder: 1, legacyId: 3001, title: 'Step 1' },
+      { ID: 's2', tutorial_ID: 't1', stepOrder: 2, legacyId: 3002, title: 'Step 2' },
+      { ID: 's3', tutorial_ID: 't1', stepOrder: 3, legacyId: 3003, title: 'Step 3' },
+    ]);
+    const now = new Date().toISOString();
+    // Only step 1 done; tutorial-level row is IN_PROGRESS (never completed).
+    await INSERT.into(TaskRecords).entries([
+      { ID: 'tr-s1', user_ID: 'u1', taskLegacyId: 3001, taskType: 'STEP',
+        status: 'COMPLETED', progress: 100, completionDate: now, attemptNumber: 1, legacyId: 4000 },
+      { ID: 'tr-tut-ip', user_ID: 'u1', taskLegacyId: 2001, taskType: 'TUTORIAL',
+        status: 'IN_PROGRESS', progress: 33, attemptNumber: 1, legacyId: 4100 },
+    ]);
+
+    cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+    const { DeveloperService } = cds.services;
+    await expect(
+      DeveloperService.send({ event: 'resetTutorialProgress', data: { slug: 'partial-tut' } })
+    ).rejects.toMatchObject({ code: 409 });
+
+    // The partial progress must be untouched — no row superseded.
+    const rows = await SELECT.from(TaskRecords).where({ user_ID: 'u1' });
+    expect(rows.every(r => r.status !== 'SUPERSEDED')).toBe(true);
+    expect(rows.find(r => r.taskType === 'STEP').status).toBe('COMPLETED');
   });
 
   it('rejects unknown slug with 404', async () => {
@@ -828,9 +869,23 @@ describe('Task 18 — resetTutorialProgress rate limit', () => {
   it('6th reset within an hour returns 429', async () => {
     const { DeveloperService } = cds.services;
 
-    // 5 resets should succeed; each one supersedes the previous attempt's
-    // live TUTORIAL row and inserts a fresh IN_PROGRESS at attempt N+1.
+    // Helper: re-complete all 3 steps so the tutorial is COMPLETED again and
+    // therefore resettable. The #2446 guard requires a COMPLETED tutorial-level
+    // row before each reset, so we must re-complete between resets.
+    const recomplete = async () => {
+      for (const stepNumber of [1, 2, 3]) {
+        cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+        await DeveloperService.send({
+          event: 'completeStep',
+          data: { slug: 'reset-happy-path', stepNumber },
+        });
+      }
+    };
+
+    // 5 resets should succeed; the seed left attempt-1 COMPLETED, and we
+    // re-complete before each subsequent reset so all 5 clear the guard.
     for (let i = 0; i < 5; i++) {
+      if (i > 0) await recomplete();
       cds.context = { user: new cds.User({ id: 'sap-u1' }) };
       await DeveloperService.send({
         event: 'resetTutorialProgress',
@@ -839,6 +894,9 @@ describe('Task 18 — resetTutorialProgress rate limit', () => {
     }
 
     // 6th must reject with 429 — quota exceeded within the 1-hour window.
+    // Re-complete first so the request fails on the rate limit, not the
+    // completion guard (rate-limit check runs before the guard anyway).
+    await recomplete();
     cds.context = { user: new cds.User({ id: 'sap-u1' }) };
     await expect(
       DeveloperService.send({
