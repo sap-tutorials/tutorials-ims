@@ -6,16 +6,36 @@ import { __setFlagForTest, __resetFlagsForTest } from '../../srv/lib/feature-fla
 
 cds.test('serve', '--project', '.', '--in-memory');
 
-// A fake SES allterms payload + an injectable fetch/getDestination pair.
+// A fake SES allterms payload + an injectable fetch/getDestination/resolveSecret
+// triple. The job now does a PDC two-step + rotation pre-check, so the fake
+// fetch is URL-aware: POST /token/ → token, GET /api/account/apikey → far-future
+// expiry (no rotation), GET allterms.json → payload.
 const PAYLOAD = {
   terms: [
     { term: { name: 'SAP S/4HANA', id: 's1', classes: ['SoftwareProduct'], paths: [{ path: ['Software Product'] }] } },
     { term: { name: 'Retail', id: 's2', classes: ['IndustryCluster'] } },
   ],
 };
+
+// URL-aware fake fetch. `alltermsRes` lets a test override just the allterms leg.
+function makeFetch({ payload = PAYLOAD, alltermsRes } = {}) {
+  return async (url) => {
+    if (String(url).endsWith('/token/')) {
+      return { ok: true, json: async () => ({ access_token: 't', expires_in: 180 }) };
+    }
+    if (String(url).includes('/api/account/apikey')) {
+      // far-future expiry → rotation is a no-op
+      return { ok: true, json: async () => ({ apikey: 'K', expiryDate: '2099-01-01T00:00:00Z' }) };
+    }
+    if (alltermsRes) return alltermsRes;
+    return { ok: true, json: async () => payload };
+  };
+}
+
 const okDeps = (payload = PAYLOAD) => ({
-  getDestination: async () => ({ url: 'https://ses/prodses', authTokens: [{ type: 'Bearer', value: 't' }] }),
-  fetch: async () => ({ ok: true, json: async () => payload }),
+  getDestination: async () => ({ url: 'https://sap.data.progress.cloud/semantic/prodses' }),
+  resolveSecret: async () => 'API-KEY',
+  fetch: makeFetch({ payload }),
 });
 
 async function setConfig(db, entries) {
@@ -73,8 +93,12 @@ describe('runSemaphoreTagSync', () => {
   it('fails shut on a fetch error — writes nothing', async () => {
     __setFlagForTest('SEMAPHORE_SYNC_ENABLED', true);
     await setConfig(db, { 'semaphore.sync.dryRun': 'false' });
-    const deps = { getDestination: async () => ({ url: 'https://ses', authTokens: [{ value: 't' }] }),
-      fetch: async () => ({ ok: false, status: 500, text: async () => 'boom' }) };
+    // token + rotation succeed; the allterms leg 500s → fail-shut, no writes.
+    const deps = {
+      getDestination: async () => ({ url: 'https://sap.data.progress.cloud/semantic/prodses' }),
+      resolveSecret: async () => 'API-KEY',
+      fetch: makeFetch({ alltermsRes: { ok: false, status: 500, text: async () => 'boom' } }),
+    };
     const res = await runSemaphoreTagSync(null, { _deps: deps });
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/HTTP 500/);
