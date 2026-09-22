@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import cds from '@sap/cds';
-import { eventIsLive, awardCatGamePoints, utcDay, MAX_POINTS, DAILY_POINTS }
+import { eventIsLive, awardCatGamePoints, sumCatGameBonus, utcDay, MAX_POINTS, DAILY_POINTS }
   from '../../srv/lib/cat-game-award.js';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
@@ -100,6 +100,40 @@ describe('POST /api/devtoberfest/cat-game/award', () => {
     const res = await project.axios.post(AWARD_URL, {}, { validateStatus: () => true });
     expect(res.status).toBe(401);
     expect(res.data.error).toBe('UNAUTHENTICATED');
+  });
+
+  describe('sumCatGameBonus (issue #2455)', () => {
+    it('sums the user+event ledger rows', async () => {
+      const db = await cds.connect.to('db');
+      await INSERT.into(CatGameAwards).entries([
+        { user_ID: userRowId, event_ID: eventId, awardDate: '2026-10-01', points: 5 },
+        { user_ID: userRowId, event_ID: eventId, awardDate: '2026-10-02', points: 5 },
+      ]);
+      expect(await sumCatGameBonus(db, { userId: userRowId, eventId })).toBe(10);
+    });
+
+    it('returns 0 when the user has no rows', async () => {
+      const db = await cds.connect.to('db');
+      expect(await sumCatGameBonus(db, { userId: userRowId, eventId })).toBe(0);
+    });
+
+    it('returns 0 for missing args (fails soft)', async () => {
+      const db = await cds.connect.to('db');
+      expect(await sumCatGameBonus(db, { userId: null, eventId })).toBe(0);
+      expect(await sumCatGameBonus(db, { userId: userRowId, eventId: null })).toBe(0);
+      expect(await sumCatGameBonus(db, {})).toBe(0);
+    });
+
+    it('does not count another event\'s bonus', async () => {
+      const db = await cds.connect.to('db');
+      const otherEvent = cds.utils.uuid();
+      await INSERT.into(Events).entries({ ID: otherEvent, name: 'Other', legacyId: 9002 });
+      await INSERT.into(CatGameAwards).entries([
+        { user_ID: userRowId, event_ID: eventId, awardDate: '2026-10-01', points: 5 },
+        { user_ID: userRowId, event_ID: otherEvent, awardDate: '2026-10-01', points: 5 },
+      ]);
+      expect(await sumCatGameBonus(db, { userId: userRowId, eventId })).toBe(5);
+    });
   });
 });
 

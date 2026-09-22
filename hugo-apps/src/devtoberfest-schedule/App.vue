@@ -17,6 +17,7 @@ const feed = ref<Feed | null>(null);
 const rows = ref<ScheduleRow[]>([]);
 const earnedPoints = ref(0);
 const maxPoints = ref(0);
+const completeCount = ref(0);
 const isAuthenticated = ref(false);
 const joined = ref(false);
 const selectedRow = ref<ScheduleRow | null>(null);
@@ -60,8 +61,6 @@ const trackOptions = computed(() => {
   rows.value.forEach((r) => { if ((r as any).trackName) set.add((r as any).trackName); });
   return Array.from(set).sort();
 });
-
-const completeCount = computed(() => rows.value.filter((r) => r.complete).length);
 
 const filtered = computed(() => {
   const q = filters.q.trim().toLowerCase();
@@ -110,6 +109,7 @@ async function loadData(edition?: string) {
     joined.value = merged.joined;
     earnedPoints.value = merged.earnedPoints;
     maxPoints.value = merged.maxPoints;
+    completeCount.value = merged.completeCount;
   } catch (e: any) {
     error.value = e?.message ?? 'Failed to load schedule.';
   } finally {
