@@ -22,4 +22,21 @@ describe('publishContributors client', () => {
     expect(JSON.parse(opts.body).slug).toBe('demo')
     expect(res.published).toBe(1)
   })
+
+  it('#2462: slugs filter only POSTs sidecars for changed slugs present in cache', async () => {
+    // cache has demo + other; publish only "demo"
+    writeFileSync(join(dir, 'other.contributors.json'),
+      JSON.stringify({ slug: 'other', contributors: [] }))
+    const res = await publishContributors({ cacheDir: dir, baseUrl: 'http://x', apiKey: 'k', slugs: ['demo'] })
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(global.fetch.mock.calls[0][1].body).slug).toBe('demo')
+    expect(res.total).toBe(1)
+  })
+
+  it('#2462: slugs filter skips changed slugs that have no sidecar (zero POSTs)', async () => {
+    const res = await publishContributors({ cacheDir: dir, baseUrl: 'http://x', apiKey: 'k', slugs: ['no-such-slug'] })
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(res.published).toBe(0)
+    expect(res.total).toBe(0)
+  })
 })
