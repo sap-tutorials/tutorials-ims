@@ -282,14 +282,25 @@ export default class DeveloperService extends cds.ApplicationService {
         return { newAttemptNumber: 1, previousAttemptCompletedAt: null, supersededRecordCount: 0 };
       }
 
-      // 4. Determine next attempt number
-      const maxAttempt = Math.max(...liveRows.map(r => r.attemptNumber ?? 1));
-
       // Capture the prior tutorial-level completion date BEFORE we update.
       const priorTutorialRow = liveRows.find(
         r => r.taskType === 'TUTORIAL' && r.status === 'COMPLETED'
       );
       const previousAttemptCompletedAt = priorTutorialRow?.completionDate ?? null;
+
+      // A reset is only valid on a FULLY completed tutorial — it re-opens a done
+      // tutorial for another attempt. Partial progress (some steps done, tutorial
+      // still IN_PROGRESS) has nothing to "re-complete" and must NOT be resettable.
+      // The UI enforces this by only showing the reset button once the tutorial is
+      // completed; the OData action + MCP `reset_tutorial_progress` tool bypassed it
+      // (issue #2446), letting a partial reset supersede in-progress rows without
+      // clearing step status. Guard both paths at the shared handler.
+      if (!priorTutorialRow) {
+        return req.reject(409, 'This tutorial is not completed yet — only completed tutorials can be reset.');
+      }
+
+      // 4. Determine next attempt number
+      const maxAttempt = Math.max(...liveRows.map(r => r.attemptNumber ?? 1));
 
       // 5. Pre-allocate legacyId for the new row (fail-fast on sequence issues)
       const newLegacyId = await getNextLegacyId('TaskRecords', db);
