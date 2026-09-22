@@ -47,6 +47,30 @@ const isUniqueViolation = (err) =>
  *   { awarded:false, reason:'already-today', total, cap }
  *   { awarded:false, reason:'max',           total:cap, cap }
  */
+/**
+ * Sum a user's cat-game ("Hit the Cat") bonus points for one event. Read-only
+ * companion to {@link awardCatGamePoints}: used where the total earned needs to
+ * include the Kasimir bonus alongside activity/completion points (issue #2455 —
+ * the schedule banner under-counted because it summed only activity points).
+ *
+ * Returns 0 (never throws) when args are missing or the ledger has no rows, so
+ * callers can add it unconditionally. Values are already write-time capped at
+ * MAX_POINTS per event, so no clamp is applied here.
+ *
+ * @param db      a connected db / tx handle.
+ * @param userId  the Users.ID (UUID) of the player; falsy → 0.
+ * @param eventId the Events.ID of the event; falsy → 0.
+ */
+export async function sumCatGameBonus(db, { userId, eventId } = {}) {
+  if (!userId || !eventId) return 0;
+  const { CatGameAwards } = cds.entities('com.sap.developers.ims');
+  const rows = await db.run(
+    SELECT.from(CatGameAwards).columns('points')
+      .where({ user_ID: userId, event_ID: eventId }),
+  );
+  return rows.reduce((s, r) => s + (Number(r.points) || 0), 0);
+}
+
 export async function awardCatGamePoints(db, { userId, event, now = new Date() }) {
   const cap = MAX_POINTS;
   const eventId = event?.ID;

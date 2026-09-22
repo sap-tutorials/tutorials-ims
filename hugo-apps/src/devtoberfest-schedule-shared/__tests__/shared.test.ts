@@ -53,6 +53,22 @@ describe('mergeCompletion', () => {
     expect(out.joined).toBe(false);
     expect(out.rows.every((r) => !r.complete)).toBe(true);
     expect(out.earnedPoints).toBe(0);
+    expect(out.completeCount).toBe(0);
+  });
+
+  it('completeCount prefers the backend completedActivityCount over ticked rows (#2455)', () => {
+    // Backend counts 3 completed activities even though the feed only carries a
+    // display row for 1 of them (edition scope / hidden statuses).
+    const my = { authenticated: true, joined: true, completedSlugs: ['slug-a'], earnedPoints: 510, maxPoints: 800, completedActivityIds: ['a1'], completedActivityCount: 3 } as any;
+    const out = mergeCompletion(feed, my);
+    expect(out.completeCount).toBe(3);
+    expect(out.rows.filter((r) => r.complete).length).toBe(2); // s1 + a1 — under-counts
+  });
+
+  it('completeCount falls back to completedActivityIds length when count absent', () => {
+    const my = { authenticated: true, joined: true, completedSlugs: ['slug-a'], earnedPoints: 500, maxPoints: 800, completedActivityIds: ['a1', 'a2'] } as any;
+    const out = mergeCompletion(feed, my);
+    expect(out.completeCount).toBe(2);
   });
 });
 

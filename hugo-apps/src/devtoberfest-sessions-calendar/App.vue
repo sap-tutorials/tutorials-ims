@@ -32,6 +32,7 @@ const feed = ref<Feed | null>(null);
 const sessions = ref<ScheduleRow[]>([]);
 const earnedPoints = ref(0);
 const maxPoints = ref(0);
+const completeCount = ref(0);
 const joined = ref(false);
 const selectedRow = ref<ScheduleRow | null>(null);
 const filterTrack = ref('');
@@ -73,6 +74,7 @@ async function loadData(edition?: string) {
     joined.value = merged.joined;
     earnedPoints.value = merged.earnedPoints;
     maxPoints.value = merged.maxPoints;
+    completeCount.value = merged.completeCount;
     initialCursorIso.value = iso(initialCursor());
 
     // Cursor: a URL `date` wins over the data-derived default (first load only).
@@ -141,8 +143,6 @@ const colorMap = computed(() => {
   return buildTrackColorMap([...seen.entries()].map(([name, color]) => ({ name, color })));
 });
 const legend = computed(() => legendFor(colorMap.value));
-
-const completeCount = computed(() => sessions.value.filter((r) => r.complete).length);
 
 const filteredSessions = computed<Session[]>(() => {
   const base = sessions.value as Session[];

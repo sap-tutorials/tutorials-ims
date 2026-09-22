@@ -10,8 +10,9 @@ import { computeRelatedTechEdByDtfSession } from '../lib/teched-devtoberfest-cro
 import { buildICS, buildEventICS, addToCalendarLinks } from '../lib/devtoberfest-ical.js';
 import { buildRSS } from '../lib/devtoberfest-rss.js';
 import { resolveUser } from '../lib/resolve-user.js';
-import { resolveUserSapId } from '../lib/resolve-db-user.js';
+import { resolveUserSapId, resolveDbUser } from '../lib/resolve-db-user.js';
 import { getMyCompletedTutorialsForPoints } from '../lib/user-progress.js';
+import { sumCatGameBonus } from '../lib/cat-game-award.js';
 import { fetchTranscript } from '../lib/devtoberfest-transcript.js';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { isJoinedCurrentEvent } from '../lib/devtoberfest-registration.js';
@@ -188,7 +189,7 @@ async function sessionIcalHandler(req, res) {
 
 async function myCompletionsHandler(req, res) {
   try {
-    await cds.connect.to('db');
+    const db = await cds.connect.to('db');
     const user = resolveUser(req, cds);
     const sapId = resolveUserSapId(user);
     // Per-user response — never shared-cacheable at the CDN edge.
@@ -233,6 +234,7 @@ async function myCompletionsHandler(req, res) {
     let earnedPoints = 0;
     let completedSlugSet = new Set();
     let completedActivityIds = [];
+    let catGameBonus = 0;
     if (joined) {
       // Devtoberfest points gate: count ONLY genuinely-COMPLETED tutorial-level
       // records (status='COMPLETED'), NOT the /me "ever-completed" set which
@@ -245,6 +247,21 @@ async function myCompletionsHandler(req, res) {
       const windowed = filterCompletionsWithinWindow(rows, editionWindow.start, editionWindow.end);
       completedSlugSet = normalizeSlugSet(windowed);
       ({ earnedPoints, completedActivityIds } = completedActivityPoints(activities, completedSlugSet));
+
+      // Add the "Hit the Cat" (Kasimir) bonus so the banner total matches the
+      // arcade, which unions activity + cat-game points via the external
+      // gameboard service (issue #2455). The ledger is keyed by Events.ID (the
+      // active Devtoberfest event), NOT the schedule *edition*, so resolve the
+      // event the same way the cat-game award endpoint does. Fails soft to 0.
+      try {
+        const { DevtoberfestConfig } = cds.entities('com.sap.developers.ims');
+        const cfg = await SELECT.one.from(DevtoberfestConfig).where({ isActive: true }).columns('currentEvent_ID');
+        const dbUser = await resolveDbUser(user, ['ID']);
+        if (cfg?.currentEvent_ID && dbUser?.ID) {
+          catGameBonus = await sumCatGameBonus(db, { userId: dbUser.ID, eventId: cfg.currentEvent_ID });
+          earnedPoints += catGameBonus;
+        }
+      } catch (e) { LOG.warn('myCompletions cat-game bonus read failed:', e?.message); }
     }
 
     return res.status(200).json({
@@ -254,6 +271,11 @@ async function myCompletionsHandler(req, res) {
       earnedPoints,
       maxPoints,
       completedActivityIds,
+      // Authoritative completed-activity count (issue #2455): the schedule feed
+      // may not carry a display row for every completed activity (edition scope,
+      // hidden statuses), so the banner counts this rather than ticked rows.
+      completedActivityCount: completedActivityIds.length,
+      catGameBonus,
     });
   } catch (err) {
     LOG.error('GET /api/devtoberfest/my-completions failed:', err);
