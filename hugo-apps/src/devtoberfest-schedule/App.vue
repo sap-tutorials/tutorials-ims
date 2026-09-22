@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, reactive, watch } from 'vue';
 import { fetchFeed, fetchMyCompletions } from '../devtoberfest-schedule-shared/feed';
 import { mergeCompletion, safeHref, taskHref, taskLinkLabel } from '../devtoberfest-schedule-shared/completion';
 import { broadcastingTag, matchesFormat, FORMAT_FILTER_OPTIONS } from '../devtoberfest-schedule-shared/broadcasting';
@@ -9,6 +9,7 @@ import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { Feed, ScheduleRow } from '../devtoberfest-schedule-shared/types';
 import { formatViewerLocal } from '../devtoberfest-schedule-shared/format-session-time';
 import { favSet, isFavorite, toggleFavorite, loadFavorites } from '../devtoberfest-schedule-shared/favorites';
+import { parseDevtScheduleUrl, toDevtScheduleQuery, type DevtScheduleUrlState } from './url-state';
 
 const loading = ref(true);
 const error = ref('');
@@ -31,6 +32,24 @@ const filters = reactive({
   q: '',
   favorites: false, // #2393 — favorites-only (auth-gated; sessions only)
 });
+
+// --- Deep-linking (issue #2461) -------------------------------------------
+// The page URL is the source of truth on first load. We parse it once, apply
+// the feed-independent filters synchronously, and defer the bits that need the
+// loaded feed (row lookup, edition) to loadData.
+const initialUrl = parseDevtScheduleUrl(typeof window !== 'undefined' ? window.location.search : '');
+// One-shot consumed on the FIRST load only, so a later edition change via the
+// picker doesn't re-open a stale detail panel.
+let pendingRow: string | null = initialUrl.row;
+// Gate: suppress URL writes until the incoming link has been fully applied.
+let applied = false;
+
+if (initialUrl.q) filters.q = initialUrl.q;
+if (initialUrl.week) filters.week = initialUrl.week;
+if (initialUrl.type) filters.type = initialUrl.type;
+if (initialUrl.track) filters.track = initialUrl.track;
+if (initialUrl.format) filters.format = initialUrl.format;
+if (initialUrl.favorites) filters.favorites = true;
 
 type SortKey = 'kind' | 'title' | 'trackName' | 'week' | 'scheduledStart' | 'points';
 const sortKey = ref<SortKey>('week');
@@ -110,6 +129,13 @@ async function loadData(edition?: string) {
     earnedPoints.value = merged.earnedPoints;
     maxPoints.value = merged.maxPoints;
     completeCount.value = merged.completeCount;
+
+    // Row deep-link: open its detail panel (first load only).
+    if (pendingRow) {
+      const row = rows.value.find((r) => `${r.kind}:${r.id}` === pendingRow);
+      if (row) selectedRow.value = row;
+      pendingRow = null;
+    }
   } catch (e: any) {
     error.value = e?.message ?? 'Failed to load schedule.';
   } finally {
@@ -131,7 +157,61 @@ function clearFilters() {
   filters.favorites = false;
 }
 
-onMounted(() => loadData());
+// --- URL sync (issue #2461) -----------------------------------------------
+/** Current shareable state, derived from the live refs. */
+function currentUrlState(): DevtScheduleUrlState {
+  return {
+    q: filters.q || null,
+    week: filters.week || null,
+    type: filters.type || null,
+    track: filters.track || null,
+    format: filters.format || null,
+    favorites: filters.favorites,
+    // Omit edition when it's just the active default — the ?edition param is
+    // for explicitly viewing a non-active edition.
+    edition: editionId.value && editionId.value !== feed.value?.activeEditionId
+      ? editionId.value
+      : null,
+    row: selectedRow.value ? `${selectedRow.value.kind}:${selectedRow.value.id}` : null,
+  };
+}
+
+function writeUrl() {
+  if (!applied || typeof window === 'undefined') return;
+  const qs = toDevtScheduleQuery(currentUrlState());
+  window.history.replaceState({}, '', `${window.location.pathname}${qs}${window.location.hash}`);
+}
+
+/** Re-apply in-memory filter/row state from the URL on back/forward. */
+function applyFromUrl(st: DevtScheduleUrlState) {
+  filters.q = st.q ?? '';
+  filters.week = st.week ?? '';
+  filters.type = st.type ?? '';
+  filters.track = st.track ?? '';
+  filters.format = st.format ?? '';
+  filters.favorites = st.favorites;
+  if (st.row) {
+    const row = rows.value.find((r) => `${r.kind}:${r.id}` === st.row);
+    selectedRow.value = row ?? null;
+  } else {
+    selectedRow.value = null;
+  }
+}
+
+// Edition changes require a reload (different feed), so they're handled by
+// onEditionChange rather than applyFromUrl.
+function onPopState() { applyFromUrl(parseDevtScheduleUrl(window.location.search)); }
+
+onMounted(async () => {
+  window.addEventListener('popstate', onPopState);
+  await loadData(initialUrl.edition ?? undefined);
+  applied = true;      // start reflecting user interactions into the URL
+  writeUrl();          // canonicalise the URL after the incoming link is applied
+});
+
+onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
+
+watch([() => filters.q, () => filters.week, () => filters.type, () => filters.track, () => filters.format, () => filters.favorites, editionId, selectedRow], writeUrl);
 
 defineExpose({ filters });
 </script>
@@ -299,6 +379,8 @@ defineExpose({ filters });
                 <a
                   v-if="(row as any).taskSlug"
                   :href="taskHref(row)"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   class="sched-link"
                   @click.stop
                   :title="taskLinkLabel(row)"

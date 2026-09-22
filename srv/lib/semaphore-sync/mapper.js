@@ -55,16 +55,35 @@ export function normalizeName(label) {
     .trim();
 }
 
+// Classes that are structural scaffolding in the SES hierarchy, not real
+// taxonomy ancestors — dropped from the human titlePath. Verified against the
+// live SAPCore payload (#2184): every path begins with a "Concept Scheme" root
+// ("SAP Core Model") and a "SCHEMA" node ("Topic", "Materials Flat List", …)
+// before the actual term ancestors.
+const SCAFFOLD_CLASSES = new Set(['concept scheme', 'schema']);
+
+function nodeIsScaffold(node) {
+  const classes = node?.classes;
+  if (!Array.isArray(classes)) return false;
+  return classes.some((c) => SCAFFOLD_CLASSES.has(String(c).toLowerCase()));
+}
+
 // Extract the ordered ancestor→leaf segment names for a term. Defensive across
-// the SES `paths` variants seen in the docs: paths[i].path may be an array of
-// node objects ({name}) or strings; paths[i] itself may carry a name. Falls
-// back to the term's own name when no usable path is present.
+// the SES `paths` variants:
+//   - Live SAPCore shape: paths[i].path[j] = { field: { name, classes, id } }
+//   - Doc/legacy variants: paths[i].path[j] = { name } | "string"
+// Structural scaffold nodes (Concept Scheme / SCHEMA) are skipped. Falls back to
+// the term's own name when no usable path is present.
 function deriveSegments(term) {
   const paths = Array.isArray(term.paths) ? term.paths : [];
   for (const p of paths) {
     const nodes = Array.isArray(p?.path) ? p.path : Array.isArray(p) ? p : null;
     if (!nodes) continue;
     const names = nodes
+      // Unwrap the { field: {...} } envelope used by live SES; tolerate bare
+      // node objects and plain strings.
+      .map((n) => (n && typeof n === 'object' && n.field ? n.field : n))
+      .filter((n) => !nodeIsScaffold(n))
       .map((n) => (typeof n === 'string' ? n : n?.name))
       .map((n) => (n == null ? '' : String(n).trim()))
       .filter(Boolean);

@@ -83,8 +83,8 @@ import { codeCheckSpecPublishHandler } from './lib/code-check-spec-publish.js';
 import { assertSpecPublishHandler } from './lib/assert-spec-publish.js';
 import { publishValidateAnswerSpecs } from './lib/validate-answer-spec-publish.js';
 import { publishChallengeAnswers } from './lib/challenge-answer-publish.js';
-import { publishContributors } from './lib/contributors-publish.js';
-import { publishValidationRules } from './lib/validation-rules-publish.js';
+import { publishContributors, publishContributorsBulk, contributorHashesHandler } from './lib/contributors-publish.js';
+import { publishValidationRules, publishValidationRulesBulk, validationRuleHashesHandler } from './lib/validation-rules-publish.js';
 import { resolveSearchSettings } from './lib/runtime-config/search-settings.js';
 import { resolveTenantSettings } from './lib/runtime-config/tenant-settings.js';
 import { makeValidateAnswerHandler } from './lib/validate-answer-handler.js';
@@ -783,6 +783,11 @@ cds.on('bootstrap', (app) => {
   // Public-read like /content/hashes; see srv/lib/content-store.js for the
   // rationale (rendered HTML is volatile-by-design, source markdown isn't).
   app.get('/content/source-hashes', sourceHashesHandler);
+  // Sidecar hash feeds (#2464) — public-read like /content/hashes. The publish
+  // client diffs these against locally-computed sidecar hashes to skip POSTing
+  // contributors/validation-rules whose stored content is already current.
+  app.get('/content/contributor-hashes', contributorHashesHandler);
+  app.get('/content/validation-rule-hashes', validationRuleHashesHandler);
   // Public, anonymous Markdown alternate of a tutorial (#agent-readiness): the
   // "machine-readable layer" agents look for. Approuter maps ^/tutorials/<slug>.md$
   // here. Registered BEFORE the wildcard serveHandler so the `.md` suffix wins;
@@ -1016,6 +1021,20 @@ cds.on('bootstrap', (app) => {
     express.json({ limit: '4mb' }),
     contentAuthMiddleware,
     publishValidationRules
+  );
+
+  // Bulk REPLACE handlers (#2463) — collapse the per-file sidecar POST loop into
+  // a handful of batched requests on full publishes. Same auth guard; larger
+  // body limits since a batch carries many slugs. Body: { items: [{ slug, ... }] }.
+  app.post('/content/publish-contributors-bulk',
+    express.json({ limit: '16mb' }),
+    contentAuthMiddleware,
+    publishContributorsBulk
+  );
+  app.post('/content/publish-validation-rules-bulk',
+    express.json({ limit: '32mb' }),
+    contentAuthMiddleware,
+    publishValidationRulesBulk
   );
 
   // Tutorial feedback bridge. Express handler (rather than letting CAP expose

@@ -96,3 +96,41 @@ describe('semaphore mapper', () => {
     expect(mapAllTerms({})).toEqual({ rows: [], skipped: [] });
   });
 });
+
+// Live SAPCore shape (#2184, verified 2026-09-22): paths[].path[] nodes are
+// wrapped in a `field` object, and the chain is prefixed by structural scaffold
+// nodes ("Concept Scheme" root + "SCHEMA") before the real ancestors.
+describe('deriveTitlePath — live SES field-wrapped hierarchy', () => {
+  const term = {
+    id: 'b2cfadac-57fd-4099-8358-4a6882be5123',
+    name: 'Accessibility',
+    classes: ['TOPIC'],
+    paths: [{
+      name: 'Narrower Term',
+      path: [
+        { field: { classes: ['Concept Scheme'], name: 'SAP Core Model' } },
+        { field: { classes: ['SCHEMA'], name: 'Topic' } },
+        { field: { classes: ['TOPIC'], name: 'Business Development' } },
+        { field: { classes: ['TOPIC'], name: 'Accessibility' } },
+      ],
+    }],
+  };
+
+  it('unwraps .field, drops scaffold nodes, and keeps the real ancestor chain', () => {
+    // scaffold (SAP Core Model / Topic) dropped; leaf not duplicated
+    expect(deriveTitlePath(term)).toBe('Business Development : Accessibility');
+  });
+
+  it('mapAllTerms produces the hierarchical titlePath end-to-end', () => {
+    const { rows } = mapAllTerms({ terms: [{ term }] });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].titlePath).toBe('Business Development : Accessibility');
+    expect(rows[0].label).toBe('Accessibility');
+    expect(rows[0].semaphoreId).toBe('b2cfadac-57fd-4099-8358-4a6882be5123');
+  });
+
+  it('trims a leading-space SES label', () => {
+    const { rows } = mapAllTerms({ terms: [{ term: { id: 'x', name: ' DNS Forward' } }] });
+    expect(rows[0].label).toBe('DNS Forward');
+  });
+});
