@@ -1220,6 +1220,16 @@ export default class DeveloperService extends cds.ApplicationService {
         taskLegacyId: tutorial.legacyId,
         taskType: 'TUTORIAL',
         status, progress,
+        // Stamp completionDate when a NEW row lands directly in COMPLETED — the
+        // single-step-tutorial case (stepCount=1: one completeStep → 100% →
+        // straight to COMPLETED with no prior IN_PROGRESS row). Without this the
+        // row is COMPLETED with a null completionDate, and any date-windowed
+        // consumer drops it: the Devtoberfest gameboard's withinWindow guard
+        // excludes null-date completions (can't prove in-window), so single-step
+        // tutorials scored 0 in the arcade while the schedule counted them
+        // (issue: scavenger-hunt 3,000-pt arcade/schedule mismatch). The UPDATE
+        // branch above already stamps it; this mirrors that + createTaskRecord.
+        completionDate: status === 'COMPLETED' ? new Date().toISOString() : null,
         titleSnapshot: tutorial.title,
         legacyId: newLegacyId,
         attemptNumber: currentAttempt,

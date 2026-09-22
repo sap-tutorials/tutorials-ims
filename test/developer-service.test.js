@@ -62,6 +62,37 @@ describe('DeveloperService', () => {
       expect(data.completedSteps).toEqual([1, 2]);
       expect(data.points).toBe(20);
     });
+
+    // Single-step tutorial (stepCount=1) flips straight to COMPLETED on the one
+    // completeStep, taking _updateTutorialProgress's INSERT branch (no prior
+    // IN_PROGRESS row to UPDATE). That branch previously omitted completionDate,
+    // leaving the row COMPLETED with a null date — invisible to date-windowed
+    // consumers like the Devtoberfest gameboard (withinWindow drops null-date
+    // completions), which under-counted single-step tutorials in the arcade.
+    it('stamps completionDate on a single-step tutorial (INSERT branch)', async () => {
+      const { Tutorials, Steps, TaskRecords } = cds.entities('com.sap.developers.ims');
+      await INSERT.into(Tutorials).entries({
+        ID: 'aaaaaaaa-0000-0000-0000-000000000099',
+        slug: 'single-step-tut', title: 'Single Step', legacyId: 1099,
+        status: 'ACTIVE', stepCount: 1,
+      });
+      await INSERT.into(Steps).entries({
+        ID: 'bbbbbbbb-0000-0000-0000-000000000099',
+        tutorial_ID: 'aaaaaaaa-0000-0000-0000-000000000099',
+        stepOrder: 1, title: 'Step 1', legacyId: 2099,
+      });
+
+      const { status } = await project.post('/api/completeStep',
+        { slug: 'single-step-tut', stepNumber: 1 },
+        { auth: { username: 'developer', password: 'developer' } });
+      expect(status).toBe(200);
+
+      const rec = await SELECT.one.from(TaskRecords).where({
+        taskLegacyId: 1099, taskType: 'TUTORIAL',
+      });
+      expect(rec?.status).toBe('COMPLETED');
+      expect(rec?.completionDate).toBeTruthy();
+    });
   });
 
   describe('createTaskRecord (legacy)', () => {
