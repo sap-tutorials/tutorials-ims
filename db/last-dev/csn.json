@@ -4166,6 +4166,11 @@
           "type": "cds.String",
           "length": 64,
           "@cds.persistence.name": "SOURCECOMMIT"
+        },
+        "sourceRepo": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "SOURCEREPO"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CONTENTFILES"

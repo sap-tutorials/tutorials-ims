@@ -816,6 +816,27 @@ jobs:
             --hugo-dir hugo/public \
             --check-islands
 
+      # Belt-and-suspenders for the server-side public-namespace guard
+      # (srv/lib/content-publish-session.js): this PUBLIC workflow must never
+      # fetch -Contribution repos while targeting prod. Unlike rebuild-content-qa.yml,
+      # this workflow never sets INCLUDE_CONTRIBUTION_REPOS / ONLY_CONTRIBUTION_REPOS
+      # and never passes --channel qa, so the check reads the *resolved* env: it
+      # stays quiet today and turns red only if a future edit leaks -Contribution
+      # inclusion into a prod publish. QA content flows through rebuild-content-qa.yml.
+      - name: Guard — no -Contribution repos in a public prod publish
+        if: ${{ steps.mode.outputs.effective_mode != 'catalog-only' }}
+        env:
+          TARGET: ${{ steps.env.outputs.target }}
+          INCLUDE_CONTRIB: ${{ env.INCLUDE_CONTRIBUTION_REPOS }}
+          ONLY_CONTRIB: ${{ env.ONLY_CONTRIBUTION_REPOS }}
+        run: |
+          set -euo pipefail
+          if [ "$TARGET" = "prod" ] && { [ "${INCLUDE_CONTRIB:-}" = "true" ] || [ "${ONLY_CONTRIB:-}" = "true" ]; }; then
+            echo "::error title=Contribution-in-prod guard::A public PROD publish must not include -Contribution repos (INCLUDE_CONTRIBUTION_REPOS=$INCLUDE_CONTRIB ONLY_CONTRIBUTION_REPOS=$ONLY_CONTRIB). QA content belongs on the QA channel (rebuild-content-qa.yml)."
+            exit 1
+          fi
+          echo "Contribution-in-prod guard passed (target=$TARGET)."
+
       - name: Publish tutorial content to HANA
         id: publish
         # Concurrency / batch-size are tunable via workflow_dispatch inputs
