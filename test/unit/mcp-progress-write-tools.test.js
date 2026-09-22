@@ -58,11 +58,11 @@ describe('DeveloperService authenticated MCP write tools', () => {
   });
 
   it('reset_tutorial_progress emits TutorialProgressReset with tokenSource field', async () => {
-    // First complete a step so there are live rows to reset.
-    await project.post('/api/complete_step',
-      { slug: 'wtut-a', stepNumber: 1 },
-      auth1
-    );
+    // Fully complete the tutorial (all 3 steps) so it is resettable — the #2446
+    // guard only allows resetting a COMPLETED tutorial. Step 2 was already
+    // completed by the test above; complete 1 and 3 to finish the set.
+    await project.post('/api/complete_step', { slug: 'wtut-a', stepNumber: 1 }, auth1);
+    await project.post('/api/complete_step', { slug: 'wtut-a', stepNumber: 3 }, auth1);
 
     const initialCount = emittedEvents.length;
 
