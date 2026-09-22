@@ -45,6 +45,9 @@ describe('applyPostValidation (#2426)', () => {
       'The concept provided is **undefined** and cannot be documented. The supplied sources cover a range of SAP HANA Cloud connectivity tutorials.',
       'The provided sources do not contain enough information to write a grounded definition for an undefined concept. Please supply a valid concept name.',
       'The concept name provided is "undefined," which does not correspond to a identifiable SAP developer concept supported by the given source snippets.',
+      // The #2426 bulk-run also swept in "valid name, thin grounding" refusals:
+      'The provided sources do not contain sufficient information about "Placeholder Property Handling" in UI5 to write a grounded definition.',
+      'The provided sources do not contain any information about UI5 Semantic Colors and States. The only source available describes a unit testing tutorial step for UI5.',
     ];
     for (const def of refusals) {
       const r = applyPostValidation(def);
