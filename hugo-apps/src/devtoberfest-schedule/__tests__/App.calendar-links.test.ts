@@ -21,7 +21,11 @@ vi.mock('../../devtoberfest-schedule-shared/feed', () => ({
 import App from '../App.vue';
 
 describe('schedule App per-session calendar links', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // #2461: reset the shared happy-dom URL so deep-link parse-on-mount starts clean.
+    window.history.replaceState({}, '', window.location.pathname);
+  });
 
   it('opens a session and its .ics/add-to-calendar links carry the active edition', async () => {
     const wrapper = mount(App);
