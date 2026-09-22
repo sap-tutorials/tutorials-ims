@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, reactive, watch } from 'vue';
 import { filterSessions, type TechEdSession } from '../teched-sessions-grid/filter';
 import DetailPanel from '../devtoberfest-schedule-shared/DetailPanel.vue';
 import type { ScheduleRow } from '../devtoberfest-schedule-shared/types';
 import { useAuth } from '../devtoberfest-schedule-shared/useAuth';
 import { favSet, isFavorite, toggleFavorite, loadFavorites } from '../devtoberfest-schedule-shared/favorites';
+import { parseTechEdScheduleUrl, toTechEdScheduleQuery, type TechEdScheduleUrlState } from './url-state';
 
 // --- Feed shapes (mirrors teched-sessions-grid/App.vue) --------------------
 interface RawSpeaker { slug: string; name: string; title?: string | null; company?: string | null; bio?: string | null; photoUrl?: string | null; authorLogin?: string | null; advocateSlug?: string | null; }
@@ -41,6 +42,19 @@ const filters = reactive({
   clubhouse: false, // Community Clubhouse (room "Community Theater")
   favorites: false, // #2393 — favorites-only (auth-gated)
 });
+
+// --- Deep-linking (issue #2461) -------------------------------------------
+// Parse once on load; apply feed-independent filters synchronously; defer
+// row-open to loadData (needs the session list to resolve slug → row).
+const initialUrl = parseTechEdScheduleUrl(typeof window !== 'undefined' ? window.location.search : '');
+let pendingRow: string | null = initialUrl.row;
+let applied = false;
+
+if (initialUrl.q) filters.q = initialUrl.q;
+if (initialUrl.venue) filters.venue = initialUrl.venue;
+if (initialUrl.track) filters.track = initialUrl.track;
+if (initialUrl.clubhouse) filters.clubhouse = true;
+if (initialUrl.favorites) filters.favorites = true;
 
 const { isAuthenticated } = useAuth();
 
@@ -182,6 +196,13 @@ async function loadData() {
         })
         .filter(Boolean),
     }));
+
+    // Row deep-link: open the session's detail panel (first load only).
+    if (pendingRow) {
+      const s = sessions.value.find((sess) => sess.slug === pendingRow);
+      if (s) selectedRow.value = toDetailRow(s);
+      pendingRow = null;
+    }
   } catch (e: any) {
     error.value = e?.message ?? 'Failed to load TechEd sessions.';
   } finally {
@@ -189,7 +210,50 @@ async function loadData() {
   }
 }
 
-onMounted(() => loadData());
+// --- URL sync (issue #2461) -----------------------------------------------
+function currentUrlState(): TechEdScheduleUrlState {
+  return {
+    q: filters.q || null,
+    venue: filters.venue || null,
+    track: filters.track || null,
+    clubhouse: filters.clubhouse,
+    favorites: filters.favorites,
+    row: selectedRow.value?.id ?? null,
+  };
+}
+
+function writeUrl() {
+  if (!applied || typeof window === 'undefined') return;
+  const qs = toTechEdScheduleQuery(currentUrlState());
+  window.history.replaceState({}, '', `${window.location.pathname}${qs}${window.location.hash}`);
+}
+
+function applyFromUrl(st: TechEdScheduleUrlState) {
+  filters.q = st.q ?? '';
+  filters.venue = st.venue ?? '';
+  filters.track = st.track ?? '';
+  filters.clubhouse = st.clubhouse;
+  filters.favorites = st.favorites;
+  if (st.row) {
+    const s = sessions.value.find((sess) => sess.slug === st.row);
+    selectedRow.value = s ? toDetailRow(s) : null;
+  } else {
+    selectedRow.value = null;
+  }
+}
+
+function onPopState() { applyFromUrl(parseTechEdScheduleUrl(window.location.search)); }
+
+onMounted(async () => {
+  window.addEventListener('popstate', onPopState);
+  await loadData();
+  applied = true;
+  writeUrl();
+});
+
+onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
+
+watch([() => filters.q, () => filters.venue, () => filters.track, () => filters.clubhouse, () => filters.favorites, selectedRow], writeUrl);
 
 // #2393 — load the user's favorites once authenticated; clear the facet if anonymous.
 watch(isAuthenticated, (authed) => {
