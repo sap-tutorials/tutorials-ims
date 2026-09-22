@@ -26,7 +26,8 @@
 // terms[] payload, so a transient outage can never wipe the taxonomy.
 
 import cds from '@sap/cds';
-import { fetchAllTerms } from '../lib/semaphore-sync/client.js';
+import { fetchAllTerms, resolveConnection } from '../lib/semaphore-sync/client.js';
+import { checkAndRotateApiKey } from '../lib/semaphore-sync/rotation.js';
 import { mapAllTerms } from '../lib/semaphore-sync/mapper.js';
 import { applyTerms } from '../lib/semaphore-sync/applier.js';
 import { isFlagEnabled } from '../lib/feature-flags/db-flags.js';
@@ -87,12 +88,35 @@ export async function runSemaphoreTagSync(_logId, opts = {}) {
   const db = cds.db ?? (await cds.connect.to('db'));
   const cfg = await readConfig(db);
 
+  // Resolve the PDC connection once (destination URL + API key → one ~180s
+  // token), then (a) opportunistically rotate the key if near expiry and
+  // (b) fetch allterms with the same token. Both fail-shut into a FAILED run.
+  let conn;
+  try {
+    conn = await resolveConnection({ _deps: opts._deps });
+  } catch (e) {
+    LOG.error(`semaphore-sync connect failed: ${e.message}`);
+    return { ok: false, error: e.message, model: cfg.model };
+  }
+
+  // Fail-SOFT rotation: a rotation hiccup must not block the sync (the current
+  // key is valid until expiryDate). checkAndRotateApiKey swallows its own errors.
+  const rotation = await checkAndRotateApiKey({
+    tokenBaseUrl: conn.tokenBaseUrl,
+    token: conn.token,
+    _deps: opts._deps,
+  });
+  if (rotation.rotated) {
+    LOG.info(`semaphore-sync rotated API key (was expiring ~${rotation.expiryDate})`);
+  }
+
   let data;
   try {
     data = await fetchAllTerms({
       model: cfg.model,
       lang: cfg.lang,
       filter: cfg.filter,
+      connection: conn,
       _deps: opts._deps,
     });
   } catch (e) {
@@ -118,6 +142,7 @@ export async function runSemaphoreTagSync(_logId, opts = {}) {
     ok: true,
     model: cfg.model,
     dryRun: cfg.dryRun,
+    rotated: !!rotation.rotated,
     fetched: Array.isArray(data.terms) ? data.terms.length : 0,
     mapped: rows.length,
     skipped: skipped.length,
