@@ -292,11 +292,16 @@ entity Books : managed {
 2. Add or edit a .md file under tutorials/
 3. Commit any new images in the slug-named folder
 4. Open a PR against main
-5. PR review + merge (current review is informal — see §11)
-6. Push to main → repo dispatch event → tutorials-ims CI
+5. Get ≥ 1 approving review, then merge (direct pushes to main are blocked — see below)
+6. Merge to main → repo dispatch event → tutorials-ims CI
 7. CI re-fetches your tutorial, rebuilds Hugo, publishes to HANA
 8. Live at developers.sap.com/tutorials/<your-slug> within a few minutes
 ```
+
+> [!IMPORTANT]
+> Since September 2026, an org-wide OSPO ruleset **blocks direct pushes to `main`**. Every change —
+> even a typo fix — must go through a reviewed pull request. Full rules and step-by-step
+> branch/fork/PR instructions: [branch-protection-and-pull-requests.md](branch-protection-and-pull-requests.md).
 
 The notification step (6) is wired by adding a small workflow file to your tutorial repo — see [tutorial-repo-dispatch.yml](tutorial-repo-dispatch.yml). Org admins typically handle this once per repo.
 
@@ -380,7 +385,7 @@ If the build fails, the dispatch run will be red in the `tutorials-ims` GitHub A
 
 ### Quick edits
 
-Push a change to `main` of the source repo. The pipeline picks it up automatically — no manual step.
+Open a reviewed PR against `main` of the source repo (direct pushes to `main` are blocked — see [branch-protection-and-pull-requests.md](branch-protection-and-pull-requests.md)). Once merged, the pipeline picks it up automatically — no manual step.
 
 ### Rollback
 
@@ -412,7 +417,7 @@ These items are listed here so authors know what to expect — and what *not* to
 
 | Gap | Current state |
 |-----|---------------|
-| Editorial review gate | Informal PR review in source repo; no formal Author QA lane |
+| Editorial review gate | PR review now **required** by the OSPO ruleset (≥ 1 approval before merge) — see [branch-protection-and-pull-requests.md](branch-protection-and-pull-requests.md); a formal Author QA lane is still separate |
 | Approval / sign-off workflow | None — merge equals publish; no reviewer roles |
 | PR preview deploys | None — preview requires local clone (§5) or QA channel (§5.1) |
 | VS Code authoring extension | None — live preview, frontmatter validation, link checking are planned |

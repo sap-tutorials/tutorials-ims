@@ -7,6 +7,7 @@ This folder is the operational manual for everyone working with the SAP Develope
 | If you are a... | Read | What you do |
 | --- | --- | --- |
 | **Tutorial author** writing markdown | [writing-tutorials.md](writing-tutorials.md) | Write, preview, and publish tutorials |
+| **Any author** getting a change merged | [branch-protection-and-pull-requests.md](branch-protection-and-pull-requests.md) | Branches, forks, and PRs under the OSPO branch-protection rules (no more direct pushes to `main`) |
 | **New tutorial author** learning the ropes | [meta-tutorials.md](meta-tutorials.md) | Follow the platform's own "how to write a tutorial" tutorials (on the QA channel) |
 | **Repo group owner** in `sap-tutorials` | [repo-group-owners.md](repo-group-owners.md) | Review PRs, plan tutorials, manage your repos |
 | **Center admin** running the platform | [center-admin.md](center-admin.md) | Catalog, taxonomy, pipeline, access, support |
