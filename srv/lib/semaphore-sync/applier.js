@@ -18,6 +18,11 @@
 // class→flag mapping against the live SAPCore model before the flag is flipped.
 
 import cds from '@sap/cds';
+// Tags carry a legacyId (IMS numeric key) auto-assigned by AdminService's
+// before(CREATE) hook. This applier writes via cds.db directly, bypassing that
+// hook, so it must assign legacyId itself — otherwise new rows land with a NULL
+// legacyId (the Admin UI's "ID" column) and self-heal never fires. #2479.
+import { getNextLegacyId } from '../legacy-id.js';
 
 // SES SAPCore is the ENTIRE SAP product/topic universe (~21k terms); the Tags
 // table is a deliberately curated subset. So the sync is two-tier (#2184):
@@ -118,8 +123,12 @@ export async function applyTerms(rows, opts = {}) {
       continue;
     }
     if (!dryRun) {
+      // Assign legacyId from the Tags HANA sequence (SQLite: in-memory counter).
+      // Only when actually writing — a dryRun must not burn sequence numbers.
+      const legacyId = await getNextLegacyId('Tags', db);
       await db.run(INSERT.into(Tags).entries({
         ID: cds.utils.uuid(),
+        legacyId,
         semaphoreId: row.semaphoreId,
         label: row.label,
         name: row.name,

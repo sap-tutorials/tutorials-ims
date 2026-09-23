@@ -49,6 +49,9 @@ describe('semaphore applyTerms — two-tier (#2184)', () => {
       isActualTag: false, isInterestItem: false,
     });
     expect(t.ID).toBeTruthy();
+    // Insert path assigns a legacyId (AdminService's before-CREATE hook is
+    // bypassed by the direct cds.db write, so the applier must set it). #2479.
+    expect(t.legacyId).toBeTruthy();
   });
 
   it('skips an unmatched term whose class is not in the allowlist', async () => {
@@ -138,6 +141,23 @@ describe('semaphore applyTerms — two-tier (#2184)', () => {
     const res = await applyTerms([ROW()], { db, dryRun: true, intakeClasses: ['Topic'] });
     expect(res).toEqual({ inserted: 1, updated: 0, unchanged: 0, skippedIntake: 0, total: 1 });
     expect(await SELECT.from(Tags)).toHaveLength(0);
+  });
+
+  it('dryRun does NOT assign a legacyId (no sequence burn on a plan)', async () => {
+    // A real write immediately after must get the first available legacyId — if
+    // dryRun had consumed one, this row's legacyId would skip a value.
+    await applyTerms([ROW()], { db, dryRun: true, intakeClasses: ['Topic'] });
+    await applyTerms([ROW()], { db, intakeClasses: ['Topic'] });
+    const written = await SELECT.one.from(Tags).where({ semaphoreId: 's1' });
+    const fresh = await applyTerms(
+      [ROW({ semaphoreId: 's2', name: 'other' })],
+      { db, intakeClasses: ['Topic'] },
+    );
+    expect(fresh.inserted).toBe(1);
+    const next = await SELECT.one.from(Tags).where({ semaphoreId: 's2' });
+    // Consecutive real writes get consecutive legacyIds; the dryRun did not
+    // consume one in between.
+    expect(next.legacyId).toBe(written.legacyId + 1);
   });
 
   it('handles an empty payload', async () => {
