@@ -136,6 +136,11 @@ export function _setJobFn(jobName, mockFn) {
  * triggers (opts.manualTrigger=true), emits a completion SecurityEvent
  * audit event from the `finally` block (spec §9).
  *
+ * #2478: FAILED is recorded for BOTH a thrown exception AND a runner that
+ * returns a soft-failure object `{ ok:false, error }`. The latter fell
+ * through to SUCCESS before, masking fail-shut no-ops (e.g. semaphore-tag-
+ * sync). A returned `{ ok:true }` or any non-`ok:false` value still succeeds.
+ *
  * Return shape: {skipped: false, outcome: 'success'|'error', result,
  * errorMessage} — `skipped` is always false since #958 retired the
  * lock-held short-circuit; retained in the shape for backward-compat
