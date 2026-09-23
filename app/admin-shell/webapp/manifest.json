@@ -95,6 +95,7 @@
       "sap.tutorials.admin.videoRotation": "./components/video-rotation",
       "sap.tutorials.admin.pats": "./components/pats",
       "sap.tutorials.admin.featureFlags": "./components/featureFlags",
+      "sap.tutorials.admin.semaphoreConfig": "./components/semaphoreConfig",
       "sap.tutorials.admin.petoberfest": "./components/petoberfest",
       "sap.tutorials.admin.channels": "./components/channels",
       "sap.tutorials.admin.channelCollections": "./components/channel-collections",
@@ -388,6 +389,12 @@
       },
       "featureFlagsComponent": {
         "name": "sap.tutorials.admin.featureFlags",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "semaphoreConfigComponent": {
+        "name": "sap.tutorials.admin.semaphoreConfig",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -932,6 +939,16 @@
           ]
         },
         {
+          "name": "semaphoreConfig",
+          "pattern": "semaphoreConfig",
+          "target": [
+            {
+              "name": "semaphoreConfigTarget",
+              "prefix": "smc"
+            }
+          ]
+        },
+        {
           "name": "petoberfest",
           "pattern": "petoberfest",
           "target": [
@@ -1340,6 +1357,13 @@
           "id": "featureFlagsTarget",
           "viewLevel": 1,
           "prefix": "ffl"
+        },
+        "semaphoreConfigTarget": {
+          "type": "Component",
+          "usage": "semaphoreConfigComponent",
+          "id": "semaphoreConfigTarget",
+          "viewLevel": 1,
+          "prefix": "smc"
         },
         "petoberfestTarget": {
           "type": "Component",

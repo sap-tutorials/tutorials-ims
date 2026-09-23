@@ -31,24 +31,48 @@ import { checkAndRotateApiKey } from '../lib/semaphore-sync/rotation.js';
 import { mapAllTerms } from '../lib/semaphore-sync/mapper.js';
 import { applyTerms } from '../lib/semaphore-sync/applier.js';
 import { isFlagEnabled } from '../lib/feature-flags/db-flags.js';
+// Key list + defaults live in the shared descriptor so the Admin UI panel
+// (AdminService.SemaphoreConfig, #2477) and this reader never drift.
+import { SEMAPHORE_CONFIG_KEY_NAMES } from '../lib/semaphore-sync/config-keys.js';
 
 const LOG = cds.log('semaphore-sync');
 const NS = 'com.sap.developers.ims';
 
-const CONFIG_KEYS = [
-  'semaphore.sync.model',
-  'semaphore.sync.lang',
-  'semaphore.sync.filter',
-  'semaphore.sync.actualTagClasses',
-  'semaphore.sync.interestItemClasses',
-  'semaphore.sync.dryRun',
-];
+const CONFIG_KEYS = SEMAPHORE_CONFIG_KEY_NAMES;
 
 function splitList(v) {
   return String(v ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+// Shorten a class URI to its readable leaf ("…schema#Topic" → "Topic") for the
+// histogram; leave short names untouched.
+function shortClass(c) {
+  const s = String(c ?? '');
+  if (s.includes('#')) return s.slice(s.lastIndexOf('#') + 1);
+  if (s.includes('/')) return s.slice(s.lastIndexOf('/') + 1);
+  return s;
+}
+
+// Distinct SES classes across all mapped rows with a term count each, rendered
+// as a compact single-line string. formatJobSummary only renders scalar summary
+// fields (number/string/boolean) — an object/array would be silently dropped —
+// so the histogram MUST be a pre-formatted string to survive into the SUMMARY.
+// This is the whole point of the first dry run: it surfaces the real class
+// distribution so semaphore.sync.filter / intakeClasses can be chosen from data.
+function classHistogram(rows) {
+  const counts = new Map();
+  for (const r of rows) {
+    for (const c of r.classes ?? []) {
+      const k = shortClass(c);
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+  }
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  if (sorted.length === 0) return '(no classes on any term)';
+  return sorted.map(([k, n]) => `${k}=${n}`).join(', ');
 }
 
 // Read the semaphore.sync.* string config from ImsConfig in one SELECT.
@@ -69,6 +93,10 @@ async function readConfig(db) {
     filter: map.get('semaphore.sync.filter') || undefined,
     actualTagClasses: splitList(map.get('semaphore.sync.actualTagClasses')),
     interestItemClasses: splitList(map.get('semaphore.sync.interestItemClasses')),
+    // Tier-2 intake allowlist: unmatched terms are INSERTed only if their SES
+    // class is listed here. Empty ⇒ intake OFF (adopt-only) — the safe default
+    // until the FILTER/classes are chosen from the dry-run histogram.
+    intakeClasses: splitList(map.get('semaphore.sync.intakeClasses')),
     // dryRun defaults to TRUE — first live runs report the plan without writing.
     dryRun: (map.get('semaphore.sync.dryRun') ?? 'true').toLowerCase() !== 'false',
   };
@@ -130,9 +158,9 @@ export async function runSemaphoreTagSync(_logId, opts = {}) {
     interestItemClasses: cfg.interestItemClasses,
   });
 
-  let applied = { inserted: 0, updated: 0, unchanged: 0, total: rows.length };
+  let applied = { inserted: 0, updated: 0, unchanged: 0, skippedIntake: 0, total: rows.length };
   try {
-    applied = await applyTerms(rows, { db, dryRun: cfg.dryRun });
+    applied = await applyTerms(rows, { db, dryRun: cfg.dryRun, intakeClasses: cfg.intakeClasses });
   } catch (e) {
     LOG.error(`semaphore-sync upsert failed: ${e.message}`);
     return { ok: false, error: e.message, mapped: rows.length, skipped: skipped.length };
@@ -146,6 +174,9 @@ export async function runSemaphoreTagSync(_logId, opts = {}) {
     fetched: Array.isArray(data.terms) ? data.terms.length : 0,
     mapped: rows.length,
     skipped: skipped.length,
+    intakeClasses: cfg.intakeClasses.join(', ') || '(none — adopt-only)',
+    // Pre-formatted string so formatJobSummary renders it into the SUMMARY.
+    classHistogram: classHistogram(rows),
     ...applied,
   };
   LOG.info(`semaphore-sync summary: ${JSON.stringify(summary)}`);

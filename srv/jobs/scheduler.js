@@ -136,6 +136,11 @@ export function _setJobFn(jobName, mockFn) {
  * triggers (opts.manualTrigger=true), emits a completion SecurityEvent
  * audit event from the `finally` block (spec §9).
  *
+ * #2478: FAILED is recorded for BOTH a thrown exception AND a runner that
+ * returns a soft-failure object `{ ok:false, error }`. The latter fell
+ * through to SUCCESS before, masking fail-shut no-ops (e.g. semaphore-tag-
+ * sync). A returned `{ ok:true }` or any non-`ok:false` value still succeeds.
+ *
  * Return shape: {skipped: false, outcome: 'success'|'error', result,
  * errorMessage} — `skipped` is always false since #958 retired the
  * lock-held short-circuit; retained in the shape for backward-compat
@@ -170,7 +175,26 @@ async function runWithLock(jobName, durationMs, fn, opts = {}) {
   try {
     result = await fn(logId);
     const summary = formatJobSummary(jobName, result);
-    await logPipelineEnd(logId, 'SUCCESS', summary);
+    // A job may fail-shut by RETURNING { ok:false, error } rather than throwing
+    // (e.g. semaphore-tag-sync on a bad fetch). Treat that as a failed run so the
+    // PipelineLog STATUS and JobLastRun.lastSuccessAt/lastErrorAt reflect reality
+    // — otherwise a no-op/errored run is mislogged SUCCESS and looks healthy.
+    if (result && typeof result === 'object' && result.ok === false) {
+      outcome = 'error';
+      errorMessage = result.error ? String(result.error) : `${jobName} returned ok:false`;
+      LOG.error(`Job ${jobName} returned failure:`, errorMessage);
+      await logPipelineEnd(logId, 'FAILED', summary, errorMessage);
+      void alerting.raise({
+        eventType: 'ScheduledJobFailed',
+        severity: 'ERROR',
+        category: 'ALERT',
+        subject: `Scheduled job failed: ${jobName}`,
+        body: errorMessage,
+        resource: { resourceName: jobName, resourceType: 'job' }
+      }); // fail-open, non-blocking
+    } else {
+      await logPipelineEnd(logId, 'SUCCESS', summary);
+    }
   } catch (err) {
     outcome = 'error';
     errorMessage = err.message ?? String(err);
