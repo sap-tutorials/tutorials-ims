@@ -66,7 +66,8 @@ sap.ui.define([
     channels: "channels",
     channelCollections: "channelCollections",
     channelTopicMap: "channelTopicMap",
-    channelSubmissions: "channelSubmissions"
+    channelSubmissions: "channelSubmissions",
+    semaphoreConfig: "semaphoreConfig"
   };
 
   var NAV_KEY_TO_TITLE = {
@@ -129,7 +130,8 @@ sap.ui.define([
     channels: "Channels",
     channelCollections: "Channel Collections",
     channelTopicMap: "Channel Topic Map",
-    channelSubmissions: "Channel Submissions"
+    channelSubmissions: "Channel Submissions",
+    semaphoreConfig: "Semaphore Config"
   };
 
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {
