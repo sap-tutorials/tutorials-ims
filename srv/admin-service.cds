@@ -460,6 +460,30 @@ service AdminService {
     action disable() returns FeatureFlags;
   }
 
+  // Semaphore taxonomy-sync tuning keys (#2477). Like FeatureFlags this is a
+  // synthesized @cds.persistence.skip viewer over the raw `semaphore.sync.*`
+  // ImsConfig rows — but the values are string/csv/bool, not booleans, so the
+  // bound setValue(value) action takes a free-text parameter (FE renders a
+  // parameter dialog) instead of enable/disable. clearValue() removes the row
+  // so the documented default takes effect again. Reads live in resolve-time;
+  // the sync job reads the same rows via srv/lib/semaphore-sync/config-keys.js.
+  @readonly
+  @cds.persistence.skip
+  @Capabilities: { InsertRestrictions: { Insertable: false }, UpdateRestrictions: { Updatable: false }, DeleteRestrictions: { Deletable: false } }
+  entity SemaphoreConfig {
+    key ![key]     : String(60);   // ImsConfig key, e.g. 'semaphore.sync.model'
+    label          : String(60);
+    valueType      : String(10);   // 'string' | 'csv' | 'bool'
+    description    : String(500);
+    effectiveValue : String(500);  // DB value if set, else the default
+    rawDbValue     : String(500);  // null when the row is absent (→ default)
+    defaultValue   : String(500);
+    isDefault      : Boolean;       // true when no ImsConfig row is present
+  } actions {
+    action setValue(value : String) returns SemaphoreConfig;
+    action clearValue() returns SemaphoreConfig;
+  }
+
   @odata.singleton
   @requires: 'Admin'
   entity ChatSettings as projection on ims.ChatSettings actions {
