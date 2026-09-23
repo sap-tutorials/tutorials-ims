@@ -1,0 +1,71 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.semaphoreConfig",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appSubtitle}}",
+    "applicationVersion": { "version": "0.0.1" },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {}, "sap.m": {}, "sap.ui.core": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.semaphoreConfig.i18n.i18n" }
+      }
+    },
+    "routing": {
+      "routes": [
+        { "pattern": ":?query:", "name": "SemaphoreConfigList", "target": "SemaphoreConfigList" },
+        { "pattern": "SemaphoreConfig({key}):?query:", "name": "SemaphoreConfigObjectPage", "target": "SemaphoreConfigObjectPage" }
+      ],
+      "targets": {
+        "SemaphoreConfigList": {
+          "type": "Component",
+          "id": "SemaphoreConfigList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/SemaphoreConfig",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "SemaphoreConfig": { "detail": { "route": "SemaphoreConfigObjectPage" } }
+              }
+            }
+          }
+        },
+        "SemaphoreConfigObjectPage": {
+          "type": "Component",
+          "id": "SemaphoreConfigObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": { "contextPath": "/SemaphoreConfig", "editableHeaderContent": false }
+          }
+        }
+      }
+    }
+  }
+}

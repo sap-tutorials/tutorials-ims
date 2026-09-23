@@ -60,6 +60,9 @@ import * as mcpAdmin from './lib/mcp-admin-tools.js';   // #1106 Phase 3 (WS2) a
 import { computeCoverage, resolveThreshold } from './lib/kg-community-coverage.js'; // #1172
 import { resolveFeatureFlags } from './lib/feature-flags/resolve.js'; // #feature-flags
 import { FEATURE_FLAGS } from './lib/feature-flags/registry.js'; // #2060 bound enable/disable
+// #2477 — semaphore.sync.* tuning-key panel. Shared descriptor is the single
+// source of truth for keys/defaults/valueTypes (also read by the sync job).
+import { SEMAPHORE_CONFIG_KEYS, SEMAPHORE_CONFIG_KEY_SET } from './lib/semaphore-sync/config-keys.js';
 import { resetFeaturedCache } from './lib/featured-resolve.js';
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
@@ -551,6 +554,97 @@ export default class AdminService extends cds.ApplicationService {
 
     this.on('enable', 'FeatureFlags', (req) => setFeatureFlagRow(req, true));
     this.on('disable', 'FeatureFlags', (req) => setFeatureFlagRow(req, false));
+
+    // ---- SemaphoreConfig (#2477): synthesized viewer + string setter -------
+    // Extract the entity key from a bound-action or object-page READ request.
+    // CAP surfaces the key on req.params (last segment); a list→detail nav may
+    // instead arrive as a {key: {'=': …}} equality in the WHERE. Returns the
+    // key string, or null for a collection read.
+    const keyFromReq = (req) => {
+      const params = req.params;
+      const last = Array.isArray(params) && params.length ? params[params.length - 1] : null;
+      if (last && typeof last === 'object' && 'key' in last) return last.key;
+      if (typeof last === 'string') return last;
+      const where = req.query?.SELECT?.where;
+      if (Array.isArray(where)) {
+        // pattern: [ {ref:['key']}, '=', {val:'…'} ]
+        const i = where.findIndex((t) => t && t.ref && t.ref[0] === 'key');
+        if (i >= 0 && where[i + 1] === '=' && where[i + 2]?.val != null) return where[i + 2].val;
+      }
+      return null;
+    };
+    // READ synthesizes one row per shared descriptor key, layering the live
+    // ImsConfig value over the documented default. @cds.persistence.skip, so
+    // there is nothing to SELECT — we build the rows here and honor $filter on
+    // key (single-row object-page fetch) plus $count.
+    const resolveSemaphoreConfig = async () => {
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      let byKey = Object.create(null);
+      try {
+        const rows = await SELECT.from(ImsConfig)
+          .columns('key', 'value')
+          .where({ key: { in: SEMAPHORE_CONFIG_KEYS.map((k) => k.key) } });
+        for (const r of rows || []) byKey[r.key] = r.value == null ? null : String(r.value);
+      } catch (e) {
+        cds.log('admin').warn(`SemaphoreConfig ImsConfig read failed, using defaults: ${e.message}`);
+      }
+      return SEMAPHORE_CONFIG_KEYS.map((d) => {
+        const raw = d.key in byKey ? byKey[d.key] : null;
+        const def = String(d.default ?? '');
+        return {
+          key: d.key,
+          label: d.label,
+          valueType: d.valueType,
+          description: d.description,
+          rawDbValue: raw,
+          effectiveValue: raw !== null ? raw : def,
+          defaultValue: def,
+          isDefault: raw === null,
+        };
+      });
+    };
+
+    this.on('READ', 'SemaphoreConfig', async (req) => {
+      let rows = await resolveSemaphoreConfig();
+      // Object-page fetch: SemaphoreConfig(key='…') arrives as an equality on key.
+      const keyEq = keyFromReq(req);
+      if (keyEq != null) {
+        const one = rows.find((r) => r.key === keyEq) ?? null;
+        return one;
+      }
+      const wantsCount = req.query?.SELECT?.count;
+      const total = rows.length;
+      if (wantsCount) rows.$count = total;
+      return rows;
+    });
+
+    // Upsert a single semaphore.sync.* key. Allowlisted against the shared
+    // descriptor so an arbitrary ImsConfig key can never be written here.
+    const writeSemaphoreValue = async (req, value) => {
+      const key = keyFromReq(req);
+      if (!key || !SEMAPHORE_CONFIG_KEY_SET.has(key)) {
+        return req.reject(400, `Unknown semaphore config key: ${key}`);
+      }
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      if (value === null) {
+        // clearValue → remove the row so the documented default takes effect.
+        await DELETE.from(ImsConfig).where({ key });
+      } else {
+        const existing = await SELECT.one.from(ImsConfig).where({ key });
+        if (existing) {
+          await UPDATE(ImsConfig, existing.ID).set({ value: String(value) });
+        } else {
+          await INSERT.into(ImsConfig).entries({ ID: cds.utils.uuid(), key, value: String(value) });
+        }
+      }
+      // The sync job reads ImsConfig live (its own short cache in readConfig runs
+      // per-invocation), so no cache bust is needed here.
+      const all = await resolveSemaphoreConfig();
+      return all.find((r) => r.key === key) ?? null;
+    };
+
+    this.on('setValue', 'SemaphoreConfig', (req) => writeSemaphoreValue(req, req.data?.value ?? ''));
+    this.on('clearValue', 'SemaphoreConfig', (req) => writeSemaphoreValue(req, null));
 
     // Virtual severityCrit element (drives @UI.LineItem Criticality coloring).
     // Information=3 (Neutral), Success=5 (Positive), Warning=2 (Critical), Error=1 (Negative)

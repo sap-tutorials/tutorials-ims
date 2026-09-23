@@ -31,19 +31,14 @@ import { checkAndRotateApiKey } from '../lib/semaphore-sync/rotation.js';
 import { mapAllTerms } from '../lib/semaphore-sync/mapper.js';
 import { applyTerms } from '../lib/semaphore-sync/applier.js';
 import { isFlagEnabled } from '../lib/feature-flags/db-flags.js';
+// Key list + defaults live in the shared descriptor so the Admin UI panel
+// (AdminService.SemaphoreConfig, #2477) and this reader never drift.
+import { SEMAPHORE_CONFIG_KEY_NAMES } from '../lib/semaphore-sync/config-keys.js';
 
 const LOG = cds.log('semaphore-sync');
 const NS = 'com.sap.developers.ims';
 
-const CONFIG_KEYS = [
-  'semaphore.sync.model',
-  'semaphore.sync.lang',
-  'semaphore.sync.filter',
-  'semaphore.sync.actualTagClasses',
-  'semaphore.sync.interestItemClasses',
-  'semaphore.sync.intakeClasses',
-  'semaphore.sync.dryRun',
-];
+const CONFIG_KEYS = SEMAPHORE_CONFIG_KEY_NAMES;
 
 function splitList(v) {
   return String(v ?? '')

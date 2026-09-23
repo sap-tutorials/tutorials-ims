@@ -4167,6 +4167,58 @@ annotate AdminService.FeatureFlags with @UI: {
   ]}
 };
 
+// --- Semaphore taxonomy-sync tuning keys (#2477) ---
+// String/csv/bool ImsConfig rows surfaced as an editable panel. setValue takes
+// a free-text parameter (FE renders a parameter dialog); clearValue removes the
+// row so the documented default takes effect again.
+annotate AdminService.SemaphoreConfig with @UI: {
+  HeaderInfo: {
+    TypeName: 'Semaphore Config Key', TypeNamePlural: 'Semaphore Config Keys',
+    Title: { Value: label },
+    Description: { Value: key }
+  },
+  SelectionFields: [ valueType ],
+  LineItem: [
+    { Value: label },
+    { Value: key, Label: 'Config key' },
+    { Value: valueType, Label: 'Type' },
+    {
+      $Type: 'UI.DataField', Value: effectiveValue, Label: 'Effective value',
+      // Neutral (3) when a value is set, Critical (2) when falling back to default.
+      Criticality: { $edmJson: { $If: [ { $Path: 'isDefault' }, 2, 3 ] } }
+    },
+    { Value: defaultValue, Label: 'Default' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.setValue',   Label: 'Set value' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.clearValue', Label: 'Reset to default' }
+  ],
+  Identification: [
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.setValue',   Label: 'Set value' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.clearValue', Label: 'Reset to default' }
+  ],
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', ID: 'General', Label: 'General', Target: '@UI.FieldGroup#General' },
+    { $Type: 'UI.ReferenceFacet', ID: 'Value', Label: 'Value', Target: '@UI.FieldGroup#Value' }
+  ],
+  FieldGroup#General: { Data: [
+    { Value: key }, { Value: label }, { Value: valueType }, { Value: description }
+  ]},
+  FieldGroup#Value: { Data: [
+    { Value: effectiveValue, Label: 'Effective value' },
+    { Value: rawDbValue, Label: 'Raw DB value' },
+    { Value: defaultValue, Label: 'Default value' }
+  ]}
+};
+
+annotate AdminService.SemaphoreConfig with {
+  ![key]         @Common.Label: 'Config key';
+  label          @Common.Label: 'Setting';
+  valueType      @Common.Label: 'Type';
+  effectiveValue @Common.Label: 'Effective value';
+  rawDbValue     @Common.Label: 'Raw DB value';
+  defaultValue   @Common.Label: 'Default value';
+  description    @Common.Label: 'Description';
+};
+
 // --- Petoberfest admin moderation surface ---
 // PetSubmissions: moderation queue list report with approve/hide actions.
 // Blob columns (photoDisplay/photoThumb) are NOT exposed here; thumbnails are
