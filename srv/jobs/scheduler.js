@@ -174,16 +174,16 @@ async function runWithLock(jobName, durationMs, fn, opts = {}) {
   const logId = await logPipelineStart('SCHEDULED_JOB', 'system', { jobName });
   try {
     result = await fn(logId);
-    // #2478: soft-failure detection. A runner that RETURNS { ok:false, error }
-    // (rather than throwing) must be recorded as FAILED, not fall through to
-    // the SUCCESS path. semaphore-tag-sync's fail-shut path (#2184) returns
-    // ok:false by design so nothing is written — previously that run showed
-    // green, masking a silent no-op taxonomy import.
+    const summary = formatJobSummary(jobName, result);
+    // A job may fail-shut by RETURNING { ok:false, error } rather than throwing
+    // (e.g. semaphore-tag-sync on a bad fetch). Treat that as a failed run so the
+    // PipelineLog STATUS and JobLastRun.lastSuccessAt/lastErrorAt reflect reality
+    // — otherwise a no-op/errored run is mislogged SUCCESS and looks healthy.
     if (result && typeof result === 'object' && result.ok === false) {
       outcome = 'error';
       errorMessage = result.error ? String(result.error) : `${jobName} returned ok:false`;
-      LOG.error(`Job ${jobName} returned soft failure:`, errorMessage);
-      await logPipelineEnd(logId, 'FAILED', formatJobSummary(jobName, result), errorMessage);
+      LOG.error(`Job ${jobName} returned failure:`, errorMessage);
+      await logPipelineEnd(logId, 'FAILED', summary, errorMessage);
       void alerting.raise({
         eventType: 'ScheduledJobFailed',
         severity: 'ERROR',
@@ -193,7 +193,6 @@ async function runWithLock(jobName, durationMs, fn, opts = {}) {
         resource: { resourceName: jobName, resourceType: 'job' }
       }); // fail-open, non-blocking
     } else {
-      const summary = formatJobSummary(jobName, result);
       await logPipelineEnd(logId, 'SUCCESS', summary);
     }
   } catch (err) {
