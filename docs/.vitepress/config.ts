@@ -225,6 +225,7 @@ export default defineConfig({
           { text: 'A2A agent consumption guide', link: '/developers/reference/a2a-instructions' },
           { text: 'AI Skills Catalog',          link: '/developers/reference/ai-skills-catalog' },
           { text: 'CAP / CDS gotchas',         link: '/developers/reference/cap-cds-gotchas' },
+          { text: 'Challenge widget cost sizing', link: '/developers/reference/challenge-widget-cost-sizing' },
           { text: 'cds-caching CDS-DB store',  link: '/developers/reference/cds-caching-store' },
           { text: 'Community blog RSS transport', link: '/developers/reference/community-rss-transport' },
           { text: 'Cookie and storage analysis', link: '/developers/reference/cookie-and-storage-analysis' },
