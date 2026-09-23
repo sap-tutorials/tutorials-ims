@@ -136,6 +136,11 @@ export function _setJobFn(jobName, mockFn) {
  * triggers (opts.manualTrigger=true), emits a completion SecurityEvent
  * audit event from the `finally` block (spec §9).
  *
+ * #2478: FAILED is recorded for BOTH a thrown exception AND a runner that
+ * returns a soft-failure object `{ ok:false, error }`. The latter fell
+ * through to SUCCESS before, masking fail-shut no-ops (e.g. semaphore-tag-
+ * sync). A returned `{ ok:true }` or any non-`ok:false` value still succeeds.
+ *
  * Return shape: {skipped: false, outcome: 'success'|'error', result,
  * errorMessage} — `skipped` is always false since #958 retired the
  * lock-held short-circuit; retained in the shape for backward-compat
@@ -169,8 +174,28 @@ async function runWithLock(jobName, durationMs, fn, opts = {}) {
   const logId = await logPipelineStart('SCHEDULED_JOB', 'system', { jobName });
   try {
     result = await fn(logId);
-    const summary = formatJobSummary(jobName, result);
-    await logPipelineEnd(logId, 'SUCCESS', summary);
+    // #2478: soft-failure detection. A runner that RETURNS { ok:false, error }
+    // (rather than throwing) must be recorded as FAILED, not fall through to
+    // the SUCCESS path. semaphore-tag-sync's fail-shut path (#2184) returns
+    // ok:false by design so nothing is written — previously that run showed
+    // green, masking a silent no-op taxonomy import.
+    if (result && typeof result === 'object' && result.ok === false) {
+      outcome = 'error';
+      errorMessage = result.error ? String(result.error) : `${jobName} returned ok:false`;
+      LOG.error(`Job ${jobName} returned soft failure:`, errorMessage);
+      await logPipelineEnd(logId, 'FAILED', formatJobSummary(jobName, result), errorMessage);
+      void alerting.raise({
+        eventType: 'ScheduledJobFailed',
+        severity: 'ERROR',
+        category: 'ALERT',
+        subject: `Scheduled job failed: ${jobName}`,
+        body: errorMessage,
+        resource: { resourceName: jobName, resourceType: 'job' }
+      }); // fail-open, non-blocking
+    } else {
+      const summary = formatJobSummary(jobName, result);
+      await logPipelineEnd(logId, 'SUCCESS', summary);
+    }
   } catch (err) {
     outcome = 'error';
     errorMessage = err.message ?? String(err);
