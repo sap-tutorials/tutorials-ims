@@ -29,6 +29,11 @@ sap.ui.define([
       // string until _loadJobControls() resolves; never null (UI5 HTML
       // control treats null as "use the previous content").
       this.getView().setModel(new JSONModel({ jobs: [], timelineHtml: '' }), "jobControls");
+      // #2488: current Cron health sort key ('date' chronological by
+      // nextRunIso, or 'name' alphabetical). Default matches the #750
+      // chronological behaviour. Kept on the jobControls model so the
+      // SegmentedButton in the panel header can two-way bind to it.
+      this.getView().getModel("jobControls").setProperty("/sortKey", "date");
       this._loadMetrics();
       this._loadJobControls();
     },
@@ -77,7 +82,6 @@ sap.ui.define([
      */
     _loadJobControls: function () {
       var oAdminModel = this.getOwnerComponent().getModel("admin");
-      var oJobControlsModel = this.getView().getModel("jobControls");
       var that = this;
       return Promise.all([
         this._callListJobs(oAdminModel),
@@ -88,17 +92,10 @@ sap.ui.define([
         var aLastRuns = results[1];
         var aRunning = results[2];
         var aJoined = JobControlsHelpers.joinJobsWithLastRuns(aJobs, aLastRuns, aRunning);
-        // #750: chronological sort (nextRunIso ascending, nulls last) so the
-        // table reads top-to-bottom as "soonest first."
-        var aSorted = JobControlsSort.sortJobsByNextRun(aJoined);
-        // #750: build the SVG ribbon from the same array.
-        var sTimelineHtml = CronTimelineHelpers.buildTimelineSvg(aSorted, {
-          now: new Date(),
-          widthPx: 800,
-          heightPx: 80
-        });
-        oJobControlsModel.setProperty("/jobs", aSorted);
-        oJobControlsModel.setProperty("/timelineHtml", sTimelineHtml);
+        // #2488: keep the unsorted JOIN so onJobSortChange can re-sort in
+        // memory without another server round-trip.
+        that._joinedJobs = aJoined;
+        that._applyJobSort();
       }).catch(function (err) {
         // Best-effort — the tile renders 0 rows, the rest of the Board still works.
         // eslint-disable-next-line no-console
@@ -108,10 +105,38 @@ sap.ui.define([
     },
 
     /**
-     * #756: invoke AdminService.JobControls.listJobs(). Returns array of
-     * {jobName, schedule, ttlMs, description, nextRunIso}. Bound to the
-     * JobControls singleton, so the path is /JobControls/AdminService.listJobs(...).
+     * #2488: sort the cached JOIN (this._joinedJobs) by the current
+     * jobControls>/sortKey, rebuild the timeline ribbon from the sorted
+     * order, and push both onto the model. Called by _loadJobControls
+     * after a fresh fetch and by onJobSortChange when the operator flips
+     * the Name / Date toggle. No server round-trip.
      */
+    _applyJobSort: function () {
+      var oModel = this.getView().getModel("jobControls");
+      var sKey = oModel.getProperty("/sortKey") || "date";
+      var aSorted = JobControlsSort.sortJobs(this._joinedJobs || [], sKey);
+      // #750: build the SVG ribbon from the same (sorted) array.
+      var sTimelineHtml = CronTimelineHelpers.buildTimelineSvg(aSorted, {
+        now: new Date(),
+        widthPx: 800,
+        heightPx: 80
+      });
+      oModel.setProperty("/jobs", aSorted);
+      oModel.setProperty("/timelineHtml", sTimelineHtml);
+    },
+
+    /**
+     * #2488: SegmentedButton selectionChange handler for the Cron health
+     * sort toggle. Records the chosen key and re-sorts in memory.
+     */
+    onJobSortChange: function (oEvent) {
+      var oItem = oEvent.getParameter("item");
+      var sKey = oItem ? oItem.getKey() : "date";
+      this.getView().getModel("jobControls").setProperty("/sortKey", sKey);
+      this._applyJobSort();
+    },
+
+    /**
     _callListJobs: function (oAdminModel) {
       var oAction = oAdminModel.bindContext("/JobControls/AdminService.listJobs(...)");
       return oAction.execute().then(function () {
