@@ -137,6 +137,10 @@ sap.ui.define([
     },
 
     /**
+     * #756: invoke AdminService.JobControls.listJobs(). Returns the array
+     * of scheduled-job descriptors; falls back to [] when the bound action
+     * yields no result.
+     */
     _callListJobs: function (oAdminModel) {
       var oAction = oAdminModel.bindContext("/JobControls/AdminService.listJobs(...)");
       return oAction.execute().then(function () {
