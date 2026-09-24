@@ -906,6 +906,25 @@ jobs:
           SMOKE_CONTENT_FRESH: '1'
         run: npx vitest run --project smoke test/smoke/seo-files.test.js
 
+      # Topic-leaf freshness gate (#2493). Topic LEAF pages are HANA
+      # `topic-<slug>` BLOBs published ONLY by the render-topics phase of THIS
+      # full rebuild — a deploy ships no leaf BLOBs, and slug-targeted dispatches
+      # skip render-topics. So the "live-tree leaf serves 200" assertion in
+      # topics-route.smoke.test.js is gated behind SMOKE_CONTENT_FRESH (visible
+      # skip in the deploy gate) and asserts HERE, right after a successful full
+      # publish — the one place topic leaves ARE freshly published. Catches the
+      # "publish landed but render-topics produced no/thin leaf BLOBs" class that
+      # the deploy smoke gate structurally cannot (it never publishes leaves).
+      # Needs SMOKE_SRV_URL (probes ${SRV_URL}/build/topics-tree) in addition to
+      # SMOKE_BASE_URL (approuter-served /topics/<slug>).
+      - name: Verify topic-leaf freshness
+        if: ${{ steps.publish.outcome == 'success' }}
+        env:
+          SMOKE_BASE_URL: ${{ steps.url.outputs.approuter_url }}
+          SMOKE_SRV_URL: ${{ steps.srv.outputs.srv_url }}
+          SMOKE_CONTENT_FRESH: '1'
+        run: npx vitest run --project smoke test/smoke/topics-route.smoke.test.js
+
       # #2288 / #2346 — same-filename image byte changes are invisible to the
       # publish delta detector: publish hashes rendered HTML + source markdown,
       # never the image bytes, so a screenshot edited in place (unchanged

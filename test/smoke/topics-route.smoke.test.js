@@ -11,11 +11,14 @@
 //   2. /topics/ index → 200 (published BLOB or SSR-served by CAP via
 //      /content/topics-index; x-content-source assertion is best-effort)
 //   3. A live leaf slug derived from /build/topics-tree → 200 + body
-//      references the slug. ctx.skip() (VISIBLE skip) when tree is empty.
+//      references the slug. GATED behind SMOKE_CONTENT_FRESH (#2493): leaf
+//      pages are HANA BLOBs published by a full rebuild, not by a deploy, so
+//      this asserts only in the post-publish verification run and is a visible
+//      skip in the plain deploy gate. Also ctx.skip() when the tree is empty.
 //
 // Mirrors concepts-route.smoke.test.js structure exactly.
 import { describe, it, expect } from 'vitest';
-import { BASE_URL, SRV_URL, fetchWithRetry } from './smoke.config.js';
+import { BASE_URL, SRV_URL, CONTENT_FRESH, fetchWithRetry } from './smoke.config.js';
 
 describe('/topics/ route smoke', () => {
   it('does not serve a non-existent topic slug as a page', async () => {
@@ -38,6 +41,21 @@ describe('/topics/ route smoke', () => {
   });
 
   it('returns 200 for a known live topic slug', async (ctx) => {
+    // Topic LEAF pages are HANA `topic-<slug>` BLOBs published ONLY by the
+    // render-topics phase of a FULL, no-slug content rebuild (publish-content.ts
+    // gate `!opts.slug && channel === 'prod'`). A DEPLOY ships the srv fallback
+    // and the SSR `/topics/` index but publishes NO leaf BLOBs — and the ongoing
+    // DEV per-tutorial dispatches are slug-targeted, so they skip render-topics
+    // too. So in the post-deploy gate a live-tree leaf legitimately 404s until a
+    // full rebuild runs; asserting 200 there is a false regression (issue #2493).
+    // Gate the served-leaf assertion behind SMOKE_CONTENT_FRESH — the same
+    // contract seo-files.test.js uses for catalog-freshness BLOB checks — so it
+    // asserts in the post-publish verification run (where topics ARE freshly
+    // published) and is a visible skip in the plain deploy gate.
+    if (!CONTENT_FRESH) {
+      ctx.skip();
+      return;
+    }
     const probe = await fetchWithRetry(`${SRV_URL}/build/topics-tree`);
     expect(probe.status).toBe(200);
     const body = await probe.json();

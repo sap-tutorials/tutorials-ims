@@ -145,6 +145,16 @@ modules:
       KNOWLEDGE_GRAPH_ENABLED: 'false'
       KG_EXTRACT_BUILD_CAP: '200'
       KG_MERGE_SIM_THRESHOLD: '0.92'
+      # GitHub App runtime path (#1154). Read by srv/lib/github-app-token.js
+      # (process.env.USE_GITHUB_APP === 'true' → mint an installation token,
+      # else fall through to the classic PAT). Default OFF here; each
+      # deploy/<env>.mtaext overrides to 'true'. Set as a real MTA property —
+      # NOT a manual `cf set-env` — because `cf set-env` overrides do NOT
+      # survive `cf deploy` of a new MTA (same lesson as KNOWLEDGE_GRAPH_ENABLED
+      # above). The GitHub App must be installed on tutorials-ims with
+      # Actions:write + Contents:write for this path to succeed; see
+      # docs/developers/operations/github-app-setup.md.
+      USE_GITHUB_APP: 'false'
       # NOTE: CONTENT_API_KEY, GITHUB_DISPATCH_TOKEN, SMTP_HOST/PORT/USER/FROM
       # and REBUILD_TARGET_ENV used to live here. All resolved from the BTP
       # Credential Store now (via srv/lib/secret-resolver.js) or TenantSettings
@@ -178,6 +188,10 @@ modules:
     properties:
       EXPOSE_CAP_UI: false
       NODE_ENV: production
+      # GitHub App runtime path (#1154) — default OFF, per-env mtaext flips to
+      # 'true'. Mirrors tutorials-srv; srv-qa runs the same srv/ code and can
+      # exercise resolveGithubToken via the shared fetch/cron libs.
+      USE_GITHUB_APP: 'false'
     provides:
       - name: srv-qa-api
         properties:

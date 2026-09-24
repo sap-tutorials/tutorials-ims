@@ -18,6 +18,10 @@ import { isSafeForWrites } from './_guard.js';
 
 const RUN_ID = crypto.randomBytes(3).toString('hex');
 const SLUG = `__test__kg-vdup-${RUN_ID}`;
+// Tag-arm fixture: same NAME, DIFFERENT label — the exact PROD shape that
+// crashed the KG jobs ('sustainability for human capital management' had two
+// rows differing only by a double space in LABEL). A bare DISTINCT keeps both.
+const TAG_NAME = `__test__kg-tagdup-${RUN_ID}`;
 
 let db;
 
@@ -43,6 +47,18 @@ beforeAll(async () => {
     { ID: cds.utils.uuid(), slug: SLUG, name: 'Dup A', status: 'ACTIVE' },
     { ID: cds.utils.uuid(), slug: SLUG, name: 'Dup B', status: 'ACTIVE' },
   ]);
+
+  // Two Tags rows, SAME name, DIFFERENT label — bare DISTINCT keeps both and
+  // re-emits 'tag:<name>' twice. Tags has no MODIFIEDAT; ROW_NUMBER orders by
+  // LEGACYID DESC, ID. Insert via raw SQL because Tags writes go through
+  // raw db.run() (no service-layer entity write path in this suite's scope).
+  await db.run(
+    `INSERT INTO "COM_SAP_DEVELOPERS_IMS_TAGS" ("ID","NAME","LABEL") VALUES (?, ?, ?)`,
+    [
+      [cds.utils.uuid(), TAG_NAME, 'Tag Dup A'],
+      [cds.utils.uuid(), TAG_NAME, 'Tag Dup B'],
+    ],
+  );
 }, 120_000);
 
 afterAll(async () => {
@@ -51,6 +67,10 @@ afterAll(async () => {
     await db.run(
       `DELETE FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTS" WHERE LOWER(SLUG) LIKE ?`,
       [`${SLUG.toLowerCase()}%`],
+    );
+    await db.run(
+      `DELETE FROM "COM_SAP_DEVELOPERS_IMS_TAGS" WHERE NAME = ?`,
+      [TAG_NAME],
     );
   } catch (e) {
     console.warn(`[kg-vertex-dedupe teardown] failed: ${e.message}`);
@@ -75,6 +95,31 @@ describe('KG_PG_VERTICES_V concept-arm dedupe (Layer A)', () => {
       `SELECT COUNT(*) AS N, COUNT(DISTINCT VERTEX_KEY) AS D
          FROM "KG_PG_VERTICES_V" WHERE VERTEX_KEY = ?`,
       [`concept:${SLUG}`],
+    );
+    expect(row.N).toBe(1);
+    expect(row.D).toBe(1);
+  });
+});
+
+describe('KG_PG_VERTICES_V tag-arm dedupe (Layer A)', () => {
+  it('emits exactly ONE tag vertex for a NAME with two rows differing only in LABEL', async () => {
+    // The PROD crash shape: DISTINCT keeps both (LABEL differs), duplicating
+    // the 'tag:<name>' VERTEX_KEY and rejecting KG_PG_WORKSPACE at
+    // KG_LOUVAIN_GRAPH runtime ([4907] range 1). ROW_NUMBER must collapse to 1.
+    const rows = await db.run(
+      `SELECT VERTEX_KEY, LABEL FROM "KG_PG_VERTICES_V"
+         WHERE VERTEX_TYPE = 'tag' AND SLUG = ?`,
+      [TAG_NAME],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].VERTEX_KEY).toBe(`tag:${TAG_NAME}`);
+  });
+
+  it('produces a workspace-loadable (no-dup) VERTEX_KEY set for the fixture tag', async () => {
+    const [row] = await db.run(
+      `SELECT COUNT(*) AS N, COUNT(DISTINCT VERTEX_KEY) AS D
+         FROM "KG_PG_VERTICES_V" WHERE VERTEX_KEY = ?`,
+      [`tag:${TAG_NAME}`],
     );
     expect(row.N).toBe(1);
     expect(row.D).toBe(1);

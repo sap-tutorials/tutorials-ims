@@ -28,6 +28,11 @@ modules:
       # MTA. prod.mtaext / qa.mtaext intentionally inherit 'false' until
       # Phase 1 is signed off.
       KNOWLEDGE_GRAPH_ENABLED: 'true'
+      # GitHub App runtime path (#1154): flip ON for DEV. Replaces the fragile
+      # manual `cf set-env tutorials-srv USE_GITHUB_APP true` that any MTA
+      # redeploy silently dropped — same override-survival reason as the KG
+      # flag above. srv/lib/github-app-token.js reads this at resolveGithubToken.
+      USE_GITHUB_APP: 'true'
       # NOTE: KG_PATH_V2_ENABLED moved to DB-driven config (ImsConfig
       # flag.kg.pathV2, issue #2060). Enable it for DEV from the Admin UI /
       # setFeatureFlag action instead of pinning an env override here.

@@ -6,6 +6,10 @@ modules:
   - name: tutorials-srv
     properties:
       EXPOSE_CAP_UI: true
+      # GitHub App runtime path (#1154): flip ON for QA. Default is 'false' in
+      # the base mta.yaml; srv/lib/github-app-token.js reads this at
+      # resolveGithubToken (App-first, PAT fallback).
+      USE_GITHUB_APP: 'true'
       # CONTENT_API_KEY + GITHUB_DISPATCH_TOKEN moved to credstore-only in the
       # finish-credstore-migration PR. See deploy/dev.mtaext for the rationale.
 

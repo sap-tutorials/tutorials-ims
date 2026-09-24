@@ -11,12 +11,19 @@ parameters:
 
 modules:
   - name: tutorials-srv
-    # No prod-specific `properties:` overrides. CONTENT_API_KEY +
+    # No prod-specific `properties:` overrides for secrets — CONTENT_API_KEY +
     # GITHUB_DISPATCH_TOKEN are credstore-only (finish-credstore-migration PR;
     # see deploy/dev.mtaext for the rationale), and the KG flags intentionally
-    # inherit mta.yaml's 'false' defaults in prod. An empty `properties:` mapping
-    # parses as null and the multiapps controller rejects it
-    # ("Null value for key modules#0#properties") — so it is omitted, not left blank.
+    # inherit mta.yaml's 'false' defaults in prod. The one real property below
+    # is USE_GITHUB_APP — a non-empty `properties:` is required (an empty
+    # mapping parses as null and the multiapps controller rejects it with
+    # "Null value for key modules#0#properties").
+    properties:
+      # GitHub App runtime path (#1154): flip ON for PROD. Default is 'false'
+      # in the base mta.yaml; srv/lib/github-app-token.js reads this at
+      # resolveGithubToken (App-first, PAT fallback). Requires the GitHub App
+      # installed on tutorials-ims with Actions:write + Contents:write.
+      USE_GITHUB_APP: 'true'
     parameters:
       # Bumped 2→4 for the developers.sap.com site-launch load (reconciles a
       # live cockpit `cf scale`, so deploys don't revert to 2). NOTE: the rate
