@@ -82,8 +82,24 @@
            Controller does the JOIN client-side into a JSONModel at
            jobControls>/jobs; the Run now button invokes runJob(jobName) and
            optimistically flips isRunning for the busy spinner. -->
-      <Panel headerText="Cron health" expandable="true" expanded="true" class="sapUiSmallMargin"
+      <Panel expandable="true" expanded="true" class="sapUiSmallMargin"
              expand=".onCronPanelExpand">
+        <!-- #2488: Panel header toolbar hosts the title plus a Name / Date
+             sort toggle. selectionChange re-sorts the cached JOIN in memory
+             (Board.controller.onJobSortChange) — no server round-trip. -->
+        <headerToolbar>
+          <OverflowToolbar>
+            <Title text="Cron health" />
+            <ToolbarSpacer />
+            <Label text="Sort by" class="sapUiTinyMarginEnd" />
+            <SegmentedButton selectedKey="{jobControls>/sortKey}" selectionChange=".onJobSortChange">
+              <items>
+                <SegmentedButtonItem key="date" text="Date" />
+                <SegmentedButtonItem key="name" text="Name" />
+              </items>
+            </SegmentedButton>
+          </OverflowToolbar>
+        </headerToolbar>
         <!-- #750: 24-hour SVG timeline ribbon. Built client-side in
              Board.controller.js _loadJobControls() via CronTimelineHelpers.
              sanitizeContent="false" because the SVG is hand-emitted by our
