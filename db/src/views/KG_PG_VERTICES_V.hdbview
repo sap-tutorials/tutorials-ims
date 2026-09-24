@@ -108,30 +108,76 @@ VIEW "KG_PG_VERTICES_V" AS
   UNION ALL
   -- Tag vertices. Tags have no dedicated slug column — RDF projection
   -- and the taggedWith edge arm both use NAME as the identifier.
-  -- DISTINCT because Tags.name has no @assert.unique (dup-name risk
-  -- RDF already lives with; defense-in-depth here).
-  SELECT DISTINCT
-    CAST('tag:' || NAME AS NVARCHAR(280)) AS "VERTEX_KEY",
-    'tag'                                 AS "VERTEX_TYPE",
-    NAME                                  AS "SLUG",
-    LABEL                                 AS "LABEL",
-    'ACTIVE'                              AS "STATUS"
-  FROM "COM_SAP_DEVELOPERS_IMS_TAGS"
-  WHERE NAME IS NOT NULL
+  --
+  -- ROW_NUMBER dedupe (NOT DISTINCT): Tags.name has no @assert.unique and
+  -- the deployed HANA table has NO unique index on NAME, so the same NAME
+  -- can appear on multiple rows (13 such names on PROD as of 2026-09-24:
+  -- 'sapui5' x3, 'sap gateway' x2, ...). A bare DISTINCT is NOT enough
+  -- because this arm also selects LABEL: two rows sharing NAME but differing
+  -- in LABEL both survive DISTINCT and re-emit 'tag:<name>' twice — exactly
+  -- the trap the concept arm's header warns about. That happened in PROD
+  -- ('sustainability for human capital management' had two rows whose LABEL
+  -- differed only by a double space), producing a duplicate VERTEX_KEY and
+  -- crashing all three KG jobs (pagerank, communities/Louvain, wcc) at
+  -- KG_LOUVAIN_GRAPH runtime with [4907] range 1. The taggedWith edge arm
+  -- keys the tag endpoint on NAME alone, so emitting exactly one vertex per
+  -- NAME (any surviving LABEL) keeps edge targets resolvable. Tags has no
+  -- MODIFIEDAT column — order by LEGACYID (ID breaks ties) for determinism.
+  SELECT
+    "VERTEX_KEY",
+    "VERTEX_TYPE",
+    "SLUG",
+    "LABEL",
+    "STATUS"
+  FROM (
+    SELECT
+      CAST('tag:' || NAME AS NVARCHAR(280)) AS "VERTEX_KEY",
+      'tag'                                 AS "VERTEX_TYPE",
+      NAME                                  AS "SLUG",
+      LABEL                                 AS "LABEL",
+      'ACTIVE'                              AS "STATUS",
+      ROW_NUMBER() OVER (
+        PARTITION BY NAME ORDER BY LEGACYID DESC, ID
+      )                                     AS "RN"
+    FROM "COM_SAP_DEVELOPERS_IMS_TAGS"
+    WHERE NAME IS NOT NULL
+  )
+  WHERE "RN" = 1
   UNION ALL
   -- Product vertices — synthesized from tags whose NAME starts with
   -- 'software-product>'. LENGTH('software-product>')=17, so
   -- SUBSTRING(NAME, 18) extracts the suffix as the product slug.
-  -- DISTINCT because multiple tag rows may extract to the same product
-  -- slug. Mirrors RDF projection at srv/lib/kg-projection.js:305-310.
-  SELECT DISTINCT
-    CAST('product:' || SUBSTRING(NAME, 18) AS NVARCHAR(280)) AS "VERTEX_KEY",
-    'product'                                                AS "VERTEX_TYPE",
-    SUBSTRING(NAME, 18)                                      AS "SLUG",
-    LABEL                                                    AS "LABEL",
-    'ACTIVE'                                                 AS "STATUS"
-  FROM "COM_SAP_DEVELOPERS_IMS_TAGS"
-  WHERE NAME LIKE 'software-product>%'
+  -- Mirrors RDF projection at srv/lib/kg-projection.js:305-310.
+  --
+  -- ROW_NUMBER dedupe (NOT DISTINCT), for the same reason as the tag arm
+  -- above: multiple tag rows can extract to the same product suffix, and
+  -- because this arm selects LABEL a bare DISTINCT would let two rows that
+  -- differ only in LABEL both survive and re-emit 'product:<suffix>' twice,
+  -- crashing the KG jobs at KG_LOUVAIN_GRAPH runtime ([4907] range 1). No
+  -- product-suffix dup with a differing label exists on PROD today, but the
+  -- flawed pattern is one label edit away from the crash the tag arm hit —
+  -- this makes it defense-in-depth like every other keyed arm. Order by
+  -- LEGACYID DESC, ID for determinism (Tags has no MODIFIEDAT).
+  SELECT
+    "VERTEX_KEY",
+    "VERTEX_TYPE",
+    "SLUG",
+    "LABEL",
+    "STATUS"
+  FROM (
+    SELECT
+      CAST('product:' || SUBSTRING(NAME, 18) AS NVARCHAR(280)) AS "VERTEX_KEY",
+      'product'                                                AS "VERTEX_TYPE",
+      SUBSTRING(NAME, 18)                                      AS "SLUG",
+      LABEL                                                    AS "LABEL",
+      'ACTIVE'                                                 AS "STATUS",
+      ROW_NUMBER() OVER (
+        PARTITION BY SUBSTRING(NAME, 18) ORDER BY LEGACYID DESC, ID
+      )                                                        AS "RN"
+    FROM "COM_SAP_DEVELOPERS_IMS_TAGS"
+    WHERE NAME LIKE 'software-product>%'
+  )
+  WHERE "RN" = 1
   UNION ALL
   -- Category vertices. Categories are CSV-seeded (8 rows) with slugs
   -- that are @mandatory at the CDS layer — the NULL filter is
