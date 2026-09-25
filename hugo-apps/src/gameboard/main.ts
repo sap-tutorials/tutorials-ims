@@ -6,7 +6,7 @@ import type { MountConfig } from './types'
 const mount = document.getElementById('gameboard-mount') as HTMLElement | null
 if (mount) {
   const config: MountConfig = {
-    apiLeaderboard: mount.dataset.apiLeaderboard || '/gameboard/getLeaderboard',
+    apiLeaderboard: mount.dataset.apiLeaderboard || '/gameboard/getLeaderboardV2',
     apiGameboard:   mount.dataset.apiGameboard   || '/gameboard/getGameboard',
     apiMyGameboard: mount.dataset.apiMyGameboard || '/gameboard/getMyGameboard',
     ws:             mount.dataset.ws             || '',
