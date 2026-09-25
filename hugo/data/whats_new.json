@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-21T20:51:17.093Z",
+  "generatedAt": "2026-09-25T18:58:31.184Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,45 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2502",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2502,
+      "title": "Job Board admin screen opens again",
+      "summary": "Fixed a regression that stopped the admin Job Board screen from loading, so scheduled-job status and controls are reachable again.",
+      "category": "Fix",
+      "mergedAt": "2026-09-24T16:54:42Z",
+      "week": "2026-W39",
+      "weekStart": "2026-09-21",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2502"
+    },
+    {
+      "id": "tutorials-ims#2501",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2501,
+      "title": "Release 1.31.4 — durable USE_GITHUB_APP runtime flag (DEV→main promotion)",
+      "summary": "Routine release promotion of the previous version to production.",
+      "category": "Maintenance",
+      "mergedAt": "2026-09-24T13:57:03Z",
+      "week": "2026-W39",
+      "weekStart": "2026-09-21",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2501"
+    },
+    {
+      "id": "tutorials-ims#2500",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2500,
+      "title": "chore(release): 1.31.4",
+      "summary": "Routine version bump for the release.",
+      "category": "Maintenance",
+      "mergedAt": "2026-09-24T13:51:46Z",
+      "week": "2026-W39",
+      "weekStart": "2026-09-21",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2500"
+    },
     {
       "id": "tutorials-ims#2449",
       "repo": "tutorials-ims",
