@@ -50,8 +50,8 @@ function stub(opts: {
   }))
 }
 
-const row = (rank: number, name: string, score: number, level = 1): LeaderboardRow =>
-  ({ rank, displayName: name, score, level, communityUrl: null })
+const row = (rank: number, name: string, score: number, level = 1, communityUrl: string | null = null): LeaderboardRow =>
+  ({ rank, displayName: name, score, level, communityUrl })
 const emptyBoard = { thresholds: [], totals: [], tracks: [], personalized: null }
 
 describe('Gameboard.vue', () => {
@@ -133,15 +133,34 @@ describe('Gameboard.vue', () => {
 
   it('highlights the caller row when they are on the visible page', async () => {
     stub({
-      leaderboard: { rows: [row(1, 'Top T.', 200), row(2, 'Me M.', 150)], total: 2 },
+      leaderboard: { rows: [row(1, 'Top T.', 200, 4, 'https://community.sap.com/u/1'), row(2, 'Me M.', 150, 3, 'https://community.sap.com/u/2')], total: 2 },
       board: emptyBoard,
       myStatus: 200,
-      my: { status: 'joined', userId: 'u1', score: 150, level: 3, rank: 2, total: 2, avatarIndex: 0, breakdown: [] },
+      my: { status: 'joined', userId: 'u2', communityUrl: 'https://community.sap.com/u/2', score: 150, level: 3, rank: 2, total: 2, avatarIndex: 0, breakdown: [] },
     })
     const wrapper = mount(Gameboard, { props: { config: CONFIG } })
     await flushPromises()
-    expect(wrapper.find('[data-testid="lb-row-me"]').exists()).toBe(true)
+    const me = wrapper.findAll('[data-testid="lb-row-me"]')
+    expect(me.length).toBe(1)
+    expect(me[0].text()).toContain('Me M.')
     expect(wrapper.find('[data-testid="lb-row-me-sticky"]').exists()).toBe(false)
+  })
+
+  it('tags exactly ONE row as (you) even when scores are tied on the same rank (#2510 regression)', async () => {
+    // Both rows share rank 1 (tie). Matching by rank would tag BOTH as "(you)";
+    // matching by communityUrl tags only the caller's own row.
+    stub({
+      leaderboard: { rows: [row(1, 'Thomas J.', 0, 0, 'https://community.sap.com/u/139'), row(1, 'Daniel W.', 0, 0, 'https://community.sap.com/u/72')], total: 2 },
+      board: emptyBoard,
+      myStatus: 200,
+      my: { status: 'joined', userId: 'u139', communityUrl: 'https://community.sap.com/u/139', score: 0, level: 0, rank: 1, total: 2, avatarIndex: 0, breakdown: [] },
+    })
+    const wrapper = mount(Gameboard, { props: { config: CONFIG } })
+    await flushPromises()
+    const me = wrapper.findAll('[data-testid="lb-row-me"]')
+    expect(me.length).toBe(1)
+    expect(me[0].text()).toContain('Thomas J.')
+    expect(me[0].text()).not.toContain('Daniel W.')
   })
 
   it('pins a sticky "You" row when the caller is ranked but off the visible page', async () => {
