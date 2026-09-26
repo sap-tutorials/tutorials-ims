@@ -33,6 +33,22 @@ describe.skipIf(!hasBaseUrl())('e2e: devtoberfest gameboard (anonymous)', () => 
       const rowCount = await page.locator('tbody tr').count();
       const hasEmpty = await page.getByText(/no scores yet/i).count();
       expect(rowCount > 0 || hasEmpty > 0, 'leaderboard should show rows or an empty state').toBe(true);
+
+      // Participant count + pager (issue #2510). Both are data-driven and may be
+      // absent on a fresh/small event, so assert conditionally: when the count
+      // renders it shows a number; when the pager renders it shows "Page X of Y"
+      // and prev/next controls. When there ARE rows, the count must be present.
+      if (rowCount > 0) {
+        const count = page.locator('[data-testid="participant-count"]');
+        expect(await count.count(), 'participant count should render when there are rows').toBeGreaterThan(0);
+        expect(await count.first().textContent()).toMatch(/\d+\s+participant/i);
+      }
+      const pager = page.locator('[data-testid="lb-page-status"]');
+      if (await pager.count()) {
+        expect(await pager.first().textContent()).toMatch(/Page\s+\d+\s+of\s+\d+/i);
+        expect(await page.locator('[data-testid="lb-prev"]').count()).toBeGreaterThan(0);
+        expect(await page.locator('[data-testid="lb-next"]').count()).toBeGreaterThan(0);
+      }
     } finally {
       await context.close();
     }

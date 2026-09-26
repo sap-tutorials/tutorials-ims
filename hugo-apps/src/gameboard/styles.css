@@ -12,6 +12,20 @@
   background: var(--gb-accent, #0070f2); } /* swap for dataviz palette var */
 .gb-lb-empty { color: var(--sapContent_LabelColor, #556b82); }
 
+/* ---- Participant count, "you" highlight, pager (issue #2510) ---- */
+.gb-lb-count { font-weight: 400; color: var(--sapContent_LabelColor, #556b82); margin-left: .25rem; }
+/* Caller's own row — highlighted inline and as the pinned sticky footer row. */
+.gb-lb-me { background: var(--sapList_SelectionBackgroundColor, rgba(0,112,242,.08)); font-weight: 600; }
+.gb-lb-me-sticky { border-top: 2px solid var(--gb-accent, #0070f2); }
+.gb-lb-you-tag { color: var(--gb-accent, #0070f2); font-weight: 600; }
+
+.gb-lb-pager { display: flex; align-items: center; justify-content: center; gap: 1rem; padding: .75rem 0; }
+.gb-lb-pager-status { color: var(--sapContent_LabelColor, #556b82); font-variant-numeric: tabular-nums; }
+.gb-lb-pager button[disabled] { opacity: .4; cursor: not-allowed; }
+
+/* Cabinet standing stat (issue #2510). */
+.cabinet-rank { font-weight: 600; color: var(--sapTextColor, #1d2d3e); margin: .25rem 0 0; font-variant-numeric: tabular-nums; }
+
 /* ---- Cabinet region (arcade personality, contained) ---- */
 .cabinet { margin: 1.5rem 0; border-radius: 14px; padding: 4px;
   background: linear-gradient(165deg, #5D36FF 0%, #7B42F0 45%, #A100C2 100%);
