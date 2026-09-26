@@ -27,17 +27,23 @@ const hasNext = computed(() => page.value < pageCount.value)
 const myRank = computed<number | null>(() =>
   props.mine && props.mine.status === 'joined' && props.mine.rank != null ? props.mine.rank : null,
 )
-// Is the caller's row on the CURRENTLY VISIBLE page? Match by rank — the only
-// stable, non-PII key shared between the anonymized leaderboard rows and the
-// caller's personalized data.
+// The caller's own community profile URL — the unique, already-public key that
+// identifies the caller's row. Matching by rank is WRONG under ties (all tied
+// rows share one rank, so every tied row would be tagged "(you)" — #2510). Null
+// when the caller isn't a joined participant or has no community profile → we
+// then tag no row rather than risk a false match.
+const myCommunityUrl = computed<string | null>(() =>
+  props.mine && props.mine.status === 'joined' ? (props.mine.communityUrl ?? null) : null,
+)
+// Is the caller's row on the CURRENTLY VISIBLE page? Match by communityUrl.
 const myRankOnPage = computed(() =>
-  myRank.value != null && props.rows.some(r => r.rank === myRank.value),
+  myCommunityUrl.value != null && props.rows.some(r => r.communityUrl === myCommunityUrl.value),
 )
 // Show a pinned "You" row beneath the table only when the caller is ranked but
 // NOT on the visible page (so they always see where they stand — Strava-style).
 const showStickyMe = computed(() => myRank.value != null && !myRankOnPage.value)
 function isMe(row: LeaderboardRow): boolean {
-  return myRank.value != null && row.rank === myRank.value
+  return myCommunityUrl.value != null && row.communityUrl === myCommunityUrl.value
 }
 
 // communityUrl derives from user-controlled Users.khorosId/khorosLogin. Vue does NOT
