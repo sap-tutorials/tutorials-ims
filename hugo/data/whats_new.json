@@ -9,6 +9,19 @@
   ],
   "entries": [
     {
+      "id": "tutorials-ims#2511",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2511,
+      "title": "Devtoberfest leaderboard: shared ranks, paging, and your own standing",
+      "summary": "The live Devtoberfest leaderboard now shows tied scores at the same rank (and no longer reshuffles them on refresh), lets you page through the whole field, shows the total number of participants, and highlights your own row — with a pinned \"you\" row and your rank out of the field even when you're below the visible page.",
+      "category": "Feature",
+      "mergedAt": "2026-09-26T05:44:08Z",
+      "week": "2026-W39",
+      "weekStart": "2026-09-21",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2511"
+    },
+    {
       "id": "tutorials-ims#2502",
       "repo": "tutorials-ims",
       "label": "Developer Portal",
