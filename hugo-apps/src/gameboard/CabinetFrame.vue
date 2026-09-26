@@ -10,6 +10,11 @@ const joinHref = computed(() => props.joinUrl || '/devtoberfest/#join')
 // Is the caller a joined participant? (status from the backend.)
 const joined = computed(() => personalized.value?.status === 'joined')
 
+// Caller's standing in the full field (issue #2510). rank is null unless the
+// backend located them in the ranked list; total is the field size.
+const myRank = computed<number | null>(() => personalized.value?.rank ?? null)
+const myTotal = computed<number>(() => personalized.value?.total ?? 0)
+
 // The cabinet message + CTA, keyed on auth + status:
 //   anonymous            → "Log in"       (they must sign in first)
 //   authenticated + not_joined → "Join Devtoberfest" (the real CTA — the bug was
@@ -90,6 +95,11 @@ function earnedPoints(week: string, t: WeekTrackTotal): number {
       <div v-if="joined" class="cabinet-player">
         <img :src="avatarSrc" :alt="`Your avatar, level ${personalized!.level}`" class="cabinet-avatar" width="96" height="96" />
         <p class="cabinet-level">Level {{ personalized!.level }} · {{ personalized!.score }} pts</p>
+        <!-- "Where am I" standing (issue #2510): only when the backend resolved a
+             rank. total is the full field size. -->
+        <p v-if="myRank != null" class="cabinet-rank" data-testid="cabinet-rank">
+          Rank #{{ myRank }}<span v-if="myTotal"> of {{ myTotal }}</span>
+        </p>
       </div>
       <p v-else class="cabinet-cta" :class="`cabinet-cta-${cta.kind}`">
         <template v-if="cta.kind === 'join'">
