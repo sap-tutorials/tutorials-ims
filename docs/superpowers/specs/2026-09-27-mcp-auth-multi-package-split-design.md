@@ -94,6 +94,12 @@ must handle the mixed module formats in the target set (the image/attachment lib
 `.cjs`; most others are ESM/`.js`) — bundle per format or mark `.cjs` external and
 ship them alongside.
 
+**Module system: ESM.** This repo is ESM (root `package.json` `"type":"module"`; all
+consumers use `import`), so the workspace packages are ESM, their shims use
+`export … from`, and the esbuild bundles emit `--format=esm` `.mjs` artifacts with the
+`createRequire` banner (matching `parsers.bundle.mjs`). CJS is used only where a build
+script is invoked directly by node (e.g. `scripts/bundle-shared.cjs`).
+
 Package boundaries (from dependency-closure traces):
 
 - **`packages/core`** — domain/runtime utils with no feature opinion. Consumed by

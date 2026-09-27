@@ -8,6 +8,8 @@
 
 **Tech Stack:** SAP CAP (Node.js, `@sap/cds`), `@cap-js/mcp@1.3.0`, `@sap/xssec` v4, XSUAA, esbuild, npm workspaces, HANA, Cloud Foundry / MTA (`mbt`), `mcp-remote`.
 
+> **ESM correction (applies to every task below):** This repo is ESM (`"type":"module"`). Where task snippets show CommonJS (`module.exports = require(...)`, `format:'cjs'`, `.bundle.cjs`), implement the ESM equivalent: packages are `"type":"module"`, shims use `export { … } from` (or a top-level-await dynamic-import shim for bundle-first/workspace-fallback), and esbuild emits `--format=esm` `.mjs` with the `createRequire` banner (as `parsers.bundle.mjs` does). Only build scripts invoked directly by node stay `.cjs`. Verified in T3/T4.
+
 **Spec:** `docs/superpowers/specs/2026-09-27-mcp-auth-multi-package-split-design.md`
 
 ## Global Constraints
