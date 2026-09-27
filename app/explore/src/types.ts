@@ -32,6 +32,7 @@ export interface ExploreNode {
   type: NodeType
   label: string
   slug: string
+  rank?: number  // normalized PageRank 0–1, per-type max-normalized; optional (#2517)
 }
 
 export interface ExploreEdge {

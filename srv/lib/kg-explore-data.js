@@ -150,6 +150,13 @@ function parseExploreBindings(responseJson) {
  * @param {object} [opts]
  * @param {string} [opts.overrideGraphIri] — when set, query against this
  *   graph instead of the production default. Used by hybrid tests.
+ * @param {{ tutorialRank?: Map<string,number>, conceptRank?: Map<string,number> }} [opts.rankMaps]
+ *   — optional per-slug PageRank maps (from ConceptRank/TutorialRank sidecars,
+ *   injected by the Express wrapper). When supplied, each tutorial/concept node
+ *   gets a `rank` (normalized 0–1 within its own map). Nodes absent from their
+ *   map, and all other node types, receive no `rank` key. When absent or both
+ *   maps empty, no node gets a `rank` key. Additive/optional — never required.
+ *   (#2517)
  * @returns {Promise<{nodes: Array, edges: Array, generatedAt: string, droppedBindings: number}>}
  */
 export async function buildExplorePayload(db, opts = {}) {
@@ -205,6 +212,25 @@ export async function buildExplorePayload(db, opts = {}) {
       p: shortPredicate(r.p),
       o: oParsed.id,
     });
+  }
+
+  // Stamp optional per-node rank (PageRank, normalized 0–1) when the caller
+  // supplies rank maps (#2517). Only tutorial/concept nodes are ranked; all
+  // other types and nodes absent from their map receive no `rank` key.
+  // Normalization is per-map (max-normalized within each type's own map).
+  const rankMaps = opts.rankMaps;
+  if (rankMaps && (rankMaps.tutorialRank?.size || rankMaps.conceptRank?.size)) {
+    const maxOf = (m) => { let mx = 0; for (const v of m.values()) if (v > mx) mx = v; return mx || 1; };
+    const tMax = maxOf(rankMaps.tutorialRank ?? new Map());
+    const cMax = maxOf(rankMaps.conceptRank ?? new Map());
+    for (const node of nodesById.values()) {
+      const src = node.type === 'tutorial' ? rankMaps.tutorialRank
+        : node.type === 'concept' ? rankMaps.conceptRank : null;
+      if (!src) continue;
+      const raw = src.get(node.slug);
+      if (raw == null) continue;
+      node.rank = raw / (node.type === 'tutorial' ? tMax : cMax);
+    }
   }
 
   return {

@@ -29,6 +29,17 @@ export type NodeType =
   | 'community-event'    // Phase 4.8 (#765)
   | 'devtoberfest-session'  // #2311
 
+// ExploreNode mirrors the shape emitted by buildExplorePayload in
+// srv/lib/kg-explore-data.js for the /graph/explore-data endpoint.
+// Kept in sync with app/explore/src/types.ts ExploreNode. (#2517)
+export interface ExploreNode {
+  id: string
+  type: NodeType
+  label: string
+  slug: string
+  rank?: number  // normalized PageRank 0–1, optional — absent when flag off (#2517)
+}
+
 export type ConceptRef = {
   slug: string
   name: string
