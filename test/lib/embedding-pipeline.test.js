@@ -2,13 +2,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import path from 'node:path';
 const schemaPath = path.join(process.cwd(), 'db', 'schema.cds');
 
-vi.mock('../../srv/lib/embedding-client.js', () => ({
+vi.mock('@tutorials/core/embedding-client.js', () => ({
   embed: vi.fn(async (inputs) => inputs.map(() => new Float32Array(1536).fill(0.1)))
 }));
-vi.mock('../../srv/lib/step-text-extractor.js', () => ({
+vi.mock('@tutorials/core/step-text-extractor.js', () => ({
   extractStepText: vi.fn()
 }));
-vi.mock('../../srv/jobs/job-lock.js', () => ({
+vi.mock('@tutorials/core/jobs/job-lock.js', () => ({
   acquireLock: vi.fn(async () => true),
   releaseLock: vi.fn(async () => undefined)
 }));
@@ -20,9 +20,9 @@ describe('embedding-pipeline', () => {
 
   beforeEach(async () => {
     await cds.deploy(schemaPath).to('sqlite::memory:');
-    extractor = await import('../../srv/lib/step-text-extractor.js');
-    jobLock = await import('../../srv/jobs/job-lock.js');
-    embeddingClient = await import('../../srv/lib/embedding-client.js');
+    extractor = await import('@tutorials/core/step-text-extractor.js');
+    jobLock = await import('@tutorials/core/jobs/job-lock.js');
+    embeddingClient = await import('@tutorials/core/embedding-client.js');
     pipeline = await import('../../srv/lib/embedding-pipeline.js');
     vi.clearAllMocks();
     jobLock.acquireLock.mockResolvedValue(true);

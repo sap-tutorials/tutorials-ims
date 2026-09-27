@@ -10,12 +10,12 @@ const mockGetSeedEmbeddings = vi.fn();
 const mockEmbedAdHoc = vi.fn();
 const mockClassifyViaLlm = vi.fn();
 
-vi.mock('../category-seed-embeddings.js', () => ({
+vi.mock('@tutorials/content/category-seed-embeddings.js', () => ({
   getSeedEmbeddings: () => mockGetSeedEmbeddings(),
   embedAdHoc: (...a) => mockEmbedAdHoc(...a),
 }));
 
-vi.mock('../category-classifier-llm.js', () => ({
+vi.mock('@tutorials/content/category-classifier-llm.js', () => ({
   classifyViaLlm: (...a) => mockClassifyViaLlm(...a),
 }));
 

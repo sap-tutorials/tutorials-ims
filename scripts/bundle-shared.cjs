@@ -3,6 +3,17 @@
 // Mirrors prebuild:parsers-bundle. @sap/* and other CF-provided packages are
 // marked external and must be available in the CF runtime environment.
 // Output is ESM (.mjs) with a createRequire banner for any CJS interop.
+//
+// .cjs handling (packages/content only):
+// The 7 content .cjs files (attachment-ingest, attachment-mime, attachment-store,
+// image-ingest, image-store, img-cdn-fetch, img-cdn-retry) are loaded at runtime
+// via createRequire(import.meta.url) + require('./x.cjs') from the source-handler
+// JS files. esbuild's ESM bundler cannot inline these as they are CJS singletons
+// and are never statically imported. They are marked external in the esbuild config
+// and copied alongside the bundle to 'srv/lib/_shared/' preserving the flat layout
+// that attachment-source-handler.js and image-source-handler.js expect when they
+// call require('./x.cjs') at runtime (the createRequire resolves relative to the
+// bundle file's location in _shared/).
 
 const esbuild = require('esbuild');
 const path = require('node:path');
@@ -11,10 +22,32 @@ const fs = require('node:fs');
 const outDir = 'srv/lib/_shared';
 fs.mkdirSync(outDir, { recursive: true });
 
+// 7 .cjs files from packages/content that must be copied beside the bundle.
+const CONTENT_CJS = [
+  'attachment-ingest.cjs',
+  'attachment-mime.cjs',
+  'attachment-store.cjs',
+  'image-ingest.cjs',
+  'image-store.cjs',
+  'img-cdn-fetch.cjs',
+  'img-cdn-retry.cjs',
+];
+
 const targets = [
   {
     entry: require.resolve('@tutorials/core'),
     out: path.join(outDir, 'core.bundle.mjs'),
+  },
+  {
+    entry: require.resolve('@tutorials/content'),
+    out: path.join(outDir, 'content.bundle.mjs'),
+    // Mark the 7 .cjs files as external so esbuild doesn't try to inline them.
+    // They will be copied beside the bundle below.
+    extraExternal: CONTENT_CJS.map(f => `./${f}`),
+  },
+  {
+    entry: require.resolve('@tutorials/mcp'),
+    out: path.join(outDir, 'mcp.bundle.mjs'),
   },
 ];
 
@@ -28,13 +61,27 @@ for (const t of targets) {
     external: [
       '@sap/*',
       '@cap-js/*',
+      '@sap-ai-sdk/*',
       'node:*',
       'hdb',
       '@sap/hana-client',
+      'cheerio',
+      ...(t.extraExternal || []),
     ],
     banner: {
       js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
     },
   });
   console.log('bundled', t.out);
+}
+
+// Copy the 7 .cjs files from packages/content beside the content bundle
+// so the createRequire('./x.cjs') calls in image-source-handler /
+// attachment-source-handler resolve at CF runtime.
+const contentPkgDir = path.dirname(require.resolve('@tutorials/content'));
+for (const cjsFile of CONTENT_CJS) {
+  const src = path.join(contentPkgDir, cjsFile);
+  const dst = path.join(outDir, cjsFile);
+  fs.copyFileSync(src, dst);
+  console.log('copied', dst);
 }
