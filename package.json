@@ -463,5 +463,8 @@
     "mcp": {
       "per_action_tool": true
     }
-  }
+  },
+  "workspaces": [
+    "packages/*"
+  ]
 }
