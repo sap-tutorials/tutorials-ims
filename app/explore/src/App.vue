@@ -70,6 +70,15 @@ watch(isMobile, () => {
   pathError.value = null
 })
 
+// Clear path overlay on 2D↔3D view switch. ExploreGraph remounts each time
+// view3d flips, so a stale pathNodeIds from a prior 2D session would
+// re-highlight the old path without the user re-querying it. Same pattern
+// as the isMobile watcher above.
+watch(view3d, () => {
+  pathNodeIds.value = null
+  pathError.value = null
+})
+
 // ?focus=<slug> deep-link: when ExploreGraph emits 'graphReady' (i.e. after
 // buildGraph() + forceAtlas2 layout — node x/y coordinates valid), resolve
 // the slug to a node id and centre/zoom the camera on it. Using 'graphReady'

@@ -147,4 +147,28 @@ describe('App.vue — 2D/3D toggle visibility', () => {
     expect(enabledNodeTypes.value.has('concept')).toBe(true)
     expect(enabledNodeTypes.value.has('mission')).toBe(true)
   })
+
+  it('case E: 2D→3D→2D round-trip clears pathNodeIds (stale overlay fix)', async () => {
+    const wrapper = await mountApp({ threeD: true, mobile: false })
+    const vm = wrapper.vm as any
+
+    // Simulate a path having been drawn in 2D
+    vm.pathNodeIds = ['t:foo', 't:bar']
+    await nextTick()
+    expect(vm.pathNodeIds).not.toBeNull()
+
+    // Switch to 3D — watcher should clear the path
+    vm.view3d = true
+    await nextTick()
+    expect(vm.pathNodeIds).toBeNull()
+
+    // Simulate a path drawn in 3D (edge case: shouldn't survive the return trip)
+    vm.pathNodeIds = ['t:baz', 't:qux']
+    await nextTick()
+
+    // Switch back to 2D — watcher should clear again
+    vm.view3d = false
+    await nextTick()
+    expect(vm.pathNodeIds).toBeNull()
+  })
 })
