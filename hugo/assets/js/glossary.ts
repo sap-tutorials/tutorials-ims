@@ -18,6 +18,13 @@ type GlossaryMap = Record<string, GlossaryTerm>;
 const SCOPE_SELECTOR = ".tutorial-steps, .glossary-scope";
 const SKIP_ANCESTORS = new Set(["CODE", "PRE", "A", "BUTTON", "TEXTAREA", "INPUT"]);
 const SKIP_ATTR = "data-glossary-skip";
+// #2515: the scope (`.tutorial-steps`) also contains the Vue-mounted question
+// islands (Validation quiz, Challenge, tutorial-branches). Rewriting their text
+// nodes injects an inline <span> into layouts that assume a single text run
+// (e.g. the Validation legend's inline-flex), breaking the question into broken
+// columns, and races Vue's vdom over DOM it owns. Skip any island mount host —
+// they are the `*-mount` markers emitted by shortcodes/tutorial-step.html.
+const SKIP_MOUNT_CLASS = "-mount";
 
 type Ui5Popover = HTMLElement & { opener: Element | string; open: boolean };
 
@@ -36,6 +43,9 @@ function shouldSkip(node: Node): boolean {
     if (SKIP_ANCESTORS.has(el.tagName)) return true;
     if (el.hasAttribute(SKIP_ATTR)) return true;
     if (el.classList.contains("glossary-term")) return true;
+    // Any Vue-mounted island host (`.step-validation-mount`,
+    // `.step-challenge-mount`, `.tutorial-branch-mount`, …). See #2515.
+    if (Array.from(el.classList).some((cls) => cls.endsWith(SKIP_MOUNT_CLASS))) return true;
     el = el.parentElement;
   }
   return false;
@@ -211,3 +221,7 @@ if (document.readyState === "loading") {
 } else {
   init();
 }
+
+// Test-only surface (see test/unit/glossary.test.ts, matches lightbox.ts's
+// `__test__` convention). Not referenced by production code.
+export const __test__ = { tagFirstOccurrences, shouldSkip };
