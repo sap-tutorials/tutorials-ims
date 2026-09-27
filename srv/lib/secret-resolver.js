@@ -1,7 +1,7 @@
-// Prefer the CF-deploy bundle; fall back to the workspace package in local dev.
+// Workspace-first: full surface (incl. test seams) in local dev; bundle fallback at CF deploy.
 let mod;
-try { mod = await import('./_shared/core.bundle.mjs'); }
-catch { mod = await import('@tutorials/core/secret-resolver.js'); }
+try { mod = await import('@tutorials/core/secret-resolver.js'); }
+catch { mod = await import('./_shared/core.bundle.mjs'); }
 export const resolveSecret = mod.resolveSecret;
 export const invalidateSecret = mod.invalidateSecret;
 export const _resetForTests = mod._resetForTests;

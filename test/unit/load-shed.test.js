@@ -12,7 +12,7 @@ import cds from '@sap/cds';
 // single test can force it to reject (proving the guard's own fail-open)
 // without disturbing the config-defaulting tests. vi.mock is hoisted and
 // applies to load-shed.js's own static import too.
-vi.mock('../../srv/lib/runtime-config/load-shed-settings.js', async (importActual) => {
+vi.mock('@tutorials/core/runtime-config/load-shed-settings.js', async (importActual) => {
   const actual = await importActual();
   return { ...actual, resolveLoadShedConfig: vi.fn(actual.resolveLoadShedConfig) };
 });

@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // (issue #2060). Mock the DB-flag resolver so tests toggle the kill switch
 // without a DB. `state.metricsFlag` is read at call time by isFlagEnabled.
 const state = vi.hoisted(() => ({ metricsFlag: true }));
-vi.mock('../feature-flags/db-flags.js', () => ({
+vi.mock('@tutorials/core/feature-flags/db-flags.js', () => ({
   isFlagEnabled: (key) => (key === 'METRICS_ENABLED' ? state.metricsFlag : true),
 }));
 
