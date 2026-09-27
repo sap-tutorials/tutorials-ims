@@ -42,7 +42,7 @@ build-parameters:
       commands:
         - npm --prefix .. install
         - bash -c "cd .. && npm run prebuild:parsers-bundle"
-        - bash -c "cd .. && npx cds build --production"
+        - bash -c "cd .. && node scripts/bundle-shared.cjs && npx cds build --production"
         - bash -c "cd .. && node -e 'for (const p of [\"gen/db/src/gen/.hdiconfig\",\"gen/db-qa/src/gen/.hdiconfig\"]) { const fs=require(\"fs\"); const d=JSON.parse(fs.readFileSync(p,\"utf8\")); d.file_suffixes=d.file_suffixes||{}; d.file_suffixes.hdbprocedure={plugin_name:\"com.sap.hana.di.procedure\"}; fs.writeFileSync(p, JSON.stringify(d,null,2)+\"\\n\"); }'"
         - bash -c "rm -f ../gen/db-qa/src/gen/sap.changelog.*.hdbindex"
         # Build app/explore + emit the bundle manifest into hugo/data/.
