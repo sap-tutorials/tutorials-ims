@@ -1,2 +1,2 @@
 // Barrel re-exports added as modules are carved in later tasks.
-module.exports = {}
+export { getNextLegacyId, resetCounters } from './legacy-id.js';
