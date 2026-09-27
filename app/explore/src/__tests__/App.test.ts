@@ -1,15 +1,20 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { ref, nextTick, computed } from 'vue'
+import { ref, nextTick, computed, defineComponent } from 'vue'
 import { _resetFilters, useFilters } from '../composables/useFilters'
 
 // ---------------------------------------------------------------------------
 // Stub ThreeDGraph so mounting never touches WebGL
+// For async components, return all module exports to avoid vue-test-utils stubs
 // ---------------------------------------------------------------------------
-vi.mock('../components/ThreeDGraph.vue', () => ({
-  default: { name: 'ThreeDGraph', render: () => null },
-}))
+vi.mock('../components/ThreeDGraph.vue', async (importOriginal) => {
+  const actual = await importOriginal() as any
+  return {
+    ...actual,
+    default: defineComponent({ name: 'ThreeDGraph', render: () => null }),
+  }
+})
 
 // ---------------------------------------------------------------------------
 // Stub ExploreGraph — the real one imports sigma/graphology which require DOM
