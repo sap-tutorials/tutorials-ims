@@ -16,6 +16,8 @@
 
 import cds from '@sap/cds';
 import { buildExplorePayload } from './kg-explore-data.js';
+import { isFlagEnabled } from './feature-flags/db-flags.js';
+import { loadRankMaps } from '../knowledge-graph-service.js';
 
 const log = cds.log('build-explore-data');
 
@@ -30,12 +32,27 @@ export async function exploreDataHandler(req, res) {
     // 5-min Cache-Control matches the in-process TTL — lets browsers/CDNs
     // cache the response too, not just this Node process.
     res.setHeader('Cache-Control', 'public, max-age=300');
+
+    // features.threeD is computed fresh on EVERY request so a flag flip
+    // surfaces immediately (within seconds) without waiting for the 5-min
+    // cache TTL on the payload data itself.
+    let threeD = false;
+    try { threeD = isFlagEnabled('KG_EXPLORE_3D_ENABLED'); } catch { threeD = false; }
+
     if (cached && now - cachedAt < TTL_MS) {
       res.setHeader('X-Cache', 'HIT');
+      cached.features = { threeD };
       return res.json(cached);
     }
     const db = await cds.connect.to('db');
-    const payload = await buildExplorePayload(db);
+
+    // Load rank maps when PageRank is enabled; fail-open (no rank data) on any error.
+    let rankMaps;
+    try {
+      if (isFlagEnabled('KG_PAGERANK_ENABLED')) rankMaps = await loadRankMaps();
+    } catch { /* fail-open: no rank */ }
+
+    const payload = await buildExplorePayload(db, { rankMaps });
     if (payload.droppedBindings > 0) {
       // Non-zero means at least one SPARQL row had a non-empty IRI that
       // didn't match any prefix in IRI_TYPE_MAP — usually schema drift
@@ -58,6 +75,7 @@ export async function exploreDataHandler(req, res) {
         'its SYS_SPARQL_EXECUTE call.',
       );
     }
+    payload.features = { threeD };
     cached = payload;
     cachedAt = now;
     res.setHeader('X-Cache', 'MISS');

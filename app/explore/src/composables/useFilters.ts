@@ -44,12 +44,18 @@ function togglePredicate(p: PredicateType) {
   dispatchTelemetry({ filter: p, kind: 'predicate', enabled: next.has(p) })
 }
 
+function setEnabledNodeTypes(types: NodeType[]) {
+  enabledNodeTypes.value = new Set(types)
+  dispatchTelemetry({ kind: 'nodeType-bulk', enabled: true })
+}
+
 export function useFilters() {
   return {
     enabledNodeTypes,
     enabledPredicates,
     toggleNodeType,
     togglePredicate,
+    setEnabledNodeTypes,
     ALL_NODE_TYPES,
     ALL_PREDICATES,
   }
