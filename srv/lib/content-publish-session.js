@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { acquireLock, releaseLock } from '../jobs/job-lock.js';
 import { getNextLegacyId } from './legacy-id.js';
-import { toBuffer } from './content-store.js';
+import { toBuffer } from '@tutorials/core/buffers.js';
 import * as metrics from './metrics.js';
 import * as alerting from './alerting.js';
 import { recomputeTutorialProgressBulkSQL } from './recompute-tutorial-progress-bulk-sql.js';

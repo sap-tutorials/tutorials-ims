@@ -33,7 +33,7 @@
 // is passed twice (inner aggregate scope + outer scope filter).
 
 import cds from '@sap/cds';
-import { recomputeTutorialProgress } from './content-store.js';
+import { recomputeTutorialProgress } from '@tutorials/core/recompute-tutorial-progress.js';
 
 const LOG = cds.log('content-publish');
 

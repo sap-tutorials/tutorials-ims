@@ -2,7 +2,6 @@ import cds from '@sap/cds';
 import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { timingSafeEqual } from 'node:crypto';
-import { Readable } from 'node:stream';
 import { acquireLock, releaseLock } from '../jobs/job-lock.js';
 import { logPipelineStart, logPipelineEnd, logPipelineItem, logPipeline } from './pipeline-log.js';
 import { getNextLegacyId } from './legacy-id.js';
@@ -21,13 +20,14 @@ import { setContentCacheHeaders } from './edge-cache-headers.js';
 import { purgePublishedSlugs, purgeAllContent } from './fast-purge.js';
 import { pageKeyForPath, mimeTypeForPageKey } from './page-key-map.js';
 import { loadPageFallback } from './page-fallback.js';
-import { stampSubmissionId } from './task-record-submission-id.js';
 import { isDeltaWrite, isDeltaRead, isDeltaSkipCarryForward } from './content-delta-flags.js';
 import { normalizeTutorialMarkdown, prefersMarkdown } from './tutorial-markdown.js';
 import { isFlagEnabled } from './feature-flags/db-flags.js';
 import { acquireServeSlot } from './load-shed.js';
 import { loadProvenanceInputs } from './provenance-data.js';
 import { deriveConfidence } from './provenance-freshness.js';
+import { toBuffer } from '@tutorials/core/buffers.js';
+import { recomputeTutorialProgress } from '@tutorials/core/recompute-tutorial-progress.js';
 
 const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
@@ -55,16 +55,6 @@ function humanizeFallback(slug) {
     .join(' ');
 }
 
-async function toBuffer(data) {
-  if (Buffer.isBuffer(data)) return data;
-  if (data instanceof Readable) {
-    const chunks = [];
-    for await (const chunk of data) chunks.push(chunk);
-    return Buffer.concat(chunks);
-  }
-  return Buffer.from(data);
-}
-
 // Catalog pages (/tutorials/group-* and /tutorials/mission-*) are SSR'd from
 // the Groups/Missions tables via catalog-data.js + catalog-renderer.js since
 // PR #115 (#91). They must NEVER be persisted into ContentFiles or Tutorials,
@@ -90,7 +80,7 @@ function dropCatalogSlugs(obj) {
   return dropped;
 }
 
-export { toBuffer, isCatalogSlug, dropCatalogSlugs };
+export { toBuffer, isCatalogSlug, dropCatalogSlugs, recomputeTutorialProgress };
 
 // Advisory provenance helpers — called from serveStoredSlug. Fail-open: any
 // error or missing data returns null so the serve path is never blocked.
@@ -107,57 +97,6 @@ function setAdvisoryHeaders(res, advisory) {
   if (!advisory) return;
   res.setHeader('X-Freshness-Confidence', advisory.confidence);
   res.setHeader('X-Content-Provenance', advisory.url);
-}
-
-// Re-evaluate every TUTORIAL TaskRecord for `tutorialId` against the
-// authoritative step count (`stepCount`) and the user's actual completed STEP
-// records. Flips stale `progress=100/COMPLETED` rows back to IN_PROGRESS when
-// the denominator has grown beyond what the user has actually completed.
-// Skips when stepCount is 0 (nothing to compare against) or when the existing
-// row is already consistent. Logs any user whose status changed.
-export async function recomputeTutorialProgress(db, namespace, tutorialId, stepCount) {
-  if (!Number.isInteger(stepCount) || stepCount <= 0) return { rechecked: 0, updated: 0 };
-  const { Tutorials, Steps, TaskRecords } = cds.entities(namespace);
-  const tutorial = await SELECT.one.from(Tutorials).where({ ID: tutorialId }).columns('ID', 'legacyId');
-  if (!tutorial?.legacyId) return { rechecked: 0, updated: 0 };
-
-  const steps = await SELECT.from(Steps).where({ tutorial_ID: tutorialId }).columns('legacyId');
-  const stepLegacyIds = steps.map(s => s.legacyId).filter(Boolean);
-  if (stepLegacyIds.length === 0) return { rechecked: 0, updated: 0 };
-
-  const tutorialRecs = await SELECT.from(TaskRecords).where({
-    taskLegacyId: tutorial.legacyId,
-    taskType: 'TUTORIAL',
-    // Task 14 (#600): SUPERSEDED rows preserve historical completion timestamps
-    // from prior attempts. They must never be recomputed — doing so would wipe
-    // their completionDate (line 115 sets completionDate=null on any newStatus
-    // !== 'COMPLETED', and a SUPERSEDED row has zero attempt-2 step completions
-    // by definition).
-    status: { '!=': 'SUPERSEDED' }
-  });
-  if (tutorialRecs.length === 0) return { rechecked: 0, updated: 0 };
-
-  let updated = 0;
-  for (const rec of tutorialRecs) {
-    const completed = await SELECT.from(TaskRecords).where({
-      user_ID: rec.user_ID,
-      taskType: 'STEP',
-      status: 'COMPLETED',
-      taskLegacyId: { in: stepLegacyIds }
-    }).columns('ID');
-    const newProgress = Math.round((completed.length / stepCount) * 100);
-    const newStatus = newProgress >= 100 ? 'COMPLETED' : 'IN_PROGRESS';
-    if (rec.progress === newProgress && rec.status === newStatus) continue;
-    const set = { progress: newProgress, status: newStatus };
-    if (newStatus !== 'COMPLETED') set.completionDate = null;
-    stampSubmissionId(set, rec);
-    await UPDATE(TaskRecords).where({ ID: rec.ID }).set(set);
-    updated += 1;
-  }
-  if (updated > 0) {
-    LOG.info(`recomputeTutorialProgress: tutorialId=${tutorialId} stepCount=${stepCount} updated=${updated}/${tutorialRecs.length}`);
-  }
-  return { rechecked: tutorialRecs.length, updated };
 }
 
 export async function triggerPostPublishEmbeddings({ changedSlugs, settings }) {

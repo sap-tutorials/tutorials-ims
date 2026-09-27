@@ -68,3 +68,7 @@ export { slugifyKey } from './branch/slug-key.js';
 export { resolveTutorialAuthor } from './resolve-tutorial-author.js';
 // safe-fetch.js
 export { isLiteralPrivateAddress, resolveAndCheckHost, safeFetch } from './safe-fetch.js';
+// buffers.js
+export { toBuffer } from './buffers.js';
+// recompute-tutorial-progress.js
+export { recomputeTutorialProgress } from './recompute-tutorial-progress.js';

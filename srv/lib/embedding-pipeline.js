@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { extractStepText } from './step-text-extractor.js';
 import { embed } from './embedding-client.js';
 import { acquireLock, releaseLock } from '../jobs/job-lock.js';
-import { toBuffer } from './content-store.js';
+import { toBuffer } from '@tutorials/core/buffers.js';
 import { isDeltaRead } from './content-delta-flags.js';
 
 const LOG = cds.log('embedding-pipeline');
