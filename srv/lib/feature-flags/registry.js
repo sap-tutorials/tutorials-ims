@@ -76,6 +76,13 @@ export const FEATURE_FLAGS = [
     howToChange: featureFlagUpsert('KG_PAGERANK_ENABLED', 'flag.kg.pagerank'),
   },
   {
+    key: 'KG_EXPLORE_3D_ENABLED', label: 'Explore 3D graph view', category: 'Knowledge Graph',
+    kind: 'db', imsConfigKey: 'flag.kg.explore3d',
+    valueType: 'boolean', default: false, issue: '#2517', status: 'dev-only',
+    description: 'Opt-in 3D force-directed view on /explore/ (three.js). Desktop-only, lazy-loaded. DB-driven config (ImsConfig flag.kg.explore3d); DEV-first, default OFF, fail-open.',
+    howToChange: featureFlagUpsert('KG_EXPLORE_3D_ENABLED', 'flag.kg.explore3d'),
+  },
+  {
     key: 'KG_PATH_V2_ENABLED', label: 'KG path-finding v2', category: 'Knowledge Graph',
     kind: 'db', imsConfigKey: 'flag.kg.pathV2',
     valueType: 'boolean', default: false, issue: '#913', status: 'beta',
