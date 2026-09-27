@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useGraphData } from './composables/useGraphData'
 import { useFilters } from './composables/useFilters'
 import { useTelemetry, dispatchPathDrawn } from './composables/useTelemetry'
@@ -11,13 +11,44 @@ import NodeDetailPanel from './components/NodeDetailPanel.vue'
 import MobileTypedList from './components/MobileTypedList.vue'
 import { fetchPath } from './api/path'
 import { parseFocusParam } from './focus-param'
-import type { ExploreNode } from './types'
+import type { ExploreNode, NodeType } from './types'
+
+// Async component — the 3D chunk (three / d3-force-3d / 3d-force-graph) only
+// loads when the user first opens 3D view (load-bearing: do NOT convert to a
+// static import, see task-5-brief for the bundle-size constraint).
+const ThreeDGraph = defineAsyncComponent(() => import('./components/ThreeDGraph.vue'))
 
 const { payload, hasData, error } = useGraphData()
-const { enabledNodeTypes, enabledPredicates, toggleNodeType, togglePredicate } = useFilters()
+const { enabledNodeTypes, enabledPredicates, toggleNodeType, togglePredicate, setEnabledNodeTypes, ALL_NODE_TYPES } = useFilters()
 const { selectedNode, selectNode } = useSelectedNode()
 const { isMobile } = useViewport()
 useTelemetry({ payload })
+
+// ---------------------------------------------------------------------------
+// 2D/3D toggle
+// ---------------------------------------------------------------------------
+
+/** High-signal "spine" node types used as the default 3D filter subset. */
+const THREED_DEFAULT_TYPES: NodeType[] = ['tutorial', 'concept', 'mission']
+
+/** Whether the 3D toggle is visible: flag on AND desktop-only. */
+const show3dToggle = computed(() => !!payload.value?.features?.threeD && !isMobile.value)
+
+/** True = currently showing 3D scene; false = 2D Sigma graph. */
+const view3d = ref(false)
+
+/**
+ * Enter 3D mode. On the first switch, if filters are still at the all-on
+ * default (detected by size equality), narrow to the default 3D subset so
+ * the scene stays interactive. Does NOT auto-restore on switch-back to 2D —
+ * user filter choices persist.
+ */
+function enter3d() {
+  if (!view3d.value && enabledNodeTypes.value.size === ALL_NODE_TYPES.length) {
+    setEnabledNodeTypes(THREED_DEFAULT_TYPES)
+  }
+  view3d.value = true
+}
 
 // Ref to the ExploreGraph component, used for ?focus= deep-link camera centering.
 const graphRef = ref<InstanceType<typeof ExploreGraph> | null>(null)
@@ -165,9 +196,29 @@ async function onFindPath(p: { from: string; to: string }) {
           @findPath="onFindPath"
         />
         <p v-if="pathError" class="explore__path-status" role="status">{{ pathError }}</p>
+        <!-- 2D/3D view toggle — only rendered when flag is on AND desktop -->
+        <div v-if="show3dToggle" class="explore__viewtoggle" role="group" aria-label="Graph view">
+          <button
+            class="explore__viewbtn"
+            :aria-pressed="!view3d"
+            @click="view3d = false"
+          >2D</button>
+          <button
+            class="explore__viewbtn"
+            :aria-pressed="view3d"
+            @click="enter3d"
+          >3D</button>
+        </div>
         <div class="explore__body">
           <div class="explore__canvas">
+            <ThreeDGraph
+              v-if="view3d"
+              :nodes="filteredNodes"
+              :edges="filteredEdges"
+              @nodeClick="onNodeClick"
+            />
             <ExploreGraph
+              v-else
               ref="graphRef"
               :nodes="filteredNodes"
               :edges="filteredEdges"
@@ -226,5 +277,32 @@ async function onFindPath(p: { from: string; to: string }) {
   padding: 0.5rem 1rem;
   margin: 0;
   font-size: 0.9rem;
+}
+/* Segmented 2D/3D toggle — desktop only (show3dToggle gates rendering). */
+.explore__viewtoggle {
+  display: flex;
+  gap: 0;
+  align-self: flex-start;
+  margin: 0.5rem 1rem;
+  border: 1px solid #b0b0b0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.explore__viewbtn {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8rem;
+  background: #fff;
+  border: none;
+  cursor: pointer;
+  color: #333;
+  line-height: 1.5;
+}
+.explore__viewbtn + .explore__viewbtn {
+  border-left: 1px solid #b0b0b0;
+}
+.explore__viewbtn[aria-pressed="true"] {
+  background: #0070f2;
+  color: #fff;
+  font-weight: 600;
 }
 </style>

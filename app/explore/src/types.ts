@@ -47,4 +47,7 @@ export interface ExplorePayload {
   edges: ExploreEdge[]
   generatedAt: string
   droppedBindings?: number  // observability counter from Task 1's buildExplorePayload
+  features?: {
+    threeD: boolean  // KG_EXPLORE_3D_ENABLED flag, injected per-request (#2517)
+  }
 }
