@@ -1,0 +1,446 @@
+// srv/lib/feature-flags/registry.js
+// Hand-authored source of truth for the Feature Flag Viewer (Admin UI).
+// The drift test in test/unit/feature-flags-registry.test.js fails the build
+// if a new env flag or settings boolean is added without a matching entry.
+//
+// kind:
+//   'env'        — read from process.env; effective value via envRule.
+//   'db-setting' — a boolean/number column on a settings entity.
+//                  `resolver` picks how the effective value is resolved:
+//                    'kg'/'uiEvents' → the env-layered resolveXSettings()
+//                    'chat'          → direct ChatSettings row (no env layer)
+//   'db'         — an ImsConfig key/value row (string 'true'/'false'); the
+//                  effective value is read live from ImsConfig by `imsConfigKey`.
+//                  No env layer — admin-toggle / SQL upsert only.
+//   'constant'   — a hardcoded, non-runtime-configurable value (shown, no howToChange).
+// envRule: 'true-enables' | 'false-disables' | 'numeric'.
+// status:  'ga' | 'dev-only' | 'beta' | 'parked'.
+
+export const KINDS = ['env', 'db-setting', 'db', 'constant'];
+export const ENV_RULES = ['true-enables', 'false-disables', 'numeric'];
+export const STATUSES = ['ga', 'dev-only', 'beta', 'parked'];
+
+const adminTile = (tile, hash, note) => ({ method: 'admin-tile', tile, hash, note });
+// ImsConfig-backed DB flag (kind:'db'): flipped via the AdminService
+// setContentDeltaFlags action or a direct ImsConfig upsert. No env var.
+const imsConfigUpsert = (imsKey) => ({
+  method: 'db-upsert',
+  text: `AdminService.setContentDeltaFlags action (busts cache), or UPSERT ImsConfig key '${imsKey}' = 'true'/'false'.`,
+});
+// Generic ImsConfig-backed DB feature flag (kind:'db', #2060): flipped via the
+// AdminService setFeatureFlag(key, enabled) action (busts the 60s cache) or a
+// direct ImsConfig upsert. No env var — read live through srv/lib/feature-flags/db-flags.js.
+const featureFlagUpsert = (registryKey, imsKey) => ({
+  method: 'db-upsert',
+  text: `AdminService.setFeatureFlag(key:'${registryKey}', enabled) action (busts cache), or UPSERT ImsConfig key '${imsKey}' = 'true'/'false'.`,
+});
+
+export const FEATURE_FLAGS = [
+  // ---- Knowledge Graph env flags (env-layered via resolveKnowledgeGraphSettings where applicable) ----
+  {
+    key: 'KNOWLEDGE_GRAPH_ENABLED', label: 'Knowledge Graph master switch',
+    category: 'Knowledge Graph', kind: 'db-setting', entity: 'KnowledgeGraphSettings',
+    column: 'enabled', resolver: 'kg', envVar: 'KNOWLEDGE_GRAPH_ENABLED',
+    valueType: 'boolean', default: false,
+    issue: '', status: 'ga',
+    description: 'Master switch for the /graph/* service surface. Off → 503.',
+    howToChange: adminTile('knowledgeGraph', '#knowledgeGraph', 'Or env KNOWLEDGE_GRAPH_ENABLED.'),
+  },
+  {
+    key: 'KG_LEARNING_PATH_ENABLED', label: 'KG learning-path reasoner', category: 'Knowledge Graph',
+    kind: 'db-setting', entity: 'KnowledgeGraphSettings', column: 'learningPathEnabled', resolver: 'kg',
+    valueType: 'boolean', default: false, issue: 'kg-learning-path', status: 'dev-only',
+    description: 'Ordered/personalized "what should I learn next / prerequisite chain" reasoner exposed via learningPath(). DB-driven config (KnowledgeGraphSettings.learningPathEnabled); no env var. DEV-only, default OFF, fail-open.',
+    howToChange: adminTile('knowledgeGraph', '#knowledgeGraph', 'Toggle learning-path reasoner in the Knowledge Graph settings tile'),
+  },
+  {
+    key: 'KG_CONCEPT_DEFINITIONS_ENABLED', label: 'KG concept-definition generator', category: 'Knowledge Graph',
+    kind: 'db-setting', entity: 'KnowledgeGraphSettings', column: 'conceptDefinitionsEnabled', resolver: 'kg',
+    valueType: 'boolean', default: false, issue: '#2426', status: 'dev-only',
+    description: 'LLM-authored, grounded concept definitions (#2426). Gates the generate-concept-definitions scheduled job. DB-driven config (KnowledgeGraphSettings.conceptDefinitionsEnabled); no env var. DEV-only, default OFF, fail-open.',
+    howToChange: adminTile('knowledgeGraph', '#knowledgeGraph', 'Toggle the concept-definition generator in the Knowledge Graph settings tile'),
+  },
+  {
+    key: 'KG_ONDEMAND_ENABLED', label: 'KG on-demand extraction',
+    category: 'Knowledge Graph', kind: 'db-setting', entity: 'KnowledgeGraphSettings',
+    column: 'onDemandExtractionEnabled', resolver: 'kg', envVar: 'KG_ONDEMAND_ENABLED',
+    valueType: 'boolean', default: false, issue: '#948', status: 'ga',
+    description: 'On-demand concept extraction from zero-seed search queries.',
+    howToChange: adminTile('knowledgeGraph', '#knowledgeGraph', 'Or env KG_ONDEMAND_ENABLED.'),
+  },
+  {
+    key: 'KG_PAGERANK_ENABLED', label: 'KG PageRank blend', category: 'Knowledge Graph',
+    kind: 'db', imsConfigKey: 'flag.kg.pagerank',
+    valueType: 'boolean', default: false, issue: '#916', status: 'ga',
+    description: 'Blends per-tutorial PageRank into KG neighborhood ranking. DB-driven config (ImsConfig key flag.kg.pagerank); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('KG_PAGERANK_ENABLED', 'flag.kg.pagerank'),
+  },
+  {
+    key: 'KG_EXPLORE_3D_ENABLED', label: 'Explore 3D graph view', category: 'Knowledge Graph',
+    kind: 'db', imsConfigKey: 'flag.kg.explore3d',
+    valueType: 'boolean', default: false, issue: '#2517', status: 'dev-only',
+    description: 'Opt-in 3D force-directed view on /explore/ (three.js). Desktop-only, lazy-loaded. DB-driven config (ImsConfig flag.kg.explore3d); DEV-first, default OFF, fail-open.',
+    howToChange: featureFlagUpsert('KG_EXPLORE_3D_ENABLED', 'flag.kg.explore3d'),
+  },
+  {
+    key: 'KG_PATH_V2_ENABLED', label: 'KG path-finding v2', category: 'Knowledge Graph',
+    kind: 'db', imsConfigKey: 'flag.kg.pathV2',
+    valueType: 'boolean', default: false, issue: '#913', status: 'beta',
+    description: 'Property-graph v2 pathBetween with fail-open v1 SPARQL fallback. DB-driven config (ImsConfig key flag.kg.pathV2); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('KG_PATH_V2_ENABLED', 'flag.kg.pathV2'),
+  },
+  {
+    key: 'communityRankWeight', label: 'KG community search weight',
+    category: 'Knowledge Graph', kind: 'db-setting', entity: 'ChatSettings',
+    column: 'communityRankWeight', resolver: 'chat', envVar: 'KG_COMMUNITY_WEIGHT',
+    valueType: 'number', default: 0, issue: '#1171', status: 'dev-only',
+    description: 'Additive Louvain-community rank term in search (>0 enables). Requires searchKgRerankEnabled=true. Admin-editable; KG_COMMUNITY_WEIGHT env var is a fallback only.',
+    howToChange: adminTile('joule', '#joule', 'Or env KG_COMMUNITY_WEIGHT (fallback only, used when the column is unset).'),
+  },
+  {
+    key: 'KG_WEIGHT', label: 'KG concept-overlap search weight',
+    category: 'Knowledge Graph', kind: 'constant', valueType: 'number', default: 2.0,
+    issue: '#945', status: 'ga',
+    description: 'Hardcoded concept-overlap rank multiplier. Not runtime-configurable.',
+  },
+  // ---- Security / abuse protection ----
+  {
+    key: 'RATE_LIMIT_ENABLED', label: 'Origin rate limiting', category: 'Security',
+    kind: 'db', imsConfigKey: 'flag.ratelimit',
+    valueType: 'boolean', default: false, issue: 'origin-abuse-protection', status: 'dev-only',
+    description: 'Cross-instance (cds-caching backed) rate limiter on the anon/expensive surface (/content, /build, /graph, /mcp*, …). Layered tiers: anon IP floor, higher tier for an already-present PAT/XSUAA token, top tier for HMAC-signed first-party agents. DB-driven config (ImsConfig key flag.ratelimit); thresholds in ImsConfig ratelimit.* via rate-limit-settings.js. No env var. Default OFF, fail-open.',
+    howToChange: featureFlagUpsert('RATE_LIMIT_ENABLED', 'flag.ratelimit'),
+  },
+  {
+    key: 'INPUT_VALIDATION_ENABLED', label: 'Origin input validation', category: 'Security',
+    kind: 'db', imsConfigKey: 'flag.inputvalidation',
+    valueType: 'boolean', default: false, issue: 'origin-abuse-protection', status: 'dev-only',
+    description: 'WAF-equivalent input validation on the anon/agentic write surface (PR3). Body-size caps + JSON depth/shape limits on anon POST bodies before handlers run, and a depth + complexity limit (plus prod-only introspection block) on GraphQL /graphql/public. DB-driven config (ImsConfig key flag.inputvalidation); thresholds in ImsConfig inputvalidation.* via input-validation-settings.js. No env var. Default OFF, fail-open.',
+    howToChange: featureFlagUpsert('INPUT_VALIDATION_ENABLED', 'flag.inputvalidation'),
+  },
+  {
+    key: 'LOADSHED_ENABLED', label: 'Origin load-shedding', category: 'Security',
+    kind: 'db', imsConfigKey: 'flag.loadshed',
+    valueType: 'boolean', default: false, issue: 'origin-abuse-protection', status: 'dev-only',
+    description: 'In-flight concurrency guard on the anonymous HANA content-serve path (content-store.js serveStoredSlug — tutorial HTML + content pages + author/advocate pages). When concurrent per-request gzip-BLOB reads exceed loadshed.maxConcurrent, excess requests are shed with 503 + Retry-After instead of piling up toward OOM under a scraper flood that gets past the edge cache (the serve path has no static fallback). Cache hits are never counted. Per-instance ceiling (in-memory, not cross-instance). DB-driven config (ImsConfig key flag.loadshed); ceiling + Retry-After in ImsConfig loadshed.maxConcurrent / loadshed.retryAfterSeconds via load-shed-settings.js. No env var. Default OFF, fail-open (a guard fault admits).',
+    howToChange: featureFlagUpsert('LOADSHED_ENABLED', 'flag.loadshed'),
+  },
+  // ---- Navigator ----
+  {
+    key: 'NAV_INCLUDE_NESTED_GROUPS', label: 'Navigator nested-group cards',
+    category: 'Navigator', kind: 'db-setting', entity: 'NavigatorSettings',
+    column: 'includeNestedGroups', resolver: 'navigator', envVar: 'NAV_INCLUDE_NESTED_GROUPS',
+    valueType: 'boolean', default: false, issue: '#364', status: 'ga',
+    description: 'When on, /build/navigator emits cards for nested groups (~65 extra cards on dev).',
+    howToChange: adminTile('navigator', '#navigator', 'Or env NAV_INCLUDE_NESTED_GROUPS.'),
+  },
+  // ---- UI events ----
+  {
+    key: 'UI_EVENTS_ENABLED', label: 'UI event telemetry', category: 'Telemetry',
+    kind: 'db-setting', entity: 'UiEventsSettings', column: 'enabled', resolver: 'uiEvents',
+    envVar: 'UI_EVENTS_ENABLED', valueType: 'boolean', default: false, issue: '#204', status: 'ga',
+    description: 'UI event tracking. Off → /api/ui-event 503, tracker self-disables.',
+    howToChange: adminTile('uiEvents', '#uiEvents', 'Or env UI_EVENTS_ENABLED.'),
+  },
+  // ---- Chat / AI booleans (direct ChatSettings row; NO env layer) ----
+  {
+    key: 'ChatSettings.enabled', label: 'Joule chat master switch', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'enabled', resolver: 'chat',
+    valueType: 'boolean', default: false, issue: '', status: 'ga',
+    description: 'Master switch for the Joule chat assistant.',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
+    key: 'ChatSettings.ragEnabled', label: 'RAG / vector grounding', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'ragEnabled', resolver: 'chat',
+    valueType: 'boolean', default: false, issue: '', status: 'ga',
+    description: 'Retrieval-augmented grounding over tutorial embeddings.',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
+    key: 'ChatSettings.semanticSearchEnabled', label: 'Public semantic search', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'semanticSearchEnabled', resolver: 'chat',
+    valueType: 'boolean', default: false, issue: '#2246', status: 'dev-only',
+    description: 'Anonymous public semantic/vector search: SearchService.semantic_search function + /mcp/search MCP tool. Server embeds the query and returns scored content references (tutorials/concepts/external) — never vectors. Off → 503. Default OFF until corpora are backfilled and the anon surface is vetted.',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
+    key: 'ChatSettings.codeCheckEnabled', label: 'AI code-check', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'codeCheckEnabled', resolver: 'chat',
+    valueType: 'boolean', default: false, issue: '#171', status: 'ga',
+    description: 'AI code-check tool. Off → /api/codecheck 503.',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
+    key: 'ChatSettings.validateAnswerEnabled', label: 'AI answer grader', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'validateAnswerEnabled', resolver: 'chat',
+    valueType: 'boolean', default: false, issue: '#209', status: 'ga',
+    description: 'AI free-text answer grader. Off → /api/validate-answer 503.',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
+    key: 'ChatSettings.branchingEnabled', label: 'Branching learning paths', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'branchingEnabled', resolver: 'chat',
+    valueType: 'boolean', default: false, issue: '#172', status: 'ga',
+    description: 'Branching paths master flag. Off → /api/branches/decide 404.',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
+    key: 'ChatSettings.kgPathBetweenEnabled', label: 'KG learning-path tool', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'kgPathBetweenEnabled', resolver: 'chat',
+    valueType: 'boolean', default: false, issue: '#445', status: 'ga',
+    description: 'findLearningPath Joule tool registration.',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
+    key: 'ChatSettings.communityPeersEnabled', label: 'KG community-peers tool', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'communityPeersEnabled', resolver: 'chat',
+    valueType: 'boolean', default: false, issue: '#1126', status: 'dev-only',
+    description: 'findCommunityPeers Joule tool. Ships dark until PROD Louvain data verified.',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
+    key: 'ChatSettings.puzzleHintEnabled', label: 'Puzzle hint Joule tool', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'puzzleHintEnabled', resolver: 'chat',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'puzzleHint Joule tool registration. Returns safe hint material without revealing the answer.',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
+    key: 'ChatSettings.kgSearchExpansionEnabled', label: 'KG search expansion', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'kgSearchExpansionEnabled', resolver: 'chat',
+    valueType: 'boolean', default: true, issue: '#943', status: 'ga',
+    description: 'expandSearchConcepts Joule tool. Default ON (cheap).',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
+    key: 'ChatSettings.searchKgRerankEnabled', label: 'KG-boosted search ranking', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'searchKgRerankEnabled', resolver: 'chat',
+    valueType: 'boolean', default: true, issue: '#945', status: 'ga',
+    description: 'Server-side KG rerank of search results. Default ON. Gates KG_COMMUNITY_WEIGHT.',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
+    key: 'ChatSettings.kgRelatedContentEnabled', label: 'KG related-content tool', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'kgRelatedContentEnabled', resolver: 'chat',
+    valueType: 'boolean', default: true, issue: '#1125', status: 'ga',
+    description: 'findRelatedContent Joule tool. Default ON (cache-reused).',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
+    key: 'ChatSettings.whatsNewEnabled', label: 'What\'s New Joule tool', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'whatsNewEnabled', resolver: 'chat',
+    valueType: 'boolean', default: true, issue: '#1859', status: 'ga',
+    description: 'getWhatsNew Joule tool + learner-path What\'s New guidance (chat-context.js). Default ON.',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  // ---- A2A (Agent-to-Agent) ----
+  {
+    key: 'ChatSettings.a2aEnabled', label: 'A2A agent endpoint', category: 'A2A',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'a2aEnabled', resolver: 'chat',
+    valueType: 'boolean', default: true, issue: '#1220', status: 'dev-only',
+    description: 'Exposes the A2A JSON-RPC endpoint (POST /a2a) and the agent card (GET /.well-known/agent-card.json). Kill switch — set false to signal the endpoint is disabled in the agent card.',
+    howToChange: adminTile('joule', '#joule', 'Managed via ChatSettings.a2aEnabled DB column.'),
+  },
+  // ---- Observability ----
+  {
+    key: 'ChatSettings.alertsEnabled', label: 'ANS push alerting', category: 'Observability',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'alertsEnabled', resolver: 'chat',
+    valueType: 'boolean', default: false, issue: '', status: 'ga',
+    description: 'Master switch for SAP Alert Notification push alerts (publish-reject, scheduled-job failures, rebuild-dispatch failures). DB-backed, admin-editable; no env var. Enable after deploying the MTA and binding the email action.',
+    howToChange: adminTile('joule', '#joule', 'Managed via ChatSettings.alertsEnabled DB column.'),
+  },
+  {
+    key: 'METRICS_ENABLED', label: 'Metrics collection', category: 'Observability',
+    kind: 'db', imsConfigKey: 'flag.metrics',
+    valueType: 'boolean', default: true, issue: '', status: 'ga',
+    description: 'Prometheus-style metrics snapshots and DB wrap instrumentation. Kill switch — set false to disable all metric writes. DB-driven config (ImsConfig key flag.metrics); no env var. Default ON.',
+    howToChange: featureFlagUpsert('METRICS_ENABLED', 'flag.metrics'),
+  },
+  // ---- MCP (Phase 2 / Phase 3) ----
+  {
+    key: 'MCP_AUTH_ENABLED', label: 'MCP OAuth auth tier', category: 'MCP',
+    kind: 'db', imsConfigKey: 'flag.mcp.auth',
+    valueType: 'boolean', default: true, issue: '#1105', status: 'ga',
+    description: 'Phase 2 MCP /mcp-auth and /mcp-pat routes. Kill switch — set false to return 503 on both routes. DB-driven config (ImsConfig key flag.mcp.auth); no env var. Default ON. NOTE: the boot-time route mount reads this on a cold cache and so honors the declared default (ON) at boot; the DB value gates the per-request paths and takes full effect after the warm-up / next restart.',
+    howToChange: featureFlagUpsert('MCP_AUTH_ENABLED', 'flag.mcp.auth'),
+  },
+  {
+    key: 'MCP_PAT_MINT_ENABLED', label: 'MCP PAT minting', category: 'MCP',
+    kind: 'db', imsConfigKey: 'flag.mcp.patMint',
+    valueType: 'boolean', default: true, issue: '#1105', status: 'ga',
+    description: 'Allows PAT tokens to be minted via the MCP auth tier. Kill switch — set false to disable minting (existing PATs still valid). DB-driven config (ImsConfig key flag.mcp.patMint); no env var. Default ON.',
+    howToChange: featureFlagUpsert('MCP_PAT_MINT_ENABLED', 'flag.mcp.patMint'),
+  },
+  {
+    key: 'MCP_PHASE3_ENABLED', label: 'MCP Phase-3 compose router', category: 'MCP',
+    kind: 'db', imsConfigKey: 'flag.mcp.phase3',
+    valueType: 'boolean', default: true, issue: '#1106', status: 'ga',
+    description: 'MCP Phase-3 compose router (resources + prompts + admin tools). Kill switch — set false to serve tools-only via plain @cap-js/mcp adapter. DB-driven config (ImsConfig key flag.mcp.phase3); no env var. Default ON. NOTE: the boot-time compose-router mount reads this on a cold cache and so honors the declared default (ON) at boot; the per-request /mcp-admin gate uses the warm DB value.',
+    howToChange: featureFlagUpsert('MCP_PHASE3_ENABLED', 'flag.mcp.phase3'),
+  },
+  {
+    key: 'MCP_RESOURCES_ENABLED', label: 'MCP resources', category: 'MCP',
+    kind: 'db', imsConfigKey: 'flag.mcp.resources',
+    valueType: 'boolean', default: true, issue: '#1106', status: 'ga',
+    description: 'MCP resource registration inside the Phase-3 compose router. Kill switch — set false to omit resources from the compose server. DB-driven config (ImsConfig key flag.mcp.resources); no env var. Default ON.',
+    howToChange: featureFlagUpsert('MCP_RESOURCES_ENABLED', 'flag.mcp.resources'),
+  },
+  {
+    key: 'MCP_PROMPTS_ENABLED', label: 'MCP prompts', category: 'MCP',
+    kind: 'db', imsConfigKey: 'flag.mcp.prompts',
+    valueType: 'boolean', default: true, issue: '#1106', status: 'ga',
+    description: 'MCP prompt registration inside the Phase-3 compose router. Kill switch — set false to omit prompts from the compose server. DB-driven config (ImsConfig key flag.mcp.prompts); no env var. Default ON.',
+    howToChange: featureFlagUpsert('MCP_PROMPTS_ENABLED', 'flag.mcp.prompts'),
+  },
+  {
+    key: 'MCP_ADMIN_TOOLS_ENABLED', label: 'MCP admin tools', category: 'MCP',
+    kind: 'db', imsConfigKey: 'flag.mcp.adminTools',
+    valueType: 'boolean', default: true, issue: '#1106', status: 'ga',
+    description: 'MCP admin tool registration inside the Phase-3 compose router. Kill switch — set false to omit admin tools from the compose server. DB-driven config (ImsConfig key flag.mcp.adminTools); no env var. Default ON.',
+    howToChange: featureFlagUpsert('MCP_ADMIN_TOOLS_ENABLED', 'flag.mcp.adminTools'),
+  },
+  // ---- Knowledge Graph kill switches ----
+  {
+    key: 'KG_RETIRE_ORPHANS_ENABLED', label: 'KG orphan concept retirement', category: 'Knowledge Graph',
+    kind: 'db', imsConfigKey: 'flag.kg.retireOrphans',
+    valueType: 'boolean', default: true, issue: '#1115', status: 'ga',
+    description: 'Nightly job that retires zero-link orphaned concepts (ACTIVE→RETIRED). Kill switch — set false to skip retirement on each nightly run. DB-driven config (ImsConfig key flag.kg.retireOrphans); no env var. Default ON.',
+    howToChange: featureFlagUpsert('KG_RETIRE_ORPHANS_ENABLED', 'flag.kg.retireOrphans'),
+  },
+  {
+    key: 'KG_STEP_SLICER_ENABLED', label: 'KG tutorial step slicer', category: 'Knowledge Graph',
+    kind: 'db', imsConfigKey: 'flag.kg.stepSlicer',
+    valueType: 'boolean', default: true, issue: '', status: 'ga',
+    description: 'Per-step concept extraction slice during tutorial ingestion. Kill switch — set false to skip step-level slicing (whole-tutorial extraction still runs). DB-driven config (ImsConfig key flag.kg.stepSlicer); no env var. Default ON.',
+    howToChange: featureFlagUpsert('KG_STEP_SLICER_ENABLED', 'flag.kg.stepSlicer'),
+  },
+  {
+    key: 'KG_DEVTOBERFEST_SESSIONS_ENABLED', label: 'KG Devtoberfest session ingestion', category: 'Knowledge Graph',
+    kind: 'db', imsConfigKey: 'flag.kg.devtoberfestSessions',
+    valueType: 'boolean', default: false, issue: '#2311', status: 'dev-only',
+    description: 'Twice-weekly job that ingests rich Devtoberfest Planner sessions (title/abstract/speaker/YouTube) from the cross-container facade into the Knowledge Graph as first-class DevtoberfestSession nodes (predicate "presents") and embeds them for the semantic-search external corpus. Requires the master KG switch (KNOWLEDGE_GRAPH_ENABLED) AND cross-container Leg B (ACTIVITY_SESSION_V1 / DTF_*_V1 synonym+grant) deployed — the facade query is empty/errors without it (fail-closed). DB-driven config (ImsConfig key flag.kg.devtoberfestSessions); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('KG_DEVTOBERFEST_SESSIONS_ENABLED', 'flag.kg.devtoberfestSessions'),
+  },
+  {
+    key: 'TECHED_DEVTOBERFEST_CROSSLINK_ENABLED', label: 'TechEd ↔ Devtoberfest session cross-links', category: 'Knowledge Graph',
+    kind: 'db', imsConfigKey: 'flag.teched.devtoberfestCrosslink',
+    valueType: 'boolean', default: false, issue: '#2312', status: 'dev-only',
+    description: 'Bidirectional related-session cross-linking between Devtoberfest sessions and SAP TechEd sessions, computed from shared Knowledge-Graph concepts. Both are first-class KG nodes (#2311): Devtoberfest session → DevtoberfestSessionConceptLinks; TechEd session → TechEdSessionConceptLinks, over the SAME Concepts registry. When ON, the Devtoberfest schedule feed attaches relatedTechEdSessions (keyed by session ID) and /build/teched attaches relatedDevtoberfestSessions (top 3 by concept overlap). Fail-open: when either concept-link table is cold/empty (e.g. unit SQLite), the related arrays are empty and nothing throws. DB-driven config (ImsConfig key flag.teched.devtoberfestCrosslink); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('TECHED_DEVTOBERFEST_CROSSLINK_ENABLED', 'flag.teched.devtoberfestCrosslink'),
+  },
+  {
+    key: 'KG_TECHED_SESSIONS_ENABLED', label: 'KG TechEd session ingestion', category: 'Knowledge Graph',
+    kind: 'db', imsConfigKey: 'flag.kg.techedSessions',
+    valueType: 'boolean', default: false, issue: '#2312', status: 'dev-only',
+    description: 'KG concept-link enrichment for the weekly SAP TechEd session ingest. When on (and the master KG switch KNOWLEDGE_GRAPH_ENABLED is on), the fetch-teched-sessions job embeds each new/changed session and LLM-extracts "covers" concept links into TechEdSessionConceptLinks. The fetch + upsert + delta core of the job ALWAYS runs regardless of this flag; only the LLM/embedding enrichment is gated. DB-driven config (ImsConfig key flag.kg.techedSessions); no env var. Default OFF. Fail-open.',
+    howToChange: featureFlagUpsert('KG_TECHED_SESSIONS_ENABLED', 'flag.kg.techedSessions'),
+  },
+  // ---- Content ----
+  {
+    key: 'COMMUNITY_BLOGS_CLASSIFIER_ENABLED', label: 'Community blogs classifier', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.community.blogsClassifier',
+    valueType: 'boolean', default: true, issue: '#1033', status: 'ga',
+    description: 'Scheduled AI classifier that drains PENDING CommunityBlogPosts rows via SAP Generative AI Hub. Kill switch — set false to skip all classification runs. DB-driven config (ImsConfig key flag.community.blogsClassifier); no env var. Default ON.',
+    howToChange: featureFlagUpsert('COMMUNITY_BLOGS_CLASSIFIER_ENABLED', 'flag.community.blogsClassifier'),
+  },
+  {
+    key: 'HOMEPAGE_NEWS_RELEVANCE_ENABLED', label: 'Homepage news relevance scoring', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.homepage.newsRelevance',
+    valueType: 'boolean', default: true, issue: '', status: 'ga',
+    description: 'AI-based relevance scoring for homepage news items. Kill switch — set false to fall back to chronological ordering. DB-driven config (ImsConfig key flag.homepage.newsRelevance); no env var. Default ON.',
+    howToChange: featureFlagUpsert('HOMEPAGE_NEWS_RELEVANCE_ENABLED', 'flag.homepage.newsRelevance'),
+  },
+  {
+    key: 'TECHED_HOMEPAGE_ENABLED', label: 'Homepage TechEd sessions band', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.homepage.teched',
+    valueType: 'boolean', default: false, issue: '#2312', status: 'dev-only',
+    description: 'When true, upcoming SAP TechEd 2026 sessions (from external.TechEdSessions) are surfaced as always-on cards in the homepage events band, each linking to its session URL (falling back to /teched/). Additive to the existing CodeJam/Devtoberfest band; region-agnostic like Devtoberfest. Fail-open: an empty catalog or a query error yields no cards (the band is unchanged). DB-driven config (ImsConfig key flag.homepage.teched); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('TECHED_HOMEPAGE_ENABLED', 'flag.homepage.teched'),
+  },
+  {
+    key: 'CONTENT_DELTA_WRITE_ENABLED', label: 'Content Option-B dual-write', category: 'Content',
+    kind: 'db', imsConfigKey: 'content.delta.write',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'Workstream D Option B: on publish, mirror freshly-published slugs into ContentCurrent + ContentHistory alongside the legacy ContentFiles write. Fail-safe (never throws into the commit tx); legacy ContentFiles remains the source of truth until the read cutover. DB-driven config (ImsConfig key content.delta.write); no env var. Default OFF.',
+    howToChange: imsConfigUpsert('content.delta.write'),
+  },
+  {
+    key: 'CONTENT_DELTA_READ_ENABLED', label: 'Content Option-B read from ContentCurrent', category: 'Content',
+    kind: 'db', imsConfigKey: 'content.delta.read',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'Workstream D Option B: serve + readers source from the mutable ContentCurrent (per-slug fallback to legacy ContentFiles). Enable after ContentCurrent is fully seeded. DB-driven config (ImsConfig key content.delta.read); no env var. Default OFF.',
+    howToChange: imsConfigUpsert('content.delta.read'),
+  },
+  {
+    key: 'CONTENT_DELTA_SKIP_CARRYFORWARD', label: 'Content Option-B skip carry-forward (O(changed) publish)', category: 'Content',
+    kind: 'db', imsConfigKey: 'content.delta.skipCarryForward',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'Workstream D Option B: publish writes ONLY changed slugs (no carry-forward); rollback replays ContentHistory into ContentCurrent. Enable ONLY after the read cutover is live AND ContentCurrent is fully seeded. DB-driven config (ImsConfig key content.delta.skipCarryForward); no env var. Default OFF.',
+    howToChange: imsConfigUpsert('content.delta.skipCarryForward'),
+  },
+  {
+    key: 'FRESHNESS_SCAN_ENABLED', label: 'Tutorial freshness bulk scan', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.freshness.scan',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'When true, the nightly freshness-scan job runs the detector across the tutorial catalog. DB-driven config (ImsConfig key flag.freshness.scan); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('FRESHNESS_SCAN_ENABLED', 'flag.freshness.scan'),
+  },
+  {
+    key: 'PROVENANCE_ENVELOPE_ENABLED', label: 'Signed provenance & freshness envelope', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.provenance.envelope',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'When true, serves the signed provenance JWS at /content/tutorials/:slug/provenance, publishes the JWKS at /.well-known/tutorial-provenance/jwks.json, and emits advisory X-Freshness-Confidence / X-Content-Provenance headers. DB-driven config (ImsConfig key flag.provenance.envelope); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('PROVENANCE_ENVELOPE_ENABLED', 'flag.provenance.envelope'),
+  },
+  {
+    key: 'SKILL_BUNDLE_ENABLED', label: 'Installable Skill bundle endpoint', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.skill.bundle',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'When true, serves an installable agent-Skill zip at '
+      + '/content/tutorials/:slug/skill (SKILL.md procedure + verify.sh generated from assert '
+      + 'blocks + provenance/freshness stamp). Public, anonymous, read-only over PUBLISHED '
+      + 'tutorials. DB-driven config (ImsConfig key flag.skill.bundle); no env var. Default OFF (#2245).',
+    howToChange: featureFlagUpsert('SKILL_BUNDLE_ENABLED', 'flag.skill.bundle'),
+  },
+  // ---- Taxonomy ----
+  {
+    key: 'SEMAPHORE_SYNC_ENABLED', label: 'Semaphore taxonomy auto-sync', category: 'Taxonomy',
+    kind: 'db', imsConfigKey: 'flag.semaphore.sync',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'When true, the weekly semaphore-tag-sync job pulls the SAPCore model from the Semaphore SES allterms API and upserts Tags (keyed on semaphoreId). Fail-open: a fetch/mapping error records a FAILED run and never mutates tags. Pairs with ImsConfig keys semaphore.sync.{model,lang,filter,actualTagClasses,interestItemClasses,dryRun} and the semaphore-destination. DB-driven config (ImsConfig key flag.semaphore.sync); no env var. Default OFF (#2184).',
+    howToChange: featureFlagUpsert('SEMAPHORE_SYNC_ENABLED', 'flag.semaphore.sync'),
+  },
+  // ---- Notifications ----
+  {
+    key: 'FEEDBACK_EMAIL_ENABLED', label: 'Owner feedback digest email', category: 'Notifications',
+    kind: 'db', imsConfigKey: 'feedback.email.enabled',
+    valueType: 'boolean', default: false, issue: '#2188', status: 'ga',
+    description: 'When true, the daily feedback-owner-digest job emails each tutorial owner a summary of new commented feedback. Second gate: only fires when the CF space is prod, and requires the SMTP secrets in Credential Store — so this toggle is inert on dev/qa. Toggling takes effect within the job\'s 60s flag cache. DB-driven config (ImsConfig key feedback.email.enabled); no env var. Default OFF (#2188).',
+    howToChange: featureFlagUpsert('FEEDBACK_EMAIL_ENABLED', 'feedback.email.enabled'),
+  },
+  // ---- KTT (Kasimir Teaches TLAs) ----
+  {
+    key: 'KTT_ENABLED', label: 'KTT — Kasimir Teaches TLAs', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.ktt.enabled',
+    valueType: 'boolean', default: false, status: 'beta',
+    description: 'Enables the /explore/ktt/ acronym trainer and its /ktt CAP endpoints. Off → completeLesson/syncProgress reject 503.',
+    howToChange: featureFlagUpsert('KTT_ENABLED', 'flag.ktt.enabled'),
+  },
+  // ---- Generative UI (research spike #2362) ----
+  {
+    key: 'CHALLENGE_WIDGET_ENABLED', label: 'AI challenge widget (json-render POC)', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.challengeWidget',
+    valueType: 'boolean', default: false, issue: '#2362', status: 'dev-only',
+    description: 'Research spike (#2362): AI-authored json-render challenge panel per tutorial step. The model emits a constrained UI spec (srv/lib/ai-challenge-spec.js) rendered by a generic Vue catalog (hugo-apps/src/challenge-render). Anti-leak: reference answers are stripped from the public spec and returned separately for the ValidateAnswerSpecs sidecar. Because tutorial HTML is baked at build time, GENERATION is gated by the CHALLENGE_WIDGET_ENABLED build-time env var (scripts/fetch-tutorials.ts); this DB flag is the greenlight/kill record and admin control of record. Default OFF, DEV-only, fail-open.',
+    howToChange: featureFlagUpsert('CHALLENGE_WIDGET_ENABLED', 'flag.challengeWidget'),
+  },
+  // ---- Edge cache ----
+  {
+    key: 'EDGE_PURGE_ENABLED', label: 'Akamai edge Fast-Purge on publish', category: 'Security',
+    kind: 'db', imsConfigKey: 'flag.edgepurge',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'When true, a successful content publish/rollback fires a fire-and-forget Akamai Fast-Purge (CCU v3) purge-by-tag for the changed slugs, AND the served content Cache-Control s-maxage is raised from 600s to 86400s (safe only because the purge now bounds staleness). Requires the AKAMAI_FASTPURGE_EDGERC JSON credential in Credential Store; inert (no-op, short TTL) without it. Fail-open. Numeric tunables: ImsConfig edgepurge.network (production|staging), edgepurge.timeoutMs. DB-driven config (ImsConfig key flag.edgepurge); no env var. Default OFF.',
+    howToChange: featureFlagUpsert('EDGE_PURGE_ENABLED', 'flag.edgepurge'),
+  },
+];
