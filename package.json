@@ -138,7 +138,8 @@
     "validate-api-docs-yaml": "node scripts/validate-api-docs-yaml.cjs",
     "build:sdl": "tsx scripts/emit-graphql-sdl.ts",
     "check:graphql-breaking": "tsx scripts/check-graphql-breaking.ts",
-    "install-notify-workflows": "tsx scripts/install-notify-workflows.ts"
+    "install-notify-workflows": "tsx scripts/install-notify-workflows.ts",
+    "lint:boundaries": "node scripts/lint-package-boundaries.cjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
