@@ -68,11 +68,31 @@ Trace established that CAP validates the XSUAA JWT itself (xsuaa strategy,
   `authenticated-user`.
 - Approuter login flow: untouched.
 
-### D3. Multi-package npm workspace (retire the copy tax)
+### D3. Multi-package npm workspace + esbuild bundling (retire the copy tax)
 
 The `srv-qa` module today copies ~150 files from `srv/lib` via a hand-curated `cp`
-block (`.deploy/mta.yaml:191`) — a repeatedly-broken drift foot-gun. Replace copying
-with a workspace of published-internally packages consumed via `package.json` deps.
+block (`.deploy/mta.yaml:191`) — a repeatedly-broken drift foot-gun. Replace the
+hand-curated per-file list with a **npm workspace** of internal packages, consumed
+via `package.json` deps for local development (hoisted install, one `npm test`).
+
+**Deploy-time mechanism — esbuild bundling (not plain workspaces).** Plain npm
+workspaces do **not** survive CF/MTA packaging: `cds build` does not vendor
+`node_modules` (CAP docs: "The contents of the node_modules folder is not copied into
+the deployment folder"); the CF `nodejs_buildpack` runs `npm install` inside the
+packed `gen/<module>` dir, which has neither the root `node_modules` nor the sibling
+`packages/` tree — so a `file:`/workspace-symlinked dep is unresolvable at deploy time
+(`mbt` zips only the module dir; a symlink points outside the droplet). Therefore each
+consuming module **esbuild-bundles the workspace packages it needs** into a
+self-contained artifact at build time, emitted into the module before/at `cds build`.
+This mirrors the existing, proven `prebuild:parsers-bundle` step
+(`package.json:44`), which bundles `scripts/parsers/` into
+`srv-qa/lib/parsers.bundle.mjs` for exactly this cross-module-boundary problem.
+
+Net effect: "no copies" means **no hand-curated file list and no drift** — one
+automated bundle step per module replaces the ~150-line `cp` block. Bundler config
+must handle the mixed module formats in the target set (the image/attachment libs are
+`.cjs`; most others are ESM/`.js`) — bundle per format or mark `.cjs` external and
+ship them alongside.
 
 Package boundaries (from dependency-closure traces):
 
@@ -89,7 +109,9 @@ Package boundaries (from dependency-closure traces):
   (main-srv consumer).
 
 Layering: `core` depends on nothing; feature packages depend only on `core`, never
-each other. A boundary lint enforces no feature→feature imports.
+each other. A boundary lint enforces no feature→feature imports. The bundler entry per
+module is the module's own code; the packages resolve through the workspace symlinks
+at bundle time (dev-host), producing a deploy-safe artifact.
 
 ### D4. `complete_step` cross-service emit → best-effort
 
@@ -176,13 +198,19 @@ to break the cycle cleanly before/while moving content files.
 
 ## Phasing (one branch, independently-verifiable phases)
 
-**P1 — workspace + `core`.** Create npm workspace; carve `packages/core`; point
-`tutorials-srv` at it. Existing `npm test` stays green. Add boundary lint.
+**P1 — workspace + `core` + bundling harness.** Add npm `workspaces` to root
+`package.json`; carve `packages/core`; add the per-module esbuild bundle step
+(generalize the existing `parsers-bundle` pattern) and wire it into `before-all`/
+`prebuild` so `tutorials-srv` ships a bundled `core`. Point `tutorials-srv` at the
+workspace package for dev. Existing `npm test` green; **deploy smoke to DEV to prove
+the bundled artifact resolves at CF runtime** (validates the whole mechanism before
+more packages ride on it). Add boundary lint.
 
-**P2 — `content`, `mcp`, `kg`, `channels`.** Carve remaining packages. Fix the
-content-store cycle. `kg`/`channels` require a **main-srv** import-graph trace +
-de-cycle (their live edges are not exercised by srv-qa) — treat as a plan
-prerequisite for those two packages. Existing tests green after each.
+**P2 — `content`, `mcp`, `kg`, `channels`.** Carve remaining packages; each consuming
+module bundles what it needs. Fix the content-store cycle. `kg`/`channels` require a
+**main-srv** import-graph trace + de-cycle (their live edges are not exercised by
+srv-qa) — treat as a plan prerequisite for those two packages. Existing tests green
+after each.
 
 **P3 — `tutorials-srv-mcp` + `mta-mcp.yaml` + `tutorials-xsuaa-mcp`.** Stand up the
 module consuming `core`+`mcp`; new MTA; new public instance; approuter
@@ -208,6 +236,13 @@ srv-qa consumes `core`+`content`. srv-qa hybrid + smoke must be green before mer
 - **R1 — main-srv kg/channels de-cycle (P2).** Their real edges are only in the
   larger, cyclier main-srv graph; carving may surface feature→feature edges the
   srv-qa slice hid. Mitigation: dedicated trace as plan prerequisite; boundary lint.
+- **R0 — bundling mechanism is load-bearing and unproven for these packages.** Plain
+  workspaces don't deploy to CF (symlink/buildpack); the esbuild bundle must produce a
+  runtime-resolvable artifact, and the target set mixes ESM `.js` with `.cjs` media
+  libs. If bundling breaks a runtime path it fails at deploy/runtime, not at
+  `npm test`. Mitigation: P1 proves the mechanism end-to-end (DEV deploy smoke of a
+  bundled `core`) before any other package depends on it; per-format bundler config;
+  keep `.cjs` external if bundling them is fragile.
 - **R2 — P4 touches the working srv-qa build.** Mitigation: mostly deletion of dead
   copies; isolated phase with its own green-gate; DEV-first.
 - **R3 — `.well-known`/issuer mismatch** breaks `mcp-remote` discovery. Mitigation:
