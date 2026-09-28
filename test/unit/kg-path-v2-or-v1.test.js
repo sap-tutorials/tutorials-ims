@@ -6,18 +6,18 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('../../srv/lib/kg-path-v2-client.js', () => ({
+vi.mock('@tutorials/kg/kg-path-v2-client.js', () => ({
   kgPathV2: vi.fn(),
 }))
-vi.mock('../../srv/lib/kg-sparql-client.js', () => ({
+vi.mock('@tutorials/kg/kg-sparql-client.js', () => ({
   kgQuery: vi.fn(),
   SparqlTimeoutError: class SparqlTimeoutError extends Error {},
   SparqlSyntaxError: class SparqlSyntaxError extends Error {},
 }))
 
-const { kgPathV2 } = await import('../../srv/lib/kg-path-v2-client.js')
-const { kgQuery } = await import('../../srv/lib/kg-sparql-client.js')
-const { findPathV2OrV1 } = await import('../../srv/lib/kg-path.js')
+const { kgPathV2 } = await import('@tutorials/kg/kg-path-v2-client.js')
+const { kgQuery } = await import('@tutorials/kg/kg-sparql-client.js')
+const { findPathV2OrV1 } = await import('@tutorials/kg/kg-path.js')
 // KG_PATH_V2_ENABLED migrated env → DB (ImsConfig key flag.kg.pathV2, #2060):
 // kg-path.js now reads it via isFlagEnabled(), so stubEnv no longer toggles it.
 const { __setFlagForTest, __resetFlagsForTest } = await import('../../srv/lib/feature-flags/db-flags.js')
