@@ -4,16 +4,10 @@
 // marked external and must be available in the CF runtime environment.
 // Output is ESM (.mjs) with a createRequire banner for any CJS interop.
 //
-// .cjs handling (packages/content only):
-// The 7 content .cjs files (attachment-ingest, attachment-mime, attachment-store,
-// image-ingest, image-store, img-cdn-fetch, img-cdn-retry) are loaded at runtime
-// via createRequire(import.meta.url) + require('./x.cjs') from the source-handler
-// JS files. esbuild's ESM bundler cannot inline these as they are CJS singletons
-// and are never statically imported. They are marked external in the esbuild config
-// and copied alongside the bundle to 'srv/lib/_shared/' preserving the flat layout
-// that attachment-source-handler.js and image-source-handler.js expect when they
-// call require('./x.cjs') at runtime (the createRequire resolves relative to the
-// bundle file's location in _shared/).
+// .cjs handling (packages/content and packages/channels):
+// CJS files are loaded at runtime via createRequire(import.meta.url) + require('./x.cjs').
+// esbuild's ESM bundler cannot inline these as they are CJS singletons.
+// They are marked external and copied alongside the bundle to 'srv/lib/_shared/'.
 
 const esbuild = require('esbuild');
 const path = require('node:path');
@@ -33,6 +27,14 @@ const CONTENT_CJS = [
   'img-cdn-retry.cjs',
 ];
 
+// 4 .cjs files from packages/channels that must be copied beside the bundle.
+const CHANNELS_CJS = [
+  'normalize.cjs',
+  'promote-to-shelves.cjs',
+  'seed-channel-topic-map.cjs',
+  'seed-collections.cjs',
+];
+
 const targets = [
   {
     entry: require.resolve('@tutorials/core'),
@@ -48,6 +50,16 @@ const targets = [
   {
     entry: require.resolve('@tutorials/mcp'),
     out: path.join(outDir, 'mcp.bundle.mjs'),
+  },
+  {
+    entry: require.resolve('@tutorials/kg'),
+    out: path.join(outDir, 'kg.bundle.mjs'),
+  },
+  {
+    entry: require.resolve('@tutorials/channels'),
+    out: path.join(outDir, 'channels.bundle.mjs'),
+    // Mark the 4 channels .cjs files as external (CJS singletons, ship alongside).
+    extraExternal: CHANNELS_CJS.map(f => `./${f}`),
   },
 ];
 
@@ -81,6 +93,15 @@ for (const t of targets) {
 const contentPkgDir = path.dirname(require.resolve('@tutorials/content'));
 for (const cjsFile of CONTENT_CJS) {
   const src = path.join(contentPkgDir, cjsFile);
+  const dst = path.join(outDir, cjsFile);
+  fs.copyFileSync(src, dst);
+  console.log('copied', dst);
+}
+
+// Copy the 4 .cjs files from packages/channels beside the channels bundle.
+const channelsPkgDir = path.dirname(require.resolve('@tutorials/channels'));
+for (const cjsFile of CHANNELS_CJS) {
+  const src = path.join(channelsPkgDir, cjsFile);
   const dst = path.join(outDir, cjsFile);
   fs.copyFileSync(src, dst);
   console.log('copied', dst);

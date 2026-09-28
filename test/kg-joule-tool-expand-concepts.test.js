@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeAll, afterEach, afterAll, beforeEach, vi } from 'vitest'
 import cds from '@sap/cds'
 import { EXPAND_SEARCH_CONCEPTS_TOOL, expandSearchConceptsHandler } from '../srv/lib/kg/joule-tool-expand-concepts.js'
-import { enqueueOnDemandExtraction } from '../srv/lib/kg/on-demand-enqueue.js'
+import { enqueueOnDemandExtraction } from '@tutorials/kg/on-demand-enqueue.js'
 
 // vi.mock is hoisted by Vitest to before all imports, so the mocked version of
 // enqueueOnDemandExtraction is what joule-tool-expand-concepts.js receives too.
-vi.mock('../srv/lib/kg/on-demand-enqueue.js', () => ({
+vi.mock('@tutorials/kg/on-demand-enqueue.js', () => ({
   enqueueOnDemandExtraction: vi.fn().mockResolvedValue({ status: 'enqueued', normalizedKey: 'x' }),
 }))
 
