@@ -112,6 +112,54 @@ for (const cjsFile of CHANNELS_CJS) {
   console.log('copied', dst);
 }
 
+// srv-qa/lib/_shared/ — core + content only (srv-qa closure = content-store + secret-resolver).
+const outDirQa = 'srv-qa/lib/_shared';
+fs.mkdirSync(outDirQa, { recursive: true });
+
+const qaTargets = [
+  {
+    entry: require.resolve('@tutorials/core'),
+    out: path.join(outDirQa, 'core.bundle.mjs'),
+  },
+  {
+    entry: require.resolve('@tutorials/content'),
+    out: path.join(outDirQa, 'content.bundle.mjs'),
+    extraExternal: CONTENT_CJS.map(f => `./${f}`),
+  },
+];
+
+for (const t of qaTargets) {
+  esbuild.buildSync({
+    entryPoints: [t.entry],
+    outfile: t.out,
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    external: [
+      '@sap/*',
+      '@cap-js/*',
+      '@sap-ai-sdk/*',
+      'node:*',
+      'hdb',
+      '@sap/hana-client',
+      'cheerio',
+      ...(t.extraExternal || []),
+    ],
+    banner: {
+      js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
+    },
+  });
+  console.log('bundled', t.out);
+}
+
+// Copy the 7 .cjs files from packages/content beside the srv-qa content bundle.
+for (const cjsFile of CONTENT_CJS) {
+  const src = path.join(contentPkgDir, cjsFile);
+  const dst = path.join(outDirQa, cjsFile);
+  fs.copyFileSync(src, dst);
+  console.log('copied', dst);
+}
+
 // srv-mcp/lib/_shared/ — core + mcp only (7 MCP tools don't need content/kg/channels).
 const mcpTargets = [
   {

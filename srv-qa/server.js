@@ -3,8 +3,8 @@ import cds from '@sap/cds';
 import express from 'express';
 import { timingSafeEqual } from 'node:crypto';
 
-import { createContentHandlers } from '../srv/lib/content-store.js';
-import { resolveSecret } from '../srv/lib/secret-resolver.js';
+import { createContentHandlers } from './lib/content-store.js';
+import { resolveSecret } from './lib/secret-resolver.js';
 import { requireXsuaaScope } from './xsuaa-scope-middleware.js';
 import { createSemaphore } from './preview-semaphore.js';
 import { renderPreview, errorHtml } from './preview-renderer.js';
