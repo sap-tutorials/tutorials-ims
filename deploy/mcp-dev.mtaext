@@ -1,0 +1,20 @@
+_schema-version: 3.3.0
+# DEV extension for the MCP-auth microservice MTA (mta-mcp.yaml).
+#
+# Destinations are subaccount-level and DEV+PROD share one subaccount, so the
+# DEV write-forward destination has a distinct name from PROD. This override
+# points srv-mcp's MainDeveloperService remote binding at the DEV destination
+# (tutorials-main-srv-api-dev), which Tom created in the BTP cockpit:
+#   URL:               https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/api
+#   Authentication:    OAuth2ClientCredentials
+#   Client ID/Secret:  from `cf create-service-key tutorials-xsuaa mcp-cc-key`
+#   Token Service URL: https://tutorial-system.authentication.eu10.hana.ondemand.com/oauth/token
+#
+# Deploy DEV:
+#   mbt build -e mta-mcp.yaml … && cf deploy mta_archives/*.mtar -e deploy/mcp-dev.mtaext -f
+# (deploy from a FRESH origin/DEV; cf target -s dev FIRST — never the feature branch.)
+ID: tutorials-mcp-dev
+extends: tutorials-mcp
+
+parameters:
+  dest-main-srv: tutorials-main-srv-api-dev

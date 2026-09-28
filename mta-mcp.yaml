@@ -6,6 +6,15 @@ _schema-version: 3.3.0
 ID: tutorials-mcp
 version: 1.0.0
 
+# Destinations are subaccount-level, so DEV and PROD (sharing one subaccount)
+# need DISTINCT destination names. `dest-main-srv` defaults to the PROD name;
+# a per-env mtaext (e.g. mta-mcp-dev.mtaext) overrides it to the DEV name
+# (tutorials-main-srv-api-dev). CAP reads it via the
+# cds_requires_MainDeveloperService_credentials_destination env override below,
+# which supersedes the [production] destination baked into srv-mcp/package.json.
+parameters:
+  dest-main-srv: tutorials-main-srv-api
+
 build-parameters:
   before-all:
     - builder: custom
@@ -31,6 +40,10 @@ modules:
     properties:
       NODE_ENV: production
       EXPOSE_CAP_UI: false
+      # CAP env override for the remote-service destination NAME (subaccount-level,
+      # so DEV/PROD differ). Supersedes the [production] destination in
+      # srv-mcp/package.json. Default = PROD name; DEV set via mta-mcp-dev.mtaext.
+      cds_requires_MainDeveloperService_credentials_destination: ${dest-main-srv}
     provides:
       - name: srv-mcp-api
         properties:
