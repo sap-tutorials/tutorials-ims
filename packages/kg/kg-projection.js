@@ -1308,7 +1308,7 @@ async function loadFixtures(db) {
   }));
 
   // Co-completions - top-10 per tutorial, from analytics.
-  const coCompletionsMod = await import('./co-completion.js');
+  const coCompletionsMod = await import('@tutorials/core/co-completion.js');
   const coCompletions = await coCompletionsMod.computeCoCompletions({ topN: 10 });
 
   // Phase 4.1 (#447) — Learning Journeys + cover/prereq link rows. The
