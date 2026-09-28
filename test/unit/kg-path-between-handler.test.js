@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('../../srv/lib/kg-sparql-client.js', () => ({
+vi.mock('@tutorials/kg/kg-sparql-client.js', () => ({
   kgQuery: vi.fn(),
   kgAdminRunSparql: vi.fn(),
   SparqlTimeoutError: class SparqlTimeoutError extends Error {
@@ -30,18 +30,18 @@ vi.mock('../../srv/lib/kg-sparql-client.js', () => ({
   },
 }))
 
-vi.mock('../../srv/lib/kg/concepts-for-user.js', () => ({
+vi.mock('@tutorials/kg/concepts-for-user.js', () => ({
   getConceptsForUser: vi.fn(async () => ({ learned: [], partial: [], truncatedAt500: false })),
 }))
 
-vi.mock('../../srv/lib/kg-path-v2-client.js', () => ({
+vi.mock('@tutorials/kg/kg-path-v2-client.js', () => ({
   kgPathV2: vi.fn(),
 }))
 
 const { kgQuery, SparqlTimeoutError, SparqlSyntaxError } =
-  await import('../../srv/lib/kg-sparql-client.js')
-const { getConceptsForUser } = await import('../../srv/lib/kg/concepts-for-user.js')
-const { kgPathV2 } = await import('../../srv/lib/kg-path-v2-client.js')
+  await import('@tutorials/kg/kg-sparql-client.js')
+const { getConceptsForUser } = await import('@tutorials/kg/concepts-for-user.js')
+const { kgPathV2 } = await import('@tutorials/kg/kg-path-v2-client.js')
 const { findLearningPathHandler, FIND_LEARNING_PATH_TOOL } =
   await import('../../srv/lib/kg/joule-tool-find-path.js')
 // KG_PATH_V2_ENABLED migrated env → DB (ImsConfig key flag.kg.pathV2, #2060):
@@ -493,7 +493,7 @@ describe('findLearningPathHandler — telemetry', () => {
   })
 
   it('emits path_returned with error:"timeout" on SparqlTimeoutError', async () => {
-    const { SparqlTimeoutError: TimeoutErr } = await import('../../srv/lib/kg-sparql-client.js')
+    const { SparqlTimeoutError: TimeoutErr } = await import('@tutorials/kg/kg-sparql-client.js')
     kgQuery.mockRejectedValue(new TimeoutErr('timed out'))
 
     const tel = makeTelemetry()

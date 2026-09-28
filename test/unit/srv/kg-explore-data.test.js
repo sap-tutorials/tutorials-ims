@@ -39,7 +39,7 @@ describe('buildExplorePayload', () => {
   });
 
   it('converts SPARQL bindings into {nodes, edges, generatedAt}', async () => {
-    vi.doMock('../../../srv/lib/kg-sparql-client.js', () => ({
+    vi.doMock('@tutorials/kg/kg-sparql-client.js', () => ({
       kgQuery: vi.fn().mockResolvedValue({
         response: sparqlResponse([
           row({
@@ -85,7 +85,7 @@ describe('buildExplorePayload', () => {
   });
 
   it('deduplicates nodes that appear in multiple edges', async () => {
-    vi.doMock('../../../srv/lib/kg-sparql-client.js', () => ({
+    vi.doMock('@tutorials/kg/kg-sparql-client.js', () => ({
       kgQuery: vi.fn().mockResolvedValue({
         response: sparqlResponse([
           row({
@@ -114,7 +114,7 @@ describe('buildExplorePayload', () => {
   });
 
   it('produces stable node IDs from (type, slug)', async () => {
-    vi.doMock('../../../srv/lib/kg-sparql-client.js', () => ({
+    vi.doMock('@tutorials/kg/kg-sparql-client.js', () => ({
       kgQuery: vi.fn().mockResolvedValue({
         response: sparqlResponse([
           row({
@@ -134,7 +134,7 @@ describe('buildExplorePayload', () => {
   });
 
   it('returns an empty graph (zero nodes, zero edges) when SPARQL has no bindings', async () => {
-    vi.doMock('../../../srv/lib/kg-sparql-client.js', () => ({
+    vi.doMock('@tutorials/kg/kg-sparql-client.js', () => ({
       kgQuery: vi.fn().mockResolvedValue({
         response: sparqlResponse([]),
       }),
@@ -148,7 +148,7 @@ describe('buildExplorePayload', () => {
   });
 
   it('short-names predicate IRIs by stripping the kg: prefix', async () => {
-    vi.doMock('../../../srv/lib/kg-sparql-client.js', () => ({
+    vi.doMock('@tutorials/kg/kg-sparql-client.js', () => ({
       kgQuery: vi.fn().mockResolvedValue({
         response: sparqlResponse([
           row({
@@ -166,7 +166,7 @@ describe('buildExplorePayload', () => {
   });
 
   it('counts dropped bindings when SPARQL returns unrecognized IRIs', async () => {
-    vi.doMock('../../../srv/lib/kg-sparql-client.js', () => ({
+    vi.doMock('@tutorials/kg/kg-sparql-client.js', () => ({
       kgQuery: vi.fn().mockResolvedValue({
         response: sparqlResponse([
           // Valid binding — kept.
@@ -198,7 +198,7 @@ describe('buildExplorePayload', () => {
   });
 
   it('reports zero dropped bindings when every row parses cleanly', async () => {
-    vi.doMock('../../../srv/lib/kg-sparql-client.js', () => ({
+    vi.doMock('@tutorials/kg/kg-sparql-client.js', () => ({
       kgQuery: vi.fn().mockResolvedValue({
         response: sparqlResponse([
           row({
@@ -218,7 +218,7 @@ describe('buildExplorePayload', () => {
   // --- rank stamping (#2517) ---
 
   it('omits rank on every node when no rankMaps supplied', async () => {
-    vi.doMock('../../../srv/lib/kg-sparql-client.js', () => ({
+    vi.doMock('@tutorials/kg/kg-sparql-client.js', () => ({
       kgQuery: vi.fn().mockResolvedValue({
         response: sparqlResponse([
           row({ s: `${KG}tutorial/a`, p: `${KG}teaches`, o: `${KG}concept/b`, sName: 'A', oName: 'B' }),
@@ -234,7 +234,7 @@ describe('buildExplorePayload', () => {
   });
 
   it('stamps max-normalized rank on tutorial and concept nodes when rankMaps supplied', async () => {
-    vi.doMock('../../../srv/lib/kg-sparql-client.js', () => ({
+    vi.doMock('@tutorials/kg/kg-sparql-client.js', () => ({
       kgQuery: vi.fn().mockResolvedValue({
         response: sparqlResponse([
           row({ s: `${KG}tutorial/a`, p: `${KG}teaches`, o: `${KG}concept/b`, sName: 'A', oName: 'B' }),
@@ -257,7 +257,7 @@ describe('buildExplorePayload', () => {
   });
 
   it('omits rank when rankMaps has empty maps', async () => {
-    vi.doMock('../../../srv/lib/kg-sparql-client.js', () => ({
+    vi.doMock('@tutorials/kg/kg-sparql-client.js', () => ({
       kgQuery: vi.fn().mockResolvedValue({
         response: sparqlResponse([
           row({ s: `${KG}tutorial/a`, p: `${KG}teaches`, o: `${KG}concept/b`, sName: 'A', oName: 'B' }),
@@ -273,7 +273,7 @@ describe('buildExplorePayload', () => {
   });
 
   it('omits rank for a node whose slug is absent from its map', async () => {
-    vi.doMock('../../../srv/lib/kg-sparql-client.js', () => ({
+    vi.doMock('@tutorials/kg/kg-sparql-client.js', () => ({
       kgQuery: vi.fn().mockResolvedValue({
         response: sparqlResponse([
           row({ s: `${KG}tutorial/a`, p: `${KG}teaches`, o: `${KG}concept/b`, sName: 'A', oName: 'B' }),
@@ -291,7 +291,7 @@ describe('buildExplorePayload', () => {
   });
 
   it('never stamps rank on non-tutorial/non-concept nodes even when rankMaps supplied', async () => {
-    vi.doMock('../../../srv/lib/kg-sparql-client.js', () => ({
+    vi.doMock('@tutorials/kg/kg-sparql-client.js', () => ({
       kgQuery: vi.fn().mockResolvedValue({
         response: sparqlResponse([
           // tutorial → mission edge; mission has no rank map

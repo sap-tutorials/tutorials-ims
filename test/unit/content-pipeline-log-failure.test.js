@@ -17,13 +17,13 @@ import cds from '@sap/cds';
 // #1718: the handler now also raises a RebuildPipelineFailed ANS alert. Mock
 // the fail-open alerting helper so we can assert the raise without a real ANS
 // binding (the real raise is DB-gated OFF in tests anyway → it would no-op).
-vi.mock('../../srv/lib/alerting.js', () => ({
+vi.mock('@tutorials/core/alerting.js', () => ({
   raise: vi.fn().mockResolvedValue(undefined),
   raiseTest: vi.fn().mockResolvedValue({ outcome: 'disabled' }),
   _resetForTest: vi.fn(),
 }));
 
-import * as alerting from '../../srv/lib/alerting.js';
+import * as alerting from '@tutorials/core/alerting.js';
 import { createContentHandlers } from '../../srv/lib/content-store.js';
 
 const NS = 'com.sap.developers.ims';

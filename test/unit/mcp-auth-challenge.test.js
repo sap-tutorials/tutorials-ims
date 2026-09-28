@@ -28,7 +28,7 @@ describe('mcp-auth-challenge', () => {
     expect(nexted).toBe(false);
     expect(res.statusCode).toBe(401);
     expect(res.headers['WWW-Authenticate']).toBe(
-      'Bearer resource_metadata="https://developers.sap.com/.well-known/oauth-protected-resource", scope="tutorials!t676072.Tutorial.MCP"');
+      'Bearer resource_metadata="https://developers.sap.com/.well-known/oauth-protected-resource", scope="tutorials!t676072.Everyone"'); // T14: Tutorial.MCP → Everyone
   });
 
   it('passes through when an Authorization bearer is present', () => {

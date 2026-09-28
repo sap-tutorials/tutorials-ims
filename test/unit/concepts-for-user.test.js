@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('../../srv/lib/kg-sparql-client.js', () => ({
+vi.mock('@tutorials/kg/kg-sparql-client.js', () => ({
   // KG_ADMIN_RUNSPARQL emits SPARQL-results+JSON (Accept:
   // application/sparql-results+json), not XML (#1129 — matching the real proc
   // output; the prior XML fixture masked a parser bug in concepts-for-user.js).

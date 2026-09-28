@@ -19,7 +19,7 @@ vi.mock('@sap/cds', () => {
   return { default: { log, env: {} } };
 });
 
-vi.mock('../chat-settings-resolver.js', () => ({
+vi.mock('@tutorials/core/chat-settings-resolver.js', () => ({
   resolveChatLlmSettings: vi.fn(() => Promise.resolve({
     modelName: 'anthropic--claude-4.6-sonnet',
     deploymentId: 'test-deployment-id',

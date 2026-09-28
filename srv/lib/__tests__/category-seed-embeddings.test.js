@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Mock the embedding-client BEFORE the cache module imports it.
-vi.mock('../embedding-client.js', () => ({
+vi.mock('@tutorials/core/embedding-client.js', () => ({
   embed: vi.fn(async (inputs) =>
     inputs.map((_, i) => new Float32Array([0.1 * (i + 1), 0.2, 0.3]))
   ),
@@ -35,7 +35,7 @@ beforeEach(() => {
 });
 
 import { getSeedEmbeddings, invalidateSeedEmbedding, embedAdHoc, _resetCache } from '../category-seed-embeddings.js';
-import { embed } from '../embedding-client.js';
+import { embed } from '@tutorials/core/embedding-client.js';
 
 describe('category-seed-embeddings', () => {
   beforeEach(() => {

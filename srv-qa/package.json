@@ -15,6 +15,8 @@
     "@sap/cds": "^10.1.0",
     "@sap/xsenv": "^6.2.1",
     "@sap/xssec": "^4.13.1",
+    "@tutorials/content": "*",
+    "@tutorials/core": "*",
     "cheerio": "^1.2.0",
     "express": "^5",
     "hugo-extended": "0.147.8",

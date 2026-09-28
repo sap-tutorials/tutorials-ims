@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // before any const declarations. vi.hoisted() lets us declare classifySpy in
 // a way that is also hoisted, keeping the reference valid inside the factory.
 const classifySpy = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
-vi.mock('../../srv/lib/category-classifier.js', () => ({
+vi.mock('@tutorials/content/category-classifier.js', () => ({
   classifyAndPersist: classifySpy,
 }))
 

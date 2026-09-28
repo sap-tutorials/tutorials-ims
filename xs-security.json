@@ -50,6 +50,10 @@
     {
       "name": "$XSAPPNAME.Tutorial.MCP",
       "description": "MCP protocol access — authenticated tutorial reads/writes"
+    },
+    {
+      "name": "$XSAPPNAME.InternalWrite",
+      "description": "Internal service-to-service write on behalf of an authenticated MCP developer (issue #1105 C1)"
     }
   ],
   "role-templates": [
@@ -217,7 +221,8 @@
     }
   ],
   "authorities": [
-    "$XSAPPNAME.Everyone"
+    "$XSAPPNAME.Everyone",
+    "$XSAPPNAME.InternalWrite"
   ],
   "oauth2-configuration": {
     "redirect-uris": [

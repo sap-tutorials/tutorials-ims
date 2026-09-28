@@ -11,6 +11,7 @@
       { "for": "nodejs", "src": "srv", "dest": "srv", "options": { "model": ["srv", "db", "db/hana", "app", "@cap-js/data-inspector", "@cap-js/ai/srv/AICoreService", "cds-caching/db/cache-store", "cds-caching/db/statistics", "@cap-js/attachments/srv/malware-scanner/malwareScanner-mocked"] } },
       { "for": "hana", "src": "db-qa", "dest": "db-qa", "options": { "model": ["db-qa"] } },
       { "for": "nodejs", "src": "srv-qa", "dest": "srv-qa", "options": { "model": ["srv-qa", "db-qa"] } },
+      { "for": "nodejs", "src": "srv-mcp", "dest": "srv-mcp", "options": { "model": ["srv-mcp", "db"] } },
       { "for": "cds-caching" },
       { "for": "hana", "src": "db", "dest": "db", "options": { "model": ["cds-caching/db/statistics"] } }
     ]

@@ -91,60 +91,29 @@ export default class DeveloperService extends cds.ApplicationService {
       }
     });
 
-    // --- Frontend slug-based endpoints ---
+    // --- Shared write logic (#1105 C1) ---
+    //
+    // doCompleteStep / doResetTutorialProgress accept an EXPLICIT sapId so both
+    // the browser path (resolves from req.user JWT) and the internal srv-mcp
+    // path (actingSapId forwarded as a trusted param) share the same body.
+    //
+    // tokenSource is passed through to the TutorialProgressReset audit event so
+    // admins can distinguish browser-driven ('jwt'/'pat') from MCP-driven ('mcp')
+    // resets. null = browser/basic-auth with no tokenSource.
 
-    this.on('getProgress', async (req) => {
-      const slug = String(req.data.slug || '').toLowerCase();
-      const user = req.user;
-
-      // slug-canonical: pre-canonicalized
-      const tutorial = await SELECT.one.from(dbTutorials).where({ slug });
-      if (!tutorial) return req.reject(404, `Tutorial not found: ${slug}`);
-
-      const steps = await SELECT.from(dbSteps).where({ tutorial_ID: tutorial.ID });
-
-      // Find user's task records for this tutorial's steps. Issue #343:
-      // lookup by sapId (the JWT user_uuid claim), not uuid (= email).
-      const sapId = resolveUserSapId(user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
-      if (!dbUser) return { completedSteps: [], points: 0, badges: [] };
-
-      // Scope step records to the user's current (non-SUPERSEDED) attempt so a
-      // fresh attempt starts empty even though prior-attempt SUPERSEDED step
-      // rows still exist in the DB. See issue #600 Task 6.
-      const currentAttempt = await this._getCurrentTutorialAttempt(dbUser, tutorial);
-      const stepRecords = await SELECT.from(dbTaskRecords).where({
-        user_ID: dbUser.ID,
-        taskType: 'STEP',
-        status: 'COMPLETED',
-        attemptNumber: currentAttempt,
-      });
-
-      // Filter to only steps belonging to this tutorial
-      const stepLegacyIds = steps.map(s => s.legacyId);
-      const completedSteps = stepRecords
-        .filter(r => stepLegacyIds.includes(r.taskLegacyId))
-        .map(r => {
-          const step = steps.find(s => s.legacyId === r.taskLegacyId);
-          return step?.stepOrder;
-        })
-        .filter(Boolean)
-        .sort((a, b) => a - b);
-
-      // Points = 10 per completed step (simplified scoring)
-      const points = completedSteps.length * 10;
-
-      return { completedSteps, points, badges: [] };
-    });
-
-    this.on('completeStep', async (req) => {
-      const slug = String(req.data.slug || '').toLowerCase();
-      const { stepNumber } = req.data;
-      const user = req.user;
+    /**
+     * @param {string} sapId - Developer's SAP ID (user_uuid from JWT or actingSapId from MCP).
+     * @param {string} slug  - Tutorial slug (will be lowercased internally).
+     * @param {number} stepNumber - Step order (1-based).
+     * @param {object} req   - CAP request (for req.reject).
+     * @param {string|null} tokenSource - 'mcp' | 'jwt' | 'pat' | null.
+     */
+    const doCompleteStep = async (sapId, slug, stepNumber, req, tokenSource) => {
+      const slugLower = String(slug || '').toLowerCase();
 
       // slug-canonical: pre-canonicalized
-      const tutorial = await SELECT.one.from(dbTutorials).where({ slug });
-      if (!tutorial) return req.reject(404, `Tutorial not found: ${slug}`);
+      const tutorial = await SELECT.one.from(dbTutorials).where({ slug: slugLower });
+      if (!tutorial) return req.reject(404, `Tutorial not found: ${slugLower}`);
 
       let step = await SELECT.one.from(dbSteps).where({
         tutorial_ID: tutorial.ID, stepOrder: stepNumber
@@ -170,13 +139,12 @@ export default class DeveloperService extends cds.ApplicationService {
         step.legacyId = legacyId;
       }
 
-      // Get or create user. Issue #343: lookup + auto-provision keyed on
-      // sapId (the JWT user_uuid claim) so migrated IMS users (Users.sapId
-      // populated by migrator) are found by their existing row.
-      const sapId = resolveUserSapId(user);
       if (!sapId) return req.reject(401, 'Unauthenticated');
       let dbUser = await SELECT.one.from(dbUsers).where({ sapId });
       if (!dbUser) {
+        // Get or create user. For the browser path req.user carries attr (email etc.);
+        // for the MCP *For path we have only the sapId — create a minimal row.
+        const user = req.user;
         const newUser = {
           // Explicit UUID key: these writes go straight to cds.db (bare
           // INSERT.into(dbUsers) on the db-model entity), which does NOT run
@@ -190,9 +158,9 @@ export default class DeveloperService extends cds.ApplicationService {
           uuid: cds.utils.uuid(),
           sapId,
           legacyId: await getNextLegacyId('Users', db),
-          email: user.attr?.email || '',
-          firstName: user.attr?.given_name || '',
-          lastName: user.attr?.family_name || ''
+          email: user?.attr?.email || '',
+          firstName: user?.attr?.given_name || '',
+          lastName: user?.attr?.family_name || ''
         };
         await INSERT.into(dbUsers).entries(newUser);
         dbUser = await SELECT.one.from(dbUsers).where({ sapId });
@@ -241,14 +209,15 @@ export default class DeveloperService extends cds.ApplicationService {
 
       // Return updated progress
       return this._getProgressForTutorial(dbUser, tutorial, db);
-    });
+    };
 
-    this.on('resetTutorialProgress', async (req) => {
-      const { slug } = req.data;
-      const user = req.user || cds.context?.user;
-      if (!user) return req.reject(401, 'Unauthenticated');
-
-      const sapId = resolveUserSapId(user);
+    /**
+     * @param {string} sapId - Developer's SAP ID (user_uuid from JWT or actingSapId from MCP).
+     * @param {string} slug  - Tutorial slug.
+     * @param {object} req   - CAP request (for req.reject).
+     * @param {string|null} tokenSource - 'mcp' | 'jwt' | 'pat' | null.
+     */
+    const doResetTutorialProgress = async (sapId, slug, req, tokenSource) => {
       if (!sapId) return req.reject(401, 'Unauthenticated');
 
       // Rate-limit BEFORE any DB work — protects against griefing and
@@ -329,7 +298,7 @@ export default class DeveloperService extends cds.ApplicationService {
         attemptNumber: maxAttempt + 1,
         supersededRecordCount: liveRows.length,
         previousAttemptCompletedAt,
-        tokenSource: req.user?.tokenSource ?? null,
+        tokenSource,
       });
 
       // A reset supersedes the TUTORIAL record → recompute parent group/mission
@@ -345,6 +314,83 @@ export default class DeveloperService extends cds.ApplicationService {
         previousAttemptCompletedAt,
         supersededRecordCount: liveRows.length,
       };
+    };
+
+    // --- Frontend slug-based endpoints ---
+
+    this.on('getProgress', async (req) => {
+      const slug = String(req.data.slug || '').toLowerCase();
+      const user = req.user;
+
+      // slug-canonical: pre-canonicalized
+      const tutorial = await SELECT.one.from(dbTutorials).where({ slug });
+      if (!tutorial) return req.reject(404, `Tutorial not found: ${slug}`);
+
+      const steps = await SELECT.from(dbSteps).where({ tutorial_ID: tutorial.ID });
+
+      // Find user's task records for this tutorial's steps. Issue #343:
+      // lookup by sapId (the JWT user_uuid claim), not uuid (= email).
+      const sapId = resolveUserSapId(user);
+      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
+      if (!dbUser) return { completedSteps: [], points: 0, badges: [] };
+
+      // Scope step records to the user's current (non-SUPERSEDED) attempt so a
+      // fresh attempt starts empty even though prior-attempt SUPERSEDED step
+      // rows still exist in the DB. See issue #600 Task 6.
+      const currentAttempt = await this._getCurrentTutorialAttempt(dbUser, tutorial);
+      const stepRecords = await SELECT.from(dbTaskRecords).where({
+        user_ID: dbUser.ID,
+        taskType: 'STEP',
+        status: 'COMPLETED',
+        attemptNumber: currentAttempt,
+      });
+
+      // Filter to only steps belonging to this tutorial
+      const stepLegacyIds = steps.map(s => s.legacyId);
+      const completedSteps = stepRecords
+        .filter(r => stepLegacyIds.includes(r.taskLegacyId))
+        .map(r => {
+          const step = steps.find(s => s.legacyId === r.taskLegacyId);
+          return step?.stepOrder;
+        })
+        .filter(Boolean)
+        .sort((a, b) => a - b);
+
+      // Points = 10 per completed step (simplified scoring)
+      const points = completedSteps.length * 10;
+
+      return { completedSteps, points, badges: [] };
+    });
+
+    this.on('completeStep', async (req) => {
+      const sapId = resolveUserSapId(req.user);
+      return doCompleteStep(sapId, req.data.slug, req.data.stepNumber, req, req.user?.tokenSource ?? null);
+    });
+
+    // #1105 C1 — internal write path for srv-mcp. actingSapId is the developer's
+    // user_uuid resolved by srv-mcp from the MCP token and forwarded as a TRUSTED
+    // parameter. The InternalWrite scope gate (in the .cds) prevents browser users
+    // from reaching this action (no IDOR).
+    this.on('completeStepFor', async (req) => {
+      const { actingSapId, slug, stepNumber } = req.data;
+      if (!actingSapId || actingSapId === 'anonymous') {
+        return req.reject(400, 'actingSapId is required — must be a real developer SAP ID');
+      }
+      return doCompleteStep(actingSapId, slug, stepNumber, req, 'mcp');
+    });
+
+    this.on('resetTutorialProgress', async (req) => {
+      const sapId = resolveUserSapId(req.user || cds.context?.user);
+      return doResetTutorialProgress(sapId, req.data.slug, req, req.user?.tokenSource ?? null);
+    });
+
+    // #1105 C1 — internal write path for srv-mcp. See completeStepFor comment.
+    this.on('resetTutorialProgressFor', async (req) => {
+      const { actingSapId, slug } = req.data;
+      if (!actingSapId || actingSapId === 'anonymous') {
+        return req.reject(400, 'actingSapId is required — must be a real developer SAP ID');
+      }
+      return doResetTutorialProgress(actingSapId, slug, req, 'mcp');
     });
 
     // --- Legacy IMS-compatible endpoints ---

@@ -5,7 +5,7 @@ import cds from '@sap/cds'
 // Gating is DB-backed via the alert-settings resolver (ChatSettings.alertsEnabled),
 // NOT an env var. Mock the resolver to toggle enabled/disabled in tests.
 const enabledState = { value: true }
-vi.mock('../../srv/lib/runtime-config/alert-settings.js', () => ({
+vi.mock('@tutorials/core/runtime-config/alert-settings.js', () => ({
   isAlertingEnabled: () => Promise.resolve(enabledState.value),
   _resetForTest: () => {}
 }))

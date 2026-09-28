@@ -6,7 +6,7 @@ vi.mock('@sap-ai-sdk/orchestration', () => ({
     this.chatCompletion = chatCompletion;
   }),
 }));
-vi.mock('../../../srv/lib/chat-settings-resolver.js', () => ({
+vi.mock('@tutorials/core/chat-settings-resolver.js', () => ({
   resolveChatLlmSettings: vi.fn().mockResolvedValue({ modelName: 'm1', deploymentId: 'd1' }),
 }));
 

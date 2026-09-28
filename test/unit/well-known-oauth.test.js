@@ -38,6 +38,8 @@ describe('.well-known OAuth discovery — dynamic runtime middleware (#1105)', (
     delete process.env.VCAP_SERVICES;
     delete process.env.XSUAA_TENANT;
     delete process.env.XSUAA_REGION;
+    delete process.env.XSUAA_MCP_URL;
+    delete process.env.XSUAA_MCP_XSAPPNAME;
   });
   afterEach(() => {
     if (SAVED_VCAP === undefined) delete process.env.VCAP_SERVICES; else process.env.VCAP_SERVICES = SAVED_VCAP;
@@ -73,12 +75,12 @@ describe('.well-known OAuth discovery — dynamic runtime middleware (#1105)', (
     // scopes_supported verbatim, so the discovery docs must advertise the
     // qualified form. Live-verified on Dev 2026-07-13 (#1105 criterion 8).
     setXsuaaBinding('https://t.authentication.eu10.hana.ondemand.com', 'tutorials!t676072');
-    expect(resolveScope()).toBe('tutorials!t676072.Tutorial.MCP');
+    expect(resolveScope()).toBe('tutorials!t676072.Everyone');
   });
 
   it('falls back to the short scope name when no xsappname is bound', () => {
     delete process.env.VCAP_SERVICES;
-    expect(resolveScope()).toBe('Tutorial.MCP');
+    expect(resolveScope()).toBe('Everyone');
   });
 
   it('authorization-server metadata has all RFC 8414 required fields', () => {
@@ -123,7 +125,7 @@ describe('.well-known OAuth discovery — dynamic runtime middleware (#1105)', (
       () => {},
     );
     const parsed = JSON.parse(res.body);
-    expect(parsed.scopes_supported).toContain('tutorials!t676072.Tutorial.MCP');
+    expect(parsed.scopes_supported).toContain('tutorials!t676072.Everyone');
   });
 
   it('serves the authorization-server doc at its path with 200 + JSON', () => {

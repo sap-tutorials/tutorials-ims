@@ -70,12 +70,17 @@ describe('approuter /mcp/* route (#912)', () => {
     expect(route.csrfProtection).toBe(false);
   });
 
-  it('mounts /mcp-auth/* xsuaa with Tutorial.MCP scope gate', () => {
+  // T12 (#1105): /mcp-auth/* was flipped to authenticationType: 'none' —
+  // PKCE / token-exchange is handled inside srv-mcp itself; the approuter
+  // no longer gates the route with XSUAA, and the Tutorial.MCP scope guard
+  // was removed so unauthenticated PKCE challenge requests can reach the
+  // service. The scope is checked by srv-mcp after the token exchange.
+  it('mounts /mcp-auth/* as anonymous (no XSUAA gate, no scope)', () => {
     const route = xsapp.routes.find((r) => r.source === '^/mcp-auth/(.*)$');
     expect(route).toBeDefined();
-    expect(route.authenticationType).toBe('xsuaa');
+    expect(route.authenticationType).toBe('none');
     expect(route.csrfProtection).toBe(false);
-    expect(route.scope).toBe('$XSAPPNAME.Tutorial.MCP');
+    expect(route.scope).toBeUndefined();
   });
 
   it('orders /mcp-auth/* AFTER /mcp-pat/* AFTER /mcp/*', () => {

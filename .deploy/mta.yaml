@@ -25,6 +25,13 @@ parameters:
   # rather than cross-env-leaking. Parity is enforced by
   # scripts/check-gameboard-url-mtaext.ts (deploy gate).
   gameboard-url: UNSET-see-env-mtaext
+  # URL of the separately-deployed tutorials-mcp MTA's tutorials-srv-mcp app,
+  # consumed by the approuter's srv-mcp-api destination (serves /mcp-auth/* with
+  # authenticationType: none — the public PKCE token is validated by CAP, not
+  # forwarded from the approuter). Base default is INVALID ON PURPOSE: same
+  # config-cross-env-leak guard as gameboard-url. Each env MUST set its own value
+  # in deploy/<env>.mtaext.
+  srv-mcp-url: UNSET-see-env-mtaext
 
 # Full MTA for deploying: db-deployer + CAP srv + approuter (with admin UI).
 #
@@ -188,8 +195,6 @@ modules:
         - cp -r ../../hugo/assets  ./hugo/assets
         - cp -r ../../hugo/data    ./hugo/data
         - cp -r ../../hugo/i18n    ./hugo/i18n
-        - bash -c "mkdir -p srv/jobs && mkdir -p srv/handlers && mkdir -p srv/lib/branch && mkdir -p srv/lib/runtime-config && mkdir -p srv/lib/prompts && mkdir -p srv/lib/kg && mkdir -p srv/mcp/prompts && cp ../../srv/lib/branch/condition.js ../../srv/lib/branch/engine.js ../../srv/lib/branch/ranker.js ../../srv/lib/branch/user-state.js ../../srv/lib/branch/loaders.js ../../srv/lib/branch/mission-detail.js ../../srv/lib/branch/slug-key.js ../../srv/lib/branch/decide.js ../../srv/lib/branch/joule-tool.js ../../srv/lib/branch/branch-telemetry.js ../../srv/lib/branch/group-by-alt.js ../../srv/lib/branch/profile-fields.js ../../srv/lib/branch/profile-override.js srv/lib/branch/ && cp ../../srv/lib/runtime-config/kg-settings.js ../../srv/lib/runtime-config/ui-events-settings.js ../../srv/lib/runtime-config/search-settings.js ../../srv/lib/runtime-config/navigator-settings.js ../../srv/lib/runtime-config/display-settings.js ../../srv/lib/runtime-config/tenant-settings.js ../../srv/lib/runtime-config/alert-settings.js ../../srv/lib/runtime-config/load-shed-settings.js srv/lib/runtime-config/ && cp ../../srv/lib/kg/on-demand-enqueue.js ../../srv/lib/kg/on-demand-cosine-rank.js srv/lib/kg/ && cp ../../srv/lib/credstore.js ../../srv/lib/secret-resolver.js ../../srv/lib/content-store.js ../../srv/lib/tutorial-markdown.js ../../srv/lib/content-delta-flags.js ../../srv/lib/content-cache-coherence.js ../../srv/lib/edge-cache-headers.js ../../srv/lib/content-publish-session.js ../../srv/lib/resolve-tutorial-author.js ../../srv/lib/_tutorials-table.js ../../srv/lib/catalog-renderer.js ../../srv/lib/markdown.js ../../srv/lib/catalog-data.js ../../srv/lib/catalog-mission-hierarchy.js ../../srv/lib/chrome-shell.js ../../srv/lib/pipeline-log.js ../../srv/lib/legacy-id.js ../../srv/lib/embedding-pipeline.js ../../srv/lib/step-text-extractor.js ../../srv/lib/embedding-client.js ../../srv/lib/step-vectors.js ../../srv/lib/user-progress.js ../../srv/lib/co-completion.js ../../srv/lib/tutorial-centroid.js ../../srv/lib/tag-label-map.js ../../srv/lib/code-check-tool.js ../../srv/lib/code-check-prompt.js ../../srv/lib/code-check-handler.js ../../srv/lib/code-check-llm.js ../../srv/lib/code-check-step-loader.js ../../srv/lib/code-check-spec-publish.js ../../srv/lib/assert-spec-publish.js ../../srv/lib/validate-answer-spec-publish.js ../../srv/lib/category-classifier.js ../../srv/lib/category-classifier-llm.js ../../srv/lib/category-seed-embeddings.js ../../srv/lib/build-catalog-categories.js ../../srv/lib/chat-settings-resolver.js ../../srv/lib/kg-extract.js ../../srv/lib/kg-queries.js ../../srv/lib/kg-projection.js ../../srv/lib/kg-similarity.js ../../srv/lib/kg-cycles.js ../../srv/lib/kg-graph-rebuild.js ../../srv/lib/kg-sparql-client.js ../../srv/lib/kg-merge-pair.js ../../srv/lib/kg-concept-loader.js ../../srv/lib/kg-neighborhood-cache.js ../../srv/lib/kg-neighborhood-merge.js ../../srv/lib/kg-neighborhood-full-helpers.js ../../srv/lib/kg-other-resources-loader.js ../../srv/lib/kg-stamp-meta-text.js ../../srv/lib/kg-tutorial-teaches-map.js ../../srv/lib/kg-resource-type-config.js ../../srv/lib/kg-meta-formatters.js ../../srv/lib/discovery-mission-categories.js ../../srv/lib/external-content-ttl.js ../../srv/lib/recompute-tutorial-progress-bulk-sql.js ../../srv/lib/youtube-fetcher.js ../../srv/lib/homepage-events-merger.js ../../srv/lib/homepage-rss-fetcher.js ../../srv/lib/rss-parse.js ../../srv/lib/community-blogs-fetcher.js ../../srv/lib/community-blog-source-defaults.js ../../srv/lib/community-blogs-classifier.js ../../srv/lib/safe-fetch.js ../../srv/lib/curl-transport.js ../../srv/lib/khoros-transport.js ../../srv/lib/explainer-generator.js ../../srv/lib/_token-cost.js ../../srv/lib/metrics.js ../../srv/lib/alerting.js ../../srv/lib/relevance-classifier.js ../../srv/lib/relevance-seed-embeddings.js ../../srv/lib/relevance-keyword-rules.js ../../srv/lib/canonicalize-link.js ../../srv/lib/detect-language-en.js ../../srv/lib/kg-community-coverage.js ../../srv/lib/page-key-map.js ../../srv/lib/page-fallback.js ../../srv/lib/task-record-submission-id.js ../../srv/lib/image-store.cjs ../../srv/lib/image-ingest.cjs ../../srv/lib/image-source-handler.js ../../srv/lib/img-cdn-fetch.cjs ../../srv/lib/img-cdn-retry.cjs ../../srv/lib/image-warm-utils.js ../../srv/lib/attachment-store.cjs ../../srv/lib/attachment-ingest.cjs ../../srv/lib/attachment-mime.cjs ../../srv/lib/attachment-warm-utils.js ../../srv/lib/attachment-source-handler.js ../../srv/lib/attachment-ingest-handler.js ../../srv/lib/contributors-publish.js ../../srv/lib/validation-rules-publish.js ../../srv/lib/topics-query.js ../../srv/lib/topic-slug.js ../../srv/lib/tag-md-format.js ../../srv/lib/semaphore-tags.js ../../srv/lib/publish-channels.js ../../srv/lib/media-diet-picks.js ../../srv/lib/media-diet-export.js ../../srv/lib/build-channel-detail.js ../../srv/lib/channel-detail-render.js ../../srv/lib/build-channel-atlas.js ../../srv/lib/island-manifest.json ../../srv/lib/provenance-handlers.js ../../srv/lib/provenance-envelope.js ../../srv/lib/provenance-data.js ../../srv/lib/provenance-keys.js ../../srv/lib/provenance-freshness.js ../../srv/lib/fast-purge.js ../../srv/lib/load-shed.js srv/lib/ && mkdir -p srv/lib/channels && cp ../../srv/lib/channels/normalize.cjs srv/lib/channels/ && mkdir -p srv/lib/feature-flags && cp ../../srv/lib/feature-flags/db-flags.js ../../srv/lib/feature-flags/registry.js srv/lib/feature-flags/ && cp ../../srv/handlers/categories-after-hooks.js ../../srv/handlers/completion-path-items-altgroup.js srv/handlers/ && mkdir -p srv && cp ../../srv/content-moderation-service.js srv/ && cp ../../srv/jobs/consolidate-concepts-job.js ../../srv/jobs/extract-concepts-job.js ../../srv/jobs/job-lock.js ../../srv/jobs/secret-expiry-check.js ../../srv/jobs/homepage-link-health.js ../../srv/jobs/kg-ondemand-job.js ../../srv/jobs/community-blogs-fetch-job.js ../../srv/jobs/community-blogs-classify-job.js ../../srv/jobs/fetch-news-job.js srv/jobs/ && cp ../../srv/lib/prompts/explainer-verb.md ../../srv/lib/prompts/explainer-shelf.md ../../srv/lib/prompts/explainer-shelf-entry.md ../../srv/lib/prompts/community-blogs-classifier.md srv/lib/prompts/ && cp ../../srv/mcp/prompts/summarize_mission_for_beginner.md ../../srv/mcp/prompts/generate_lab_exercise.md ../../srv/mcp/prompts/explain_concept.md ../../srv/mcp/prompts/suggest_learning_path.md srv/mcp/prompts/"
-        - bash -c "node -e \"const p=require('./package.json'); p.dependencies=Object.assign(p.dependencies||{},{cheerio:'^1.2.0','@sap-ai-sdk/foundation-models':'^2.10.0'}); require('fs').writeFileSync('./package.json', JSON.stringify(p,null,2));\""
     properties:
       EXPOSE_CAP_UI: false
       NODE_ENV: production
@@ -288,6 +293,14 @@ modules:
       instances: 1                  # Lower bound; Autoscaler manages up to instance_max_count via binding-level config in requires below (#749)
     properties:
       XS_APP_LOG_LEVEL: info
+      # Public MCP XSUAA issuer (non-secret) that approuter/lib/well-known-oauth.js
+      # advertises in the .well-known OAuth discovery docs mcp-remote reads for
+      # PKCE. Supplied as env — NOT a 2nd xsuaa binding (see requires note) — so
+      # the approuter's confidential login binding stays unambiguous. Base default
+      # is an INVALID placeholder ON PURPOSE (same config-cross-env-leak guard as
+      # gameboard-url/srv-mcp-url): each env sets its real value in deploy/<env>.mtaext.
+      XSUAA_MCP_URL: UNSET-see-env-mtaext
+      XSUAA_MCP_XSAPPNAME: tutorials-mcp
       # The approuter framework injects X-Frame-Options: SAMEORIGIN by default
       # (sendXFrameOptions defaults true; its lookup for our config header is
       # case-mismatched — searches lowercase 'x-frame-options' but xs-app.json
@@ -313,8 +326,25 @@ modules:
       - name: gameboard-auth-dest
         properties:
           gameboard-url: ${gameboard-url}
+      # Self-provides for the srv-mcp-api destination. tutorials-srv-mcp is in
+      # the SEPARATELY-deployed tutorials-mcp MTA — ~{...} cannot cross MTAs.
+      # The gameboard-self-provide idiom: the approuter provides and then requires
+      # its own property set so mbt resolves ~{srv-mcp-url} from the top-level
+      # parameter (set per-env in dev.mtaext). NO forwardAuthToken — the flipped
+      # /mcp-auth/* route is authenticationType:none; the public PKCE bearer token
+      # from the client passes through and CAP/XSUAA validates it server-side.
+      - name: srv-mcp-dest
+        properties:
+          srv-mcp-url: ${srv-mcp-url}
     requires:
       - name: tutorials-xsuaa
+      # NOTE: the approuter is deliberately bound to ONLY the confidential
+      # tutorials-xsuaa (its login client). The PUBLIC tutorials-mcp issuer that
+      # .well-known OAuth discovery advertises is supplied as NON-SECRET config
+      # env (XSUAA_MCP_URL + XSUAA_MCP_XSAPPNAME, see properties below) — NOT a
+      # 2nd xsuaa binding. Binding a 2nd xsuaa would make @sap/approuter's own
+      # login handshake pick a binding non-deterministically (no route selector),
+      # risking 500s on every xsuaa-authed route. Keeping one binding avoids that.
       # approuter resolves runtime secrets from the credstore via
       # approuter/lib/credstore-secret.js (same binding the srv uses). The retired
       # /admin/rebuild handler (#1659 C.4) no longer reads from it.
@@ -359,6 +389,17 @@ modules:
           name: gameboard-auth-api
           url: ~{gameboard-url}
           forwardAuthToken: true
+      # srv-mcp-api destination → separately-deployed tutorials-mcp MTA.
+      # References the self-provided srv-mcp-dest property set above (mbt-valid
+      # for a static/external destination with no in-MTA provider). This require
+      # injects srv-mcp-api into the approuter's runtime `destinations` env var.
+      # NO forwardAuthToken — the /mcp-auth/* route is authenticationType:none;
+      # the PKCE bearer from the client passes through and CAP validates it.
+      - name: srv-mcp-dest
+        group: destinations
+        properties:
+          name: srv-mcp-api
+          url: ~{srv-mcp-url}
       # CF Autoscaler binding (#749 phase-1). Policy is inlined here per
       # SAP BTP convention — putting it on the resource block via path: is
       # silently ignored. Range 1..4, CPU 70% / 30% thresholds. Memory metric

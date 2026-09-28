@@ -20,11 +20,11 @@ const kgGraphClearMock = vi.fn();
 const kgGraphInsertMock = vi.fn();
 const projectTriplesMock = vi.fn();
 
-vi.mock('../../srv/lib/kg-sparql-client.js', () => ({
+vi.mock('@tutorials/kg/kg-sparql-client.js', () => ({
   kgGraphClear: (...args) => kgGraphClearMock(...args),
   kgGraphInsert: (...args) => kgGraphInsertMock(...args),
 }));
-vi.mock('../../srv/lib/kg-projection.js', () => ({
+vi.mock('@tutorials/kg/kg-projection.js', () => ({
   projectTriples: (...args) => projectTriplesMock(...args),
 }));
 
@@ -35,7 +35,7 @@ vi.mock('../../srv/lib/kg-projection.js', () => ({
 // throw would escape into graphRebuild(). This test verifies the SPARQL
 // wipe sequence, not cache behavior (that's kg-neighborhood-cache.test.js),
 // so stub the bust to a no-op.
-vi.mock('../../srv/lib/kg-neighborhood-cache.js', () => ({
+vi.mock('@tutorials/kg/kg-neighborhood-cache.js', () => ({
   bustNeighborhoodCache: vi.fn().mockResolvedValue(undefined),
 }));
 

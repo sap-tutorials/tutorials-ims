@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
-vi.mock('../../srv/lib/credstore.js', () => ({
+vi.mock('@tutorials/core/credstore.js', () => ({
   readSecret: vi.fn().mockResolvedValue(null),
 }));
 
@@ -54,12 +54,12 @@ describe('mail-client — all 5 SMTP fields via credstore', () => {
     _resetResolver();
     const nodemailer = await import('nodemailer');
     nodemailer.createTransport.mockClear();
-    const credstore = await import('../../srv/lib/credstore.js');
+    const credstore = await import('@tutorials/core/credstore.js');
     credstore.readSecret.mockReset();
   });
 
   it('reads SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_FROM, SMTP_PASS from credstore', async () => {
-    const credstore = await import('../../srv/lib/credstore.js');
+    const credstore = await import('@tutorials/core/credstore.js');
     const nodemailer = await import('nodemailer');
     credstore.readSecret.mockImplementation(async (alias) => ({
       SMTP_HOST: 'relay.credstore.example.com',
@@ -81,7 +81,7 @@ describe('mail-client — all 5 SMTP fields via credstore', () => {
   });
 
   it('falls through to process.env when credstore returns null for a non-password field', async () => {
-    const credstore = await import('../../srv/lib/credstore.js');
+    const credstore = await import('@tutorials/core/credstore.js');
     const nodemailer = await import('nodemailer');
     credstore.readSecret.mockResolvedValue(null);
     process.env.SMTP_HOST = 'env.example.com';
@@ -101,7 +101,7 @@ describe('mail-client — all 5 SMTP fields via credstore', () => {
   });
 
   it('returns null transport when SMTP_HOST is missing from both credstore and env', async () => {
-    const credstore = await import('../../srv/lib/credstore.js');
+    const credstore = await import('@tutorials/core/credstore.js');
     credstore.readSecret.mockResolvedValue(null);
     // process.env.SMTP_HOST is already deleted in beforeEach
 
@@ -110,7 +110,7 @@ describe('mail-client — all 5 SMTP fields via credstore', () => {
   });
 
   it('coerces non-numeric SMTP_PORT to default 587', async () => {
-    const credstore = await import('../../srv/lib/credstore.js');
+    const credstore = await import('@tutorials/core/credstore.js');
     const nodemailer = await import('nodemailer');
     credstore.readSecret.mockImplementation(async (alias) => ({
       SMTP_HOST: 'relay.example.com',
@@ -145,7 +145,7 @@ describe('mail-client — Tier-0 credstore lookup', () => {
     _resetResolver();
     const nodemailer = await import('nodemailer');
     nodemailer.createTransport.mockClear();
-    const credstore = await import('../../srv/lib/credstore.js');
+    const credstore = await import('@tutorials/core/credstore.js');
     credstore.readSecret.mockReset();
     credstore.readSecret.mockResolvedValue(null);
   });
@@ -155,7 +155,7 @@ describe('mail-client — Tier-0 credstore lookup', () => {
   });
 
   it('uses credstore password when credstore returns a value (credstore wins over env)', async () => {
-    const credstore = await import('../../srv/lib/credstore.js');
+    const credstore = await import('@tutorials/core/credstore.js');
     const nodemailer = await import('nodemailer');
     // Only mock SMTP_PASS from credstore; other aliases fall through to env.
     credstore.readSecret.mockImplementation(async (alias) =>
@@ -174,7 +174,7 @@ describe('mail-client — Tier-0 credstore lookup', () => {
   });
 
   it('falls through to env SMTP_PASS when credstore throws, and logs a WARN', async () => {
-    const credstore = await import('../../srv/lib/credstore.js');
+    const credstore = await import('@tutorials/core/credstore.js');
     const nodemailer = await import('nodemailer');
     credstore.readSecret.mockRejectedValue(new Error('credstore offline'));
     process.env.SMTP_PASS = 'from-env';
@@ -199,7 +199,7 @@ describe('mail-client — Tier-0 credstore lookup', () => {
   });
 
   it('caches the resolved password for 5 minutes (second call does not re-read credstore)', async () => {
-    const credstore = await import('../../srv/lib/credstore.js');
+    const credstore = await import('@tutorials/core/credstore.js');
     credstore.readSecret.mockResolvedValue('cached-value');
 
     await _getTransporterForTests();

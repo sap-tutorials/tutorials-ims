@@ -63,6 +63,26 @@ service DeveloperService {
     supersededRecordCount      : Integer;
   };
 
+  // #1105 C1 — internal service-to-service write path for the dedicated MCP
+  // module (srv-mcp). Gated by the InternalWrite scope, which only a
+  // client_credentials token from tutorials-xsuaa carries — NEVER a browser
+  // user. `actingSapId` is the developer's JWT user_uuid, resolved by srv-mcp
+  // from the MCP token and forwarded as a TRUSTED param. Browser callers cannot
+  // reach these (no InternalWrite scope) so there is no IDOR — contrast the
+  // #1231 fix where user-scoping params on public actions were made non-trusted.
+  @(requires: 'InternalWrite')
+  action completeStepFor(actingSapId : String, slug : String, stepNumber : Integer) returns {
+    completedSteps : array of Integer;
+    points         : Integer;
+  };
+
+  @(requires: 'InternalWrite')
+  action resetTutorialProgressFor(actingSapId : String, slug : String) returns {
+    newAttemptNumber           : Integer;
+    previousAttemptCompletedAt : DateTime;
+    supersededRecordCount      : Integer;
+  };
+
   // Task 17 (#600) — explicit declaration for the audit event emitted by
   // resetTutorialProgress. Makes the audit contract first-class (visible
   // in OData $metadata, typed for downstream consumers, discoverable via

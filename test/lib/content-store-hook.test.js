@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../../srv/lib/embedding-pipeline.js', () => ({
+vi.mock('@tutorials/content/embedding-pipeline.js', () => ({
   embedSlugs: vi.fn().mockResolvedValue({ embedded: 1, skipped: 0, failed: 0, lockHeld: false })
 }));
 
@@ -8,7 +8,7 @@ describe('content-store post-publish hook', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('invokes embedSlugs with changed slugs when ragEnabled is true', async () => {
-    const { embedSlugs } = await import('../../srv/lib/embedding-pipeline.js');
+    const { embedSlugs } = await import('@tutorials/content/embedding-pipeline.js');
     const { triggerPostPublishEmbeddings } = await import('../../srv/lib/content-store.js');
     await triggerPostPublishEmbeddings({
       changedSlugs: ['cap-hello-world', 'btp-trial-setup'],
@@ -19,7 +19,7 @@ describe('content-store post-publish hook', () => {
   });
 
   it('skips embedding when ragEnabled is false', async () => {
-    const { embedSlugs } = await import('../../srv/lib/embedding-pipeline.js');
+    const { embedSlugs } = await import('@tutorials/content/embedding-pipeline.js');
     const { triggerPostPublishEmbeddings } = await import('../../srv/lib/content-store.js');
     await triggerPostPublishEmbeddings({
       changedSlugs: ['cap-hello-world'],
@@ -29,7 +29,7 @@ describe('content-store post-publish hook', () => {
   });
 
   it('swallows embedding errors so publish stays successful', async () => {
-    const { embedSlugs } = await import('../../srv/lib/embedding-pipeline.js');
+    const { embedSlugs } = await import('@tutorials/content/embedding-pipeline.js');
     embedSlugs.mockRejectedValueOnce(new Error('AI Core down'));
     const { triggerPostPublishEmbeddings } = await import('../../srv/lib/content-store.js');
     await expect(triggerPostPublishEmbeddings({

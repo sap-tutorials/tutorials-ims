@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Note: rebuild-trigger.js imports './credstore.js' lazily inside getDispatchToken.
 // vi.mock the module so unit tests don't need a real BTP binding.
-vi.mock('../../srv/lib/credstore.js', () => ({
+vi.mock('@tutorials/core/credstore.js', () => ({
   readSecret: vi.fn().mockResolvedValue(null),  // default: credstore has no value
 }));
 
@@ -44,7 +44,7 @@ describe('scheduleRebuild — opts-based signature (#429)', () => {
     });
     _resetForTests({ dispatchFn: mockDispatch, debounceMs: 10, token: 'test-token' });
     // Reset credstore mock
-    const credstore = await import('../../srv/lib/credstore.js');
+    const credstore = await import('@tutorials/core/credstore.js');
     credstore.readSecret.mockReset();
     credstore.readSecret.mockResolvedValue(null);
   });
@@ -159,7 +159,7 @@ describe('scheduleRebuild — token resolution (#429)', () => {
   });
 
   it('no-op when neither credstore nor env has a token', async () => {
-    const credstore = await import('../../srv/lib/credstore.js');
+    const credstore = await import('@tutorials/core/credstore.js');
     credstore.readSecret.mockReset();
     credstore.readSecret.mockResolvedValue(null);
     delete process.env.GITHUB_DISPATCH_TOKEN;
@@ -170,7 +170,7 @@ describe('scheduleRebuild — token resolution (#429)', () => {
   });
 
   it('uses env fallback when credstore returns null', async () => {
-    const credstore = await import('../../srv/lib/credstore.js');
+    const credstore = await import('@tutorials/core/credstore.js');
     credstore.readSecret.mockReset();
     credstore.readSecret.mockResolvedValue(null);
     process.env.GITHUB_DISPATCH_TOKEN = 'env-token';
@@ -182,7 +182,7 @@ describe('scheduleRebuild — token resolution (#429)', () => {
   });
 
   it('uses credstore value when available (takes precedence over env)', async () => {
-    const credstore = await import('../../srv/lib/credstore.js');
+    const credstore = await import('@tutorials/core/credstore.js');
     credstore.readSecret.mockReset();
     credstore.readSecret.mockResolvedValue('credstore-token');
     process.env.GITHUB_DISPATCH_TOKEN = 'env-token';
@@ -195,7 +195,7 @@ describe('scheduleRebuild — token resolution (#429)', () => {
   });
 
   it('caches the credstore lookup within the 5-min TTL window', async () => {
-    const credstore = await import('../../srv/lib/credstore.js');
+    const credstore = await import('@tutorials/core/credstore.js');
     credstore.readSecret.mockReset();
     credstore.readSecret.mockResolvedValue('cached-token');
     _resetForTests({ dispatchFn: mockDispatch, debounceMs: 10, token: null });
@@ -210,7 +210,7 @@ describe('scheduleRebuild — token resolution (#429)', () => {
   });
 
   it('falls back to env when credstore throws', async () => {
-    const credstore = await import('../../srv/lib/credstore.js');
+    const credstore = await import('@tutorials/core/credstore.js');
     credstore.readSecret.mockReset();
     credstore.readSecret.mockRejectedValue(new Error('credstore unavailable'));
     process.env.GITHUB_DISPATCH_TOKEN = 'env-fallback';
@@ -224,7 +224,7 @@ describe('scheduleRebuild — token resolution (#429)', () => {
 
 describe('invalidateDispatchTokenCache (#429)', () => {
   it('forces the next dispatch to re-read from credstore', async () => {
-    const credstore = await import('../../srv/lib/credstore.js');
+    const credstore = await import('@tutorials/core/credstore.js');
     const mockDispatch = vi.fn().mockResolvedValue({ status: 204 });
     credstore.readSecret.mockReset();
     credstore.readSecret.mockResolvedValueOnce('token-v1');
