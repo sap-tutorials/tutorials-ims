@@ -17,7 +17,10 @@ const REPO_ROOT = process.env.KG_MIRROR_ROOT
   ? resolve(process.env.KG_MIRROR_ROOT)
   : resolve(__dirname, '..');
 
-const SRV_PATH = join(REPO_ROOT, 'srv', 'lib', 'kg-meta-formatters.js');
+// The real formatters module moved to @tutorials/kg in the package carve (T9);
+// srv/lib/kg-meta-formatters.js is now a re-export shim. Mirror-compare the
+// real source (packages/kg) against the hugo-apps browser-island copy.
+const SRV_PATH = join(REPO_ROOT, 'packages', 'kg', 'kg-meta-formatters.js');
 const MIRROR_PATH = join(REPO_ROOT, 'hugo-apps', 'src', 'related-graph', 'kg-meta-formatters.js');
 
 const FIX = process.argv.includes('--fix');

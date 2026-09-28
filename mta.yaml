@@ -15,6 +15,11 @@ parameters:
   # sets its own value in deploy/<env>.mtaext. .deploy/mta.yaml is the live
   # deploy source; this root copy is mirrored for consistency (legacy).
   gameboard-url: UNSET-see-env-mtaext
+  # URL of the separately-deployed tutorials-mcp MTA's tutorials-srv-mcp app,
+  # consumed by the approuter's srv-mcp-api destination (/mcp-auth/*, authType
+  # none). INVALID placeholder ON PURPOSE (config-cross-env-leak guard, like
+  # gameboard-url) — each env sets its value in deploy/<env>.mtaext.
+  srv-mcp-url: UNSET-see-env-mtaext
 
 build-parameters:
   before-all:
@@ -240,6 +245,12 @@ modules:
       instances: 1                  # Lower bound; Autoscaler manages up to instance_max_count via binding-level config in requires below (#749)
     properties:
       XS_APP_LOG_LEVEL: info
+      # Public MCP XSUAA issuer (non-secret) for .well-known OAuth discovery —
+      # supplied as env, NOT a 2nd xsuaa binding (keeps approuter login binding
+      # unambiguous). INVALID placeholder default; per-env value in mtaext.
+      # Mirrors .deploy/mta.yaml.
+      XSUAA_MCP_URL: UNSET-see-env-mtaext
+      XSUAA_MCP_XSAPPNAME: tutorials-mcp
       # (#1659 C.4) The approuter's REBUILD_API_KEY env was removed along with the
       # retired POST /admin/rebuild handler — nothing on the approuter resolves it
       # anymore. The srv keeps its own REBUILD_API_KEY (credstore) to validate the
@@ -262,6 +273,11 @@ modules:
       - name: gameboard-auth-dest
         properties:
           gameboard-url: ${gameboard-url}
+      # Self-provide for the srv-mcp-api destination (separately-deployed
+      # tutorials-mcp MTA — no in-MTA provider). Mirrors .deploy/mta.yaml.
+      - name: srv-mcp-dest
+        properties:
+          srv-mcp-url: ${srv-mcp-url}
     requires:
       - name: tutorials-xsuaa
       # approuter resolves runtime secrets from the BTP Credential Store via
@@ -302,6 +318,15 @@ modules:
           name: gameboard-auth-api
           url: ~{gameboard-url}
           forwardAuthToken: true
+      # srv-mcp-api → separately-deployed tutorials-mcp MTA. Serves /mcp-auth/*
+      # (authType none — public PKCE token validated by CAP, not forwarded), so
+      # NO forwardAuthToken. References the self-provided srv-mcp-dest set above.
+      # Mirrors .deploy/mta.yaml (live deploy source).
+      - name: srv-mcp-dest
+        group: destinations
+        properties:
+          name: srv-mcp-api
+          url: ~{srv-mcp-url}
       # CF Autoscaler binding (#749 phase-1). Policy is inlined here per
       # SAP BTP convention — putting it on the resource block via path: is
       # silently ignored. Range 1..4, CPU 70% / 30% thresholds. Memory metric

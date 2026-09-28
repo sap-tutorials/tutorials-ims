@@ -43,15 +43,22 @@ const MCP_RESOURCE_SUFFIX = '/mcp-auth'
 // the requested scope must exist on the target (public) client.
 const MCP_SCOPE_SHORT = 'Everyone'
 
-// The approuter is bound to TWO xsuaa instances: the confidential login client
-// (tutorials / tutorials-prod) and the PUBLIC PKCE client (xsappname
-// `tutorials-mcp`, from tutorials-xsuaa-mcp). OAuth discovery for the MCP tier
-// MUST advertise the PUBLIC instance, so select the binding by xsappname rather
-// than by array index — vcap.xsuaa[0] is not guaranteed to be the MCP one, and
-// is usually the confidential login client. Falls back to [0] when no
-// tutorials-mcp binding is present (local/degraded), preserving prior behavior.
-const MCP_XSAPPNAME = 'tutorials-mcp'
+// OAuth discovery for the MCP tier must advertise the PUBLIC tutorials-mcp
+// instance (issuer + baseline scope). To avoid binding a SECOND xsuaa to the
+// approuter (which would make @sap/approuter's own confidential LOGIN handshake
+// ambiguous — the framework has no route-level selector and picks a binding
+// non-deterministically), the public issuer/xsappname are supplied as PLAIN
+// NON-SECRET config env (set in the mtaext): XSUAA_MCP_URL + XSUAA_MCP_XSAPPNAME.
+// The approuter keeps its single confidential tutorials-xsuaa binding for login.
+// Fallbacks (for flexibility): a bound tutorials-mcp xsuaa if one is present,
+// then vcap.xsuaa[0] (local/degraded).
+const MCP_XSAPPNAME = process.env.XSUAA_MCP_XSAPPNAME || 'tutorials-mcp'
 function resolveMcpXsuaaCredentials() {
+  // 1. Explicit non-secret env config — the intended production path (no 2nd binding).
+  if (process.env.XSUAA_MCP_URL) {
+    return { url: process.env.XSUAA_MCP_URL, xsappname: MCP_XSAPPNAME }
+  }
+  // 2. A bound tutorials-mcp xsuaa, selected by xsappname (not index).
   try {
     const vcap = JSON.parse(process.env.VCAP_SERVICES || '{}')
     const bindings = Array.isArray(vcap.xsuaa) ? vcap.xsuaa : []

@@ -293,6 +293,14 @@ modules:
       instances: 1                  # Lower bound; Autoscaler manages up to instance_max_count via binding-level config in requires below (#749)
     properties:
       XS_APP_LOG_LEVEL: info
+      # Public MCP XSUAA issuer (non-secret) that approuter/lib/well-known-oauth.js
+      # advertises in the .well-known OAuth discovery docs mcp-remote reads for
+      # PKCE. Supplied as env — NOT a 2nd xsuaa binding (see requires note) — so
+      # the approuter's confidential login binding stays unambiguous. Base default
+      # is an INVALID placeholder ON PURPOSE (same config-cross-env-leak guard as
+      # gameboard-url/srv-mcp-url): each env sets its real value in deploy/<env>.mtaext.
+      XSUAA_MCP_URL: UNSET-see-env-mtaext
+      XSUAA_MCP_XSAPPNAME: tutorials-mcp
       # The approuter framework injects X-Frame-Options: SAMEORIGIN by default
       # (sendXFrameOptions defaults true; its lookup for our config header is
       # case-mismatched — searches lowercase 'x-frame-options' but xs-app.json
@@ -330,15 +338,13 @@ modules:
           srv-mcp-url: ${srv-mcp-url}
     requires:
       - name: tutorials-xsuaa
-      # Public PKCE XSUAA instance (xsappname tutorials-mcp), created by
-      # mta-mcp.yaml. The approuter binds it (as an existing-service) ONLY so
-      # approuter/lib/well-known-oauth.js can advertise the tutorials-mcp issuer
-      # + baseline scope in the .well-known OAuth discovery docs that mcp-remote
-      # reads for PKCE. Login flow still uses the confidential tutorials-xsuaa;
-      # the discovery functions select the MCP binding by xsappname, not [0].
-      # DEPLOY ORDER: mta-mcp.yaml must deploy before this MTA so the service
-      # instance exists for the existing-service reference.
-      - name: tutorials-xsuaa-mcp
+      # NOTE: the approuter is deliberately bound to ONLY the confidential
+      # tutorials-xsuaa (its login client). The PUBLIC tutorials-mcp issuer that
+      # .well-known OAuth discovery advertises is supplied as NON-SECRET config
+      # env (XSUAA_MCP_URL + XSUAA_MCP_XSAPPNAME, see properties below) — NOT a
+      # 2nd xsuaa binding. Binding a 2nd xsuaa would make @sap/approuter's own
+      # login handshake pick a binding non-deterministically (no route selector),
+      # risking 500s on every xsuaa-authed route. Keeping one binding avoids that.
       # approuter resolves runtime secrets from the credstore via
       # approuter/lib/credstore-secret.js (same binding the srv uses). The retired
       # /admin/rebuild handler (#1659 C.4) no longer reads from it.
@@ -430,14 +436,6 @@ resources:
     type: org.cloudfoundry.existing-service
     parameters:
       service-name: devtoberfest-planner-db
-
-  # Public PKCE XSUAA instance for the MCP auth tier — CREATED by mta-mcp.yaml
-  # (deploy that MTA first). Referenced here as existing so the approuter can
-  # bind it for .well-known OAuth discovery (advertises the tutorials-mcp issuer).
-  - name: tutorials-xsuaa-mcp
-    type: org.cloudfoundry.existing-service
-    parameters:
-      service-name: tutorials-xsuaa-mcp
 
   - name: tutorials-hana-qa
     type: com.sap.xs.hdi-container

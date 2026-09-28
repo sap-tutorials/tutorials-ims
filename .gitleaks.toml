@@ -79,4 +79,14 @@ paths = [
   # only flag metadata by design; the narrow tripwire in
   # scripts/check-no-committed-secrets.js remains the real secret backstop.
   '''srv/lib/feature-flags/registry\.js''',
+  # Same registry, moved to @tutorials/core in the package carve (T6). The
+  # srv/lib path above is the retained shim; the real file now lives here.
+  '''packages/core/feature-flags/registry\.js''',
+  # Generated esbuild workspace bundles (srv/lib/_shared, srv-mcp/lib/_shared,
+  # srv-qa/lib/_shared) — build output of scripts/bundle-shared.cjs, gitignored
+  # going forward. They inline @tutorials/* source incl. feature-flag registry
+  # identifiers (same generic-api-key false positive as registry.js above), not
+  # secrets. A couple of these blobs also exist in history (commits 75489ca4f /
+  # c9eb11cc9) before they were untracked; this path rule covers the scan.
+  '''.*/lib/_shared/.*''',
 ]

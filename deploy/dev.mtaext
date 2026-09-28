@@ -55,6 +55,13 @@ modules:
     properties:
       XS_APP_LOG_LEVEL: debug
       DEBUG: "xs-approuter:*"
+      # Public MCP XSUAA issuer for .well-known OAuth discovery (approuter/lib/
+      # well-known-oauth.js reads process.env.XSUAA_MCP_URL). Non-secret public
+      # auth domain of the tutorial-system subaccount (same tenant as the
+      # confidential login xsuaa; the tutorials-mcp public client lives here).
+      # Set as a `properties:` env (which DOES reach the approuter — unlike the
+      # `env:` param block noted above) so no 2nd xsuaa binding is needed.
+      XSUAA_MCP_URL: https://tutorial-system.authentication.eu10-005.hana.ondemand.com
       # REBUILD_API_KEY was formerly injected here via envsubst against
       # deploy.yml's $REBUILD_API_KEY. Removed as the third and final rollout
       # step of PR #871 (issue #903): the approuter now reads REBUILD_API_KEY

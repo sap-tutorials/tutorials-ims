@@ -78,7 +78,10 @@ function walkOne(dir: string, out: string[], visited: Set<string>): void {
   try { entries = readdirSync(dir, { withFileTypes: true }); }
   catch { return; }
   for (const e of entries) {
-    if (e.name === '__tests__' || e.name === 'node_modules') continue;
+    // _shared holds generated esbuild bundles (scripts/bundle-shared.cjs) that
+    // re-inline already-scanned @tutorials/* source — skip to avoid flagging the
+    // inlined copies (the real source files are scanned + marked directly).
+    if (e.name === '__tests__' || e.name === 'node_modules' || e.name === '_shared') continue;
     const full = join(dir, e.name);
     let real: string;
     try { real = realpathSync(full); }
