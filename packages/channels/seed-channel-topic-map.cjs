@@ -48,7 +48,7 @@ async function draftChannelTopicMap(channels, topicTags, { llm }) {
 // srv-qa boot path.
 async function buildLlm() {
   const { OrchestrationClient } = await import('@sap-ai-sdk/orchestration');
-  const { resolveChatLlmSettings } = await import('../chat-settings-resolver.js');
+  const { resolveChatLlmSettings } = await import('@tutorials/core/chat-settings-resolver.js');
   const { modelName, deploymentId } = await resolveChatLlmSettings();
   return async (channels, topicTags) => {
     const catalog = channels.map((c) => ({ sourceId: c.sourceId, name: c.name, purpose: c.purpose, focusAreas: c.focusAreas, tags: c.tags, category: c.category }));
@@ -96,7 +96,7 @@ async function buildLlm() {
 // Load the valid mdFormat topicTag vocabulary from the Tags entity.
 // tag-md-format.js is ESM, so loaded via dynamic import (not require).
 async function loadTopicTags(db, linked) {
-  const { titlePathToMdFormat } = await import('../tag-md-format.js');
+  const { titlePathToMdFormat } = await import('@tutorials/core/tag-md-format.js');
   const { Tags } = linked.entities('com.sap.developers.ims');
   const tags = await db.run(SELECT.from(Tags).columns('titlePath'));
   const out = new Set();

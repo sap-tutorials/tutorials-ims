@@ -80,3 +80,17 @@ export { getUserProgress, getMyCompletedTutorials, getMyCompletedTutorialsForPoi
 export { normalizeTutorialMarkdown, stripImageDirectiveComments, absolutizeImagePaths, prefersMarkdown } from './tutorial-markdown.js';
 // tutorial-markdown-steps.js (moved T8)
 export { parseMarkdownSteps, stripMarkdownToText } from './tutorial-markdown-steps.js';
+// external-content-ttl.js (moved T9)
+export { PER_TYPE_TTL_DAYS, isWithinTTL } from './external-content-ttl.js';
+// co-completion.js (moved T9)
+export { computeCoCompletions, loadCoCompletionsFor, coCompletionsHandler } from './co-completion.js';
+// puzzle-grading.js (moved T9)
+export { parseLayout, parseSolution, buildSlots, wordForSlot, deriveSlotIds, gradeEntries, validatePuzzle } from './puzzle-grading.js';
+// per-user-rate-limit.js (moved T9)
+export { checkRateLimit, _resetForTests } from './per-user-rate-limit.js';
+// published-concepts-query.js (moved T9)
+export { HELP_DOC_SOURCE_LABEL, anchorToLabel, buildConceptsPayload } from './published-concepts-query.js';
+// topic-slug.js (moved T9)
+export { slugifyTopic, flattenTopicSlug, parseTitlePath, buildTopicSlugMap, normalizeLegacyTopicSlug } from './topic-slug.js';
+// topics-query.js (moved T9)
+export { loadLiveTags, buildTopicsTreePayload, resolveTopicBySlug, loadTopicCorpus, buildTopicDetailPayload } from './topics-query.js';

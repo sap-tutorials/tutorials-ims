@@ -11,10 +11,10 @@ import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { buildChannelDetailPayload } from './build-channel-detail.js';
 import { renderChannelDetail } from './channel-detail-render.js';
-import { composeShell, createShellLoader } from './chrome-shell.js';
-import { createSessionHelpers } from './content-publish-session.js';
-import { loadLiveTags } from './topics-query.js';
-import * as metrics from './metrics.js';
+import { composeShell, createShellLoader } from '@tutorials/content/chrome-shell.js';
+import { createSessionHelpers } from '@tutorials/content/content-publish-session.js';
+import { loadLiveTags } from '@tutorials/core/topics-query.js';
+import * as metrics from '@tutorials/core/metrics.js';
 
 const DEFAULT_NAMESPACE = 'com.sap.developers.ims';
 const BATCH_SIZE = 20;

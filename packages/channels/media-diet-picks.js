@@ -10,7 +10,7 @@
 // Returns { channels, source } where source='completions' or 'no-data'.
 
 import cds from '@sap/cds';
-import { titlePathToMdFormat } from './tag-md-format.js';
+import { titlePathToMdFormat } from '@tutorials/core/tag-md-format.js';
 
 const NS = 'com.sap.developers.ims';
 

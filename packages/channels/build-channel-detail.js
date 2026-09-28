@@ -8,8 +8,8 @@
 // with a tutorialCount from loadLiveTags(db).
 
 import cds from '@sap/cds';
-import { loadLiveTags } from './topics-query.js';
-import { titlePathToMdFormat } from './tag-md-format.js';
+import { loadLiveTags } from '@tutorials/core/topics-query.js';
+import { titlePathToMdFormat } from '@tutorials/core/tag-md-format.js';
 
 const NS = 'com.sap.developers.ims';
 

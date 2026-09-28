@@ -18,7 +18,7 @@ async function draftCollections(channels, { llm }) {
 // Lazy-built real LLM caller. Mirrors srv/lib/category-classifier-llm.js.
 async function buildLlm() {
   const { OrchestrationClient } = await import('@sap-ai-sdk/orchestration');
-  const { resolveChatLlmSettings } = await import('../chat-settings-resolver.js');
+  const { resolveChatLlmSettings } = await import('@tutorials/core/chat-settings-resolver.js');
   const { modelName, deploymentId } = await resolveChatLlmSettings();
   return async (channels) => {
     const catalog = channels.map((c) => ({ sourceId: c.sourceId, name: c.name, purpose: c.purpose, focusAreas: c.focusAreas, tags: c.tags, category: c.category }));

@@ -12,7 +12,7 @@
 // contentHash, ingestBatch, audit) are never surfaced.
 
 import cds from '@sap/cds';
-import { clampLimit } from './mcp-arg-validators.js';
+import { clampLimit } from '@tutorials/mcp/mcp-arg-validators.js';
 
 const LOG = cds.log('mcp-channels-search');
 
