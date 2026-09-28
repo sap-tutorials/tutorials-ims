@@ -25,6 +25,13 @@ parameters:
   # rather than cross-env-leaking. Parity is enforced by
   # scripts/check-gameboard-url-mtaext.ts (deploy gate).
   gameboard-url: UNSET-see-env-mtaext
+  # URL of the separately-deployed tutorials-mcp MTA's tutorials-srv-mcp app,
+  # consumed by the approuter's srv-mcp-api destination (serves /mcp-auth/* with
+  # authenticationType: none — the public PKCE token is validated by CAP, not
+  # forwarded from the approuter). Base default is INVALID ON PURPOSE: same
+  # config-cross-env-leak guard as gameboard-url. Each env MUST set its own value
+  # in deploy/<env>.mtaext.
+  srv-mcp-url: UNSET-see-env-mtaext
 
 # Full MTA for deploying: db-deployer + CAP srv + approuter (with admin UI).
 #
@@ -313,6 +320,16 @@ modules:
       - name: gameboard-auth-dest
         properties:
           gameboard-url: ${gameboard-url}
+      # Self-provides for the srv-mcp-api destination. tutorials-srv-mcp is in
+      # the SEPARATELY-deployed tutorials-mcp MTA — ~{...} cannot cross MTAs.
+      # The gameboard-self-provide idiom: the approuter provides and then requires
+      # its own property set so mbt resolves ~{srv-mcp-url} from the top-level
+      # parameter (set per-env in dev.mtaext). NO forwardAuthToken — the flipped
+      # /mcp-auth/* route is authenticationType:none; the public PKCE bearer token
+      # from the client passes through and CAP/XSUAA validates it server-side.
+      - name: srv-mcp-dest
+        properties:
+          srv-mcp-url: ${srv-mcp-url}
     requires:
       - name: tutorials-xsuaa
       # approuter resolves runtime secrets from the credstore via
@@ -359,6 +376,17 @@ modules:
           name: gameboard-auth-api
           url: ~{gameboard-url}
           forwardAuthToken: true
+      # srv-mcp-api destination → separately-deployed tutorials-mcp MTA.
+      # References the self-provided srv-mcp-dest property set above (mbt-valid
+      # for a static/external destination with no in-MTA provider). This require
+      # injects srv-mcp-api into the approuter's runtime `destinations` env var.
+      # NO forwardAuthToken — the /mcp-auth/* route is authenticationType:none;
+      # the PKCE bearer from the client passes through and CAP validates it.
+      - name: srv-mcp-dest
+        group: destinations
+        properties:
+          name: srv-mcp-api
+          url: ~{srv-mcp-url}
       # CF Autoscaler binding (#749 phase-1). Policy is inlined here per
       # SAP BTP convention — putting it on the resource block via path: is
       # silently ignored. Range 1..4, CPU 70% / 30% thresholds. Memory metric

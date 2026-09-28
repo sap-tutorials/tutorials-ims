@@ -32,11 +32,11 @@
         "kind": "odata-v4",
         "model": "srv-mcp/developer-service",
         "credentials": {
-          "url": ""
+          "url": "${MAIN_DEVELOPER_SERVICE_URL}"
         },
         "[production]": {
           "credentials": {
-            "url": ""
+            "url": "${MAIN_DEVELOPER_SERVICE_URL}"
           }
         }
       }

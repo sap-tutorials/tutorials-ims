@@ -1,0 +1,71 @@
+_schema-version: 3.3.0
+# MTA descriptor for the MCP-auth microservice (tutorials-mcp).
+# Deployed SEPARATELY from the main tutorials-ims MTA (.deploy/mta.yaml).
+# This file lives at repo root → path: gen/srv-mcp (root-relative, no ../).
+# before-all runs from ROOT (no cd ..) — mbt uses the descriptor's directory as cwd.
+ID: tutorials-mcp
+version: 1.0.0
+
+# Top-level parameters (overridable per-env via a separate mta-mcp-<env>.mtaext).
+# MAIN_DEVELOPER_SERVICE_URL: base URL of the main tutorials-srv /api endpoint,
+# used by srv-mcp's write-forward handlers (MainDeveloperService remote binding).
+parameters:
+  MAIN_DEVELOPER_SERVICE_URL: https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/api
+
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm install
+        - bash -c "node scripts/bundle-shared.cjs && npx cds build --production"
+        # @tutorials/core and @tutorials/mcp are workspace packages resolved via
+        # esbuild bundles in gen/srv-mcp/srv/lib/_shared/. Remove them from the
+        # gen/srv-mcp/package.json before mbt packages the module, otherwise
+        # `npm install` inside gen/srv-mcp creates dangling symlinks to
+        # gen/srv-mcp/packages/{core,mcp} which mbt cannot archive.
+        - bash -c "node -e \"const p=require('./gen/srv-mcp/package.json'); delete p.dependencies['@tutorials/core']; delete p.dependencies['@tutorials/mcp']; require('fs').writeFileSync('./gen/srv-mcp/package.json', JSON.stringify(p,null,2)+'\n');\""
+
+modules:
+  - name: tutorials-srv-mcp
+    type: nodejs
+    path: gen/srv-mcp
+    parameters:
+      memory: 1024M
+      disk-quota: 1024M
+      buildpack: nodejs_buildpack
+      instances: 1
+    properties:
+      NODE_ENV: production
+      EXPOSE_CAP_UI: false
+      MAIN_DEVELOPER_SERVICE_URL: ${MAIN_DEVELOPER_SERVICE_URL}
+    provides:
+      - name: srv-mcp-api
+        properties:
+          srv-url: ${default-url}
+    requires:
+      - name: tutorials-hana
+      - name: tutorials-credstore
+      - name: tutorials-xsuaa-mcp
+
+resources:
+  - name: tutorials-xsuaa-mcp
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      service-name: tutorials-xsuaa-mcp
+      config-path: xs-security-mcp.json
+
+  # tutorials-hana is deployed and owned by the main tutorials-ims MTA.
+  # This MTA adopts it as an existing service to bind srv-mcp to the same HANA container.
+  - name: tutorials-hana
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: tutorials-hana
+
+  # tutorials-credstore is deployed and owned by the main tutorials-ims MTA.
+  # Shared binding so srv-mcp can resolve BTP Credential Store secrets.
+  - name: tutorials-credstore
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: tutorials-credstore

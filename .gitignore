@@ -78,6 +78,9 @@ default-env.json
 # envsubst at deploy time; never commit — they contain real CI secrets.
 deploy/*.resolved.mtaext
 
+# Temporary mbt build-check directory (T12 verify step; never committed).
+.mbt-check/
+
 # Worktrees
 .worktrees/
 .claude/worktrees/

@@ -9,6 +9,10 @@ extends: tutorials-ims
 # guard; see .deploy/mta.yaml parameters).
 parameters:
   gameboard-url: https://tutorial-system-dev-gameboard-srv.cfapps.eu10-005.hana.ondemand.com
+  # DEV host for the separately-deployed tutorials-mcp MTA's tutorials-srv-mcp app.
+  # Naming scheme: tutorial-system-dev-<cf-app-name> where cf-app-name=tutorials-srv-mcp.
+  # Overrides the invalid base placeholder so the approuter's srv-mcp-api destination resolves.
+  srv-mcp-url: https://tutorial-system-dev-tutorials-srv-mcp.cfapps.eu10-005.hana.ondemand.com
 
 modules:
   - name: tutorials-srv
