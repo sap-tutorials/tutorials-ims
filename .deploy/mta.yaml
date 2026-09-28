@@ -332,6 +332,15 @@ modules:
           srv-mcp-url: ${srv-mcp-url}
     requires:
       - name: tutorials-xsuaa
+      # Public PKCE XSUAA instance (xsappname tutorials-mcp), created by
+      # mta-mcp.yaml. The approuter binds it (as an existing-service) ONLY so
+      # approuter/lib/well-known-oauth.js can advertise the tutorials-mcp issuer
+      # + baseline scope in the .well-known OAuth discovery docs that mcp-remote
+      # reads for PKCE. Login flow still uses the confidential tutorials-xsuaa;
+      # the discovery functions select the MCP binding by xsappname, not [0].
+      # DEPLOY ORDER: mta-mcp.yaml must deploy before this MTA so the service
+      # instance exists for the existing-service reference.
+      - name: tutorials-xsuaa-mcp
       # approuter resolves runtime secrets from the credstore via
       # approuter/lib/credstore-secret.js (same binding the srv uses). The retired
       # /admin/rebuild handler (#1659 C.4) no longer reads from it.
@@ -423,6 +432,14 @@ resources:
     type: org.cloudfoundry.existing-service
     parameters:
       service-name: devtoberfest-planner-db
+
+  # Public PKCE XSUAA instance for the MCP auth tier — CREATED by mta-mcp.yaml
+  # (deploy that MTA first). Referenced here as existing so the approuter can
+  # bind it for .well-known OAuth discovery (advertises the tutorials-mcp issuer).
+  - name: tutorials-xsuaa-mcp
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: tutorials-xsuaa-mcp
 
   - name: tutorials-hana-qa
     type: com.sap.xs.hdi-container

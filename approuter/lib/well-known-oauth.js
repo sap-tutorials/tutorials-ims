@@ -35,30 +35,49 @@ const MCP_RESOURCE_SUFFIX = '/mcp-auth'
 // invalid. Please use a valid scope name in the request"). mcp-remote copies
 // `scopes_supported` from these discovery docs verbatim into its authorize
 // request, so the docs MUST advertise the qualified form. See resolveScope().
-const MCP_SCOPE_SHORT = 'Tutorial.MCP'
+// Baseline MCP scope. The public MCP auth tier gates on `authenticated-user`
+// (a valid logged-in token is enough — see xs-security-mcp.json + the design
+// non-goal), so discovery advertises the baseline `Everyone` scope that
+// tutorials-xsuaa-mcp defines, NOT the optional/elevated `Tutorial.MCP`.
+// mcp-remote copies scopes_supported verbatim into its authorize request, and
+// the requested scope must exist on the target (public) client.
+const MCP_SCOPE_SHORT = 'Everyone'
 
-// Prefix the short MCP scope with the bound xsappname to produce the
+// The approuter is bound to TWO xsuaa instances: the confidential login client
+// (tutorials / tutorials-prod) and the PUBLIC PKCE client (xsappname
+// `tutorials-mcp`, from tutorials-xsuaa-mcp). OAuth discovery for the MCP tier
+// MUST advertise the PUBLIC instance, so select the binding by xsappname rather
+// than by array index — vcap.xsuaa[0] is not guaranteed to be the MCP one, and
+// is usually the confidential login client. Falls back to [0] when no
+// tutorials-mcp binding is present (local/degraded), preserving prior behavior.
+const MCP_XSAPPNAME = 'tutorials-mcp'
+function resolveMcpXsuaaCredentials() {
+  try {
+    const vcap = JSON.parse(process.env.VCAP_SERVICES || '{}')
+    const bindings = Array.isArray(vcap.xsuaa) ? vcap.xsuaa : []
+    const mcp = bindings.find(b => b && b.credentials && b.credentials.xsappname === MCP_XSAPPNAME)
+    if (mcp) return mcp.credentials
+    return bindings[0] && bindings[0].credentials
+  } catch { return undefined }
+}
+
+// Prefix the short MCP scope with the bound MCP xsappname to produce the
 // fully-qualified, grantable scope name. Falls back to the short name only if
 // the binding is unavailable (same degraded path as resolveIssuer()).
 function resolveScope() {
-  try {
-    const vcap = JSON.parse(process.env.VCAP_SERVICES || '{}')
-    const xsappname = vcap.xsuaa && vcap.xsuaa[0] && vcap.xsuaa[0].credentials && vcap.xsuaa[0].credentials.xsappname
-    if (xsappname) return `${xsappname}.${MCP_SCOPE_SHORT}`
-  } catch { /* fall through */ }
+  const creds = resolveMcpXsuaaCredentials()
+  const xsappname = creds && creds.xsappname
+  if (xsappname) return `${xsappname}.${MCP_SCOPE_SHORT}`
   return MCP_SCOPE_SHORT
 }
 
 // Derive the XSUAA OAuth issuer base (e.g.
 // https://tutorial-system.authentication.eu10-005.hana.ondemand.com) from the
-// bound xsuaa VCAP credentials. Falls back to the XSUAA_TENANT/XSUAA_REGION
-// env vars (set as mtaext env:) if the binding is somehow unavailable.
+// bound PUBLIC (tutorials-mcp) xsuaa credentials. Falls back to the
+// XSUAA_TENANT/XSUAA_REGION env vars (set as mtaext env:) if unavailable.
 function resolveIssuer() {
-  try {
-    const vcap = JSON.parse(process.env.VCAP_SERVICES || '{}')
-    const xsuaa = vcap.xsuaa && vcap.xsuaa[0] && vcap.xsuaa[0].credentials
-    if (xsuaa && xsuaa.url) return xsuaa.url.replace(/\/+$/, '')
-  } catch { /* fall through to env */ }
+  const creds = resolveMcpXsuaaCredentials()
+  if (creds && creds.url) return creds.url.replace(/\/+$/, '')
 
   const tenant = process.env.XSUAA_TENANT
   const region = process.env.XSUAA_REGION
