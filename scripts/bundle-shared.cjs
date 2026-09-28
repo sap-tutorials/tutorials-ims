@@ -16,6 +16,11 @@ const fs = require('node:fs');
 const outDir = 'srv/lib/_shared';
 fs.mkdirSync(outDir, { recursive: true });
 
+// srv-mcp gets its own _shared/ with core + mcp bundles only
+// (no content/kg/channels needed for the 7 MCP read/write tools).
+const outDirMcp = 'srv-mcp/lib/_shared';
+fs.mkdirSync(outDirMcp, { recursive: true });
+
 // 7 .cjs files from packages/content that must be copied beside the bundle.
 const CONTENT_CJS = [
   'attachment-ingest.cjs',
@@ -105,4 +110,39 @@ for (const cjsFile of CHANNELS_CJS) {
   const dst = path.join(outDir, cjsFile);
   fs.copyFileSync(src, dst);
   console.log('copied', dst);
+}
+
+// srv-mcp/lib/_shared/ — core + mcp only (7 MCP tools don't need content/kg/channels).
+const mcpTargets = [
+  {
+    entry: require.resolve('@tutorials/core'),
+    out: path.join(outDirMcp, 'core.bundle.mjs'),
+  },
+  {
+    entry: require.resolve('@tutorials/mcp'),
+    out: path.join(outDirMcp, 'mcp.bundle.mjs'),
+  },
+];
+
+for (const t of mcpTargets) {
+  esbuild.buildSync({
+    entryPoints: [t.entry],
+    outfile: t.out,
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    external: [
+      '@sap/*',
+      '@cap-js/*',
+      '@sap-ai-sdk/*',
+      'node:*',
+      'hdb',
+      '@sap/hana-client',
+      'cheerio',
+    ],
+    banner: {
+      js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
+    },
+  });
+  console.log('bundled', t.out);
 }
