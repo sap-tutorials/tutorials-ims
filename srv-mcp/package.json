@@ -30,7 +30,7 @@
       },
       "MainDeveloperService": {
         "kind": "odata-v4",
-        "model": "srv-mcp/developer-service",
+        "model": "srv-mcp/main-developer-service",
         "credentials": {
           "url": "${MAIN_DEVELOPER_SERVICE_URL}"
         },

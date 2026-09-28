@@ -24,12 +24,15 @@ const TSX_CLI = fileURLToPath(import.meta.resolve('tsx/cli'));
 
 interface RunResult { stdout: string; stderr: string; status: number; }
 
-const SRV_REL = 'srv/lib/kg-meta-formatters.js';
+// T9 moved the authoritative KG formatters from srv/lib/ to packages/kg/;
+// the mirror-check script (scripts/check-kg-meta-formatters-mirror.ts) was
+// already repointed. Update fixture paths to match.
+const SRV_REL = 'packages/kg/kg-meta-formatters.js';
 const MIRROR_REL = 'hugo-apps/src/related-graph/kg-meta-formatters.js';
 
 function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'kg-meta-mirror-'));
-  mkdirSync(join(root, 'srv', 'lib'), { recursive: true });
+  mkdirSync(join(root, 'packages', 'kg'), { recursive: true });
   mkdirSync(join(root, 'hugo-apps', 'src', 'related-graph'), { recursive: true });
   return root;
 }

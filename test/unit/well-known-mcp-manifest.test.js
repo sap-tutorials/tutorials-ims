@@ -32,7 +32,7 @@ describe('well-known-mcp-manifest', () => {
     expect(doc.servers.map(s => s.name)).toEqual(['search', 'homepage', 'graph', 'developer']);
     const dev = doc.servers.find(s => s.name === 'developer');
     expect(dev.url).toBe('https://developers.sap.com/mcp-auth/api');
-    expect(dev.scope).toBe('tutorials!t676072.Tutorial.MCP');
+    expect(dev.scope).toBe('tutorials!t676072.Everyone'); // T14 changed baseline MCP scope from Tutorial.MCP → Everyone
     expect(doc.authorization.protected_resource)
       .toBe('https://developers.sap.com/.well-known/oauth-protected-resource');
   });
