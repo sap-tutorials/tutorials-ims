@@ -17,16 +17,19 @@
 //      actions gated by the InternalWrite scope (CC-only, never a browser user).
 //   → Per-developer attribution is preserved; no IDOR.
 //
-// ⚠ STEP F BLOCKED: the CC token source (tutorials-xsuaa binding on srv-mcp) is not
-// yet wired because CAP Node.js has no documented equivalent of Java's
-// `cds.security.xsuaa.binding` to pin which of two bound XSUAA instances validates
-// inbound tokens. Binding both tutorials-xsuaa-mcp (inbound validation) AND
-// tutorials-xsuaa (outbound CC) risks CAP picking the wrong one for inbound auth.
-// Until this is resolved (credstore-stored CC creds or a Node binding selector), the
-// write-forward path cannot be deployed — see task-18-report.md §Step F.
+// CC token source (Step F resolution): srv-mcp binds ONLY tutorials-xsuaa-mcp for
+// inbound MCP-token validation. The outbound client-credentials token (carrying the
+// InternalWrite scope) is obtained from a BTP Destination — NOT a second XSUAA
+// binding — because CAP Node.js has no equivalent of Java's
+// `cds.security.xsuaa.binding` to disambiguate two bound XSUAA instances. The
+// destination `tutorials-main-srv-api` (OAuth2ClientCredentials) supplies the main
+// tutorials-srv /api URL + the CC token minted against tutorials-xsuaa; the Cloud
+// SDK (@sap-cloud-sdk/connectivity) resolves it at runtime from the bound
+// Destination Service. No client secret lives in source — the destination is
+// created/managed in the BTP cockpit (see task-18-report.md §Step F).
 //
-// Remote binding: cds.requires.MainDeveloperService.credentials.url must be set to
-// the main tutorials-srv /api OData base URL (MAIN_DEVELOPER_SERVICE_URL env var).
+// Remote binding: cds.requires.MainDeveloperService.credentials.destination =
+// 'tutorials-main-srv-api' (hybrid + production); local dev falls back to a plain url.
 //
 // (#1105 Task 18 — srv-mcp C1 write-forward trust model)
 
@@ -112,10 +115,10 @@ export default class McpDeveloperService extends cds.ApplicationService {
  * The old pattern mainSrv.send({event, data, user}) is incorrect — `user` is not
  * a supported key and CAP ignores it. The actingSapId travels in the action payload.
  *
- * ⚠ CC auth PENDING (Step F blocked): until tutorials-xsuaa is safely bindable to
- * srv-mcp without breaking inbound-auth binding selection, the outbound call will
- * arrive at main-srv with whatever token CAP attaches. In production this will fail
- * the InternalWrite scope check until Step F is resolved.
+ * The outbound request carries a client-credentials token (InternalWrite scope)
+ * sourced from the `tutorials-main-srv-api` BTP Destination via the Cloud SDK —
+ * see the module header. Until that destination is created in the target env, the
+ * connect/send throws and this handler returns a graceful 503.
  */
 async function forwardWriteToMainSrv(event, payload, req) {
   try {
