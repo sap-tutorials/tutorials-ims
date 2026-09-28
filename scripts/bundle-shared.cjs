@@ -3,6 +3,12 @@
 // Mirrors prebuild:parsers-bundle. @sap/* and other CF-provided packages are
 // marked external and must be available in the CF runtime environment.
 // Output is ESM (.mjs) with a createRequire banner for any CJS interop.
+// NOTE: the banner uses the alias `__cjsBundleRequire` instead of the bare
+// `createRequire` name to avoid a SyntaxError collision with esbuild's own
+// automatic `import { createRequire } from "node:module"` injection (which
+// esbuild emits when a bundled CJS dep needs it and uses the bare name
+// `createRequire`/`createRequire2` internally). Using a distinct alias keeps
+// the two top-level import bindings separate.
 //
 // .cjs handling (packages/content and packages/channels):
 // CJS files are loaded at runtime via createRequire(import.meta.url) + require('./x.cjs').
@@ -86,7 +92,7 @@ for (const t of targets) {
       ...(t.extraExternal || []),
     ],
     banner: {
-      js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
+      js: "import { createRequire as __cjsBundleRequire } from 'module'; const require = __cjsBundleRequire(import.meta.url);",
     },
   });
   console.log('bundled', t.out);
@@ -146,7 +152,7 @@ for (const t of qaTargets) {
       ...(t.extraExternal || []),
     ],
     banner: {
-      js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
+      js: "import { createRequire as __cjsBundleRequire } from 'module'; const require = __cjsBundleRequire(import.meta.url);",
     },
   });
   console.log('bundled', t.out);
@@ -189,7 +195,7 @@ for (const t of mcpTargets) {
       'cheerio',
     ],
     banner: {
-      js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
+      js: "import { createRequire as __cjsBundleRequire } from 'module'; const require = __cjsBundleRequire(import.meta.url);",
     },
   });
   console.log('bundled', t.out);
