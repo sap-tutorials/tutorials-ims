@@ -23,6 +23,10 @@ const checks = [
   'tsx scripts/check-kg-meta-formatters-mirror.ts',
   'tsx scripts/check-csrf-clients.ts',
   'npm run check:graphql-breaking',
+  // Guard: no @tutorials/* workspace deps in gen/*/package.json after cds build.
+  // CF nodejs buildpack runs `npm install` at staging — unpublished workspace
+  // packages cause staging to fail. This fires post-build so gen/ is populated.
+  'node scripts/check-no-workspace-deps-in-gen.cjs',
 ];
 
 // Guards that support a `--fix` flag. Only mechanically-derivable,
