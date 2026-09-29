@@ -81,3 +81,20 @@ Built the new IAS app as an EXACT clone of the working "SAP BTP subaccount Tutor
 **Recommended next action (NOT more self-service tweaking):** take this exact, reproducible question to SAP identity support (component BC-IAM-IDS): "An IAS OIDC app that is a byte-for-byte clone of the auto-created working subaccount app fails at accounts.sap.com with 'could not process the authentication request' ONLY when Public Client Flows is enabled; confidential works, public fails. Correlation IDs: 14D942C4-…, 13D6FCA8-…, C188AFA7-…. Why does the default SAP ID Service trust reject the public-client AuthnRequest, and what config makes a public-PKCE app work with it?" SAP can see the accounts.sap.com-side reason we cannot.
 
 **Status:** paused pending SAP input. Do NOT continue self-service console tweaking — it has been exhausted. All POC artifacts to clean up; tenant otherwise at default.
+
+## CORRECTION (2026-09-29) — the local probe was an INVALID test; its failures are unreliable
+
+Tom correctly identified that the local test script INTRODUCED variables not present in the real flow, and those variables likely caused the failures — meaning the local-probe results do NOT tell us whether the real design works.
+
+Invalid aspects of the local probe (all injected by testing locally, NOT part of the real design):
+1. **No approuter in the path** — the probe hit IAS `/oauth2/authorize` directly. The real flow is mcp-remote → **approuter `/mcp-auth/api`** → approuter-served `.well-known` discovery. The probe bypassed all of that.
+2. **`http://localhost:*/oauth/callback` redirect** — WE added this for the probe. If SAP ID Service (upstream IdP) doesn't trust a localhost redirect in the federated chain, that ALONE could cause "could not process the authentication request." An injected test variable, not a design element.
+3. **Hand-built AuthnRequest / raw params** — not what mcp-remote sends after real approuter discovery.
+
+**⇒ ALL prior local-probe conclusions are SUSPECT and should not be trusted:** the "SAML could not process" errors, the "public-client incompatible with SAP ID Service" narrowing, the cert prompt, the `P000000` results — these may be artifacts of the invalid local test path + injected localhost redirect, NOT properties of the real mcp-remote→approuter flow.
+
+**The ONLY valid acceptance test** = the documented real flow: the actual `mcp-remote` client → the deployed `<approuter>/mcp-auth/api`, with the IAS public app wired into the approuter discovery (`XSUAA_MCP_URL`/`XSUAA_MCP_XSAPPNAME` → the IAS app), letting mcp-remote do real discovery. NO local hand-built probe. NO standalone localhost-redirect test as a stand-in.
+
+**Tasks 4 (local probe) is DELETED as invalid.** The real acceptance test is Task 6 (mcp-remote → deployed approuter) — which requires the Task 5 wiring first. We have NOT yet validly tested the design; the hours of local-probe failures do not count as evidence against it.
+
+**Status: paused. Next valid step is real wiring (Task 5) + real mcp-remote test (Task 6) — not another local probe.**
