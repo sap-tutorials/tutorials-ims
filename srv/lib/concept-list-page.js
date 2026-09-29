@@ -3,8 +3,9 @@
 // Task 2 of the concepts-scale plan (#1327). Backs GET /content/concepts-index:
 // the /concepts/ LIST page, served from CAP instead of a Hugo-static file that
 // inlines all ~5k concepts as <li>. Renders an SSR shell with the top-100
-// concepts as real <li> (SEO / no-JS) plus the full slim array embedded as
-// JSON for the concepts-filter Vue island to virtualize.
+// concepts as real <li> (SEO / no-JS) plus the slim array embedded as JSON
+// for the concepts-filter Vue island to virtualize (descriptions truncated to
+// DESC_TRUNCATE to keep the payload under the 2 MB cap, #2532).
 //
 // The body is composed into the __shell__ chrome at serve time via the same
 // composeShell path the catalog (group/mission) pages use — see
@@ -211,9 +212,18 @@ export function renderConceptListBody(model) {
     .map(([letter, c]) => `<a href="/concepts/${escapeHtml(c.slug)}/">${escapeHtml(letter)}</a>`)
     .join(' ');
 
-  // Embed the full slim array for the island. Escape </ so a value containing
-  // "</script>" can't break out of the JSON <script> block.
-  const json = JSON.stringify(cards).replace(/<\//g, '<\\/');
+  // Embed the slim array for the island. The card only ever RENDERS the
+  // description truncated to DESC_TRUNCATE (see ConceptCard.vue) and the client
+  // search matches over that same slice, so we truncate here too — full-length
+  // descriptions were 95% of a 2.39 MB page and blew the 2 MB smoke cap (#2532).
+  // Escape </ so a value containing "</script>" can't break out of the JSON
+  // <script> block.
+  const slimCards = cards.map(c => (
+    c.description && c.description.length > DESC_TRUNCATE
+      ? { ...c, description: truncate(c.description, DESC_TRUNCATE) }
+      : c
+  ));
+  const json = JSON.stringify(slimCards).replace(/<\//g, '<\\/');
 
   return `${header}
   <div class="concepts-index__controls" id="concepts-filter-controls" hidden></div>
