@@ -3,8 +3,10 @@
   Concepts filter island (#859, virtualized in #1327 Task 4).
 
   The CAP-served /concepts/ list page (srv/lib/concept-list-page.js) emits
-  the top-100 concepts as SSR <li> (SEO / no-JS) plus the FULL slim array in
-  a `<script type="application/json" id="concepts-data">` block. This island
+  the top-100 concepts as SSR <li> (SEO / no-JS) plus the slim array in
+  a `<script type="application/json" id="concepts-data">` block (descriptions
+  truncated to 140 chars there to keep the page under the 2 MB cap, #2532 —
+  the card only renders 140 chars anyway, and search matches that same slice). This island
   reads that JSON and renders only the visible slice via vue-virtual-scroller's
   RecycleScroller — so a 5k-10k concept corpus stays a few dozen live DOM nodes
   instead of thousands, and each keystroke filters an in-memory array (<5ms)

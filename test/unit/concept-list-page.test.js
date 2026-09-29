@@ -177,6 +177,33 @@ describe('renderConceptListBody', () => {
     expect(arr[0]).toHaveProperty('tutorialCount');
   });
 
+  it('truncates embedded-JSON description to <=140 chars + ellipsis (#2532 payload cap)', () => {
+    // The embedded #concepts-data JSON is 95% of the decompressed page and was
+    // shipping FULL descriptions for every concept — 2.39 MB at 5.4k concepts,
+    // over the 2 MB smoke cap. The island only ever RENDERS description at 140
+    // chars (ConceptCard truncate), so the JSON only needs 140 too.
+    const longDesc = 'x'.repeat(500);
+    const body = renderConceptListBody({
+      cards: [{ slug: 'long', name: 'Long', description: longDesc, tutorialCount: 0, firstLetter: 'L' }],
+      top: [{ slug: 'long', name: 'Long', description: longDesc, tutorialCount: 0, firstLetter: 'L' }],
+      count: 1, version: 7,
+    });
+    const m = body.match(/<script type="application\/json" id="concepts-data">([\s\S]*?)<\/script>/);
+    const arr = JSON.parse(m[1]);
+    // 140 kept chars + the single-char ellipsis appended by truncate().
+    expect(arr[0].description).toBe('x'.repeat(140) + '…');
+    expect(arr[0].description.length).toBe(141);
+  });
+
+  it('leaves short descriptions untouched in embedded JSON', () => {
+    const body = renderConceptListBody(model);
+    const m = body.match(/<script type="application\/json" id="concepts-data">([\s\S]*?)<\/script>/);
+    const arr = JSON.parse(m[1]);
+    const cap = arr.find(c => c.slug === 'cap');
+    // 39 chars < 140 → verbatim, no ellipsis.
+    expect(cap.description).toBe('SAP Cloud Application Programming Model.');
+  });
+
   it('renders a noscript A-Z fallback', () => {
     const body = renderConceptListBody(model);
     expect(body).toContain('<noscript>');
