@@ -144,8 +144,14 @@ plugin's `RedisClient` finds the CF binding:
   name `tutorials-redis-websocket` (see §3). If label matching proves ambiguous at
   bind time we fall back to matching by instance name — resolved during the DEV
   deploy, noted as an open item.
-- Add `@socket.io/redis-adapter` to `dependencies` (`npm install --save`). Pin to the
-  major that matches installed `socket.io ^4.8.3` (adapter v8.x).
+- `options.key` is the **prefix for the Redis pub/sub channel names** the adapter
+  broadcasts on (plugin default `"websocket"`). `tutorials-srv` uses `"socket.io"`;
+  `tutorials-srv-qa` uses `"socket.io-qa"` so QA and primary can share one Redis
+  instance without their broadcasts colliding (see §3).
+- Add `@socket.io/redis-adapter` to `dependencies` (`npm install --save`). Use the
+  current major, **v8.x** — that is the release line that pairs with `socket.io 4.x`
+  (the adapter's major runs ahead of socket.io's; they are not meant to match
+  numbers). Confirm the exact 8.x at install.
 
 ### 2. Sticky sessions — `srv/server.js` handshake cookie hook
 
@@ -191,15 +197,18 @@ New managed-service resource, following the existing `tutorials-objectstore` pat
 ```
 
 Bind it to `tutorials-srv` (add to the module's `requires:` block, `.deploy/mta.yaml`
-:157-163). `standard` plan in `.deploy/mta.yaml` base and confirmed/overridden in
-`deploy/{dev,qa,prod}.mtaext` — standard everywhere, so likely no per-env plan
-override needed beyond ensuring the resource is present for each.
+:157-163). `standard` plan in `.deploy/mta.yaml` base; confirm the resource is present
+for each of `deploy/{dev,qa,prod}.mtaext` (standard everywhere → no per-env plan
+override needed).
 
-**`tutorials-srv-qa` decision (open item):** the QA module (`.deploy/mta.yaml:164`)
-also serves WebSocket. Either bind it to the same Redis instance or give it its own.
-Recommendation: bind QA to the **same** `tutorials-redis-websocket` instance (QA is
-low-traffic; the adapter's channel `key` namespaces it) unless we want hard isolation.
-To be confirmed before implementation.
+**`tutorials-srv-qa` — resolved: share one instance, distinct channel key.** The QA
+module (`.deploy/mta.yaml:164`) also serves WebSocket and has the same fan-out bug at
+N>1. QA binds to the **same** `tutorials-redis-websocket` instance rather than a
+dedicated one — QA is low-traffic and a second managed Redis is unwarranted. Broadcast
+isolation between QA and the primary is achieved by giving each module a distinct
+adapter channel-key (see §1): primary uses `key: "socket.io"`, QA uses
+`key: "socket.io-qa"`. Same Redis instance, non-colliding pub/sub channels. Hard
+instance-level isolation is rejected — QA volume cannot swamp the shared instance.
 
 ### 4. Docs + stale comment
 
@@ -265,14 +274,13 @@ verification.
 - Approuter auto-scaling (row #1) / cron separation (row #3).
 - Changing emit sites or WS service definitions.
 
-## Open items (resolve before/at implementation)
+## Open items (resolve at implementation / DEV deploy)
 
-1. **`tutorials-srv-qa` Redis binding** — same instance vs dedicated. (Recommend
-   same.)
-2. **`vcap` binding key** — confirm `vcap.label: "redis-cache"` resolves the instance
-   at deploy; fall back to instance-name match if needed. Verify during DEV deploy.
-3. **`@socket.io/redis-adapter` version** — confirm v8.x matches `socket.io 4.8.3`
-   engine expectations at `npm install`.
-4. **`options.key`** — `"socket.io"` chosen as the channel prefix; confirm it does not
-   collide with any other consumer of the same Redis instance (it won't if QA shares
-   via a distinct key or the instance is dedicated to websocket).
+1. **`vcap` binding resolution** — confirm `vcap.label: "redis-cache"` resolves the
+   instance at deploy; fall back to instance-name match if needed. Verify during the
+   DEV deploy.
+2. **`@socket.io/redis-adapter` exact 8.x** — confirm the specific 8.x release at
+   `npm install` (v8.x is the correct line for `socket.io 4.x`).
+
+Resolved during review: QA shares one Redis instance with a distinct channel key
+(`socket.io-qa`); `options.key` collision is thereby avoided (§3).
