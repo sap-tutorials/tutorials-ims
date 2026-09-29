@@ -29,7 +29,7 @@ useTelemetry({ payload })
 // ---------------------------------------------------------------------------
 
 /** High-signal "spine" node types used as the default 3D filter subset. */
-const THREED_DEFAULT_TYPES: NodeType[] = ['tutorial', 'concept', 'mission']
+const THREED_DEFAULT_TYPES: NodeType[] = ['tutorial', 'mission']
 
 /** Whether the 3D toggle is visible: flag on AND desktop-only. */
 const show3dToggle = computed(() => !!payload.value?.features?.threeD && !isMobile.value)

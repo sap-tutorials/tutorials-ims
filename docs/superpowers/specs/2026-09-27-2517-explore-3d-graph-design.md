@@ -75,9 +75,11 @@ single-flight guard, fails to empty maps).
   toggle never renders ⇒ 3D chunk never downloads.
 
 **Default filtering (hairball fix):** on first switch to 3D, apply a **default node-type subset**
-instead of all 27 filters: **`tutorial + concept + mission`** (high-signal spine), everything else
-opt-in via the existing filter dropdown. Kept as a single named constant for easy tuning. The 2D
-view's all-on default is unchanged.
+instead of all 27 filters: **`tutorial + mission`** (~3,125 nodes, ~50% of the graph; missions
+supply the connective tissue since tutorials have no direct tutorial↔tutorial edges — they link
+through concepts/missions). Everything else — including `concept` — is opt-in via the existing
+filter dropdown. Kept as a single named constant for easy tuning. The 2D view's all-on default is
+unchanged.
 
 ### §4 — Bundle budget + testing
 

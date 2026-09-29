@@ -128,14 +128,14 @@ describe('App.vue — 2D/3D toggle visibility', () => {
     expect(wrapper.findAll('.explore__viewbtn').length).toBe(0)
   })
 
-  it('case D: clicking 3D button when filters are all-on narrows enabledNodeTypes to THREED_DEFAULT_TYPES (size 3)', async () => {
+  it('case D: clicking 3D button when filters are all-on narrows enabledNodeTypes to THREED_DEFAULT_TYPES (size 2)', async () => {
     _resetFilters()
     const { enabledNodeTypes } = useFilters()
     const wrapper = await mountApp({ threeD: true, mobile: false })
 
     // Filters should start at all-on
     const allOnSize = enabledNodeTypes.value.size
-    expect(allOnSize).toBeGreaterThan(3)
+    expect(allOnSize).toBeGreaterThan(2)
 
     // Click the 3D button
     const btns = wrapper.findAll('.explore__viewbtn')
@@ -146,11 +146,11 @@ describe('App.vue — 2D/3D toggle visibility', () => {
     await btn3d!.trigger('click')
     await nextTick()
 
-    // Should have narrowed to tutorial, concept, mission = 3 types
-    expect(enabledNodeTypes.value.size).toBe(3)
+    // Should have narrowed to tutorial, mission = 2 types
+    expect(enabledNodeTypes.value.size).toBe(2)
     expect(enabledNodeTypes.value.has('tutorial')).toBe(true)
-    expect(enabledNodeTypes.value.has('concept')).toBe(true)
     expect(enabledNodeTypes.value.has('mission')).toBe(true)
+    expect(enabledNodeTypes.value.has('concept')).toBe(false)
   })
 
   it('case E: 2D→3D→2D round-trip clears pathNodeIds (stale overlay fix)', async () => {
