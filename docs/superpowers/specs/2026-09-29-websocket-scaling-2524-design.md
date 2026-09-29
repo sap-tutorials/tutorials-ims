@@ -18,7 +18,7 @@ to both services via `service.tx({ user: privileged }, tx => tx.emit(...))`, sco
 by `contexts: [String(event.legacyId)]`.
 
 At `instances: 1` this works. `deploy/prod.mtaext` already sets `tutorials-srv
-instances: 4`. **At N>1 srv there are two distinct, independent failure modes:**
+instances: 2`. **At N>1 srv there are two distinct, independent failure modes:**
 
 ### Failure mode 1 — cross-instance fan-out is lossy (the core bug)
 
@@ -89,7 +89,7 @@ is `@socket.io/redis-adapter`, which the plugin `require`s by name at runtime.
 ## Rejected approaches
 
 - **(c) Pin srv to 1** — the issue's last-resort option. Rejected: `prod.mtaext`
-  already wants 4 instances; pinning to 1 caps the whole backend's throughput to
+  already wants 2 instances; pinning to 1 caps the whole backend's throughput to
   protect one feature. Kicks the can.
 - **Sticky sessions only (A alone)** — does not fix the core fan-out bug (mode 1).
   Rejected on correctness.

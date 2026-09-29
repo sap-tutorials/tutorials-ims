@@ -17,7 +17,10 @@
  * serving old content until LRU eviction or `cf restart` (#1621), and an
  * Admin-UI reorder "didn't propagate" for the same reason (#1592).
  *
- * THE FIX (no pub/sub bus exists; websocket has no Redis adapter)
+ * THE FIX (a Redis pub/sub bus now exists for the Socket.IO websocket adapter,
+ * but cache-coherence deliberately does NOT use it — wiring cache invalidation
+ * onto Redis is a separate concern tracked in scaling-playbook.md row #5, out
+ * of scope for #2524)
  * --------------------------------------------------------------
  * Keep the fast local caches for read latency, but publish a shared
  * *generation token* into the already-wired `caching` service. In hybrid/prod
