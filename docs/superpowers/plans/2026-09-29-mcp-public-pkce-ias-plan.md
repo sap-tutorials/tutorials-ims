@@ -62,3 +62,22 @@
 
 ## Cleanup
 - Throwaway probe scripts under the job tmp dir; the `mcp-pkce-test` service key already deleted. Prior POC artifacts already removed.
+
+## TASK 4 RESULT (2026-09-29) — narrowed to a single-variable finding
+
+Built the new IAS app as an EXACT clone of the working "SAP BTP subaccount Tutorial System" app:
+- Subject Name Identifier = Email ✓
+- Attributes = the working app's 5 (incl. user_uuid←Global User ID) ✓
+- Default Identity Provider = SAP ID Service ✓
+- Identity Federation Source = Corporate IdP ✓
+- The ONLY delta vs. the working app: **Enable Public Client Flows = ON** + loopback redirect.
+
+**Result: federated login FAILS at accounts.sap.com — "Identity Provider could not process the authentication request received"** (correlation IDs incl. 14D942C4-A3C7-4C43-A564-C8C762FFF8B6). Same error as every prior attempt.
+
+**Decisive narrowing:** because this app is config-identical to the WORKING app except for the public-client flag, the failure correlates SPECIFICALLY with the public-client / PKCE flow to SAP ID Service — NOT with app-config divergence (the earlier "we diverged" theory is disproven). A confidential app with these exact settings works (platform proves it daily); enabling public-client + PKCE causes accounts.sap.com to reject the AuthnRequest.
+
+**Conclusion:** IAS public-PKCE token issuance works in isolation, BUT routing a public-client login through the DEFAULT SAP ID Service trust fails. The working SAP-ID-Service federation and the public-client requirement appear incompatible in this setup. This is a precise, reproducible finding — and the accounts.sap.com-side rejection reason is not visible to us (empty tenant log for these correlation IDs).
+
+**Recommended next action (NOT more self-service tweaking):** take this exact, reproducible question to SAP identity support (component BC-IAM-IDS): "An IAS OIDC app that is a byte-for-byte clone of the auto-created working subaccount app fails at accounts.sap.com with 'could not process the authentication request' ONLY when Public Client Flows is enabled; confidential works, public fails. Correlation IDs: 14D942C4-…, 13D6FCA8-…, C188AFA7-…. Why does the default SAP ID Service trust reject the public-client AuthnRequest, and what config makes a public-PKCE app work with it?" SAP can see the accounts.sap.com-side reason we cannot.
+
+**Status:** paused pending SAP input. Do NOT continue self-service console tweaking — it has been exhausted. All POC artifacts to clean up; tenant otherwise at default.
