@@ -208,6 +208,7 @@
     "@sap/cds": "^10.1.0",
     "@sap/xsenv": "^6.2.1",
     "@sap/xssec": "^4.13.1",
+    "@socket.io/redis-adapter": "8.3.0",
     "ajv": "8.20.0",
     "archiver": "8.0.0",
     "cds-caching": "2.1.0",
@@ -440,13 +441,20 @@
           "AlertingTest"
         ],
         "dedupWindowMs": 300000
+      },
+      "redis-websocket": {
+        "vcap": { "label": "redis-cache" }
       }
     },
     "hana": {
       "fuzzy": false
     },
     "websocket": {
-      "kind": "socket.io"
+      "kind": "socket.io",
+      "adapter": {
+        "impl": "@socket.io/redis-adapter",
+        "options": { "key": "socket.io" }
+      }
     },
     "ord": {
       "namespace": "sap.tutorials",
