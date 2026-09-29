@@ -55,13 +55,20 @@ modules:
     properties:
       XS_APP_LOG_LEVEL: debug
       DEBUG: "xs-approuter:*"
-      # Public MCP XSUAA issuer for .well-known OAuth discovery (approuter/lib/
-      # well-known-oauth.js reads process.env.XSUAA_MCP_URL). Non-secret public
-      # auth domain of the tutorial-system subaccount (same tenant as the
-      # confidential login xsuaa; the tutorials-mcp public client lives here).
-      # Set as a `properties:` env (which DOES reach the approuter — unlike the
-      # `env:` param block noted above) so no 2nd xsuaa binding is needed.
-      XSUAA_MCP_URL: https://tutorial-system.authentication.eu10-005.hana.ondemand.com
+      # OAuth discovery issuer for the MCP tier (approuter/lib/well-known-oauth.js
+      # reads process.env.XSUAA_MCP_URL). Points at the IAS tenant that owns the
+      # PUBLIC mcp-remote client (tutorials-identity instance, client d01a9789-…).
+      # IAS CAN mint a secretless public/PKCE client; XSUAA `application` cannot
+      # (verified 2026-09-29). mcp-remote reads authorize/token from discovery, so
+      # this MUST be the IAS issuer or the public-PKCE exchange has no endpoint.
+      # authorize=<issuer>/oauth2/authorize, token=<issuer>/oauth2/token.
+      XSUAA_MCP_URL: https://atxgsg7zi.accounts.ondemand.com
+      # Discovery must advertise the IAS OIDC scope model (plain `openid`), NOT the
+      # XSUAA `<xsappname>.Everyone` form — IAS JWTs carry no scopes. well-known-
+      # oauth.js keys on MCP_ISSUER_KIND to select the scope shape. The client_id
+      # is NOT server config — mcp-remote supplies it via --static-oauth-client-info
+      # (see docs/end-users/mcp-quickstart.md); RFC 8414 discovery carries no client_id.
+      MCP_ISSUER_KIND: ias
       # REBUILD_API_KEY was formerly injected here via envsubst against
       # deploy.yml's $REBUILD_API_KEY. Removed as the third and final rollout
       # step of PR #871 (issue #903): the approuter now reads REBUILD_API_KEY

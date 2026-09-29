@@ -26,6 +26,7 @@ function mockRes() {
 const SAVED_VCAP = process.env.VCAP_SERVICES;
 const SAVED_TENANT = process.env.XSUAA_TENANT;
 const SAVED_REGION = process.env.XSUAA_REGION;
+const SAVED_ISSUER_KIND = process.env.MCP_ISSUER_KIND;
 
 function setXsuaaBinding(url, xsappname) {
   const credentials = { url };
@@ -40,11 +41,13 @@ describe('.well-known OAuth discovery — dynamic runtime middleware (#1105)', (
     delete process.env.XSUAA_REGION;
     delete process.env.XSUAA_MCP_URL;
     delete process.env.XSUAA_MCP_XSAPPNAME;
+    delete process.env.MCP_ISSUER_KIND;
   });
   afterEach(() => {
     if (SAVED_VCAP === undefined) delete process.env.VCAP_SERVICES; else process.env.VCAP_SERVICES = SAVED_VCAP;
     if (SAVED_TENANT === undefined) delete process.env.XSUAA_TENANT; else process.env.XSUAA_TENANT = SAVED_TENANT;
     if (SAVED_REGION === undefined) delete process.env.XSUAA_REGION; else process.env.XSUAA_REGION = SAVED_REGION;
+    if (SAVED_ISSUER_KIND === undefined) delete process.env.MCP_ISSUER_KIND; else process.env.MCP_ISSUER_KIND = SAVED_ISSUER_KIND;
   });
 
   it('derives the issuer from the bound xsuaa VCAP credentials', () => {
@@ -192,6 +195,54 @@ describe('.well-known OAuth discovery — dynamic runtime middleware (#1105)', (
     );
     expect(nexted).toBe(true);
     expect(res.statusCode).toBeNull();
+  });
+});
+
+describe('.well-known OAuth discovery — IAS issuer (MCP_ISSUER_KIND=ias)', () => {
+  const SAVED_VCAP = process.env.VCAP_SERVICES;
+  const SAVED_MCP_URL = process.env.XSUAA_MCP_URL;
+  const SAVED_ISSUER_KIND = process.env.MCP_ISSUER_KIND;
+  const IAS_ISSUER = 'https://atxgsg7zi.accounts.ondemand.com';
+
+  beforeEach(() => {
+    delete process.env.VCAP_SERVICES;
+    process.env.MCP_ISSUER_KIND = 'ias';
+    process.env.XSUAA_MCP_URL = IAS_ISSUER;
+  });
+  afterEach(() => {
+    if (SAVED_VCAP === undefined) delete process.env.VCAP_SERVICES; else process.env.VCAP_SERVICES = SAVED_VCAP;
+    if (SAVED_MCP_URL === undefined) delete process.env.XSUAA_MCP_URL; else process.env.XSUAA_MCP_URL = SAVED_MCP_URL;
+    if (SAVED_ISSUER_KIND === undefined) delete process.env.MCP_ISSUER_KIND; else process.env.MCP_ISSUER_KIND = SAVED_ISSUER_KIND;
+  });
+
+  it('advertises the plain OIDC `openid` scope, not the XSUAA qualified form', () => {
+    // IAS is OIDC-compliant and its JWTs carry no scopes; the MCP tier gates on
+    // authenticated-user. So discovery advertises bare `openid`.
+    expect(resolveScope()).toBe('openid');
+  });
+
+  it('uses IAS /oauth2/* endpoint paths and openid-only scopes_supported', () => {
+    const m = authorizationServerMetadata('https://developers.sap.com', IAS_ISSUER, 'openid');
+    expect(m.authorization_endpoint).toBe(`${IAS_ISSUER}/oauth2/authorize`);
+    expect(m.token_endpoint).toBe(`${IAS_ISSUER}/oauth2/token`);
+    expect(m.scopes_supported).toEqual(['openid']);
+    // Public client: no secret at the token endpoint.
+    expect(m.token_endpoint_auth_methods_supported).toContain('none');
+    expect(m.code_challenge_methods_supported).toContain('S256');
+  });
+
+  it('served AS doc points authorize/token at IAS /oauth2/*', () => {
+    const res = mockRes();
+    wellKnownOAuthHandler(
+      { method: 'GET', url: '/.well-known/oauth-authorization-server', headers: { host: 'x.example' } },
+      res,
+      () => {},
+    );
+    expect(res.statusCode).toBe(200);
+    const parsed = JSON.parse(res.body);
+    expect(parsed.issuer).toBe('https://x.example');
+    expect(parsed.authorization_endpoint).toBe(`${IAS_ISSUER}/oauth2/authorize`);
+    expect(parsed.scopes_supported).toEqual(['openid']);
   });
 });
 

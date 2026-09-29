@@ -308,7 +308,12 @@ modules:
       # is an INVALID placeholder ON PURPOSE (same config-cross-env-leak guard as
       # gameboard-url/srv-mcp-url): each env sets its real value in deploy/<env>.mtaext.
       XSUAA_MCP_URL: UNSET-see-env-mtaext
-      XSUAA_MCP_XSAPPNAME: tutorials-mcp
+      # xsappname of the confidential tutorials-xsuaa instance mcp-remote does PKCE
+      # against (no standalone public -mcp instance — XSUAA `application` plan can't
+      # declare one). well-known-oauth.js uses this to build scopes_supported, so it
+      # MUST match the instance whose default client (sb-tutorials!<suffix>) issues
+      # the token, or the advertised scope won't match the granted token.
+      XSUAA_MCP_XSAPPNAME: tutorials
       # The approuter framework injects X-Frame-Options: SAMEORIGIN by default
       # (sendXFrameOptions defaults true; its lookup for our config header is
       # case-mismatched — searches lowercase 'x-frame-options' but xs-app.json

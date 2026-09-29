@@ -250,7 +250,10 @@ modules:
       # unambiguous). INVALID placeholder default; per-env value in mtaext.
       # Mirrors .deploy/mta.yaml.
       XSUAA_MCP_URL: UNSET-see-env-mtaext
-      XSUAA_MCP_XSAPPNAME: tutorials-mcp
+      # xsappname of the confidential tutorials-xsuaa instance mcp-remote does PKCE
+      # against (no standalone public -mcp instance — XSUAA `application` plan can't
+      # declare one). Mirrors .deploy/mta.yaml.
+      XSUAA_MCP_XSAPPNAME: tutorials
       # (#1659 C.4) The approuter's REBUILD_API_KEY env was removed along with the
       # retired POST /admin/rebuild handler — nothing on the approuter resolves it
       # anymore. The srv keeps its own REBUILD_API_KEY (credstore) to validate the

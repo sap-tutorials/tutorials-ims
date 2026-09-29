@@ -51,23 +51,62 @@ modules:
     requires:
       - name: tutorials-hana
       - name: tutorials-credstore
-      - name: tutorials-xsuaa-mcp
+      # Inbound MCP-token validation is HYBRID (CAP `auth: {kind:ias, xsuaa:true}`
+      # in srv-mcp/package.json). Two bindings, two accepted issuers:
+      #  (1) tutorials-identity (IAS) — the PUBLIC OIDC client mcp-remote uses.
+      #      XSUAA `application` plan cannot mint a secretless public/PKCE client
+      #      (broker rejects public-client / _pkce_s256 / credential-types:none —
+      #      confirmed 2026-09-29). The IAS `identity` broker CAN: instance param
+      #      oauth2-configuration.public-client:true + a `credential-type:NONE`
+      #      key yields a client with NO secret/cert (verified on DEV 2026-09-29,
+      #      client d01a9789-…). mcp-remote does authorization_code + S256 against
+      #      it. This is the client the approuter .well-known advertises.
+      #  (2) tutorials-xsuaa (confidential) — KEPT for the XSUAA-fallback so every
+      #      existing XSUAA path (browser login, PAT, platform tokens) still
+      #      validates. `xsuaa:true` wires cds.env.requires.xsuaa.credentials.
+      - name: tutorials-identity
+      - name: tutorials-xsuaa
       # #1105 C1 — Step F resolution: outbound CC token for the write-forward
       # path comes from the BTP Destination Service (destination name:
       # tutorials-main-srv-api, Authentication: OAuth2ClientCredentials).
       # Binding this service does NOT affect inbound JWT validation; CAP's
-      # auth strategy remains tutorials-xsuaa-mcp. The Cloud SDK resolves the
+      # auth strategy remains tutorials-xsuaa. The Cloud SDK resolves the
       # named destination at runtime to produce the CC token for main-srv.
       - name: tutorials-destination
 
 resources:
-  - name: tutorials-xsuaa-mcp
+  # IAS public OIDC client for mcp-remote (authorization_code + PKCE S256, NO
+  # secret). Managed `identity`:`application` instance — the broker mints its
+  # OWN client per instance (it does NOT adopt a console-created app by name),
+  # so THIS instance's client is the one the approuter .well-known advertises
+  # and srv-mcp validates against. public-client:true + credential-type:NONE key
+  # ⇒ secretless public client (verified DEV 2026-09-29). redirect port wildcard
+  # http://localhost:*/oauth/callback is IAS-supported for localhost.
+  - name: tutorials-identity
     type: org.cloudfoundry.managed-service
     parameters:
-      service: xsuaa
+      service: identity
       service-plan: application
-      service-name: tutorials-xsuaa-mcp
-      config-path: xs-security-mcp.json
+      config:
+        oauth2-configuration:
+          public-client: true
+          grant-types:
+            - authorization_code
+            - authorization_code_pkce_s256
+            - refresh_token
+          redirect-uris:
+            - http://localhost:*/oauth/callback
+            - http://localhost:*/mcp-callback
+
+  # tutorials-xsuaa is deployed and owned by the main tutorials-ims MTA.
+  # srv-mcp adopts it as an existing service for the XSUAA-FALLBACK leg of the
+  # hybrid auth (browser login, PAT, platform tokens keep validating). The
+  # PUBLIC mcp-remote client is the IAS `tutorials-identity` instance above,
+  # NOT this one — XSUAA cannot mint a secretless public client.
+  - name: tutorials-xsuaa
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: tutorials-xsuaa
 
   # tutorials-hana is deployed and owned by the main tutorials-ims MTA.
   # This MTA adopts it as an existing service to bind srv-mcp to the same HANA container.
