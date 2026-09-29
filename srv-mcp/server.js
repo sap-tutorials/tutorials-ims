@@ -16,7 +16,7 @@
 // (#1105 Task 11 — srv-mcp dedicated authenticated MCP module)
 
 import cds from '@sap/cds';
-import { isFlagEnabled } from '@tutorials/core/feature-flags/db-flags.js';
+import { isFlagEnabled } from './lib/db-flags.js';
 
 cds.on('bootstrap', (app) => {
   app.disable('x-powered-by');
