@@ -2,35 +2,39 @@
 // scripts/check-bundle-externals-declared.cjs
 //
 // Build-time guard: for each deployable module that ships a *.bundle.mjs,
-// assert that every bare @sap-ai-sdk/* and @sap/* package imported by that
-// bundle is declared in the module's own package.json dependencies.
+// assert that every bare external package imported by that bundle is declared
+// in the module's own package.json dependencies.
 //
 // WHY THIS EXISTS:
 //   scripts/bundle-shared.cjs bundles workspace packages (@tutorials/*) into
 //   self-contained ESM artifacts for CF deploy.  @sap-ai-sdk/*, @sap/*, and
-//   other CF-runtime SDKs are marked external (not inlined) so they must be
-//   available in the CONSUMING module's node_modules at CF staging.
+//   other third-party packages (e.g. cheerio) are marked external (not inlined)
+//   so they must be available in the CONSUMING module's node_modules at CF
+//   staging.
 //
 //   If a bundle imports an external that its consumer's package.json does NOT
 //   declare, CF will stage fine (staging installs the consumer's deps) but the
 //   module will crash at boot with ERR_MODULE_NOT_FOUND.
 //
-//   The live incident that prompted this guard: tutorials-srv-qa booted fine
-//   in main srv (which declares both deps) but crashed on DEV (2026-09-28)
-//   because srv-qa/package.json was missing @sap-ai-sdk/orchestration while
-//   srv-qa/lib/_shared/content.bundle.mjs imported it transitively.
+//   Incidents that prompted this guard:
+//   - 2026-09-28: tutorials-srv-qa crashed because srv-qa/package.json was
+//     missing @sap-ai-sdk/orchestration while content.bundle.mjs imported it.
+//   - 2026-09-29: tutorials-srv-mcp crashed because srv-mcp/package.json was
+//     missing `cheerio` while core.bundle.mjs imported it transitively.
 //
 // WHAT IT CHECKS:
 //   For each MODULE_DIR in { srv, srv-qa, srv-mcp } that has a lib/_shared/
-//   directory, it reads every *.bundle.mjs file, extracts all bare import
-//   specifiers matching '@sap-ai-sdk/*' or '@sap/*', then asserts that EACH
-//   of those specifiers is present in MODULE_DIR/package.json's `dependencies`.
+//   directory, it reads every *.bundle.mjs file, extracts ALL bare import
+//   specifiers (not relative, not Node.js builtins), then asserts that EACH
+//   of those specifiers is present in the module's package.json `dependencies`.
 //
-// IMPORTANT: The check is scoped to '@sap-ai-sdk/*' and '@sap/*' only — the
-//   two prefixes that bundle-shared.cjs externalises and that must be declared.
-//   Other externals (node:*, hdb, @cap-js/*, cheerio) either come from the
-//   Node.js runtime or are declared unconditionally as platform deps — they do
-//   not need this check.
+//   The check is no longer scoped to specific prefixes — it catches any
+//   third-party external (cheerio, express, jose, undici, etc.) that a bundle
+//   imports but the consuming module's package.json does not declare.
+//
+//   NOTE on the `srv` module: `srv/` is the root-level CAP service and has no
+//   own package.json.  It is covered by the root-level package.json.
+//   `checkModule` accepts an optional `pkgPath` override for this case.
 //
 // WIRING:
 //   - Consumed by scripts/__tests__/check-bundle-externals-declared.test.ts
@@ -48,39 +52,82 @@ const { existsSync, readdirSync, readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 
 /**
- * Patterns of externals we track (as RegExp match on specifier strings).
- * Only '@sap-ai-sdk/*' and '@sap/*' — these are the two prefixes
- * bundle-shared.cjs externalises that must be declared by consumers.
+ * Set of Node.js built-in module names (without and with the `node:` prefix).
+ * Used to filter out builtins from the external-specifier check.
  */
-const TRACKED_PREFIXES = ['@sap-ai-sdk/', '@sap/'];
+const BUILTIN_MODULES = (() => {
+  const raw = require('module').builtinModules;
+  const s = new Set(raw);
+  for (const m of raw) {
+    s.add('node:' + m);
+  }
+  return s;
+})();
 
 /**
  * Modules (relative to repo root) that ship *.bundle.mjs files.
+ * Each entry may include an optional `pkgOverride` (path relative to repo root)
+ * used when the module has no own package.json (e.g. `srv` uses root).
  */
-const MODULE_DIRS = ['srv', 'srv-qa', 'srv-mcp'];
+const MODULE_DIRS = [
+  { name: 'srv', pkgOverride: 'package.json' },
+  { name: 'srv-qa' },
+  { name: 'srv-mcp' },
+];
 
 /**
- * Extract all unique bare external import specifiers matching TRACKED_PREFIXES
- * from the text of a *.bundle.mjs file.
+ * Returns true if the specifier looks like a bare package name (not a
+ * relative path and not a Node.js built-in).
  *
- * esbuild emits external imports as:
- *   import ... from "@sap/cds";
- *   import ... from "@sap-ai-sdk/foundation-models";
- * We match the double-quoted form that esbuild always emits for ES module
- * externals.
+ * @param {string} spec - import specifier
+ * @returns {boolean}
+ */
+function isBareExternal(spec) {
+  if (spec.startsWith('./') || spec.startsWith('../')) return false;
+  if (BUILTIN_MODULES.has(spec)) return false;
+  return true;
+}
+
+/**
+ * Extract all unique bare external import specifiers from the text of a
+ * *.bundle.mjs file.
+ *
+ * esbuild emits external imports at the start of a line, e.g.:
+ *   import ... from "@scope/package";
+ *   import ... from "package-name";
+ *
+ * We match only lines that begin with `import` (the form esbuild uses for
+ * ESM module externals) and extract the double-quoted specifier.  We do NOT
+ * match `from "..."` that appears inside string literals or comments further
+ * in the bundle body — those are not import statements.
+ *
+ * For scoped packages (@scope/pkg) we extract the two-segment name.
+ * For unscoped packages we extract the first path segment (no subpath).
  *
  * @param {string} source - content of a .bundle.mjs file
- * @returns {string[]} sorted unique list of matching specifiers
+ * @returns {string[]} sorted unique list of bare external specifiers
  */
 function extractBundleExternals(source) {
   const seen = new Set();
-  // Match: from "@sap/..." or from "@sap-ai-sdk/..."
-  // The regex captures the package name (org/name, no subpath).
-  const re = /"(@sap(?:-ai-sdk|-cloud-sdk)?\/[a-z0-9_-]+)"/g;
+  // Match lines that start with `import ` (ESM external import statements).
+  // esbuild always emits these at column 0 and always uses double quotes.
+  // The pattern: ^import ... from "specifier";
+  const re = /^import\b[^\n]*? from "([^"]+)";?$/gm;
   let m;
   while ((m = re.exec(source)) !== null) {
-    const spec = m[1];
-    if (TRACKED_PREFIXES.some((p) => spec.startsWith(p))) {
+    const raw = m[1];
+    // Normalise to package name: for @scope/pkg/subpath → @scope/pkg;
+    // for pkg/subpath → pkg.
+    let spec;
+    if (raw.startsWith('@')) {
+      // scoped: take first two segments
+      const parts = raw.split('/');
+      spec = parts.slice(0, 2).join('/');
+    } else {
+      // unscoped: take first segment
+      spec = raw.split('/')[0];
+    }
+    if (isBareExternal(spec)) {
       seen.add(spec);
     }
   }
@@ -104,18 +151,20 @@ function depsFromPkg(pkg) {
  * Scan a single module directory for bundle-vs-package.json external gaps.
  *
  * @param {string} moduleDir - absolute path to the module (e.g. /repo/srv-qa)
+ * @param {string} [pkgPath] - override path to package.json (for modules like
+ *   `srv` that share the root package.json)
  * @returns {{ bundle: string; missing: string[] }[]} list of violations per bundle
  */
-function checkModule(moduleDir) {
+function checkModule(moduleDir, pkgPath) {
   const sharedDir = join(moduleDir, 'lib', '_shared');
-  const pkgPath = join(moduleDir, 'package.json');
+  const resolvedPkgPath = pkgPath || join(moduleDir, 'package.json');
 
   if (!existsSync(sharedDir)) return [];
-  if (!existsSync(pkgPath)) return [];
+  if (!existsSync(resolvedPkgPath)) return [];
 
   let pkg;
   try {
-    pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+    pkg = JSON.parse(readFileSync(resolvedPkgPath, 'utf8'));
   } catch {
     return [];
   }
@@ -158,10 +207,11 @@ function checkModule(moduleDir) {
  */
 function scanAllModules(repoRoot) {
   const all = [];
-  for (const name of MODULE_DIRS) {
+  for (const { name, pkgOverride } of MODULE_DIRS) {
     const moduleDir = join(repoRoot, name);
     if (!existsSync(moduleDir)) continue;
-    const violations = checkModule(moduleDir);
+    const pkgPath = pkgOverride ? join(repoRoot, pkgOverride) : undefined;
+    const violations = checkModule(moduleDir, pkgPath);
     for (const v of violations) {
       all.push({ moduleDir, ...v });
     }
@@ -169,7 +219,7 @@ function scanAllModules(repoRoot) {
   return all;
 }
 
-module.exports = { extractBundleExternals, depsFromPkg, checkModule, scanAllModules };
+module.exports = { extractBundleExternals, depsFromPkg, checkModule, scanAllModules, isBareExternal, BUILTIN_MODULES };
 
 // Run as a script only when invoked directly.
 if (require.main === module) {
@@ -201,10 +251,10 @@ if (require.main === module) {
     '  Fix: add the missing dep to the module\'s package.json "dependencies" at the',
   );
   console.error(
-    '  same version as the root package.json entry (or match foundation-models version).',
+    '  same version as the root package.json entry.',
   );
   console.error(
-    '  These packages are CF-runtime SDKs — they install fine from npmjs.com at staging.',
+    '  These packages are CF-runtime deps — they install fine from npmjs.com at staging.',
   );
   process.exit(1);
 }
