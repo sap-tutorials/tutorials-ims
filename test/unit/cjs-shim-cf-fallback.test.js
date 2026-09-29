@@ -20,12 +20,36 @@
  *      MODULE_NOT_FOUND, then require the shim and assert it resolves to a
  *      non-empty object — proving CF-boot resolution via the _shared fallback.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 const ROOT = process.cwd();
+
+// Ensure _shared/ bundles + copied .cjs files exist before any test runs.
+// The static guard (layer A) checks that the _shared fallback file exists on
+// disk, and the runtime guard (layer B) requires it directly. Without this,
+// the test fails in CI (where _shared/ is gitignored and never checked in) if
+// bundle-load-guard.test.js hasn't finished its own beforeAll in a parallel
+// worker yet.
+beforeAll(() => {
+  try {
+    execFileSync(process.execPath, ['scripts/bundle-shared.cjs'], {
+      stdio: 'pipe',
+      cwd: ROOT,
+    });
+  } catch (err) {
+    const stderr = (err.stderr || Buffer.alloc(0)).toString().trim();
+    const stdout = (err.stdout || Buffer.alloc(0)).toString().trim();
+    throw new Error(
+      `bundle-shared.cjs failed (exit ${err.status ?? 'null'}):\n` +
+      (stderr ? `STDERR:\n${stderr}\n` : '') +
+      (stdout ? `STDOUT:\n${stdout}\n` : '') +
+      'Fix bundle-shared.cjs so cjs-shim-cf-fallback tests can run.'
+    );
+  }
+}, 60_000);
 
 // The 7 CJS shims that must have the try/catch fallback.
 const CJS_SHIMS = [

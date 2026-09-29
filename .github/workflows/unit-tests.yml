@@ -44,5 +44,15 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Setup nested workspaces (hugo-apps, app/explore, app/channel-atlas) + rebuild native bindings
         run: npm run setup
+      - name: Generate workspace bundles (srv/lib/_shared etc.) required by bundle guards
+        # bundle-load-guard.test.js and cjs-shim-cf-fallback.test.js both need
+        # the _shared/ esbuild bundles + copied .cjs files to exist.
+        # bundle-load-guard's beforeAll calls bundle-shared.cjs itself, but vitest
+        # runs test files in parallel workers — cjs-shim-cf-fallback runs in a
+        # separate worker where _shared/ may not exist yet, causing 10 failures.
+        # Running bundle-shared once here before npm test makes the inputs
+        # available to all workers unconditionally, matching what the MTA
+        # before-all and local dev do.
+        run: node scripts/bundle-shared.cjs
       - name: Run unit tests
         run: npm test

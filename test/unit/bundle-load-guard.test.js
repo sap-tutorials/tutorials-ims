@@ -52,10 +52,27 @@ describe('bundle-load-guard', () => {
   beforeAll(() => {
     // Rebuild all bundles fresh.  This is fast (~3s) and ensures the test
     // reflects the current state of scripts/bundle-shared.cjs.
-    execFileSync(process.execPath, ['scripts/bundle-shared.cjs'], {
-      stdio: 'pipe',
-      cwd: process.cwd(),
-    });
+    // Use try/catch to surface stderr when bundle-shared.cjs fails — without
+    // this, execFileSync throws a SpawnError whose message doesn't include
+    // the script's stderr, making the failure opaque ("module not found"
+    // downstream rather than the actual bundler error).
+    let result;
+    try {
+      result = execFileSync(process.execPath, ['scripts/bundle-shared.cjs'], {
+        stdio: 'pipe',
+        cwd: process.cwd(),
+      });
+    } catch (err) {
+      const stderr = (err.stderr || Buffer.alloc(0)).toString().trim();
+      const stdout = (err.stdout || Buffer.alloc(0)).toString().trim();
+      throw new Error(
+        `bundle-shared.cjs failed (exit ${err.status ?? 'null'}):\n` +
+        (stderr ? `STDERR:\n${stderr}\n` : '') +
+        (stdout ? `STDOUT:\n${stdout}\n` : '') +
+        'Fix bundle-shared.cjs before running bundle-load-guard tests.'
+      );
+    }
+    void result; // output not needed — failure already throws above
   }, 60_000);
 
   for (const { dir, bundles } of BUNDLE_DIRS) {
