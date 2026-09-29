@@ -2,9 +2,24 @@
 
 **Date:** 2026-09-29 · **Status:** POC complete, decision point · **Refs:** #16, #30, ias-migration-impact-research, ias-tenant-foundation
 
-## UPDATE (2026-09-29, later) — root cause found + config path identified
+## FINAL CHAIN (2026-09-29, decisive — end-to-end tested with nav trace)
 
-The initial "RED, needs 798k reconciliation" was **too pessimistic**. Deeper investigation (real tokens + IAS console + federation research) found:
+The complete "what's needed to make IAS-for-MCP work" answer, each step empirically confirmed:
+1. ✅ **IAS public PKCE, no client secret** — real token captured (XSUAA can't).
+2. ✅ **IAS emits a P-shaped claim** — a self-defined attribute (Trust→Attributes, Source=Identity Directory→User ID) put `user_id` in the token. Mechanism works.
+3. ✅ **App routes login to SAP ID Service** — after setting the app's Default Identity Provider = SAP ID Service + "Use Identity Authentication user store" OFF, the browser nav trace confirmed it redirects to `accounts.sap.com` (not the local IAS form).
+4. ⛔ **SAP ID Service REJECTS the SAML AuthnRequest from this IAS tenant** — error thrown BY `accounts.sap.com`: "Identity Provider could not process the authentication request received" (correlation IDs 0C818729, C188AFA7). IAS's own SAML 2.0 config to SAP ID Service is correct (metadata URL, SSO/SLO endpoints, CN=accounts.sap.com signing cert to 2030, SHA-256, sign-auth-requests ON).
+
+**The last mile is an SAP-SIDE action, not a console toggle:** SAP ID Service (SAP-operated `accounts.sap.com`) must **register/trust this IAS tenant (`atxgsg7zi`) as a Service Provider** and accept its signed AuthnRequests. This requires an **SAP support request** (provide correlation `C188AFA7`); likely causes on their side: the IAS tenant/SP isn't a registered trusted SP, or the AuthnRequest signing cert isn't recognized. Until that trust is established on the SAP-ID side, the real Universal ID P-number cannot flow.
+
+**Still-open after SAP registers the trust (must retest):** (a) confirm the SAP ID Service assertion actually carries the real `^[PSIps]\d{6,}$` P-number and it equals the existing `Users.sapId`; (b) confirm CAP `resolveUserSapId` reads it from the IAS token (may need an IAS-aware branch). Both are quick token-decode retests once login completes.
+
+**Net:** IAS-for-MCP is viable and is a CONFIG + SAP-side-trust-request path (NOT a 798k migration) — gated on SAP ID Service registering the IAS tenant as an SP. Same federation foundation as #2506.
+
+---
+
+
+## UPDATE (2026-09-29, later) — root cause found + config path identified Deeper investigation (real tokens + IAS console + federation research) found:
 
 - **Why M1 was RED:** the IAS tenant `atxgsg7zi`'s users are **maintained LOCALLY** (local store; User ID = tenant-sequential placeholder `P000000`; Employee Number + Login Name EMPTY; Global User ID = SCIM UUID). The real SAP Universal ID P-number was **never fed into this tenant**, so no token claim can carry it. Confirmed via the user profile screen (`User ID: P000000`) + a real token where a `user_id` self-defined attribute (Source=Identity Directory→User ID) emitted `"P000000"` — the mechanism works, the value is the local placeholder.
 - **The claim MECHANISM is proven:** a self-defined attribute (Trust→Attributes, Source=Identity Directory) DOES emit a `P######`-shaped claim in the IAS token. So IAS *can* carry a P-number claim — the only issue is sourcing the *real* one.
