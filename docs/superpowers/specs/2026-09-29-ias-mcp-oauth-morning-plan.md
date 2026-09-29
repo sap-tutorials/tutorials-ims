@@ -18,7 +18,24 @@ The entire authenticated data model + NGDS badge crediting keys on `Users.sapId`
 - **GREEN** → IAS-for-MCP is a small, isolated, reversible change (see POC below). Full-migration path is plausible later.
 - **RED** (IAS emits the SAP id under a different claim — `sub`/`scim_id`/email) → `resolveUserSapId` falls through to `user.id` (email), silently orphaning ~797k users' progress and silently dropping NGDS badges (no HANA-level UNIQUE on `sapId` — schema.cds:157 is a CAP-runtime-only check, bypassed by the direct `cds.db` insert). Then IAS-for-MCP becomes a **project** (claim-mapping branch + 797k-row reconcile + HANA UNIQUE hardening + NGDS-gate rework), not a flip.
 
-M1 needs a real IAS token — **not** a full deploy. Cheapest form: register the IAS app, get one token for a known user, decode it. That is the whole gate.
+### M1 UPDATE (2026-09-29, from SAP-docs — answered BEFORE provisioning)
+
+**M1 is RED as the code stands today, but GREEN with a small, documented config + one code branch.** Authoritative SAP-docs finding (with real IAS token examples):
+
+- Under our current **XSUAA**, `user_uuid` = the P/S/I-number → matches `^[PSIps]\d{6,}$`, stored in `Users.sapId`.
+- Under a native **IAS** token, `user_uuid` is a **UUID** (the Global User ID, == `scim_id`); the **P-number moves to `sub`**. Real IAS audit example: `"sub":"P123456"`, `"user_uuid":"b12a0234-…"(UUID)`.
+- So a bare `kind:ias` flip makes `resolveUserSapId` read a UUID → misses every migrated row → duplicate users + NGDS badge-drop (the RED scenario), **confirmed from docs**.
+
+**The documented fix (keeps `Users.sapId` byte-identical — no 797k migration):**
+1. Register the IAS OIDC app with **`subject-name-identifier.attribute: "personnelNumber"`** so `sub` carries the P-number.
+2. Add an **IAS-aware branch** in `resolveUserSapId` that reads `sub`/personnelNumber under IAS (keep the XSUAA `user_uuid` path for the hybrid).
+3. Service **key must use `credential-type: NONE`** for a true public client.
+
+**M1 measurement (now):** mint one IAS token for a known migrated user with `subject-name-identifier=personnelNumber`, decode, and confirm `sub` === that user's existing `Users.sapId` (matching the canonical regex). GREEN = the config yields the byte-identical id; the fix is then a small resolver branch, not a migration.
+
+**Residual unknown the POC must still settle (docs can't):** whether `@sap/xssec`'s IAS token wrapper surfaces that value where our resolver reads it (`authInfo.token.userId`) — CAP warns `authInfo` shape is version-fragile. Verify against the pinned xssec version, not assumed.
+
+M1 needs a real IAS token — **not** a full deploy. Cheapest form: register the IAS app (public/PKCE, `subject-name-identifier=personnelNumber`), get one token for a known user, decode it. That is the whole gate.
 
 ## Recommended POC (small, isolated, reversible) — gated on your go
 
