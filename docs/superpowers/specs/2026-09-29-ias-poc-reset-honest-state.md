@@ -35,3 +35,28 @@ The auto-created bundled app **"SAP BTP subaccount Tutorial System"** (the one B
 
 ## Branch
 All research/decision docs on `worktree-mcp-xsuaa-public-client` (unmerged). Not PR'd.
+
+## AUTHORITATIVE working-config values (read from the live working app, 2026-09-29)
+
+From the auto-created **"SAP BTP subaccount Tutorial System"** app (OIDC, client_id `5bf33bd6-…`, the app the platform/XSUAA actually uses):
+
+**Client Authentication:**
+- **Enable Public Client Flows = OFF** ("Last enabled: Never").
+- **No secrets, no certificates.**
+- Trust via **Configure Trust by URI** → JWKS at `https://tutorial-system.authentication.eu10.hana.ondemand.com/token_keys` (12h refresh).
+- ⇒ The working platform app is **NOT a public/PKCE client**. It's the XSUAA-integration app (JWKS-based). So mcp-remote's public-PKCE requirement is a genuinely DIFFERENT shape than what the platform uses — we cannot simply "point mcp-remote at the working app."
+
+**Attributes (Self-defined, all Source = Identity Directory):**
+- `email` ← Email
+- `family_name` ← Last Name
+- `given_name` ← First Name
+- `groups` ← All Groups
+- **`user_uuid` ← Global User ID** (the UUID — NOT the employee I-number)
+- ⚠️ Banner: *"These attributes are ignored if Identity Federation User Store is disabled and Default Identity Provider isn't set to Identity Authentication."*
+
+**KEY IMPLICATION for the identity question:** even the WORKING app maps `user_uuid` → the Global User ID **UUID**, not `I809764`. So the employee I-number `I809764` that `Users.sapId` uses is **NOT produced by IAS attribute mapping** — it must be resolved in the **XSUAA federation layer** (subaccount OIDC trust), below the IAS app config. Reproducing `I809764` via a separate IAS public-PKCE app is therefore NOT a copy-the-attributes job — it would require replicating that XSUAA-layer resolution, which the IAS app itself does not do.
+
+**System app "User Profile"** (SAML 2.0, `sp.accounts.sap.com`) is an SAP System application ("be careful making changes") — Subject = User ID; not a template for a custom MCP client.
+
+## Decision needed before any restart
+Given the working app is confidential/JWKS (not public-PKCE) and the I-number is resolved in the XSUAA layer (not IAS attributes): does the MCP OAuth requirement justify a separate IAS public-PKCE app at all, or should MCP identity ride the existing XSUAA path that already yields `I809764`? This is the open architecture question — do NOT build until it's answered.
