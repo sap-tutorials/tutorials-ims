@@ -76,27 +76,21 @@ modules:
 
 resources:
   # IAS public OIDC client for mcp-remote (authorization_code + PKCE S256, NO
-  # secret). Managed `identity`:`application` instance — the broker mints its
-  # OWN client per instance (it does NOT adopt a console-created app by name),
-  # so THIS instance's client is the one the approuter .well-known advertises
-  # and srv-mcp validates against. public-client:true + credential-type:NONE key
-  # ⇒ secretless public client (verified DEV 2026-09-29). redirect port wildcard
-  # http://localhost:*/oauth/callback is IAS-supported for localhost.
+  # secret). Adopted as an EXISTING service (created out-of-band, like
+  # tutorials-xsuaa/hana below) so its client_id is STABLE across deploys — an
+  # MTA-managed instance would be recreated with a new client_id on each rebuild,
+  # breaking the client_id pinned in docs/end-users/mcp-quickstart.md. The
+  # instance was created with oauth2-configuration.public-client:true +
+  # grant-types incl. authorization_code_pkce_s256 + redirect http://localhost:*/
+  # oauth/callback; a credential-type:NONE key yields NO secret/cert = genuine
+  # public client (verified DEV 2026-09-29, client d01a9789-…). The broker mints
+  # its OWN client per instance (does NOT adopt a console app by name), so THIS
+  # instance's client is the one the approuter .well-known advertises and srv-mcp
+  # validates against.
   - name: tutorials-identity
-    type: org.cloudfoundry.managed-service
+    type: org.cloudfoundry.existing-service
     parameters:
-      service: identity
-      service-plan: application
-      config:
-        oauth2-configuration:
-          public-client: true
-          grant-types:
-            - authorization_code
-            - authorization_code_pkce_s256
-            - refresh_token
-          redirect-uris:
-            - http://localhost:*/oauth/callback
-            - http://localhost:*/mcp-callback
+      service-name: tutorials-identity
 
   # tutorials-xsuaa is deployed and owned by the main tutorials-ims MTA.
   # srv-mcp adopts it as an existing service for the XSUAA-FALLBACK leg of the
