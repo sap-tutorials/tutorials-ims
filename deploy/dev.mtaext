@@ -65,10 +65,10 @@ modules:
       XSUAA_MCP_URL: https://atxgsg7zi.accounts.ondemand.com
       # Discovery must advertise the IAS OIDC scope model (plain `openid`), NOT the
       # XSUAA `<xsappname>.Everyone` form — IAS JWTs carry no scopes. well-known-
-      # oauth.js keys on MCP_ISSUER_KIND to select the scope shape.
+      # oauth.js keys on MCP_ISSUER_KIND to select the scope shape. The client_id
+      # is NOT server config — mcp-remote supplies it via --static-oauth-client-info
+      # (see docs/end-users/mcp-quickstart.md); RFC 8414 discovery carries no client_id.
       MCP_ISSUER_KIND: ias
-      # Client_id of the IAS public client the .well-known + mcp-remote advertise.
-      XSUAA_MCP_CLIENT_ID: d01a9789-5ee1-4d5d-a499-83d574a9c8b5
       # REBUILD_API_KEY was formerly injected here via envsubst against
       # deploy.yml's $REBUILD_API_KEY. Removed as the third and final rollout
       # step of PR #871 (issue #903): the approuter now reads REBUILD_API_KEY

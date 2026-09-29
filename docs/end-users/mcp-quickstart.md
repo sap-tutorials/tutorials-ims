@@ -199,13 +199,15 @@ For builds that accept a pre-registered client, bridge through `mcp-remote`:
 > | Environment | `<base>` | `client_id` |
 > | --- | --- | --- |
 > | **Production** | `https://developers.sap.com` | `sb-tutorials-prod!t676072` |
-> | **Dev** | your dev route | `sb-tutorials!t676072` |
+> | **Dev** | your dev route | `d01a9789-5ee1-4d5d-a499-83d574a9c8b5` |
 >
-> Dev and prod live in the same XSUAA tenant, so prod uses the distinct xsappname
-> `tutorials-prod` (hence the `sb-tutorials-prod!…` client). Using the dev `client_id`
-> against production fails at `/oauth/authorize` with **"The request for authorization was
-> invalid"** — the dev client can't be granted the prod-owned `Tutorial.MCP` scope that the
-> `.well-known` discovery advertises.
+> **Dev** now authenticates against **IAS** (a public OIDC client — authorization_code
+> + PKCE S256, no secret), so the dev `client_id` is the IAS `tutorials-identity`
+> client UUID, not an XSUAA `sb-…` id. **Production still uses XSUAA** (`sb-tutorials-prod!…`)
+> until it is migrated. The `client_id` is environment-specific — using the wrong one
+> against a `<base>` fails at the authorize endpoint. If the dev `tutorials-identity`
+> instance is recreated, this UUID changes — read it from
+> `cf service-key tutorials-identity <key>` and update this row.
 
 On first connection `mcp-remote` opens a browser tab for consent (PKCE, no client secret required). The endpoints are discovered automatically from `<base>/.well-known/oauth-authorization-server`; you supply only the `client_id`. After approval, the token is cached and refreshed silently.
 
