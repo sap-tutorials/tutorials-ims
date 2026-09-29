@@ -34,6 +34,13 @@ const checks = [
   // or pretest which runs prebuild:parsers-bundle). Catches the 2026-09-28 DEV
   // incident where srv-qa was missing @sap-ai-sdk/orchestration.
   'node scripts/check-bundle-externals-declared.cjs',
+  // Guard: no bare top-level static `import ... from '@tutorials/'` in srv/,
+  // srv-mcp/, or srv-qa/ source files. Such imports throw ERR_MODULE_NOT_FOUND
+  // at CF boot because @tutorials/* workspace packages are stripped from
+  // gen/*/package.json before deploy. The allowed pattern is a workspace-first
+  // dynamic import shim (try/catch). Catches the 2026-09-28 DEV incident where
+  // srv-mcp/server.js had a bare static import of @tutorials/core.
+  'node scripts/check-no-bare-workspace-imports.cjs',
 ];
 
 // Guards that support a `--fix` flag. Only mechanically-derivable,
