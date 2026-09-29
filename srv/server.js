@@ -1,4 +1,5 @@
 import cds from '@sap/cds';
+import { randomUUID } from 'node:crypto';
 import express from 'express';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { readFileSync } from 'node:fs';
@@ -2252,4 +2253,19 @@ cds.on('served', () => {
   if (installed) {
     cds.log('metrics-db-wrap').info('METRICS_DB_WRAP enabled: cds.db.run / cds.db.tx wrapped');
   }
+});
+
+// #2524 — Gorouter session affinity for Socket.IO. The engine.io handshake is
+// multi-request (HTTP polling → WS upgrade); if those requests land on
+// different tutorials-srv instances the handshake flaps. Stamping a JSESSIONID
+// cookie on the handshake response pins the client to one instance for the
+// connection's lifetime. This is complementary to the Redis adapter (Task 1):
+// affinity fixes handshake integrity; the adapter fixes cross-instance fan-out.
+// Scoped to the engine.io handshake only — does not touch application cookies.
+cds.on('ws:ready', () => {
+  cds.io?.engine?.on('initial_headers', (headers /*, req */) => {
+    headers['set-cookie'] = [
+      `JSESSIONID=${randomUUID()}; Path=/; HttpOnly; SameSite=Lax`,
+    ];
+  });
 });

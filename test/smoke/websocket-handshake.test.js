@@ -18,4 +18,15 @@ describe('WebSocket endpoints', () => {
     expect([200, 404]).toContain(res.status);
     expect(res.headers.get('content-type')).toMatch(/application\/json/);
   });
+
+  it('engine.io handshake sets a JSESSIONID affinity cookie', async () => {
+    // Socket.IO v4 polling handshake — the first GET returns the session
+    // open packet AND (after this change) a Set-Cookie for Gorouter affinity.
+    const res = await fetchWithRetry(
+      `${SRV_URL}/socket.io/?EIO=4&transport=polling&namespace=/ws/event-stream`,
+    );
+    expect(res.status).toBe(200);
+    const setCookie = res.headers.get('set-cookie') || '';
+    expect(setCookie).toMatch(/JSESSIONID=/);
+  });
 });
