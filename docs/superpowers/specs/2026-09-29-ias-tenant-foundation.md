@@ -11,6 +11,14 @@
 
 ## Exec Summary
 
+**BROKER-APP FINDING (2026-09-29, live + docs):** The CF `identity` service broker ALWAYS creates a **"Bundled / SAP BTP solution"** app — Application Type is fixed at creation and NO `-c` key overrides it (broker publishes an empty create schema; confirmed via `cf curl`). `public-client:true` + `authorization_code_pkce_s256` ARE honored at the OAuth layer, and a matching `redirect_uri` passes initial authorize validation (HTTP 200; a non-matching redirect 400s), BUT the interactive `/oauth2/authorize` still fails **"required parameters missing" after the login leg** on the bundled app. **Implication:** the broker `identity` instance is meant to be the CAP backend's *service credential* (X509_GENERATED), NOT the interactive public-client. An interactive public-PKCE client (mcp-remote/desktop) must be a **STANDALONE IAS app**, created via:
+- **Official Terraform** `SAP/terraform-provider-sap-cloud-identity-services` → `sci_application` with `authentication_schema.oidc_config.restricted_grant_types=["authorizationCodePkceS256"]` (reproducible — the eventual wiring path), OR
+- the IAS **admin console** (Applications → Create → OpenID Connect) / **SCIM Applications API** (fast for the POC).
+
+Keep the broker instance only for the CAP backend's X509 service credential. **POC decision: create a throwaway standalone OIDC app in the console for the M1 measurement; adopt Terraform `sci_application` for reproducible wiring only after M1 is GREEN.**
+
+
+
 **LIVE-VERIFIED (2026-09-29, read-only `btp`/`cf`):** Two of the three open questions are now closed with evidence:
 - **Provisioning an IAS app is app-scoped — zero subaccount blast radius.** After `cf create-service identity application tutorials-identity-mcp`, `btp list security/trust` is UNCHANGED (still exactly 2 entries: `atxgsg7zi` + `sap.default`). Creating/binding an IAS app does NOT mutate the subaccount trust → **DEV testing cannot break PROD login via the trust layer.**
 - **`tutorials-identity-mcp` is the ONLY `identity` service instance subaccount-wide.** No PROD app depends on an IAS *binding* today (PROD auth is still XSUAA). DEV can proceed in full isolation.
