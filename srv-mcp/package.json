@@ -26,7 +26,8 @@
   "cds": {
     "requires": {
       "auth": {
-        "kind": "xsuaa"
+        "kind": "ias",
+        "xsuaa": true
       },
       "db": {
         "kind": "hana"

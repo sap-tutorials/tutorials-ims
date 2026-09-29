@@ -51,15 +51,20 @@ modules:
     requires:
       - name: tutorials-hana
       - name: tutorials-credstore
-      # Inbound MCP-token validation. XSUAA `application` plan cannot declare a
-      # standalone public/PKCE client (broker rejects public-client / _pkce_s256
-      # grant / credential-types:none — empirically confirmed 2026-09-29, and the
-      # 2026-07-13 phase2-design correction already documented this). PKCE is a
-      # CLIENT-side flow: mcp-remote performs authorization_code + S256 against the
-      # ordinary confidential `tutorials-xsuaa` client (sb-tutorials!<suffix>) and
-      # simply OMITS client_secret. XSUAA accepts that. So srv-mcp validates the
-      # inbound JWT against the SAME confidential tutorials-xsuaa the rest of the
-      # platform trusts (one issuer, no ambiguity) — no separate public instance.
+      # Inbound MCP-token validation is HYBRID (CAP `auth: {kind:ias, xsuaa:true}`
+      # in srv-mcp/package.json). Two bindings, two accepted issuers:
+      #  (1) tutorials-identity (IAS) — the PUBLIC OIDC client mcp-remote uses.
+      #      XSUAA `application` plan cannot mint a secretless public/PKCE client
+      #      (broker rejects public-client / _pkce_s256 / credential-types:none —
+      #      confirmed 2026-09-29). The IAS `identity` broker CAN: instance param
+      #      oauth2-configuration.public-client:true + a `credential-type:NONE`
+      #      key yields a client with NO secret/cert (verified on DEV 2026-09-29,
+      #      client d01a9789-…). mcp-remote does authorization_code + S256 against
+      #      it. This is the client the approuter .well-known advertises.
+      #  (2) tutorials-xsuaa (confidential) — KEPT for the XSUAA-fallback so every
+      #      existing XSUAA path (browser login, PAT, platform tokens) still
+      #      validates. `xsuaa:true` wires cds.env.requires.xsuaa.credentials.
+      - name: tutorials-identity
       - name: tutorials-xsuaa
       # #1105 C1 — Step F resolution: outbound CC token for the write-forward
       # path comes from the BTP Destination Service (destination name:
@@ -70,12 +75,34 @@ modules:
       - name: tutorials-destination
 
 resources:
+  # IAS public OIDC client for mcp-remote (authorization_code + PKCE S256, NO
+  # secret). Managed `identity`:`application` instance — the broker mints its
+  # OWN client per instance (it does NOT adopt a console-created app by name),
+  # so THIS instance's client is the one the approuter .well-known advertises
+  # and srv-mcp validates against. public-client:true + credential-type:NONE key
+  # ⇒ secretless public client (verified DEV 2026-09-29). redirect port wildcard
+  # http://localhost:*/oauth/callback is IAS-supported for localhost.
+  - name: tutorials-identity
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: identity
+      service-plan: application
+      config:
+        oauth2-configuration:
+          public-client: true
+          grant-types:
+            - authorization_code
+            - authorization_code_pkce_s256
+            - refresh_token
+          redirect-uris:
+            - http://localhost:*/oauth/callback
+            - http://localhost:*/mcp-callback
+
   # tutorials-xsuaa is deployed and owned by the main tutorials-ims MTA.
-  # srv-mcp adopts it as an existing service for inbound MCP-token validation:
-  # mcp-remote does authorization_code + PKCE (S256) against this instance's
-  # default confidential client (sb-tutorials!<suffix>) with client_secret OMITTED.
-  # A standalone public XSUAA instance is not provisionable on the `application`
-  # plan (see requires: comment above), so there is deliberately no -mcp instance.
+  # srv-mcp adopts it as an existing service for the XSUAA-FALLBACK leg of the
+  # hybrid auth (browser login, PAT, platform tokens keep validating). The
+  # PUBLIC mcp-remote client is the IAS `tutorials-identity` instance above,
+  # NOT this one — XSUAA cannot mint a secretless public client.
   - name: tutorials-xsuaa
     type: org.cloudfoundry.existing-service
     parameters:

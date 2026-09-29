@@ -55,17 +55,20 @@ modules:
     properties:
       XS_APP_LOG_LEVEL: debug
       DEBUG: "xs-approuter:*"
-      # Public MCP XSUAA issuer for .well-known OAuth discovery (approuter/lib/
-      # well-known-oauth.js reads process.env.XSUAA_MCP_URL). This is the
-      # AUTHENTICATION host of the tutorial-system subaccount — note it is plain
-      # `eu10`, NOT the `eu10-005` CF *app/API* landscape. The XSUAA token/authorize
-      # endpoints for this tenant live at eu10 (eu10-005 returns 404 — confirmed
-      # 2026-09-29). mcp-remote reads authorize/token from discovery, so this MUST
-      # resolve to the real tenant host or the token exchange fails.
-      # Same confidential tutorials-xsuaa the platform login uses (PKCE, no secret).
-      # Set as a `properties:` env (which DOES reach the approuter — unlike the
-      # `env:` param block noted above) so no 2nd xsuaa binding is needed.
-      XSUAA_MCP_URL: https://tutorial-system.authentication.eu10.hana.ondemand.com
+      # OAuth discovery issuer for the MCP tier (approuter/lib/well-known-oauth.js
+      # reads process.env.XSUAA_MCP_URL). Points at the IAS tenant that owns the
+      # PUBLIC mcp-remote client (tutorials-identity instance, client d01a9789-…).
+      # IAS CAN mint a secretless public/PKCE client; XSUAA `application` cannot
+      # (verified 2026-09-29). mcp-remote reads authorize/token from discovery, so
+      # this MUST be the IAS issuer or the public-PKCE exchange has no endpoint.
+      # authorize=<issuer>/oauth2/authorize, token=<issuer>/oauth2/token.
+      XSUAA_MCP_URL: https://atxgsg7zi.accounts.ondemand.com
+      # Discovery must advertise the IAS OIDC scope model (plain `openid`), NOT the
+      # XSUAA `<xsappname>.Everyone` form — IAS JWTs carry no scopes. well-known-
+      # oauth.js keys on MCP_ISSUER_KIND to select the scope shape.
+      MCP_ISSUER_KIND: ias
+      # Client_id of the IAS public client the .well-known + mcp-remote advertise.
+      XSUAA_MCP_CLIENT_ID: d01a9789-5ee1-4d5d-a499-83d574a9c8b5
       # REBUILD_API_KEY was formerly injected here via envsubst against
       # deploy.yml's $REBUILD_API_KEY. Removed as the third and final rollout
       # step of PR #871 (issue #903): the approuter now reads REBUILD_API_KEY

@@ -43,6 +43,18 @@ const MCP_RESOURCE_SUFFIX = '/mcp-auth'
 // the requested scope must exist on the target (public) client.
 const MCP_SCOPE_SHORT = 'Everyone'
 
+// Issuer kind selects the OAuth shape. XSUAA and IAS differ in three ways the
+// discovery doc must reflect:
+//   - endpoint paths: XSUAA /oauth/authorize|/oauth/token; IAS /oauth2/*
+//   - scope: XSUAA grants a fully-qualified <xsappname>.<scope>; IAS is OIDC and
+//     its JWTs carry NO scopes — discovery advertises plain `openid`.
+//   - client: IAS mints a public (secretless) client the platform XSUAA cannot.
+// Read from MCP_ISSUER_KIND env (mtaext) at CALL TIME (not module load) so it
+// tracks runtime config and is unit-testable. Defaults to 'xsuaa' when unset.
+function isIasIssuer() {
+  return (process.env.MCP_ISSUER_KIND || 'xsuaa').toLowerCase() === 'ias'
+}
+
 // OAuth discovery for the MCP tier must advertise the PUBLIC tutorials-mcp
 // instance (issuer + baseline scope). To avoid binding a SECOND xsuaa to the
 // approuter (which would make @sap/approuter's own confidential LOGIN handshake
@@ -72,6 +84,9 @@ function resolveMcpXsuaaCredentials() {
 // fully-qualified, grantable scope name. Falls back to the short name only if
 // the binding is unavailable (same degraded path as resolveIssuer()).
 function resolveScope() {
+  // IAS is OIDC-compliant and its JWTs carry no scopes; the MCP tier gates on
+  // `authenticated-user` (any valid token). Advertise plain `openid`.
+  if (isIasIssuer()) return 'openid'
   const creds = resolveMcpXsuaaCredentials()
   const xsappname = creds && creds.xsappname
   if (xsappname) return `${xsappname}.${MCP_SCOPE_SHORT}`
@@ -131,14 +146,21 @@ function sendJson(res, status, body) {
 //   RFC 8414 doc here) keeps XSUAA's broken well-known out of the discovery
 //   path entirely; the actual authorize/token calls still hit XSUAA.
 function authorizationServerMetadata(issuer, endpointBase, scope) {
+  // Endpoint paths differ by issuer: IAS serves /oauth2/authorize|/oauth2/token,
+  // XSUAA serves /oauth/authorize|/oauth/token.
+  const ias = isIasIssuer()
+  const authzPath = ias ? '/oauth2/authorize' : '/oauth/authorize'
+  const tokenPath = ias ? '/oauth2/token' : '/oauth/token'
+  // IAS: plain `openid` (JWTs carry no scopes). XSUAA: `openid` + the qualified scope.
+  const scopes = ias ? ['openid'] : ['openid', scope]
   return {
     issuer,
-    authorization_endpoint: `${endpointBase}/oauth/authorize`,
-    token_endpoint: `${endpointBase}/oauth/token`,
+    authorization_endpoint: `${endpointBase}${authzPath}`,
+    token_endpoint: `${endpointBase}${tokenPath}`,
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: ['S256'],
-    scopes_supported: ['openid', scope],
+    scopes_supported: scopes,
     token_endpoint_auth_methods_supported: ['none'],
   }
 }
