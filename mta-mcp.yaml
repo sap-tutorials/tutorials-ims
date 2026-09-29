@@ -51,23 +51,35 @@ modules:
     requires:
       - name: tutorials-hana
       - name: tutorials-credstore
-      - name: tutorials-xsuaa-mcp
+      # Inbound MCP-token validation. XSUAA `application` plan cannot declare a
+      # standalone public/PKCE client (broker rejects public-client / _pkce_s256
+      # grant / credential-types:none — empirically confirmed 2026-09-29, and the
+      # 2026-07-13 phase2-design correction already documented this). PKCE is a
+      # CLIENT-side flow: mcp-remote performs authorization_code + S256 against the
+      # ordinary confidential `tutorials-xsuaa` client (sb-tutorials!<suffix>) and
+      # simply OMITS client_secret. XSUAA accepts that. So srv-mcp validates the
+      # inbound JWT against the SAME confidential tutorials-xsuaa the rest of the
+      # platform trusts (one issuer, no ambiguity) — no separate public instance.
+      - name: tutorials-xsuaa
       # #1105 C1 — Step F resolution: outbound CC token for the write-forward
       # path comes from the BTP Destination Service (destination name:
       # tutorials-main-srv-api, Authentication: OAuth2ClientCredentials).
       # Binding this service does NOT affect inbound JWT validation; CAP's
-      # auth strategy remains tutorials-xsuaa-mcp. The Cloud SDK resolves the
+      # auth strategy remains tutorials-xsuaa. The Cloud SDK resolves the
       # named destination at runtime to produce the CC token for main-srv.
       - name: tutorials-destination
 
 resources:
-  - name: tutorials-xsuaa-mcp
-    type: org.cloudfoundry.managed-service
+  # tutorials-xsuaa is deployed and owned by the main tutorials-ims MTA.
+  # srv-mcp adopts it as an existing service for inbound MCP-token validation:
+  # mcp-remote does authorization_code + PKCE (S256) against this instance's
+  # default confidential client (sb-tutorials!<suffix>) with client_secret OMITTED.
+  # A standalone public XSUAA instance is not provisionable on the `application`
+  # plan (see requires: comment above), so there is deliberately no -mcp instance.
+  - name: tutorials-xsuaa
+    type: org.cloudfoundry.existing-service
     parameters:
-      service: xsuaa
-      service-plan: application
-      service-name: tutorials-xsuaa-mcp
-      config-path: xs-security-mcp.json
+      service-name: tutorials-xsuaa
 
   # tutorials-hana is deployed and owned by the main tutorials-ims MTA.
   # This MTA adopts it as an existing service to bind srv-mcp to the same HANA container.

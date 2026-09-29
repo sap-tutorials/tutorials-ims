@@ -17,8 +17,11 @@
 //      actions gated by the InternalWrite scope (CC-only, never a browser user).
 //   → Per-developer attribution is preserved; no IDOR.
 //
-// CC token source (Step F resolution): srv-mcp binds ONLY tutorials-xsuaa-mcp for
-// inbound MCP-token validation. The outbound client-credentials token (carrying the
+// CC token source (Step F resolution): srv-mcp binds ONLY tutorials-xsuaa for
+// inbound MCP-token validation (mcp-remote does authorization_code + PKCE against
+// its default confidential client, secret omitted — a standalone public -mcp
+// instance is not provisionable on the XSUAA `application` plan). The outbound
+// client-credentials token (carrying the
 // InternalWrite scope) is obtained from a BTP Destination — NOT a second XSUAA
 // binding — because CAP Node.js has no equivalent of Java's
 // `cds.security.xsuaa.binding` to disambiguate two bound XSUAA instances. The
