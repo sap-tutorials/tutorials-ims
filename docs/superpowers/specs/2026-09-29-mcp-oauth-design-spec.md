@@ -47,3 +47,19 @@ The mta-mcp.yaml comment asserts "XSUAA accepts PKCE against the confidential cl
 
 ## Next step
 Resolve the central contradiction (does confidential-client PKCE with omitted secret work against `tutorials-xsuaa`?) with one clean test. That single result determines whether this is a small discovery-consistency fix or a genuine IAS build — and we plan accordingly. Do NOT build until that's known.
+
+## TEST RESULT (2026-09-29) — contradiction RESOLVED: confidential-PKCE is NOT viable
+
+Ran the decisive test: mcp-remote-style PKCE against `tutorials-xsuaa`'s confidential client `sb-tutorials!t676072`, secret omitted, real browser login.
+- Authorize leg: SUCCESS (code captured).
+- Token exchange with NO secret: **HTTP 401 `invalid_client` / "Bad credentials".**
+
+**VERDICT: XSUAA's confidential client REQUIRES the client_secret at the token endpoint; PKCE at authorize does NOT waive it.** The `mta-mcp.yaml` comment asserting "XSUAA accepts PKCE with secret omitted" is FALSE (unverified assumption). 
+
+**Consequence — the path is decided:**
+- "Small discovery-fix / no IAS" path is DEAD — mcp-remote (no secret) cannot get a token from the confidential XSUAA client.
+- A **public-PKCE client is genuinely required**; XSUAA `application` plan cannot provide one (proven). ⇒ **IAS is the correct path**, now VERIFIED-necessary rather than assumed.
+
+**Correct IAS approach (planned, not console-hacking):** clone the working "SAP BTP subaccount Tutorial System" app EXACTLY (Email subject, its attribute mappings incl. user_uuid←Global User ID + add the I-number claim, its federation to SAP ID Service) and change ONLY: enable Public Client Flows + register mcp-remote's loopback redirect. The working app already resolves identity correctly via the subaccount OIDC trust; the sole delta is the public-client flag. Also fix `mta-mcp.yaml` to stop asserting the false secret-omit claim, and reconcile `well-known-oauth.js` (Discrepancy #2) to advertise the IAS public app's real issuer/scope.
+
+**Next:** write the implementation PLAN for the IAS public-client app modeled on the working app (a proper writing-plans task), then execute deliberately. No more live console improvisation.
