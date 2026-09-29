@@ -2,6 +2,22 @@
 
 **Date:** 2026-09-29 · **Status:** POC complete, decision point · **Refs:** #16, #30, ias-migration-impact-research, ias-tenant-foundation
 
+## CORRECTION (2026-09-29, supersedes the "SAP-side SP-trust ticket" claim below)
+
+The earlier conclusion — "SAP must register the IAS tenant as an SP on accounts.sap.com" — was **wrong** (an inference from a generic error, not verified). SAP's own troubleshooting docs give the real answer (SAP Note 2260000 / KBA 2753454, via SAP-docs `accessing-the-administration-console-6187940.md` + `corporate-identity-providers-16ab7db.md`):
+
+- The error "Identity Provider could not process the authentication request received" is thrown by **accounts.sap.com (SAP ID Service)** because it doesn't recognize the forwarded AuthnRequest's **SP issuer/entityID** (`https://atxgsg7zi.accounts.ondemand.com`).
+- **`accounts.sap.com` is a CLOSED, SAP-operated IdP** for SAP's own properties + S/P-user login. There is **no customer self-service SP registration** there. The "default" trust to it in a fresh IAS tenant is SAP-managed plumbing — **NOT a corporate IdP to point a custom app at.**
+- Therefore: federating the IAS app to accounts.sap.com to source the P-number is the **WRONG ARCHITECTURE**, not a support ticket. Neither "flip Sign-auth-requests OFF" nor "Include scoping OFF" is the documented cause — do not mutate the default trust.
+- **Self-service fix for the error itself:** repoint the app's Conditional Authentication default IdP back to the local Identity Authentication IdP (removes the broken forward). Non-destructive diagnosis: SAML-tracer the AuthnRequest + read the IAS troubleshooting log (KBA 2461862 / 2942816).
+
+### The REAL open design question (this is where #2506's "which IdP" decision lives)
+IAS auth (public PKCE) + P-shaped-claim emission both work. What does NOT work is sourcing the *real SAP Universal ID P-number* by federating IAS to the closed accounts.sap.com. So:
+- **Which IdP actually holds the tutorials user population's real P-numbers, and can IAS federate to IT?** (a corporate IdP we control, or IPS-provisioning the P-number into the IAS Identity Directory).
+- Today's working path is **XSUAA → SAP ID Service (`sap.default` subaccount trust)**, which surfaces the real P-number in XSUAA's `user_uuid` — a DIFFERENT trust than the IAS-corporate-IdP path proven here to be a dead end. Whether/how that maps to an IAS-issued token is the unresolved architecture question.
+
+---
+
 ## FINAL CHAIN (2026-09-29, decisive — end-to-end tested with nav trace)
 
 The complete "what's needed to make IAS-for-MCP work" answer, each step empirically confirmed:
