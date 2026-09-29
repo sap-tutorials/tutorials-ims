@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeRetention } from '../../scripts/lib/asset-retention.cjs';
+import { mergeRetention, finalizeManifest } from '../../scripts/lib/asset-retention.cjs';
 
 const HOUR = 3600_000;
 const now = 1_000_000_000_000;
@@ -63,5 +63,36 @@ describe('mergeRetention', () => {
     const retained = [{ file: 'legacy-44444444.js', firstSeenMs: now - 60 * HOUR }];
     const r = mergeRetention({ currentFiles: ['a-11111111.js'], retainedManifest: retained, nowMs: now, windowMs });
     expect(r.toDownload).toEqual([]); // 60h > 48h window, not in prior build → pruned
+  });
+});
+
+// ── Regression (issue #2533): manifest must not advertise assets that were never
+// shipped. A carried-forward prior bundle is added to the intended manifest AND
+// to toDownload; if its download fails (fail-open, logged as a miss), the file is
+// absent from the approuter's disk. Writing the pre-download manifest verbatim
+// left the manifest listing a 404ing asset — the exact post-deploy smoke failure.
+// finalizeManifest drops entries whose carry-forward download failed, so the
+// written manifest only advertises assets that are actually served.
+describe('finalizeManifest', () => {
+  const mkEntry = (file) => ({ file, firstSeenMs: now, lastSeenMs: now });
+
+  it('drops entries whose carry-forward download failed', () => {
+    const manifest = [mkEntry('current-11111111.js'), mkEntry('carried-22222222.js')];
+    const final = finalizeManifest(manifest, ['carried-22222222.js']);
+    expect(final.map(e => e.file)).toEqual(['current-11111111.js']);
+  });
+
+  it('keeps everything when no downloads failed', () => {
+    const manifest = [mkEntry('current-11111111.js'), mkEntry('carried-22222222.js')];
+    const final = finalizeManifest(manifest, []);
+    expect(final).toEqual(manifest);
+  });
+
+  it('never drops a current-build file even if it appears in the failed set', () => {
+    // Defensive: current files are on disk by definition; a spurious failure
+    // report must not evict them and re-introduce a 404 for the live build.
+    const manifest = [mkEntry('current-11111111.js')];
+    const final = finalizeManifest(manifest, ['current-11111111.js'], ['current-11111111.js']);
+    expect(final.map(e => e.file)).toEqual(['current-11111111.js']);
   });
 });

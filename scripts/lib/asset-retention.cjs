@@ -50,4 +50,27 @@ function mergeRetention({ currentFiles, retainedManifest, nowMs, windowMs }) {
   return { toDownload, manifest };
 }
 
-module.exports = { mergeRetention };
+/**
+ * Remove entries from the intended manifest whose carry-forward download failed.
+ *
+ * mergeRetention builds the manifest optimistically — every in-window / prior-build
+ * asset is listed AND queued for download. But a carry-forward download can fail
+ * (fail-open: logged as a miss, build continues). If the failed asset stayed in the
+ * written manifest, the approuter would advertise an asset it never received on
+ * disk, and the post-deploy asset-retention smoke gate 404s on it (issue #2533).
+ *
+ * Current-build files are on disk by definition and are never dropped, even if a
+ * caller spuriously reports one as failed.
+ *
+ * @param {{file:string}[]} manifest        intended manifest from mergeRetention
+ * @param {string[]} failedDownloads         carried files whose download failed
+ * @param {string[]} [currentFiles]          this build's files (never dropped)
+ * @returns {{file:string}[]}                manifest safe to write and advertise
+ */
+function finalizeManifest(manifest, failedDownloads, currentFiles = []) {
+  const failed = new Set(failedDownloads);
+  const current = new Set(currentFiles);
+  return manifest.filter((e) => current.has(e.file) || !failed.has(e.file));
+}
+
+module.exports = { mergeRetention, finalizeManifest };
