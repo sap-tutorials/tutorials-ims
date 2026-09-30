@@ -130,11 +130,12 @@ function sendJson(res, status, body) {
 
 // Build the RFC 8414 Authorization-Server metadata.
 //
-// `issuer` identifies THIS approuter (its own externally-visible base URL) as
-// the advertised authorization server — NOT the raw XSUAA URL. The authorize /
-// token endpoints still live on XSUAA (`endpointBase`).
+// `issuer` identifies the advertised authorization server. For XSUAA this is
+// THIS approuter (its own externally-visible base URL) — NOT the raw XSUAA URL;
+// the authorize / token endpoints still live on XSUAA (`endpointBase`). For IAS
+// the issuer is the IAS base itself (see the RFC 9207 note in the function body).
 //
-// Why self-issuer, not the XSUAA issuer (reverses the original Option A):
+// Why self-issuer for XSUAA (reverses the original Option A):
 //   MCP clients (mcp-remote / MCP SDK) read the protected-resource metadata,
 //   take `authorization_servers[0]`, and run RFC 8414 discovery against THAT
 //   host. XSUAA does not implement RFC 8414 — `<xsuaa>/.well-known/oauth-
@@ -153,8 +154,18 @@ function authorizationServerMetadata(issuer, endpointBase, scope) {
   const tokenPath = ias ? '/oauth2/token' : '/oauth/token'
   // IAS: plain `openid` (JWTs carry no scopes). XSUAA: `openid` + the qualified scope.
   const scopes = ias ? ['openid'] : ['openid', scope]
+  // RFC 9207: the `issuer` MUST equal the `iss` the authorization server stamps on
+  // its authorize/token responses; modern MCP clients (mcp-remote / MCP SDK) reject
+  // an authorization response whose `iss` differs from the discovery `issuer`
+  // (IssuerMismatchError). IAS stamps its OWN base (https://<tenant>.accounts.
+  // ondemand.com) as `iss`, so for the IAS path the advertised issuer MUST be the
+  // IAS base (endpointBase) — NOT the approuter self-URL. The self-issuer trick
+  // below applies ONLY to XSUAA, which does not serve a valid RFC 8414 doc at its
+  // own host (see the block comment above); IAS does serve one, so self-issuer is
+  // both unnecessary and RFC-9207-breaking for IAS.
+  const advertisedIssuer = ias ? endpointBase : issuer
   return {
-    issuer,
+    issuer: advertisedIssuer,
     authorization_endpoint: `${endpointBase}${authzPath}`,
     token_endpoint: `${endpointBase}${tokenPath}`,
     response_types_supported: ['code'],
