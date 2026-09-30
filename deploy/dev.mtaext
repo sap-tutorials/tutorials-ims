@@ -57,12 +57,13 @@ modules:
       DEBUG: "xs-approuter:*"
       # OAuth discovery issuer for the MCP tier (approuter/lib/well-known-oauth.js
       # reads process.env.XSUAA_MCP_URL). Points at the IAS tenant that owns the
-      # PUBLIC mcp-remote client (tutorials-identity instance, client d01a9789-…).
+      # PUBLIC mcp-remote client (tutorials-identity instance, client 02782268-…).
       # IAS CAN mint a secretless public/PKCE client; XSUAA `application` cannot
       # (verified 2026-09-29). mcp-remote reads authorize/token from discovery, so
       # this MUST be the IAS issuer or the public-PKCE exchange has no endpoint.
       # authorize=<issuer>/oauth2/authorize, token=<issuer>/oauth2/token.
-      XSUAA_MCP_URL: https://atxgsg7zi.accounts.ondemand.com
+      # Tenant cut over atxgsg7zi -> alzmza7li (fresh SAP Universal ID trust, #2551).
+      XSUAA_MCP_URL: https://alzmza7li.accounts.ondemand.com
       # Discovery must advertise the IAS OIDC scope model (plain `openid`), NOT the
       # XSUAA `<xsappname>.Everyone` form — IAS JWTs carry no scopes. well-known-
       # oauth.js keys on MCP_ISSUER_KIND to select the scope shape. The client_id

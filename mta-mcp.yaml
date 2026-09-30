@@ -59,7 +59,7 @@ modules:
       #      confirmed 2026-09-29). The IAS `identity` broker CAN: instance param
       #      oauth2-configuration.public-client:true + a `credential-type:NONE`
       #      key yields a client with NO secret/cert (verified on DEV 2026-09-29,
-      #      client d01a9789-…). mcp-remote does authorization_code + S256 against
+      #      client 02782268-…, tenant alzmza7li). mcp-remote does authorization_code + S256 against
       #      it. This is the client the approuter .well-known advertises.
       #  (2) tutorials-xsuaa (confidential) — KEPT for the XSUAA-fallback so every
       #      existing XSUAA path (browser login, PAT, platform tokens) still
@@ -83,7 +83,7 @@ resources:
   # instance was created with oauth2-configuration.public-client:true +
   # grant-types incl. authorization_code_pkce_s256 + redirect http://localhost:*/
   # oauth/callback; a credential-type:NONE key yields NO secret/cert = genuine
-  # public client (verified DEV 2026-09-29, client d01a9789-…). The broker mints
+  # public client (verified DEV 2026-09-29, client 02782268-…, tenant alzmza7li). The broker mints
   # its OWN client per instance (does NOT adopt a console app by name), so THIS
   # instance's client is the one the approuter .well-known advertises and srv-mcp
   # validates against.
