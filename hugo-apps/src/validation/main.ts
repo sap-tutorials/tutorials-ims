@@ -2,6 +2,7 @@
 import { createApp } from 'vue';
 import Validation from './Validation.vue';
 import type { ValidationQuestion } from './grading';
+import { shuffleArray } from '@shared/shuffle';
 
 // Local type — matches the Hugo-emitted shape, declared here because the
 // equivalent in tutorial.ts is being deleted as part of this PR.
@@ -35,10 +36,20 @@ if (dataEl) {
     const isPreview = host.dataset.preview === 'true';
     const aiInvolved = host.dataset.aiInvolved === 'true';
     const rulesBlockId = host.dataset.rulesBlockId;
+    // [#2558] Randomize MCQ answer order per page load so positional
+    // answer-sharing ("it's the 3rd option") stops working. Grading is
+    // string-based (see grading.ts), so reordering options is safe and needs
+    // no change to correctAnswer/correctAnswers. Text questions have no
+    // options and pass through unchanged.
+    const questions = step.validation.map((q) =>
+      q.type === 'multiple-choice' && q.options
+        ? { ...q, options: shuffleArray(q.options) }
+        : q,
+    );
     createApp(Validation, {
       stepNumber: stepNum,
       slug,
-      questions: step.validation,
+      questions,
       isPreview,
       aiInvolved,
       rulesBlockId,
