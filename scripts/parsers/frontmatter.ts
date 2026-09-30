@@ -80,8 +80,19 @@ export function extractFrontmatter(md: string): FrontmatterResult {
   return { frontmatter: fm, title, description, youWillLearn, prerequisites, level, body: content }
 }
 
+// #2555 (task 2): a section runs from its `## Heading` up to the next ATX
+// heading of ANY level (`#`..`######`) or a thematic break (`---`/`***`/`___`
+// alone on a line) — not just the next `## `/`### `. The old h2/h3-only
+// lookahead let a Prerequisites/You-will-learn block over-capture everything
+// down to EOF when the following content was an `#### ` sub-heading or a bare
+// `---`-separated intro paragraph with no h2/h3 after it. Every added
+// alternative is an EARLIER (or equal) stop point, so this can only ever
+// shrink a captured section, never grow one — a section correctly bounded by
+// `## Steps` today still stops there.
+const SECTION_END = '(?=\\n#{1,6} |\\n(?:---|\\*\\*\\*|___)\\s*(?:\\n|$)|$)'
+
 function extractBulletList(content: string, heading: string): string[] {
-  const pattern = new RegExp(`## ${heading}\\s*\\n([\\s\\S]*?)(?=\\n## |\\n### |$)`)
+  const pattern = new RegExp(`## ${heading}\\s*\\n([\\s\\S]*?)${SECTION_END}`)
   const match = content.match(pattern)
   if (!match) return []
   // Group each `- ` bullet with any wrapped continuation lines that follow it.
@@ -106,7 +117,7 @@ function extractBulletList(content: string, heading: string): string[] {
 }
 
 function extractSection(content: string, heading: string): string {
-  const pattern = new RegExp(`## ${heading}\\s*\\n([\\s\\S]*?)(?=\\n## |\\n### |$)`)
+  const pattern = new RegExp(`## ${heading}\\s*\\n([\\s\\S]*?)${SECTION_END}`)
   const match = content.match(pattern)
   return match?.[1]?.trim() ?? ''
 }
