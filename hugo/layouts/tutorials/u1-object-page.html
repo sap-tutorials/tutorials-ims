@@ -289,8 +289,13 @@
     <div class="op-anchor">
       <ui5-tabcontainer id="op-anchor" content-background-design="Transparent" header-background-design="Transparent" no-auto-selection>
         <ui5-tab data-section="overview" text="Overview" selected></ui5-tab>
-        <ui5-tab data-section="prerequisites" text="Prerequisites"></ui5-tab>
-        <ui5-tab data-section="steps" text="Steps"></ui5-tab>
+        {{/* #2555: hide the Prerequisites tab/section when there is no prerequisites
+             content, and the Steps tab/section when the tutorial has no steps. Lets
+             authors retire a tutorial down to an Overview note by emptying those
+             sections in source. The scroll-spy JS (op-anchor) iterates over the
+             tabs/sections that exist, so omitting a pair is safe. */}}
+        {{ with .Params.prerequisites }}<ui5-tab data-section="prerequisites" text="Prerequisites"></ui5-tab>{{ end }}
+        {{ if gt (int .Params.stepCount) 0 }}<ui5-tab data-section="steps" text="Steps"></ui5-tab>{{ end }}
         <ui5-tab data-section="resources" text="Resources"></ui5-tab>
         <ui5-tab data-section="discussion" text="Discussion"></ui5-tab>
       </ui5-tabcontainer>
@@ -323,13 +328,23 @@
           {{ if not site.Params.previewMode }}{{ partial "more-from-author.html" . }}{{ end }}
         </section>
 
+        {{/* #2555: only render the Prerequisites section when there is content —
+             an empty prereqs tutorial no longer shows a bare "Prerequisites" heading,
+             and the matching tab above is omitted too. */}}
+        {{ with .Params.prerequisites }}
         <section id="op-prerequisites" class="op-section" data-op-section>
           <h2 class="op-section__heading">Prerequisites</h2>
-          {{ partial "tutorial-prerequisites.html" . }}
+          {{ partial "tutorial-prerequisites.html" $ }}
         </section>
+        {{ end }}
 
         <section id="op-steps" class="op-section" data-op-section>
-          <h2 class="op-section__heading">Steps</h2>
+          {{/* #2555: only show the "Steps" heading when the tutorial actually has
+               steps. `.Content` still renders below unconditionally — it carries the
+               intro prose (e.g. a `## Video Version` block or a retirement/redirect
+               note authored before the first step), which must survive on step-less
+               tutorials. The matching Steps tab above is likewise omitted at stepCount 0. */}}
+          {{ if gt (int .Params.stepCount) 0 }}<h2 class="op-section__heading">Steps</h2>{{ end }}
           {{/* Issue #173: global OS picker — only rendered when the page contains
                OS-flavored option blocks (hasOsOptions=true). os-toggle.ts (Task 6)
                listens for selection-change and activates panels via data-os-active. */}}

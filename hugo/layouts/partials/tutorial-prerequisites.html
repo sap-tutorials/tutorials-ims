@@ -1,6 +1,9 @@
 {{ with .Params.prerequisites }}
 <div class="tutorial-prerequisites">
-  <h3>Prerequisites</h3>
+  {{/* #2555: the "Prerequisites" heading is owned by the CALLER, not this partial.
+       u1-object-page.html wraps this in a <section> with its own <h2>; single.html
+       supplies an <h3>. Emitting a heading here too produced a double
+       "Prerequisites-inside-Prerequisites" on every tutorial with a prereqs section. */}}
   {{/* #1388: prerequisites is a markdown string (not string[]). markdownify
        preserves its structure — prose stays paragraphs, bullet lists stay
        <ul><li>, mixed content renders correctly — instead of the old model
