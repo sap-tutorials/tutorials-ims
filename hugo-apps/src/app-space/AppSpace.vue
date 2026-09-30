@@ -313,7 +313,7 @@ const emptyStateMessage = computed(() => {
                layout stable and avoids the swap. -->
           <template v-if="!loading">
             <h1 class="hero-title">{{ eventName }}</h1>
-            <p class="hero-subtitle">Developer Garage &mdash; App Space</p>
+            <p class="hero-subtitle">Developer Garage &mdash; Agent Lab &mdash; App Space</p>
             <!-- #2296: eventDescription is server-rendered Markdown → safe HTML
                  (markdown-it html:false escapes raw HTML). Block element, not <p>,
                  because markdown emits its own <p> and <p>-in-<p> is invalid. -->
@@ -321,7 +321,7 @@ const emptyStateMessage = computed(() => {
           </template>
           <template v-else>
             <div class="hero-title-skeleton" aria-hidden="true"></div>
-            <p class="hero-subtitle">Developer Garage &mdash; App Space</p>
+            <p class="hero-subtitle">Developer Garage &mdash; Agent Lab &mdash; App Space</p>
           </template>
         </div>
         <div class="hero-stats" v-if="tracks.length > 0">
