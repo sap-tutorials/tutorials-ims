@@ -579,10 +579,14 @@ async function main() {
   // the operator can verify before swapping traffic and retiring blue. Resume
   // with `cf deploy -i <OP_ID> -a resume`; abort with `-a abort`.
   const strategyFlags = bg ? ['--strategy', args.strategy] : [];
+  // Upload app/resource bits concurrently instead of serially. Pure I/O win,
+  // no behavioral change — with ~5 modules (srv, srv-qa, approuter, two HDI
+  // deployers) this trims the stdout-buffered upload/stage long pole.
+  const uploadFlags = ['--parallel-resource-upload'];
   step(4, `cf deploy (-e ${mtaext})` + (bg ? ` --strategy ${args.strategy} [pauses before swap]` : ''));
   if (args.dryRun) {
     const preview = newestMtarPath() || 'mta_archives/<newest>.mtar';
-    warn(`dry-run: would run \`cf deploy ${preview} -e ${mtaext} ${strategyFlags.join(' ')} -f\` in .deploy/`);
+    warn(`dry-run: would run \`cf deploy ${preview} -e ${mtaext} ${uploadFlags.join(' ')} ${strategyFlags.join(' ')} -f\` in .deploy/`);
     if (bg) warn('dry-run: blue-green would then PAUSE for verification before the traffic swap.');
   } else {
     // Pass the explicit newest mtar, NOT the `mta_archives/*.mtar` glob:
@@ -590,7 +594,7 @@ async function main() {
     const mtar = newestMtarPath();
     if (!mtar) die(1, `no .mtar found in ${path.relative(ROOT, MTAR_GLOB_DIR)} to deploy. Run without --skip-build, or build the mtar first.`);
     await notifyDeploy('start', cfg, { env: envName, version: deployVersion });
-    const code = sh('cf', ['deploy', mtar, '-e', mtaext, ...strategyFlags, '-f'], { cwd: DEPLOY_DIR });
+    const code = sh('cf', ['deploy', mtar, '-e', mtaext, ...uploadFlags, ...strategyFlags, '-f'], { cwd: DEPLOY_DIR });
     if (code !== 0) {
       if (bg) abortFailedBlueGreen();
       await notifyDeploy('fail', cfg, { env: envName, version: deployVersion, detail: 'cf deploy failed' });
