@@ -223,6 +223,10 @@ describe('.well-known OAuth discovery — IAS issuer (MCP_ISSUER_KIND=ias)', () 
 
   it('uses IAS /oauth2/* endpoint paths and openid-only scopes_supported', () => {
     const m = authorizationServerMetadata('https://developers.sap.com', IAS_ISSUER, 'openid');
+    // RFC 9207: for IAS the advertised issuer MUST be the IAS base (what IAS
+    // stamps as `iss`), NOT the self-URL passed as the first arg — otherwise
+    // mcp-remote rejects the authorize response with IssuerMismatchError.
+    expect(m.issuer).toBe(IAS_ISSUER);
     expect(m.authorization_endpoint).toBe(`${IAS_ISSUER}/oauth2/authorize`);
     expect(m.token_endpoint).toBe(`${IAS_ISSUER}/oauth2/token`);
     expect(m.scopes_supported).toEqual(['openid']);
@@ -231,7 +235,7 @@ describe('.well-known OAuth discovery — IAS issuer (MCP_ISSUER_KIND=ias)', () 
     expect(m.code_challenge_methods_supported).toContain('S256');
   });
 
-  it('served AS doc points authorize/token at IAS /oauth2/*', () => {
+  it('served AS doc points authorize/token at IAS /oauth2/* and advertises the IAS issuer', () => {
     const res = mockRes();
     wellKnownOAuthHandler(
       { method: 'GET', url: '/.well-known/oauth-authorization-server', headers: { host: 'x.example' } },
@@ -240,7 +244,8 @@ describe('.well-known OAuth discovery — IAS issuer (MCP_ISSUER_KIND=ias)', () 
     );
     expect(res.statusCode).toBe(200);
     const parsed = JSON.parse(res.body);
-    expect(parsed.issuer).toBe('https://x.example');
+    // IAS path: issuer is the IAS base (RFC 9207), not the approuter self-host.
+    expect(parsed.issuer).toBe(IAS_ISSUER);
     expect(parsed.authorization_endpoint).toBe(`${IAS_ISSUER}/oauth2/authorize`);
     expect(parsed.scopes_supported).toEqual(['openid']);
   });
