@@ -105,6 +105,16 @@ Immediately after the frontmatter:
 - **`## You will learn`** and **`## Prerequisites`** — H2 sections, conventional and recommended.
 - The standalone `---` after Prerequisites separates the introduction from the steps.
 
+> [!NOTE]
+> Both sections auto-hide when empty. If a tutorial has no `## Prerequisites`
+> content, the Prerequisites section and its tab are omitted entirely (no empty
+> heading). Likewise, a tutorial with no steps renders no "Steps" heading or
+> tab. This is how you retire a tutorial down to a redirect note: remove the
+> Prerequisites bullets and all `###` steps, and keep just an intro paragraph or
+> blockquote (e.g. an "out of maintenance" note pointing to the SAP Discovery
+> Center). The intro prose still renders; only the empty section chrome is
+> dropped.
+
 > [!TIP]
 > Only include a single contiguous set of bullet points in the Prerequisites
 > section, and don't include any normal paragraphs. Otherwise the rendered

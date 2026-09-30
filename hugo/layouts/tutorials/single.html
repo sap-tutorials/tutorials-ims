@@ -18,6 +18,10 @@
     {{ end }}
 
     {{ partial "tutorial-author.html" . }}
+    {{/* #2555: heading is caller-owned; the partial no longer emits its own.
+         Gate on the same param the partial gates on so an empty prereqs page
+         doesn't render a bare heading. */}}
+    {{ with .Params.prerequisites }}<h3>Prerequisites</h3>{{ end }}
     {{ partial "tutorial-prerequisites.html" . }}
 
     {{ if not site.Params.qa }}<div id="progress-bar" data-step-count="{{ .Params.stepCount }}" data-slug="{{ .Params.slug }}"></div>{{ end }}
