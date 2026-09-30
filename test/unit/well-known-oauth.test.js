@@ -249,6 +249,17 @@ describe('.well-known OAuth discovery — IAS issuer (MCP_ISSUER_KIND=ias)', () 
     expect(parsed.authorization_endpoint).toBe(`${IAS_ISSUER}/oauth2/authorize`);
     expect(parsed.scopes_supported).toEqual(['openid']);
   });
+
+  it('protected-resource metadata points authorization_servers at IAS directly (RFC 8414 §3.3 + 9207)', () => {
+    // IAS serves its own valid RFC 8414 doc, so the client must discover AGAINST
+    // IAS — not the approuter self-host. Advertising the approuter would make the
+    // client fetch our doc (issuer=IAS) from the approuter URL and fail RFC 8414
+    // §3.3 (issuer != fetched-from). authorization_servers[0] must be the IAS base.
+    const m = protectedResourceMetadata('https://x.example', 'openid');
+    expect(m.authorization_servers).toEqual([IAS_ISSUER]);
+    // The resource is still the approuter-hosted MCP endpoint.
+    expect(m.resource).toBe(`https://x.example${'/mcp-auth'}`);
+  });
 });
 
 describe('well-known-oauth: openid-configuration alias', () => {

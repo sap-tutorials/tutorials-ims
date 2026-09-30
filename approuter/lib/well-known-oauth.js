@@ -176,14 +176,26 @@ function authorizationServerMetadata(issuer, endpointBase, scope) {
   }
 }
 
-// RFC 9728 Protected-Resource metadata. `authorization_servers` advertises the
-// approuter itself (baseUrl) as the authorization server — see the self-issuer
-// rationale on authorizationServerMetadata(). Clients then discover the AS doc
-// at our host, which returns a valid RFC 8414 document.
+// RFC 9728 Protected-Resource metadata. `authorization_servers` is the AS the
+// MCP client runs discovery against.
+//
+// XSUAA path: advertise the approuter itself (baseUrl) — XSUAA serves no valid
+// RFC 8414 doc at its own host, so we self-serve one (see authorizationServer
+// Metadata()'s block comment) and proxy the endpoints to XSUAA.
+//
+// IAS path: advertise the IAS base DIRECTLY. IAS serves a standards-compliant
+// RFC 8414 doc at its own host whose `issuer` equals that host — so a modern MCP
+// client (mcp-remote / MCP SDK) satisfies BOTH RFC 8414 §3.3 (metadata `issuer`
+// must equal the URL it was fetched from) AND RFC 9207 (authorize-response `iss`
+// must equal the metadata `issuer`). The approuter self-issuer scheme cannot
+// satisfy both at once for a proxied IAS — it makes fetched-from(approuter) ≠
+// issuer(IAS) (8414 fails) or issuer(approuter) ≠ authorize-iss(IAS) (9207
+// fails). Pointing discovery straight at IAS makes both hosts consistent.
 function protectedResourceMetadata(baseUrl, scope) {
+  const authServer = isIasIssuer() ? resolveIssuer() : baseUrl
   return {
     resource: `${baseUrl}${MCP_RESOURCE_SUFFIX}`,
-    authorization_servers: [baseUrl],
+    authorization_servers: [authServer],
     scopes_supported: [scope],
     bearer_methods_supported: ['header'],
   }
