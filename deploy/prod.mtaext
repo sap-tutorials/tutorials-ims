@@ -31,12 +31,13 @@ modules:
       # settled and per-instance CPU proved to sit in single digits (no CPU
       # bottleneck — the 2GB/instance was an OOM fix, not a capacity fix).
       #
-      # Do NOT raise above 2 without addressing the two things the codebase is
-      # single-instance-designed for, both of which DEGRADE with more instances:
-      #   1. WebSocket broadcasts (/ws/display, /ws/event-stream) have no sticky
-      #      sessions or Redis adapter — a completion emitted on one instance
-      #      never reaches WS clients parked on the others (silent message loss).
-      #      See scaling-playbook.md row #4 (tracked separately).
+      # Do NOT raise above 2 without addressing the remaining constraint the
+      # codebase is single-instance-designed for (the one below still DEGRADES
+      # with more instances):
+      #   1. WebSocket fan-out (/ws/display, /ws/event-stream) — RESOLVED by
+      #      #2524: handshakes are now sticky (JSESSIONID Gorouter affinity) and
+      #      broadcasts are Redis-backed (@socket.io/redis-adapter over
+      #      tutorials-redis-websocket). This constraint no longer blocks scaling.
       #   2. In-process rate limiters (srv/lib/ip-rate-limit.js,
       #      srv/lib/chat-rate-limit.js, srv/developer-service.js) run at N× the
       #      intended aggregate ceiling. See mta-deployment.md § Scaling
