@@ -117,6 +117,10 @@ function providerFromIssuer(issuer) {
   return 'oidc';
 }
 
+// A SCIM-UUID-shaped sapId (stray IAS auto-provision), e.g.
+// fbf099e2-f1b5-4cda-b590-866fed970a2a — never a real SAP ID.
+const SCIM_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Resolve the authenticated request to its Users row via the tiered identity
  * layer (#2552). Tiers, in order:
@@ -190,43 +194,40 @@ export async function resolveUser(user) {
   return null;
 }
 
-// ── IAS (MCP public-PKCE) identity resolution (#2550) ──────────────────────
-//
-// **Why IAS needs a different path than XSUAA.**
-//
-// The MCP tier authenticates mcp-remote via a secretless public OIDC client on
-// SAP Cloud Identity Services (IAS tenant atxgsg7zi). Unlike the XSUAA path —
-// where the JWT `user_uuid` claim IS the SAP ID (I-number) — an IAS token
-// carries NO I-number. Decoded live 2026-10-01 (client 0b1e8b56-…):
-//   sub   = thomas.jung@sap.com      (the VERIFIED email — IAS enforces email
-//                                      verification on the app, so sub is a
-//                                      trustworthy join key, not a self-claimed
-//                                      address)
-//   email = thomas.jung@sap.com
-//   user_uuid = scim_id = ba411614-… (the IAS SCIM UUID — NOT the I-number!)
-//   iss   = https://atxgsg7zi.accounts.ondemand.com
-//
-// So the XSUAA chain in resolveUserSapId is WRONG for an IAS token: branch #2
-// (`payload.user_uuid`) would return the SCIM UUID as a bogus "sapId". The IAS
-// path must instead JOIN on the verified email: email → Users.email → sapId.
-// This is a DB lookup, hence async — it cannot live inside the synchronous
-// resolveUserSapId. The srv-mcp before('*') hook calls resolveIasSapId once per
-// request and pins the resolved I-number onto the context (as authInfo.token.
-// userId) so the existing synchronous resolveUserSapId — and every handler that
-// calls it — keeps working unchanged, taking branch #1.
-
-const IAS_ISSUER_RE = /\.accounts\.ondemand\.com\/?$/i;
-
 /**
- * True when the authenticated request came from an IAS OIDC token (as opposed
- * to XSUAA). Detected by the token issuer host (`iss` claim).
+ * Per-request identity pin (the before('*') hook helper, #2552). Resolves the
+ * Users row via resolveUser and pins it onto the CAP user object so the ~40
+ * synchronous `resolveUserSapId` / `resolveDbUser` callsites downstream resolve
+ * the right row with NO per-callsite change:
+ *   - authInfo.token.userId = row.sapId   (when sapId present — SAP users)
+ *   - attr.dbUserId         = row.ID      (always on hit — carries no-sapId users)
+ * No-op (returns null) for anonymous or resolution miss; the caller's own
+ * fail-closed guard then applies.
  *
- * @param {object} user — CAP user; reads user.authInfo.token.payload.iss.
- * @returns {boolean}
+ * @param {object} user — CAP cds.context.user / req.user (mutated in place).
+ * @returns {Promise<object|null>} the resolved Users row, or null.
  */
-export function isIasToken(user) {
-  const iss = user?.authInfo?.token?.payload?.iss;
-  return typeof iss === 'string' && IAS_ISSUER_RE.test(iss);
+export async function pinResolvedUser(user) {
+  if (!user || !user.id || user.id === 'anonymous') return null;
+  // Idempotent: if already pinned this request, don't re-resolve.
+  if (user.attr?.dbUserId) return { ID: user.attr.dbUserId, sapId: user.authInfo?.token?.userId ?? null };
+  let row;
+  try {
+    row = await resolveUser(user);
+  } catch (err) {
+    cds.log('resolve-db-user').warn('[pinResolvedUser] resolve failed',
+      { email: tokenEmail(user), isu: issuerSubjectFromUser(user), msg: err?.message ?? err });
+    return null;
+  }
+  if (!row) return null;
+  user.attr = user.attr || {};
+  user.attr.dbUserId = row.ID;
+  if (row.sapId) {
+    user.authInfo = user.authInfo || {};
+    user.authInfo.token = user.authInfo.token || {};
+    user.authInfo.token.userId = row.sapId;
+  }
+  return row;
 }
 
 /**
@@ -248,98 +249,6 @@ export function tokenEmail(user) {
 // Stored GitHub-synthetic emails (contributor API) must never be a Tier-3 match
 // target — they are dirty data, not a login identity.
 const NOREPLY_GITHUB_RE = /@users\.noreply\.github\.com$/i;
-
-/**
- * The verified email carried by an IAS token. Prefers the `sub` claim (which
- * IAS sets to the email for these apps and gates on email-verification), then
- * the explicit `email` claim, then — defensively — emailFromUser (user.id).
- *
- * @param {object} user — CAP user.
- * @returns {string | null} lowercased email, or null.
- */
-export function iasEmailFromToken(user) {
-  const p = user?.authInfo?.token?.payload;
-  const isEmail = (v) => typeof v === 'string' && v.includes('@');
-  // Prefer sub (IAS sets it to the verified email), but only if sub is actually
-  // an address — a non-email sub (e.g. a bare id) must fall through to the
-  // explicit `email` claim, then defensively to emailFromUser(user.id).
-  const raw = (isEmail(p?.sub) && p.sub)
-    || (isEmail(p?.email) && p.email)
-    || emailFromUser(user);
-  return isEmail(raw) ? raw.toLowerCase() : null;
-}
-
-/**
- * Resolve the SAP ID (I-number) for an IAS-authenticated request by joining the
- * token's VERIFIED email to Users.email. This is the MCP-tier counterpart to
- * resolveUserSapId's XSUAA `user_uuid` path.
- *
- * Fail-closed: returns null when the token is not IAS, carries no usable email,
- * or no Users row matches that email — callers MUST treat null as "unresolved"
- * (anonymous), never minting or acting on a partial identity. Email match is
- * case-insensitive (emails are stored/compared lowercased).
- *
- * NOTE: does NOT fall back to the SCIM UUID (`user_uuid`) — that value is NOT a
- * SAP ID and must never be returned as one.
- *
- * @param {object} user — CAP user with an IAS token.
- * @returns {Promise<string | null>} the matched Users.sapId, or null.
- */
-export async function resolveIasSapId(user) {
-  if (!isIasToken(user)) return null;
-  const email = iasEmailFromToken(user);
-  if (!email) return null;
-  const { Users } = cds.entities('com.sap.developers.ims');
-  // Case-insensitive email match: compare lowercased on both sides so a token
-  // email that differs only in case from the stored value still resolves.
-  // Fetch ALL matches, not SELECT.one — a single email can map to >1 Users row:
-  // early IAS logins (before this resolver existed) auto-provisioned a row keyed
-  // on the SCIM UUID, so a user can have BOTH an I-number row (the real migrated
-  // identity) AND a stray SCIM-UUID-keyed row with the same email. We must
-  // deterministically prefer the I-number — returning the SCIM-UUID sapId would
-  // resolve the MCP user to the wrong (stray) Users row.
-  const rows = await SELECT.from(Users)
-    .columns('sapId')
-    .where`lower(email) = ${email}`;
-  if (!rows || !rows.length) return null;
-  const ids = rows.map((r) => r.sapId).filter(Boolean);
-  // Prefer a real SAP ID (I-/D-/S-number: a letter followed by digits) over a
-  // SCIM-UUID-shaped sapId (the stray auto-provisioned row).
-  const realSapId = ids.find((id) => !SCIM_UUID_RE.test(id));
-  return realSapId ?? ids[0] ?? null;
-}
-
-// A SCIM-UUID-shaped sapId (stray IAS auto-provision), e.g.
-// fbf099e2-f1b5-4cda-b590-866fed970a2a — never a real SAP ID.
-const SCIM_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * srv-mcp before('*') hook: for an IAS-authenticated request, resolve the real
- * SAP ID via resolveIasSapId and PIN it onto the context so the synchronous
- * resolveUserSapId (and every handler that calls it) returns the I-number via
- * branch #1 (authInfo.token.userId) instead of the SCIM UUID.
- *
- * Idempotent and no-op for:
- *   - non-IAS tokens (XSUAA path is untouched),
- *   - already-pinned contexts (userId already set to a resolved value),
- *   - IAS tokens whose email matches no Users row (leaves the context as-is;
- *     resolveUserSapId will then fall through to its own logic, and the caller's
- *     fail-closed null-guard still applies since no I-number was pinned).
- *
- * @param {object} user — CAP cds.context.user / req.user (mutated in place).
- * @returns {Promise<string | null>} the pinned sapId, or null if not pinned.
- */
-export async function pinIasSapId(user) {
-  if (!user || !isIasToken(user)) return null;
-  const sapId = await resolveIasSapId(user);
-  if (!sapId) return null;
-  // Pin where synchronous resolveUserSapId reads branch #1. Build the authInfo/
-  // token shells if absent (IAS tokens still carry a payload, but be defensive).
-  user.authInfo = user.authInfo || {};
-  user.authInfo.token = user.authInfo.token || {};
-  user.authInfo.token.userId = sapId;
-  return sapId;
-}
 
 /**
  * Resolve to the migrated Users row (or null) for the authenticated request.

@@ -183,3 +183,45 @@ describe('tokenEmail', () => {
     expect(tokenEmail(iasUser({ sub: 'uuid-not-email', email: undefined }))).toBeNull();
   });
 });
+
+describe('pinResolvedUser', () => {
+  beforeEach(() => { captured = undefined; stub = {}; installSelect(); installInsert(); });
+  afterEach(() => { delete globalThis.SELECT; delete globalThis.INSERT; });
+
+  it('pins sapId → authInfo.token.userId and ID → attr.dbUserId for a SAP user', async () => {
+    const { pinResolvedUser } = await import('../../packages/core/resolve-db-user.js');
+    stub.identityRow = { user_ID: 'u-1' };
+    stub.usersRows = [{ ID: 'u-1', sapId: 'I809764', email: 'x@sap.com' }];
+    const user = iasUser();
+    const row = await pinResolvedUser(user);
+    expect(row.ID).toBe('u-1');
+    expect(user.authInfo.token.userId).toBe('I809764');
+    expect(user.attr.dbUserId).toBe('u-1');
+  });
+
+  it('pins only attr.dbUserId for a no-sapId (social) user', async () => {
+    const { pinResolvedUser } = await import('../../packages/core/resolve-db-user.js');
+    stub.identityRow = { user_ID: 'u-social' };
+    stub.usersRows = [{ ID: 'u-social', sapId: null, email: 'who@gmail.com' }];
+    const user = iasUser();
+    await pinResolvedUser(user);
+    expect(user.attr.dbUserId).toBe('u-social');
+    expect(user.authInfo.token.userId).toBeUndefined();
+  });
+
+  it('is a no-op (null) on resolution miss', async () => {
+    const { pinResolvedUser } = await import('../../packages/core/resolve-db-user.js');
+    stub.identityRow = null; stub.usersRows = [];
+    const user = iasUser();
+    expect(await pinResolvedUser(user)).toBeNull();
+    expect(user.attr?.dbUserId).toBeUndefined();
+  });
+});
+
+describe('removed email-join exports', () => {
+  it('no longer exports resolveIasSapId / pinIasSapId', async () => {
+    const mod = await import('../../packages/core/resolve-db-user.js');
+    expect(mod.resolveIasSapId).toBeUndefined();
+    expect(mod.pinIasSapId).toBeUndefined();
+  });
+});
