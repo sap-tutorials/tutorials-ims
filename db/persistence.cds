@@ -57,3 +57,6 @@ annotate ims.ChannelCollectionItems with @cds.persistence.journal;
 annotate ims.ChannelTopicMap with @cds.persistence.journal;
 annotate ims.ChannelSubmissions with @cds.persistence.journal;
 annotate ims.KttLessons with @cds.persistence.journal;
+// #2552 identity-linkage: this container's .hdiconfig maps only hdbmigrationtable
+// (no plain-hdbtable plugin), so a persisted entity MUST be journaled to deploy.
+annotate ims.UserIdentities with @cds.persistence.journal;
