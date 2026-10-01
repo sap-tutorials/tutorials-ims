@@ -57,6 +57,55 @@ export function resolveUserSapId(user) {
   return user.id;
 }
 
+/**
+ * Extract the OIDC (issuer, subject) tuple from the authenticated user's token.
+ * This is the durable per-IdP identity key — stable across logins for every
+ * provider (SAP ID, IAS, social). Returns null when either claim is absent.
+ *
+ * @param {object} user — CAP cds.context.user / req.user.
+ * @returns {{issuer: string, subject: string} | null}
+ */
+export function issuerSubjectFromUser(user) {
+  const p = user?.authInfo?.token?.payload;
+  const issuer = p?.iss;
+  const subject = p?.sub;
+  if (typeof issuer === 'string' && issuer && typeof subject === 'string' && subject) {
+    return { issuer, subject };
+  }
+  return null;
+}
+
+/**
+ * Resolve the authenticated request to its Users row via the tiered identity
+ * layer (#2552). Tiers, in order:
+ *   1. (issuer, subject) link in UserIdentities — durable, all providers.
+ *   2. sapId fast-path (+ self-healing link write) — migrated SAP users.  [Task 3]
+ *   3. trusted-token-email → Users.email (+ link write).                  [Task 4]
+ * Miss on all tiers → null (caller stays fail-closed).
+ *
+ * @param {object} user — CAP cds.context.user / req.user.
+ * @returns {Promise<object|null>} the full Users row, or null.
+ */
+export async function resolveUser(user) {
+  if (!user || !user.id || user.id === 'anonymous') return null;
+  const { Users, UserIdentities } = cds.entities('com.sap.developers.ims');
+
+  // ── Tier 1: (issuer, subject) link ──────────────────────────────────────
+  const isu = issuerSubjectFromUser(user);
+  if (isu) {
+    const link = await SELECT.one.from(UserIdentities)
+      .columns('user_ID')
+      .where({ issuer: isu.issuer, subject: isu.subject });
+    if (link?.user_ID) {
+      const row = await SELECT.one.from(Users).where({ ID: link.user_ID });
+      if (row) return row;
+    }
+  }
+
+  // Tiers 2 & 3 added in later tasks.
+  return null;
+}
+
 // ── IAS (MCP public-PKCE) identity resolution (#2550) ──────────────────────
 //
 // **Why IAS needs a different path than XSUAA.**
