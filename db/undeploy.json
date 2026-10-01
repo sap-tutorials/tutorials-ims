@@ -39,6 +39,7 @@
     "src/gen/com.sap.developers.ims.TutorialTags.hdbtable",
     "src/gen/com.sap.developers.ims.Tutorials.hdbtable",
     "src/gen/com.sap.developers.ims.UserMetaData.hdbtable",
+    "src/gen/com.sap.developers.ims.UserIdentities.hdbtable",
     "src/gen/com.sap.developers.ims.Users.hdbtable",
     "src/gen/sap.changelog.ChangeLog.hdbtable"
 ]
