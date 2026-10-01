@@ -25,13 +25,24 @@ modules:
       # installed on tutorials-ims with Actions:write + Contents:write.
       USE_GITHUB_APP: 'true'
     parameters:
-      # Bumped 2→4 for the developers.sap.com site-launch load (reconciles a
-      # live cockpit `cf scale`, so deploys don't revert to 2). NOTE: the rate
-      # limiters in srv/lib/ip-rate-limit.js + srv/lib/chat-rate-limit.js are
-      # in-process, so per-instance caps now run at 4× the intended aggregate —
-      # accepted as launch headroom; revisit a shared-store limiter if 4
-      # becomes steady state.
-      instances: 4
+      # 2 instances: redundancy floor for prod (survives instance loss + rolling
+      # deploys) without the downsides of higher counts. Was briefly 4 for the
+      # developers.sap.com site-launch load; scaled back to 2 once launch traffic
+      # settled and per-instance CPU proved to sit in single digits (no CPU
+      # bottleneck — the 2GB/instance was an OOM fix, not a capacity fix).
+      #
+      # Do NOT raise above 2 without addressing the remaining constraint the
+      # codebase is single-instance-designed for (the one below still DEGRADES
+      # with more instances):
+      #   1. WebSocket fan-out (/ws/display, /ws/event-stream) — RESOLVED by
+      #      #2524: handshakes are now sticky (JSESSIONID Gorouter affinity) and
+      #      broadcasts are Redis-backed (@socket.io/redis-adapter over
+      #      tutorials-redis-websocket). This constraint no longer blocks scaling.
+      #   2. In-process rate limiters (srv/lib/ip-rate-limit.js,
+      #      srv/lib/chat-rate-limit.js, srv/developer-service.js) run at N× the
+      #      intended aggregate ceiling. See mta-deployment.md § Scaling
+      #      Constraints and scaling-playbook.md row #2.
+      instances: 2
 
   - name: tutorials-approuter
     # REBUILD_API_KEY is credstore-only (PR #903 rollout step 3 / #871 follow-up);

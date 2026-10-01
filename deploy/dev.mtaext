@@ -9,6 +9,10 @@ extends: tutorials-ims
 # guard; see .deploy/mta.yaml parameters).
 parameters:
   gameboard-url: https://tutorial-system-dev-gameboard-srv.cfapps.eu10-005.hana.ondemand.com
+  # DEV host for the separately-deployed tutorials-mcp MTA's tutorials-srv-mcp app.
+  # Naming scheme: tutorial-system-dev-<cf-app-name> where cf-app-name=tutorials-srv-mcp.
+  # Overrides the invalid base placeholder so the approuter's srv-mcp-api destination resolves.
+  srv-mcp-url: https://tutorial-system-dev-tutorials-srv-mcp.cfapps.eu10-005.hana.ondemand.com
 
 modules:
   - name: tutorials-srv
@@ -51,6 +55,22 @@ modules:
     properties:
       XS_APP_LOG_LEVEL: debug
       DEBUG: "xs-approuter:*"
+      # OAuth discovery issuer for the MCP tier (approuter/lib/well-known-oauth.js
+      # reads process.env.XSUAA_MCP_URL). Points at the IAS tenant that owns the
+      # PUBLIC mcp-remote client (tutorials-identity instance, client 0b1e8b56-…).
+      # IAS CAN mint a secretless public/PKCE client; XSUAA `application` cannot
+      # (verified 2026-09-29). mcp-remote reads authorize/token from discovery, so
+      # this MUST be the IAS issuer or the public-PKCE exchange has no endpoint.
+      # authorize=<issuer>/oauth2/authorize, token=<issuer>/oauth2/token.
+      # Tenant: atxgsg7zi (has SAP ID Service as corporate IdP; alzmza7li was
+      # deleted during cleanup 2026-10-01 — subaccount re-trusted to atxgsg7zi).
+      XSUAA_MCP_URL: https://atxgsg7zi.accounts.ondemand.com
+      # Discovery must advertise the IAS OIDC scope model (plain `openid`), NOT the
+      # XSUAA `<xsappname>.Everyone` form — IAS JWTs carry no scopes. well-known-
+      # oauth.js keys on MCP_ISSUER_KIND to select the scope shape. The client_id
+      # is NOT server config — mcp-remote supplies it via --static-oauth-client-info
+      # (see docs/end-users/mcp-quickstart.md); RFC 8414 discovery carries no client_id.
+      MCP_ISSUER_KIND: ias
       # REBUILD_API_KEY was formerly injected here via envsubst against
       # deploy.yml's $REBUILD_API_KEY. Removed as the third and final rollout
       # step of PR #871 (issue #903): the approuter now reads REBUILD_API_KEY

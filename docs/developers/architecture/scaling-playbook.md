@@ -15,7 +15,7 @@ The cheapest path to ~5x current traffic without the bigger Redis/replica work:
 1. **Row #1 — AppRouter auto-scaling** (this PR / #749). Pure deploy-config, zero code risk.
 2. **Row #3 — Cron separation** (same-binary, env-flag-gated). `JobLocks` already covers correctness at the lock level; pre-flight audit needed for caller-side acquire-before-side-effect ordering.
 3. **Row #2 — Replace in-process rate limiters** with HANA-backed `RateLimitBuckets`. Unlocks `tutorials-srv` auto-scaling.
-4. **Row #4 — WebSocket sticky sessions** (only if Socket.IO traffic justifies it).
+4. **Row #4 — WebSocket sticky sessions** (**resolved in #2524** — Redis adapter + JSESSIONID affinity shipped).
 5. Others as traffic forces them.
 
 ## The 15 constraints
@@ -25,7 +25,7 @@ The cheapest path to ~5x current traffic without the bigger Redis/replica work:
 | 1 | **AppRouter sessions** | `instances: 1` (deploy default) | **#749 (this PR)** — CF Autoscaler + `instances: 1..4`. XSUAA cookie-based, stateless. | Hours |
 | 2 | **In-process rate limiters** (feedback, search, chat) | Documented in [mta-deployment.md § Scaling Constraints](../operations/mta-deployment.md#scaling-constraints) | HANA-backed `RateLimitBuckets` entity (the "option 2" already recommended). | 2-3 days |
 | 3 | **Scheduled cron jobs** | All run inside `tutorials-srv` instance 0; safe-by-lock via `JobLocks` but couples web latency to cron load | **Same-binary, env-flag-gated separation** — new `tutorials-cron` MTA module reuses `path: gen/srv`. One-line guard `if (process.env.ENABLE_CRON === 'true') registerJobs()`. `JobLocks` covers correctness at the LOCK level, but each job must `acquireLock()` BEFORE non-idempotent side effects (email send, GitHub dispatch). **Pre-flight: audit all 16 `srv/jobs/*.js` files for acquire-then-side-effect ordering.** Not a codebase split. | 1-2 days (longer if audit surfaces non-idempotent ordering) |
-| 4 | **WebSocket sticky sessions** | Socket.IO transport in `tutorials-srv` requires sticky sessions at N>1 srv | Three options: (a) approuter sticky-session config, (b) Socket.IO Redis adapter, (c) pin srv to 1 and only scale srv if WebSocket is removed (last resort). | 1-3 days |
+| 4 | **WebSocket sticky sessions** | Socket.IO transport in `tutorials-srv` requires sticky sessions at N>1 srv | **Resolved in #2524.** Chosen path: **A+B** — sticky sessions (JSESSIONID cookie set on the engine.io handshake) + plugin-native Socket.IO Redis adapter (`@socket.io/redis-adapter` over the shared `tutorials-redis-websocket` standard instance). Fan-out is now Redis-backed; handshakes are sticky. See [PR/issue #2524](https://github.com/sap-tutorials/tutorials-ims/issues/2524). | Shipped |
 | 5 | **Per-instance in-memory caches** (content BLOBs, advocate photos, alerts, admin docs, generic TTL) | Multiple module-level caches across `srv/lib/` each hold per-instance state: `srv/lib/content-store.js` (50MB BLOB LRU), `srv/lib/advocate-photo-store.js` (bounded photo LRU), `srv/lib/alerts-cache.js` (60s TTL — alerts freshness budget per CLAUDE.md), `srv/lib/admin-docs-index.js` (module-level `_cache`), `srv/lib/ttl-cache.js` + `srv/lib/khoros-cache.js` (generic helpers). At N>1 srv each instance has its own copy → 2× memory, cold cache on each new instance, AND inconsistent TTL behavior (a 60s alerts TTL becomes "up to 60s per instance, observed inconsistently"). | At-scale fix: shared Redis or accept 2-3× memory per added instance. For our traffic profile probably acceptable until 4+ srv instances. Audit each cache for "inconsistency tolerable?" — alerts and admin-docs are tolerable; advocate photos and content BLOBs are bounded memory; nothing in this list breaks correctness. | Decision deferred to post-#2 |
 | 6 | **Content publish race** | `POST /content/publish` at N>1 srv could race concurrent publishes | Transaction-level advisory lock or `UPDATE ... WHERE version = $expected` optimistic concurrency. | 2-3 days |
 | 7 | **HANA connection pool** | `@sap/hana-client` defaults; not tuned for high concurrency | Document settings + levers (`max`, `min`, `idleTimeoutMillis`); runtime probe in `/health/db`. | 1-2 days |
@@ -72,14 +72,16 @@ The split: a new `tutorials-cron` module in `mta.yaml` reuses `path: gen/srv` (s
 
 **Pre-flight audit (mandatory before splitting):** walk `srv/jobs/*.js` (16 files) and confirm every job calls `acquireLock()` BEFORE any non-idempotent side effect. The `instances: 1` pin masks any acquire-after-side-effect ordering today. Once split, two instances of the same code (web + cron) both register schedulers — if `ENABLE_CRON` is mis-set or both happen to be true, the lock catches duplicates, but only if the lock acquisition runs before the side effect. Skip the audit and risk double-sends on email, double-dispatches on GitHub rebuild triggers, etc.
 
-### Row #4 — WebSocket sticky sessions
+### Row #4 — WebSocket sticky sessions (**resolved in #2524**)
 
 `tutorials-srv` uses Socket.IO via `@cap-js-community/websocket`. The `DisplayService` and `EventStreamService` emit CDS events to clients on the `/ws/display` and `/ws/event-stream` namespaces. At N>1 srv, a client's WebSocket connection lands on one instance and must STAY on that instance — Socket.IO state lives in process memory.
 
-The three fix options:
-- **(a) Approuter sticky-session config.** Cheapest. Approuter routes the same client (by cookie or source IP) to the same backend instance. Risk: harder to balance load if a few users have long-lived display sessions.
-- **(b) Socket.IO Redis adapter.** Textbook. Bind a BTP managed Redis service; configure `@socket.io/redis-adapter`. State shared across instances. Best architecturally; adds a service dependency for one feature.
-- **(c) Pin srv to 1.** Last resort. Acceptable until WebSocket traffic is a meaningful share of overall load.
+**Shipped in [#2524](https://github.com/sap-tutorials/tutorials-ims/issues/2524): path A+B.**
+
+- **(A) Sticky sessions** — a `JSESSIONID` cookie is set on the engine.io handshake (`srv/server.js`), pinning each client's connection to one srv instance via CF Gorouter affinity. Fixes handshake integrity at N>1.
+- **(B) Plugin-native Socket.IO Redis adapter** — `@socket.io/redis-adapter` over the `tutorials-redis-websocket` managed `redis-cache` standard instance. Bridges cross-instance broadcasts so a completion emitted on any instance reaches every subscribed client. Fixes the core fan-out bug.
+
+Fan-out is now Redis-backed and handshakes are sticky. The WebSocket constraint no longer blocks raising `instances` above 2; the remaining gate is row #2 (rate limiters).
 
 ### Row #5 — Per-instance in-memory caches
 
@@ -147,4 +149,4 @@ Every srv instance decrypts secrets on boot via the `tutorials-credstore` bindin
 
 ---
 
-**Last updated:** 2026-06-29 (#749 PR). When you crack off a row, update its status here and link to the implementing PR.
+**Last updated:** 2026-09-29 (#2524 PR — row #4 resolved). When you crack off a row, update its status here and link to the implementing PR.

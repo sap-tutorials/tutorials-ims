@@ -398,8 +398,8 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
 
   // #1027 — diagnostic surface: when the caller authenticates but STILL has
   // no Users row after provisioning is attempted (a token that carries no
-  // usable identity — no email claim, no given/family name, AND a non-email
-  // user.id — so provisionDbUser can't mint a row), the handler MUST log a WARN
+  // usable identity — no email claim, no given/family name, AND no canonical
+  // SAP ID — so provisionDbUser can't mint a row), the handler MUST log a WARN
   // so `cf logs tutorials-srv --recent | grep 'Users-row miss'` finds it.
   // Silent 0-row responses hid the real failure mode on #1027 for the better
   // part of an afternoon; the log line is the fix.
@@ -407,9 +407,11 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
   // NOTE (SAGE-ownership fix): a caller WITH profile claims but no Users row
   // no longer reaches this branch — provisionDbUser mints the row from the
   // claims. NOTE (#2199): under XSUAA `user.id` IS the email, which now also
-  // provisions a row (email-only is enough for ownership priority-3). So the
-  // miss only fires for genuinely un-provisionable tokens: tech / basic-auth
-  // callers whose id is a bare username, not an email.
+  // provisions a row (email-only is enough for ownership priority-3).
+  // NOTE (#2552): provisionDbUser now also accepts a canonical SAP ID alone
+  // (non-UUID, non-email sapId) as enough to mint a row. So the miss only fires
+  // for tokens where resolveUserSapId returns a SCIM UUID (not a canonical SAP
+  // ID), AND no email/name claims are present.
   it('logs a Users-row miss WARN when the caller cannot be provisioned (#1027)', async () => {
     const authorLog = cds.log('author-service');
     const originalWarn = authorLog.warn;
@@ -417,16 +419,17 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
     authorLog.warn = (...args) => { warnCalls.push(args.join(' ')); };
     try {
       const srv = await cds.connect.to('AuthorService');
-      // Tech-user shape: a resolvable sapId (JWT user_uuid) but NO usable
-      // identity — empty attr AND a non-email user.id — so provisionDbUser
-      // returns null → miss branch. (A real XSUAA browser login has an
-      // email-shaped user.id and would provision; see #2199.)
+      // Tech-user shape: a SCIM UUID as the JWT user_uuid (not a canonical SAP
+      // I-number) AND no email/name claims — so provisionDbUser returns null →
+      // miss branch. (#2552: a canonical SAP ID alone IS now enough to mint a
+      // row; a UUID is not.)
+      const scimUuid = 'ba411614-f1b5-4cda-b590-866fed970a2a';
       await srv.tx(
         {
           user: {
             id: 'svc-ghost',
             attr: {},
-            authInfo: { token: { userId: 'I999999' } },
+            authInfo: { token: { userId: scimUuid } },
             roles: { 'Tutorial.Author': true },
           },
         },
@@ -437,7 +440,7 @@ describe('AuthorService.MyOwnedTutorials filtering (#862 reopen)', () => {
       // Diagnostic MUST include the endpoint (so multi-endpoint miss batches
       // are distinguishable) and the resolved sapId (direct FK into Users.sapId).
       expect(missLine).toContain('endpoint=MyOwnedTutorials');
-      expect(missLine).toContain('resolved-sapId=I999999');
+      expect(missLine).toContain(`resolved-sapId=${scimUuid}`);
       // PII gate (regression guard): user.id is user-identifiable (an email for
       // browser logins) and MUST NOT appear in the log line — only the sapId is
       // emitted. Guards against a future change that logs user.id.

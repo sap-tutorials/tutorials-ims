@@ -15,6 +15,14 @@ If you're here to learn SAP technologies through tutorials at developers.sap.com
 - **[Privacy and Cookies](privacy-and-cookies.md)** — what we store and why
 - **[Accessibility](accessibility.md)** — accessibility statement and how to report issues
 
+## APIs & programmatic access
+
+For consuming site data from your own tools or scripts (AI clients, automation):
+
+- **[API Consumption](api-consumption.md)** — start here: which API surfaces exist, what's callable headless vs. browser-only, and how to authenticate each
+- **[MCP Quickstart](mcp-quickstart.md)** — connect an MCP client (Claude Desktop/Code, mcp-remote); anonymous, PAT, and OAuth tiers
+- **[A2A Quickstart](a2a-quickstart.md)** — Agent-to-Agent JSON-RPC consumption
+
 ## Need help?
 
 - Ask in [SAP Community](https://community.sap.com) (tag the tutorial's product)

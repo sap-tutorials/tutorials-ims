@@ -1,0 +1,132 @@
+_schema-version: 3.3.0
+# MTA descriptor for the MCP-auth microservice (tutorials-mcp).
+# Deployed SEPARATELY from the main tutorials-ims MTA (.deploy/mta.yaml).
+# This file lives at repo root → path: gen/srv-mcp (root-relative, no ../).
+# before-all runs from ROOT (no cd ..) — mbt uses the descriptor's directory as cwd.
+ID: tutorials-mcp
+version: 1.0.0
+
+# Destinations are subaccount-level, so DEV and PROD (sharing one subaccount)
+# need DISTINCT destination names. `dest-main-srv` defaults to the PROD name;
+# a per-env mtaext (e.g. mta-mcp-dev.mtaext) overrides it to the DEV name
+# (tutorials-main-srv-api-dev). CAP reads it via the
+# cds_requires_MainDeveloperService_credentials_destination env override below,
+# which supersedes the [production] destination baked into srv-mcp/package.json.
+parameters:
+  dest-main-srv: tutorials-main-srv-api
+
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm install
+        - bash -c "node scripts/bundle-shared.cjs && npx cds build --production"
+        # Build-only impl-binding fix: cds build nests handlers under gen/srv-mcp/
+        # srv/ but the service @source is srv-mcp/*.cds, so CAP's sibling-impl
+        # auto-discovery misses and serves a generic ApplicationService with NO
+        # custom on-handlers → every MCP tools/call 'has no handler'. Inject
+        # @impl into the baked csn to bind McpDeveloperService. Structural follow-
+        # up (rename module folder to the srv/ convention) tracked in #2569.
+        - bash -c "node scripts/patch-mcp-impl.cjs"
+        # @tutorials/core and @tutorials/mcp are workspace packages resolved via
+        # esbuild bundles in gen/srv-mcp/srv/lib/_shared/. Remove them from the
+        # gen/srv-mcp/package.json before mbt packages the module, otherwise
+        # `npm install` inside gen/srv-mcp creates dangling symlinks to
+        # gen/srv-mcp/packages/{core,mcp} which mbt cannot archive.
+        - bash -c "node -e \"const p=require('./gen/srv-mcp/package.json'); delete p.dependencies['@tutorials/core']; delete p.dependencies['@tutorials/mcp']; require('fs').writeFileSync('./gen/srv-mcp/package.json', JSON.stringify(p,null,2)+'\n');\""
+
+modules:
+  - name: tutorials-srv-mcp
+    type: nodejs
+    path: gen/srv-mcp
+    parameters:
+      memory: 1024M
+      disk-quota: 1024M
+      buildpack: nodejs_buildpack
+      instances: 1
+    properties:
+      NODE_ENV: production
+      EXPOSE_CAP_UI: false
+      # CAP env override for the remote-service destination NAME (subaccount-level,
+      # so DEV/PROD differ). Supersedes the [production] destination in
+      # srv-mcp/package.json. Default = PROD name; DEV set via mta-mcp-dev.mtaext.
+      cds_requires_MainDeveloperService_credentials_destination: ${dest-main-srv}
+    provides:
+      - name: srv-mcp-api
+        properties:
+          srv-url: ${default-url}
+    requires:
+      - name: tutorials-hana
+      - name: tutorials-credstore
+      # Inbound MCP-token validation is HYBRID (CAP `auth: {kind:ias, xsuaa:true}`
+      # in srv-mcp/package.json). Two bindings, two accepted issuers:
+      #  (1) tutorials-identity (IAS) — the PUBLIC OIDC client mcp-remote uses.
+      #      XSUAA `application` plan cannot mint a secretless public/PKCE client
+      #      (broker rejects public-client / _pkce_s256 / credential-types:none —
+      #      confirmed 2026-09-29). The IAS `identity` broker CAN: instance param
+      #      oauth2-configuration.public-client:true + a `credential-type:NONE`
+      #      key yields a client with NO secret/cert (verified on DEV 2026-10-01,
+      #      client 0b1e8b56-…, tenant atxgsg7zi). mcp-remote does authorization_code + S256 against
+      #      it. This is the client the approuter .well-known advertises.
+      #  (2) tutorials-xsuaa (confidential) — KEPT for the XSUAA-fallback so every
+      #      existing XSUAA path (browser login, PAT, platform tokens) still
+      #      validates. `xsuaa:true` wires cds.env.requires.xsuaa.credentials.
+      - name: tutorials-identity
+      - name: tutorials-xsuaa
+      # #1105 C1 — Step F resolution: outbound CC token for the write-forward
+      # path comes from the BTP Destination Service (destination name:
+      # tutorials-main-srv-api, Authentication: OAuth2ClientCredentials).
+      # Binding this service does NOT affect inbound JWT validation; CAP's
+      # auth strategy remains tutorials-xsuaa. The Cloud SDK resolves the
+      # named destination at runtime to produce the CC token for main-srv.
+      - name: tutorials-destination
+
+resources:
+  # IAS public OIDC client for mcp-remote (authorization_code + PKCE S256, NO
+  # secret). Adopted as an EXISTING service (created out-of-band, like
+  # tutorials-xsuaa/hana below) so its client_id is STABLE across deploys — an
+  # MTA-managed instance would be recreated with a new client_id on each rebuild,
+  # breaking the client_id pinned in docs/end-users/mcp-quickstart.md. The
+  # instance was created with oauth2-configuration.public-client:true +
+  # grant-types incl. authorization_code_pkce_s256 + redirect http://localhost:*/
+  # oauth/callback; a credential-type:NONE key yields NO secret/cert = genuine
+  # public client (verified DEV 2026-10-01, client 0b1e8b56-…, tenant atxgsg7zi,
+  # app 17b636dd-…). The broker mints its OWN client per instance (does NOT adopt
+  # a console app by name), so THIS instance's client is the one the approuter
+  # .well-known advertises and srv-mcp validates against.
+  - name: tutorials-identity
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: tutorials-identity
+
+  # tutorials-xsuaa is deployed and owned by the main tutorials-ims MTA.
+  # srv-mcp adopts it as an existing service for the XSUAA-FALLBACK leg of the
+  # hybrid auth (browser login, PAT, platform tokens keep validating). The
+  # PUBLIC mcp-remote client is the IAS `tutorials-identity` instance above,
+  # NOT this one — XSUAA cannot mint a secretless public client.
+  - name: tutorials-xsuaa
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: tutorials-xsuaa
+
+  # tutorials-hana is deployed and owned by the main tutorials-ims MTA.
+  # This MTA adopts it as an existing service to bind srv-mcp to the same HANA container.
+  - name: tutorials-hana
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: tutorials-hana
+
+  # tutorials-credstore is deployed and owned by the main tutorials-ims MTA.
+  # Shared binding so srv-mcp can resolve BTP Credential Store secrets.
+  - name: tutorials-credstore
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: tutorials-credstore
+
+  # tutorials-destination is deployed and owned by the main tutorials-ims MTA.
+  # Shared binding so the Cloud SDK can resolve the tutorials-main-srv-api
+  # destination at runtime (OAuth2ClientCredentials → CC token for main-srv).
+  - name: tutorials-destination
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: tutorials-destination

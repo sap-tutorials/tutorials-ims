@@ -1,0 +1,16 @@
+{
+  "name": "@tutorials/channels",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./*": "./*"
+  },
+  "dependencies": {
+    "@tutorials/core": "*",
+    "@tutorials/content": "*",
+    "@tutorials/mcp": "*"
+  }
+}

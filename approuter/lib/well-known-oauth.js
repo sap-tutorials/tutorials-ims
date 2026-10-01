@@ -35,30 +35,71 @@ const MCP_RESOURCE_SUFFIX = '/mcp-auth'
 // invalid. Please use a valid scope name in the request"). mcp-remote copies
 // `scopes_supported` from these discovery docs verbatim into its authorize
 // request, so the docs MUST advertise the qualified form. See resolveScope().
-const MCP_SCOPE_SHORT = 'Tutorial.MCP'
+// Baseline MCP scope. The public MCP auth tier gates on `authenticated-user`
+// (a valid logged-in token is enough — see xs-security-mcp.json + the design
+// non-goal), so discovery advertises the baseline `Everyone` scope that
+// tutorials-xsuaa-mcp defines, NOT the optional/elevated `Tutorial.MCP`.
+// mcp-remote copies scopes_supported verbatim into its authorize request, and
+// the requested scope must exist on the target (public) client.
+const MCP_SCOPE_SHORT = 'Everyone'
 
-// Prefix the short MCP scope with the bound xsappname to produce the
+// Issuer kind selects the OAuth shape. XSUAA and IAS differ in three ways the
+// discovery doc must reflect:
+//   - endpoint paths: XSUAA /oauth/authorize|/oauth/token; IAS /oauth2/*
+//   - scope: XSUAA grants a fully-qualified <xsappname>.<scope>; IAS is OIDC and
+//     its JWTs carry NO scopes — discovery advertises plain `openid`.
+//   - client: IAS mints a public (secretless) client the platform XSUAA cannot.
+// Read from MCP_ISSUER_KIND env (mtaext) at CALL TIME (not module load) so it
+// tracks runtime config and is unit-testable. Defaults to 'xsuaa' when unset.
+function isIasIssuer() {
+  return (process.env.MCP_ISSUER_KIND || 'xsuaa').toLowerCase() === 'ias'
+}
+
+// OAuth discovery for the MCP tier must advertise the PUBLIC tutorials-mcp
+// instance (issuer + baseline scope). To avoid binding a SECOND xsuaa to the
+// approuter (which would make @sap/approuter's own confidential LOGIN handshake
+// ambiguous — the framework has no route-level selector and picks a binding
+// non-deterministically), the public issuer/xsappname are supplied as PLAIN
+// NON-SECRET config env (set in the mtaext): XSUAA_MCP_URL + XSUAA_MCP_XSAPPNAME.
+// The approuter keeps its single confidential tutorials-xsuaa binding for login.
+// Fallbacks (for flexibility): a bound tutorials-mcp xsuaa if one is present,
+// then vcap.xsuaa[0] (local/degraded).
+const MCP_XSAPPNAME = process.env.XSUAA_MCP_XSAPPNAME || 'tutorials-mcp'
+function resolveMcpXsuaaCredentials() {
+  // 1. Explicit non-secret env config — the intended production path (no 2nd binding).
+  if (process.env.XSUAA_MCP_URL) {
+    return { url: process.env.XSUAA_MCP_URL, xsappname: MCP_XSAPPNAME }
+  }
+  // 2. A bound tutorials-mcp xsuaa, selected by xsappname (not index).
+  try {
+    const vcap = JSON.parse(process.env.VCAP_SERVICES || '{}')
+    const bindings = Array.isArray(vcap.xsuaa) ? vcap.xsuaa : []
+    const mcp = bindings.find(b => b && b.credentials && b.credentials.xsappname === MCP_XSAPPNAME)
+    if (mcp) return mcp.credentials
+    return bindings[0] && bindings[0].credentials
+  } catch { return undefined }
+}
+
+// Prefix the short MCP scope with the bound MCP xsappname to produce the
 // fully-qualified, grantable scope name. Falls back to the short name only if
 // the binding is unavailable (same degraded path as resolveIssuer()).
 function resolveScope() {
-  try {
-    const vcap = JSON.parse(process.env.VCAP_SERVICES || '{}')
-    const xsappname = vcap.xsuaa && vcap.xsuaa[0] && vcap.xsuaa[0].credentials && vcap.xsuaa[0].credentials.xsappname
-    if (xsappname) return `${xsappname}.${MCP_SCOPE_SHORT}`
-  } catch { /* fall through */ }
+  // IAS is OIDC-compliant and its JWTs carry no scopes; the MCP tier gates on
+  // `authenticated-user` (any valid token). Advertise plain `openid`.
+  if (isIasIssuer()) return 'openid'
+  const creds = resolveMcpXsuaaCredentials()
+  const xsappname = creds && creds.xsappname
+  if (xsappname) return `${xsappname}.${MCP_SCOPE_SHORT}`
   return MCP_SCOPE_SHORT
 }
 
 // Derive the XSUAA OAuth issuer base (e.g.
 // https://tutorial-system.authentication.eu10-005.hana.ondemand.com) from the
-// bound xsuaa VCAP credentials. Falls back to the XSUAA_TENANT/XSUAA_REGION
-// env vars (set as mtaext env:) if the binding is somehow unavailable.
+// bound PUBLIC (tutorials-mcp) xsuaa credentials. Falls back to the
+// XSUAA_TENANT/XSUAA_REGION env vars (set as mtaext env:) if unavailable.
 function resolveIssuer() {
-  try {
-    const vcap = JSON.parse(process.env.VCAP_SERVICES || '{}')
-    const xsuaa = vcap.xsuaa && vcap.xsuaa[0] && vcap.xsuaa[0].credentials
-    if (xsuaa && xsuaa.url) return xsuaa.url.replace(/\/+$/, '')
-  } catch { /* fall through to env */ }
+  const creds = resolveMcpXsuaaCredentials()
+  if (creds && creds.url) return creds.url.replace(/\/+$/, '')
 
   const tenant = process.env.XSUAA_TENANT
   const region = process.env.XSUAA_REGION
@@ -89,11 +130,12 @@ function sendJson(res, status, body) {
 
 // Build the RFC 8414 Authorization-Server metadata.
 //
-// `issuer` identifies THIS approuter (its own externally-visible base URL) as
-// the advertised authorization server — NOT the raw XSUAA URL. The authorize /
-// token endpoints still live on XSUAA (`endpointBase`).
+// `issuer` identifies the advertised authorization server. For XSUAA this is
+// THIS approuter (its own externally-visible base URL) — NOT the raw XSUAA URL;
+// the authorize / token endpoints still live on XSUAA (`endpointBase`). For IAS
+// the issuer is the IAS base itself (see the RFC 9207 note in the function body).
 //
-// Why self-issuer, not the XSUAA issuer (reverses the original Option A):
+// Why self-issuer for XSUAA (reverses the original Option A):
 //   MCP clients (mcp-remote / MCP SDK) read the protected-resource metadata,
 //   take `authorization_servers[0]`, and run RFC 8414 discovery against THAT
 //   host. XSUAA does not implement RFC 8414 — `<xsuaa>/.well-known/oauth-
@@ -105,26 +147,55 @@ function sendJson(res, status, body) {
 //   RFC 8414 doc here) keeps XSUAA's broken well-known out of the discovery
 //   path entirely; the actual authorize/token calls still hit XSUAA.
 function authorizationServerMetadata(issuer, endpointBase, scope) {
+  // Endpoint paths differ by issuer: IAS serves /oauth2/authorize|/oauth2/token,
+  // XSUAA serves /oauth/authorize|/oauth/token.
+  const ias = isIasIssuer()
+  const authzPath = ias ? '/oauth2/authorize' : '/oauth/authorize'
+  const tokenPath = ias ? '/oauth2/token' : '/oauth/token'
+  // IAS: plain `openid` (JWTs carry no scopes). XSUAA: `openid` + the qualified scope.
+  const scopes = ias ? ['openid'] : ['openid', scope]
+  // RFC 9207: the `issuer` MUST equal the `iss` the authorization server stamps on
+  // its authorize/token responses; modern MCP clients (mcp-remote / MCP SDK) reject
+  // an authorization response whose `iss` differs from the discovery `issuer`
+  // (IssuerMismatchError). IAS stamps its OWN base (https://<tenant>.accounts.
+  // ondemand.com) as `iss`, so for the IAS path the advertised issuer MUST be the
+  // IAS base (endpointBase) — NOT the approuter self-URL. The self-issuer trick
+  // below applies ONLY to XSUAA, which does not serve a valid RFC 8414 doc at its
+  // own host (see the block comment above); IAS does serve one, so self-issuer is
+  // both unnecessary and RFC-9207-breaking for IAS.
+  const advertisedIssuer = ias ? endpointBase : issuer
   return {
-    issuer,
-    authorization_endpoint: `${endpointBase}/oauth/authorize`,
-    token_endpoint: `${endpointBase}/oauth/token`,
+    issuer: advertisedIssuer,
+    authorization_endpoint: `${endpointBase}${authzPath}`,
+    token_endpoint: `${endpointBase}${tokenPath}`,
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: ['S256'],
-    scopes_supported: ['openid', scope],
+    scopes_supported: scopes,
     token_endpoint_auth_methods_supported: ['none'],
   }
 }
 
-// RFC 9728 Protected-Resource metadata. `authorization_servers` advertises the
-// approuter itself (baseUrl) as the authorization server — see the self-issuer
-// rationale on authorizationServerMetadata(). Clients then discover the AS doc
-// at our host, which returns a valid RFC 8414 document.
+// RFC 9728 Protected-Resource metadata. `authorization_servers` is the AS the
+// MCP client runs discovery against.
+//
+// XSUAA path: advertise the approuter itself (baseUrl) — XSUAA serves no valid
+// RFC 8414 doc at its own host, so we self-serve one (see authorizationServer
+// Metadata()'s block comment) and proxy the endpoints to XSUAA.
+//
+// IAS path: advertise the IAS base DIRECTLY. IAS serves a standards-compliant
+// RFC 8414 doc at its own host whose `issuer` equals that host — so a modern MCP
+// client (mcp-remote / MCP SDK) satisfies BOTH RFC 8414 §3.3 (metadata `issuer`
+// must equal the URL it was fetched from) AND RFC 9207 (authorize-response `iss`
+// must equal the metadata `issuer`). The approuter self-issuer scheme cannot
+// satisfy both at once for a proxied IAS — it makes fetched-from(approuter) ≠
+// issuer(IAS) (8414 fails) or issuer(approuter) ≠ authorize-iss(IAS) (9207
+// fails). Pointing discovery straight at IAS makes both hosts consistent.
 function protectedResourceMetadata(baseUrl, scope) {
+  const authServer = isIasIssuer() ? resolveIssuer() : baseUrl
   return {
     resource: `${baseUrl}${MCP_RESOURCE_SUFFIX}`,
-    authorization_servers: [baseUrl],
+    authorization_servers: [authServer],
     scopes_supported: [scope],
     bearer_methods_supported: ['header'],
   }

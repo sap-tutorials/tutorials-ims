@@ -17,12 +17,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock the SPARQL client BEFORE importing kg-path (top-level await import
 // matches the existing pattern in test/unit/kg-path-between-handler.test.js).
-vi.mock('../../../srv/lib/kg-sparql-client.js', () => ({
+vi.mock('@tutorials/kg/kg-sparql-client.js', () => ({
   kgQuery: vi.fn(),
 }))
 
-const { kgQuery } = await import('../../../srv/lib/kg-sparql-client.js')
-const { findPath, parsePathSparql } = await import('../../../srv/lib/kg-path.js')
+const { kgQuery } = await import('@tutorials/kg/kg-sparql-client.js')
+const { findPath, parsePathSparql } = await import('@tutorials/kg/kg-path.js')
 
 // SPARQL-results+JSON fixture — the exact shape KG_QUERY emits (verified
 // against DEV HANA 2026-07-09): b is a uri binding, pathType a plain literal,

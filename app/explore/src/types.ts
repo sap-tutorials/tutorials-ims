@@ -32,6 +32,7 @@ export interface ExploreNode {
   type: NodeType
   label: string
   slug: string
+  rank?: number  // normalized PageRank 0–1, per-type max-normalized; optional (#2517)
 }
 
 export interface ExploreEdge {
@@ -46,4 +47,7 @@ export interface ExplorePayload {
   edges: ExploreEdge[]
   generatedAt: string
   droppedBindings?: number  // observability counter from Task 1's buildExplorePayload
+  features?: {
+    threeD: boolean  // KG_EXPLORE_3D_ENABLED flag, injected per-request (#2517)
+  }
 }

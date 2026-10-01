@@ -10,6 +10,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const csrfFetch = vi.fn();
 vi.mock('@shared/csrf-fetch', () => ({ csrfFetch: (...args: unknown[]) => csrfFetch(...args) }));
 
+// #2558 — deterministic shuffle so we can assert the remapped answerIndex.
+vi.mock('@shared/shuffle', () => ({
+  shuffleArray: (arr: unknown[]) => [...arr].reverse(),
+}));
+
 function bakePage(steps: unknown, mountSteps: number[]) {
   const mounts = mountSteps
     .map((n) => `<div class="step-challenge-mount" data-step="${n}"></div>`)
@@ -99,5 +104,62 @@ describe('challenge-render island', () => {
     expect(JSON.parse(init.body)).toEqual({
       tutorialSlug: 'my-tutorial', stepNumber: 3, nodeId: 'challenge-3-0', submittedAnswer: 'my answer',
     });
+  });
+});
+
+describe('challenge island answer shuffle (#2558)', () => {
+  it('shuffles mcq options and remaps answerIndex to the same option string', async () => {
+    // correct option is 'a' at index 0; reverse → ['d','c','b','a'], so the
+    // correct option 'a' is now at index 3.
+    const steps = [
+      {
+        number: 1,
+        challenge: {
+          nodes: [
+            { id: 'm1', type: 'mcq', prompt: 'Which?', options: ['a', 'b', 'c', 'd'], answerIndex: 0 },
+          ],
+        },
+      },
+    ];
+    bakePage(steps, [1]);
+    await runIsland();
+
+    const labels = [...document.querySelectorAll('.challenge-option')].map(
+      (l) => l.textContent?.trim(),
+    );
+    expect(labels).toEqual(['d', 'c', 'b', 'a']);
+
+    // Grade by selecting the option now at the remapped correct index (3).
+    const radios = document.querySelectorAll<HTMLInputElement>('.challenge-option input');
+    radios[3].checked = true;
+    radios[3].dispatchEvent(new Event('change', { bubbles: true }));
+    (document.querySelector('.challenge-check') as HTMLButtonElement).click();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const verdict = document.querySelector('.challenge-verdict');
+    expect(verdict?.getAttribute('data-status')).toBe('correct');
+  });
+
+  it('grades a non-correct index as incorrect after shuffle', async () => {
+    const steps = [
+      {
+        number: 1,
+        challenge: {
+          nodes: [
+            { id: 'm1', type: 'mcq', prompt: 'Which?', options: ['a', 'b', 'c', 'd'], answerIndex: 0 },
+          ],
+        },
+      },
+    ];
+    bakePage(steps, [1]);
+    await runIsland();
+
+    const radios = document.querySelectorAll<HTMLInputElement>('.challenge-option input');
+    radios[0].checked = true; // 'd' after reverse — not the correct answer
+    radios[0].dispatchEvent(new Event('change', { bubbles: true }));
+    (document.querySelector('.challenge-check') as HTMLButtonElement).click();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(document.querySelector('.challenge-verdict')?.getAttribute('data-status')).toBe('incorrect');
   });
 });

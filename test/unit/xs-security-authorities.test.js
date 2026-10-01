@@ -39,8 +39,14 @@ describe.each(FILES)('%s — top-level authorities auto-grant', (relPath) => {
     expect(Array.isArray(cfg.authorities)).toBe(true);
   });
 
-  it('auto-grants ONLY $XSAPPNAME.Everyone (no other scopes)', () => {
-    expect(cfg.authorities).toEqual(['$XSAPPNAME.Everyone']);
+  it('auto-grants ONLY $XSAPPNAME.Everyone and $XSAPPNAME.InternalWrite (no other scopes)', () => {
+    // InternalWrite is in authorities so client_credentials tokens minted from
+    // tutorials-xsuaa carry this scope — that is what lets the self-call token
+    // pass @requires:'InternalWrite' on the *For actions (issue #1105 C1).
+    // It is NOT a role-template scope and is never assigned to a human user.
+    expect(cfg.authorities).toContain('$XSAPPNAME.Everyone');
+    expect(cfg.authorities).toContain('$XSAPPNAME.InternalWrite');
+    expect(cfg.authorities.length).toBe(2);
   });
 
   it('does not auto-grant Tutorial.Author (A1 regression)', () => {

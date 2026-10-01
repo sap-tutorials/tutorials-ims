@@ -94,7 +94,13 @@ export function parseRulesVrEnriched(content: string): {
   // Idempotent — safe to call when no block is in progress (returns early on currentNum === null).
   const flush = () => {
     if (currentNum === null) return
-    const questions = parseBlock(blockLines, currentNum, ruleTypeByStepAndId, correctAnswerByStepAndId)
+    // [#2514] Ordinal = how many questions the step already holds. It makes each
+    // question's id unique within the step (validate-N, validate-N-1, …) so the
+    // client's id-keyed answer/verdict state doesn't collide when an author puts
+    // multiple [VALIDATE_N] blocks in one step. parseBlock needs it up front so
+    // its sibling-map keys (`${stepNum}:${q.id}`) match the emitted id.
+    const ordinal = result.get(currentNum)?.length ?? 0
+    const questions = parseBlock(blockLines, currentNum, ordinal, ruleTypeByStepAndId, correctAnswerByStepAndId)
     if (questions.length) {
       const existing = result.get(currentNum) ?? []
       existing.push(...questions)
@@ -211,6 +217,7 @@ export function parseRulesVrEnriched(content: string): {
 function parseBlock(
   lines: string[],
   stepNum: number,
+  ordinal: number,
   ruleTypeByStepAndId: Map<string, string>,
   correctAnswerByStepAndId: Map<string, string>
 ): ValidationQuestion[] {
@@ -223,6 +230,11 @@ function parseBlock(
   const gradingMatch = raw.match(/###Grading\s*\n([\s\S]*?)(?=###|$)/)
 
   if (!questionMatch) return []
+
+  // [#2514] First question in a step keeps the legacy `validate-N` id (so
+  // single-question steps and all existing published content are byte-for-byte
+  // unchanged); subsequent questions get `validate-N-<ordinal>` to stay unique.
+  const questionId = ordinal === 0 ? `validate-${stepNum}` : `validate-${stepNum}-${ordinal}`
 
   const ruleType = (ruleMatch?.[1] ?? '').trim().toLowerCase()
   const question = questionMatch[1].trim()
@@ -274,7 +286,7 @@ function parseBlock(
     // client-side-grading trade-off) — multi-select carries the full set in
     // `correctAnswers`; single carries the scalar `correctAnswer`.
     const q: ValidationQuestion = {
-      id: `validate-${stepNum}`,
+      id: questionId,
       question,
       type,
       options,
@@ -298,7 +310,7 @@ function parseBlock(
 
   if (!matchContent) return []
   const q: ValidationQuestion = {
-    id: `validate-${stepNum}`,
+    id: questionId,
     question,
     type,
     ...(aiGrading ? { aiGrading: true } : { correctAnswer: matchContent }),

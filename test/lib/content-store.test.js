@@ -4,7 +4,7 @@ import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { createContentHandlers } from '../../srv/lib/content-store.js';
 import { createSessionHelpers } from '../../srv/lib/content-publish-session.js';
-import * as catalogRenderer from '../../srv/lib/catalog-renderer.js';
+import * as catalogRenderer from '@tutorials/content/catalog-renderer.js';
 import {
   refreshContentDeltaFlags, bustContentDeltaFlagsCache, DELTA_WRITE_KEY,
 } from '../../srv/lib/content-delta-flags.js';

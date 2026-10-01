@@ -171,10 +171,12 @@ describe('main() network fail-open', () => {
     });
 
     const manifest = JSON.parse(readFileSync(manifestOut, 'utf8'));
-    // Should contain current file + failed prior (still in manifest, just not downloaded)
+    // issue #2533: a failed carry-forward download must be DROPPED from the
+    // manifest, not left in it — otherwise the manifest advertises an asset the
+    // approuter 404s on, tripping the post-deploy asset-retention smoke gate.
+    // Only the current-build file (on disk) remains. Still fail-open (no throw).
     expect(manifest).toEqual([
       { file: 'current-Ab12Cd34.js', firstSeenMs: 0, lastSeenMs: 0 },
-      { file: 'prior-Xy12Ab34.js', firstSeenMs: 0, lastSeenMs: 0 },
     ]);
 
     // Should warn about the failed download

@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import cds from '@sap/cds';
 import { enqueueOnDemandExtraction, normalizeQuery } from '../srv/lib/kg/on-demand-enqueue.js';
 import { _resetForTests as _resetRateLimits } from '../srv/lib/per-user-rate-limit.js';
-import { _resetCacheForTests as _resetSettingsCache } from '../srv/lib/runtime-config/kg-settings.js';
-import * as kgSettings from '../srv/lib/runtime-config/kg-settings.js';
+import { _resetCacheForTests as _resetSettingsCache } from '@tutorials/kg/kg-settings.js';
+import * as kgSettings from '@tutorials/kg/kg-settings.js';
 
 const NS = 'com.sap.developers.ims';
 

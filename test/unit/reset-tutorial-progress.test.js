@@ -716,10 +716,10 @@ describe('Task 9 — admin-service SQL filters', () => {
 // hybrid-only (HANA SPARQL + KGE), so a regression guard here is enough.
 describe('Task 13 — KG raw-SQL filters honor SUPERSEDED', () => {
   const conceptsForUserSource = fs.readFileSync(
-    join(__dirname_t13, '../../srv/lib/kg/concepts-for-user.js'), 'utf8'
+    join(__dirname_t13, '../../packages/kg/concepts-for-user.js'), 'utf8'
   );
   const findPathSource = fs.readFileSync(
-    join(__dirname_t13, '../../srv/lib/kg/joule-tool-find-path.js'), 'utf8'
+    join(__dirname_t13, '../../packages/kg/joule-tool-find-path.js'), 'utf8'
   );
 
   it('concepts-for-user.js SQL filter includes SUPERSEDED', () => {

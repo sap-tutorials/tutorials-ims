@@ -2,7 +2,7 @@
 
 const { readdirSync, existsSync, writeFileSync, mkdirSync } = require('node:fs');
 const { join, dirname } = require('node:path');
-const { mergeRetention } = require('./lib/asset-retention.cjs');
+const { mergeRetention, finalizeManifest } = require('./lib/asset-retention.cjs');
 
 // Hash detection: support TWO formats from the build pipeline:
 // 1. Vite bundles: <name>-<hash>.(js|css) — dash separator, hash ≥ 8 chars of [A-Za-z0-9_-]
@@ -94,14 +94,20 @@ async function main(opts = {}) {
 
   // Carry forward: download each in-window prior bundle into its dir.
   let ok = 0, miss = 0;
+  const failedDownloads = [];
   for (const file of toDownload) {
     const meta = fileMetadata.get(file) || { kind: file.endsWith('.css') ? 'css' : 'js', dir: file.endsWith('.css') ? args.cssDir : args.jsDir };
     const got = await downloadTo(`${approuter.replace(/\/$/, '')}/${meta.kind}/${file}`, join(meta.dir, file));
-    if (got) ok++; else { miss++; console.warn(`[retain-assets] could not fetch carried ${file} — skipping (fail-open).`); }
+    if (got) ok++; else { miss++; failedDownloads.push(file); console.warn(`[retain-assets] could not fetch carried ${file} — dropping from manifest (fail-open).`); }
   }
 
-  writeFileSync(args.manifestOut, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
-  console.log(`[retain-assets] current=${currentFiles.length} carried=${ok} missed=${miss} manifest=${manifest.length} → ${args.manifestOut}`);
+  // Only advertise assets that actually shipped: drop carried entries whose
+  // download failed, so the manifest never lists an asset the approuter 404s on
+  // (issue #2533). Current-build files are on disk regardless and are preserved.
+  const finalManifest = finalizeManifest(manifest, failedDownloads, currentFiles);
+
+  writeFileSync(args.manifestOut, JSON.stringify(finalManifest, null, 2) + '\n', 'utf8');
+  console.log(`[retain-assets] current=${currentFiles.length} carried=${ok} missed=${miss} manifest=${finalManifest.length} → ${args.manifestOut}`);
 }
 
 module.exports = { collectHashedFiles, parseArgs, main };

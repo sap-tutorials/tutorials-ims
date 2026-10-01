@@ -13,13 +13,15 @@ const SHELL = readFileSync(
 const EXPECTED = {
   baipAiLaunchpad:   'https://tutorial-system.ai-launchpad.prod.eu-central-1.aws.ai-prod.cloud.sap/aic/index.html',
   baipBtpSubaccount: 'https://emea.cockpit.btp.cloud.sap/cockpit/#/globalaccount/a0ec0d63-f690-42ab-8113-9f6567cd897e/subaccount/3c6fa3f1-db8c-4e47-9048-fa8c84b867cb/subaccountoverview',
-  baipHanaCloud:     'https://devrel.hana-tooling.ingress.orchestration.prod-eu10.hanacloud.ondemand.com/hcs/sap/hana/cloud/index.html'
+  baipHanaCloud:     'https://devrel.hana-tooling.ingress.orchestration.prod-eu10.hanacloud.ondemand.com/hcs/sap/hana/cloud/index.html',
+  baipIasAdminConsole: 'https://atxgsg7zi.accounts.ondemand.com/admin/#/applications/17b636dd-fa87-4cd8-b0f2-0abd5f9a3042'
 };
 
 const TITLES = {
   baipAiLaunchpad:   'AI Launchpad',
   baipBtpSubaccount: 'BTP Subaccount',
-  baipHanaCloud:     'HANA Cloud'
+  baipHanaCloud:     'HANA Cloud',
+  baipIasAdminConsole: 'IAS Admin Console'
 };
 
 describe('admin-shell BAIP external-links group', () => {
@@ -36,9 +38,9 @@ describe('admin-shell BAIP external-links group', () => {
     expect(baip.requiredScope).toBe('Admin');
   });
 
-  it('has exactly the three expected external-link items', () => {
+  it('has exactly the four expected external-link items', () => {
     const keys = baip.items.map(i => i.key);
-    expect(keys).toEqual(['baipAiLaunchpad', 'baipBtpSubaccount', 'baipHanaCloud']);
+    expect(keys).toEqual(['baipAiLaunchpad', 'baipBtpSubaccount', 'baipHanaCloud', 'baipIasAdminConsole']);
   });
 
   it('every item opens in a new tab, is Admin-gated, and points at the exact https URL', () => {

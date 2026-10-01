@@ -10,6 +10,7 @@
 // selector, absent markers are harmless" idiom the branch/skip islands use.
 import { createApp } from 'vue';
 import ChallengeRenderer from './ChallengeRenderer.vue';
+import { shuffleArray } from '@shared/shuffle';
 
 // Local shape — matches the public spec emitted by srv/lib/ai-challenge-spec.js
 // and consumed by ChallengeRenderer.vue. Kept here (not imported from the .vue)
@@ -51,6 +52,18 @@ if (dataEl) {
     const stepNum = Number(host.dataset.step ?? 0);
     const step = stepByNum.get(stepNum);
     if (!step?.challenge?.nodes?.length) return;
-    createApp(ChallengeRenderer, { spec: step.challenge, slug, stepNumber: stepNum }).mount(host);
+    // [#2558] Randomize mcq answer order per page load. ChallengeRenderer
+    // grades by INDEX (selected === answerIndex), so we must remap answerIndex
+    // to the correct option's new position after shuffling. Non-mcq nodes
+    // (heading/prose/freeText) have no options and pass through unchanged;
+    // freeText is AI-graded server-side.
+    const shuffledNodes = step.challenge.nodes.map((node) => {
+      if (node.type !== 'mcq' || !node.options || node.answerIndex == null) return node;
+      const correct = node.options[node.answerIndex];
+      const options = shuffleArray(node.options);
+      return { ...node, options, answerIndex: options.indexOf(correct) };
+    });
+    const spec = { nodes: shuffledNodes };
+    createApp(ChallengeRenderer, { spec, slug, stepNumber: stepNum }).mount(host);
   });
 }

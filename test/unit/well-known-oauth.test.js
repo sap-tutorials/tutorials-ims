@@ -26,6 +26,7 @@ function mockRes() {
 const SAVED_VCAP = process.env.VCAP_SERVICES;
 const SAVED_TENANT = process.env.XSUAA_TENANT;
 const SAVED_REGION = process.env.XSUAA_REGION;
+const SAVED_ISSUER_KIND = process.env.MCP_ISSUER_KIND;
 
 function setXsuaaBinding(url, xsappname) {
   const credentials = { url };
@@ -38,11 +39,15 @@ describe('.well-known OAuth discovery — dynamic runtime middleware (#1105)', (
     delete process.env.VCAP_SERVICES;
     delete process.env.XSUAA_TENANT;
     delete process.env.XSUAA_REGION;
+    delete process.env.XSUAA_MCP_URL;
+    delete process.env.XSUAA_MCP_XSAPPNAME;
+    delete process.env.MCP_ISSUER_KIND;
   });
   afterEach(() => {
     if (SAVED_VCAP === undefined) delete process.env.VCAP_SERVICES; else process.env.VCAP_SERVICES = SAVED_VCAP;
     if (SAVED_TENANT === undefined) delete process.env.XSUAA_TENANT; else process.env.XSUAA_TENANT = SAVED_TENANT;
     if (SAVED_REGION === undefined) delete process.env.XSUAA_REGION; else process.env.XSUAA_REGION = SAVED_REGION;
+    if (SAVED_ISSUER_KIND === undefined) delete process.env.MCP_ISSUER_KIND; else process.env.MCP_ISSUER_KIND = SAVED_ISSUER_KIND;
   });
 
   it('derives the issuer from the bound xsuaa VCAP credentials', () => {
@@ -73,12 +78,12 @@ describe('.well-known OAuth discovery — dynamic runtime middleware (#1105)', (
     // scopes_supported verbatim, so the discovery docs must advertise the
     // qualified form. Live-verified on Dev 2026-07-13 (#1105 criterion 8).
     setXsuaaBinding('https://t.authentication.eu10.hana.ondemand.com', 'tutorials!t676072');
-    expect(resolveScope()).toBe('tutorials!t676072.Tutorial.MCP');
+    expect(resolveScope()).toBe('tutorials!t676072.Everyone');
   });
 
   it('falls back to the short scope name when no xsappname is bound', () => {
     delete process.env.VCAP_SERVICES;
-    expect(resolveScope()).toBe('Tutorial.MCP');
+    expect(resolveScope()).toBe('Everyone');
   });
 
   it('authorization-server metadata has all RFC 8414 required fields', () => {
@@ -123,7 +128,7 @@ describe('.well-known OAuth discovery — dynamic runtime middleware (#1105)', (
       () => {},
     );
     const parsed = JSON.parse(res.body);
-    expect(parsed.scopes_supported).toContain('tutorials!t676072.Tutorial.MCP');
+    expect(parsed.scopes_supported).toContain('tutorials!t676072.Everyone');
   });
 
   it('serves the authorization-server doc at its path with 200 + JSON', () => {
@@ -190,6 +195,70 @@ describe('.well-known OAuth discovery — dynamic runtime middleware (#1105)', (
     );
     expect(nexted).toBe(true);
     expect(res.statusCode).toBeNull();
+  });
+});
+
+describe('.well-known OAuth discovery — IAS issuer (MCP_ISSUER_KIND=ias)', () => {
+  const SAVED_VCAP = process.env.VCAP_SERVICES;
+  const SAVED_MCP_URL = process.env.XSUAA_MCP_URL;
+  const SAVED_ISSUER_KIND = process.env.MCP_ISSUER_KIND;
+  const IAS_ISSUER = 'https://atxgsg7zi.accounts.ondemand.com';
+
+  beforeEach(() => {
+    delete process.env.VCAP_SERVICES;
+    process.env.MCP_ISSUER_KIND = 'ias';
+    process.env.XSUAA_MCP_URL = IAS_ISSUER;
+  });
+  afterEach(() => {
+    if (SAVED_VCAP === undefined) delete process.env.VCAP_SERVICES; else process.env.VCAP_SERVICES = SAVED_VCAP;
+    if (SAVED_MCP_URL === undefined) delete process.env.XSUAA_MCP_URL; else process.env.XSUAA_MCP_URL = SAVED_MCP_URL;
+    if (SAVED_ISSUER_KIND === undefined) delete process.env.MCP_ISSUER_KIND; else process.env.MCP_ISSUER_KIND = SAVED_ISSUER_KIND;
+  });
+
+  it('advertises the plain OIDC `openid` scope, not the XSUAA qualified form', () => {
+    // IAS is OIDC-compliant and its JWTs carry no scopes; the MCP tier gates on
+    // authenticated-user. So discovery advertises bare `openid`.
+    expect(resolveScope()).toBe('openid');
+  });
+
+  it('uses IAS /oauth2/* endpoint paths and openid-only scopes_supported', () => {
+    const m = authorizationServerMetadata('https://developers.sap.com', IAS_ISSUER, 'openid');
+    // RFC 9207: for IAS the advertised issuer MUST be the IAS base (what IAS
+    // stamps as `iss`), NOT the self-URL passed as the first arg — otherwise
+    // mcp-remote rejects the authorize response with IssuerMismatchError.
+    expect(m.issuer).toBe(IAS_ISSUER);
+    expect(m.authorization_endpoint).toBe(`${IAS_ISSUER}/oauth2/authorize`);
+    expect(m.token_endpoint).toBe(`${IAS_ISSUER}/oauth2/token`);
+    expect(m.scopes_supported).toEqual(['openid']);
+    // Public client: no secret at the token endpoint.
+    expect(m.token_endpoint_auth_methods_supported).toContain('none');
+    expect(m.code_challenge_methods_supported).toContain('S256');
+  });
+
+  it('served AS doc points authorize/token at IAS /oauth2/* and advertises the IAS issuer', () => {
+    const res = mockRes();
+    wellKnownOAuthHandler(
+      { method: 'GET', url: '/.well-known/oauth-authorization-server', headers: { host: 'x.example' } },
+      res,
+      () => {},
+    );
+    expect(res.statusCode).toBe(200);
+    const parsed = JSON.parse(res.body);
+    // IAS path: issuer is the IAS base (RFC 9207), not the approuter self-host.
+    expect(parsed.issuer).toBe(IAS_ISSUER);
+    expect(parsed.authorization_endpoint).toBe(`${IAS_ISSUER}/oauth2/authorize`);
+    expect(parsed.scopes_supported).toEqual(['openid']);
+  });
+
+  it('protected-resource metadata points authorization_servers at IAS directly (RFC 8414 §3.3 + 9207)', () => {
+    // IAS serves its own valid RFC 8414 doc, so the client must discover AGAINST
+    // IAS — not the approuter self-host. Advertising the approuter would make the
+    // client fetch our doc (issuer=IAS) from the approuter URL and fail RFC 8414
+    // §3.3 (issuer != fetched-from). authorization_servers[0] must be the IAS base.
+    const m = protectedResourceMetadata('https://x.example', 'openid');
+    expect(m.authorization_servers).toEqual([IAS_ISSUER]);
+    // The resource is still the approuter-hosted MCP endpoint.
+    expect(m.resource).toBe(`https://x.example${'/mcp-auth'}`);
   });
 });
 

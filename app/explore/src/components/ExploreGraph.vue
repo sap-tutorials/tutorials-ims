@@ -4,6 +4,7 @@ import Graph, { MultiDirectedGraph } from 'graphology'
 import Sigma from 'sigma'
 import forceAtlas2 from 'graphology-layout-forceatlas2'
 import type { ExploreNode, ExploreEdge, NodeType, PredicateType } from '../types'
+import { NODE_COLORS, EDGE_COLORS } from '../node-colors'
 
 const props = defineProps<{
   nodes: ExploreNode[]
@@ -299,41 +300,6 @@ function focusSingleNode(id: string): void {
 
 defineExpose({ focusSingleNode })
 
-// Record<NodeType, string> is meant to make TS catch missing variants — but
-// only under a strict typecheck (not `vite build`), so keep this in sync with
-// the NodeType union in types.ts by hand AND rely on the `?? ` fallback above.
-const NODE_COLORS: Record<NodeType, string> = {
-  tutorial:           '#0a6ed1',
-  concept:            '#107e3e',
-  mission:            '#df6e0c',
-  product:            '#a100c2',
-  group:              '#8c8c8c',
-  category:           '#666666',
-  tag:                '#888888',
-  'learning-journey': '#c25e00',
-  'blog-post':        '#5b738b',
-  'discovery-mission':'#e9730c',
-  video:              '#bb0000',
-  'api-doc':          '#0070f2',
-  sample:             '#6a6d70',
-  'help-doc':         '#7858a8',
-  'community-event':  '#049f9a',
-  'devtoberfest-session': '#e97800',   // #2311 — Devtoberfest orange
-}
-
-const EDGE_COLORS: Record<PredicateType, string> = {
-  teaches:         '#999999',
-  requires:        '#999999',
-  relatedTo:       '#999999',
-  extends:         '#999999',
-  partOf:          '#999999',
-  taggedWith:      '#999999',
-  aboutProduct:    '#999999',
-  inCategory:      '#999999',
-  coCompletedWith: '#cccccc',
-  presents:        '#e97800',   // #2311 — Devtoberfest session → concept
-  aboutTutorial:   '#e97800',   // #2311 — session → tutorial bridge
-}
 </script>
 
 <template>

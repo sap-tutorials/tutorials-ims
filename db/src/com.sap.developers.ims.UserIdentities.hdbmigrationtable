@@ -1,0 +1,16 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_UserIdentities (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  user_ID NVARCHAR(36),
+  issuer NVARCHAR(512),
+  subject NVARCHAR(255),
+  provider NVARCHAR(32),
+  email NVARCHAR(255),
+  emailVerified BOOLEAN DEFAULT FALSE,
+  linkedAt TIMESTAMP,
+  PRIMARY KEY(ID)
+)
