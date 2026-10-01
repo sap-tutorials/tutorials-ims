@@ -93,6 +93,7 @@ export default defineConfig({
           { text: 'Talking to Joule',         link: '/end-users/joule-commands' },
           { text: 'MCP quickstart',           link: '/end-users/mcp-quickstart' },
           { text: 'A2A quickstart',           link: '/end-users/a2a-quickstart' },
+          { text: 'API consumption',          link: '/end-users/api-consumption' },
           { text: 'Progress and completions', link: '/end-users/progress-and-completions' },
           { text: 'Privacy and cookies',      link: '/end-users/privacy-and-cookies' },
           { text: 'Accessibility',            link: '/end-users/accessibility' },
