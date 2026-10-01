@@ -183,8 +183,23 @@ entity Users : cuid, managed, LegacyKeyed {
   accomplishments           : Composition of many AccomplishmentRecords on accomplishments.user = $self;
   metadata                  : Composition of many UserMetaData on metadata.user = $self;
   environmentTabs           : Composition of many DeveloperEnvironmentTabs on environmentTabs.user = $self;
+  // (issuer, subject) identity links — #2552. Durable per-IdP identity so IAS
+  // and future social logins resolve without an SAP employee ID. sapId stays an
+  // attribute (NGDS-only). Composition so links are managed with the user.
+  identities                : Composition of many UserIdentities on identities.user = $self;
   authoredTutorials         : Association to many Tutorials            on authoredTutorials.author = $self;
   tutorialContributions     : Association to many TutorialContributors on tutorialContributions.user = $self;
+}
+
+@assert.unique.issuerSubject : [issuer, subject]
+entity UserIdentities : cuid, managed {
+  user          : Association to Users @mandatory;  // → user_ID FK
+  issuer        : String(512) @mandatory;           // JWT `iss`
+  subject       : String(255) @mandatory;           // JWT `sub` — stable per-IdP identity
+  provider      : String(32);                       // 'sap-id' | 'ias' | 'github' | 'google'
+  email         : String(255);                      // email AS SEEN BY THIS IdP (attribute, not key)
+  emailVerified : Boolean default false;            // true when written from a login (login proves it)
+  linkedAt      : Timestamp;
 }
 
 entity TaskRecords : cuid, managed, LegacyKeyed {
