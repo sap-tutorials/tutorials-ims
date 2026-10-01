@@ -420,59 +420,55 @@ export async function backfillUserProfile(user) {
  *   unprovisionable.
  */
 export async function provisionDbUser(user, columns) {
-  const sapId = resolveUserSapId(user);
-  if (!sapId) return null;
-
+  if (!user || !user.id || user.id === 'anonymous') return null;
   const { Users } = cds.entities('com.sap.developers.ims');
-  const select = () => {
-    let q = SELECT.one.from(Users).where({ sapId });
-    if (columns && columns.length) q = q.columns(...columns);
-    return q;
-  };
+  const isu = issuerSubjectFromUser(user);
 
-  const existing = await select();
+  // Get: resolve via the tiered resolver (also self-heals a link on T2/T3 hit).
+  const existing = await resolveUser(user);
   if (existing) {
-    // Fill blanks from claims (idempotent; UPDATE-only when something's blank).
     await backfillUserProfile(user).catch((err) =>
       cds.log('resolve-db-user').warn('[provision-backfill]', err?.message ?? err));
-    // Re-select so the freshly-filled fields are visible to the caller.
-    return await select();
+    // Ensure a (iss,sub) link exists even if the hit came via Tier 1 already
+    // (no-op on duplicate). Tiers 2/3 wrote one; Tier 1 means it exists.
+    if (columns && columns.length) {
+      return await SELECT.one.from(Users).where({ ID: existing.ID }).columns(...columns);
+    }
+    return existing;
   }
 
-  // No row yet. Only provision when the JWT carries a usable identity —
-  // otherwise a bare token would mint an empty-profile row that resolves
-  // nothing. Same claim shape as backfillUserProfile.
+  // Create: brand-new identity. Only mint when the token carries a usable
+  // identity (email or a name) — never an empty-profile row.
+  const sapId = resolveUserSapId(user);
+  const canonicalSapId = sapId && !SCIM_UUID_RE.test(sapId) && !sapId.includes('@') ? sapId : null;
   const claimFirstName = user.attr?.given_name || user.attr?.givenName;
   const claimLastName  = user.attr?.family_name || user.attr?.familyName;
   const claimEmail     = emailFromUser(user);
-  if (!claimEmail && !claimFirstName && !claimLastName) return null;
+  if (!claimEmail && !claimFirstName && !claimLastName && !canonicalSapId) return null;
 
   const db = await cds.connect.to('db');
+  const newId = cds.utils.uuid();
   try {
     await INSERT.into(Users).entries({
-      uuid: cds.utils.uuid(),  // String(36): user.id is email under XSUAA → overflows on long addresses (#1614)
-      sapId,
+      ID: newId,
+      uuid: cds.utils.uuid(),
+      sapId: canonicalSapId,            // null for social / no-SAP-ID users
       legacyId: await getNextLegacyId('Users', db),
-      // NULL — not '' — for any absent claim (SAGE 718-bug). A blank-string
-      // identity collides in MyTutorialsRaw's priority-3 (ownerEmail) and
-      // priority-4 (owner-name) equijoins, matching every blank-owner
-      // TutorialMeta row; NULL never equals anything, so it can't over-match.
-      // The guard at line 246 guarantees at least one of these is truthy, so
-      // this never mints a fully-blank row.
       email: claimEmail || null,
       firstName: claimFirstName || null,
       lastName: claimLastName || null,
     });
   } catch (err) {
-    // Backstop for the SQLite unit path (which DOES enforce @assert.unique):
-    // if a concurrent first-call already inserted this sapId, swallow the
-    // uniqueness collision and fall through to the re-select — the invariant
-    // is "a row exists after this call." On HANA there is no DB-level
-    // uniqueness on sapId (see the concurrency note above), so this rarely
-    // fires there. Only swallow true uniqueness collisions; rethrow anything
-    // else (FK / NOT NULL / etc.) so real INSERT failures aren't masked as a
-    // silent zero-row "miss".
     if (!/unique|duplicate/i.test(String(err?.message ?? ''))) throw err;
   }
-  return await select();
+  // Link the (iss,sub) to the row (idempotent).
+  if (isu) {
+    await writeIdentityLink(newId, isu, {
+      provider: providerFromIssuer(isu.issuer),
+      email: tokenEmail(user),
+      emailVerified: true,
+    });
+  }
+  const q = SELECT.one.from(Users).where({ ID: newId });
+  return (columns && columns.length) ? await q.columns(...columns) : await q;
 }

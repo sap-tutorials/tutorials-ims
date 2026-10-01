@@ -15,6 +15,7 @@ vi.mock('@sap/cds', () => ({
     utils: { uuid: () => 'generated-uuid' },
     connect: { to: async () => ({}) },
     context: { user: null },
+    env: {},
   },
 }));
 
@@ -38,7 +39,7 @@ function installSelect() {
       from(e) { this._entity = e?.name || e; return this; },
       columns() { return this; },
       where(arg, ...vals) {
-        captured = { entity: this._entity, where: arg, vals };
+        captured = { ...captured, entity: this._entity, where: arg, vals };
         const isUsers = String(this._entity).endsWith('.Users');
         if (isUsers) return Promise.resolve(one ? (stub.usersRows?.[0] ?? null) : (stub.usersRows ?? []));
         // UserIdentities
@@ -238,5 +239,41 @@ describe('resolveDbUser — attr.dbUserId fallback (no-sapId user)', () => {
     const row = await resolveDbUser(user, ['ID']);
     expect(row.ID).toBe('u-social');
     expect(String(captured.where && JSON.stringify(captured.where))).toContain('u-social');
+  });
+});
+
+describe('provisionDbUser — (iss,sub) get-or-create', () => {
+  beforeEach(() => { captured = undefined; stub = {}; installSelect(); installInsert(); });
+  afterEach(() => { delete globalThis.SELECT; delete globalThis.INSERT; });
+
+  it('returns the existing row (via resolveUser) and does not insert a Users row', async () => {
+    const { provisionDbUser } = await import('../../packages/core/resolve-db-user.js');
+    stub.identityRow = { user_ID: 'u-1' };                 // Tier-1 hit
+    stub.usersRows = [{ ID: 'u-1', sapId: 'I809764', email: 'x@sap.com', firstName: 'T', lastName: 'J' }];
+    const row = await provisionDbUser(iasUser());
+    expect(row.ID).toBe('u-1');
+    expect(captured.insertEntity ?? '').not.toMatch(/\.Users$/);  // no Users insert
+  });
+
+  it('creates a Users row + link for a brand-new (iss,sub) with a usable email', async () => {
+    const { provisionDbUser } = await import('../../packages/core/resolve-db-user.js');
+    // All tiers miss first; after insert, a re-select returns the new row.
+    let selectCalls = 0;
+    stub.identityRow = null;
+    Object.defineProperty(stub, 'usersRows', { get() { return selectCalls++ < 1 ? [] : [{ ID: 'u-new', sapId: null, email: 'who@gmail.com' }]; } });
+    const user = { id: 'who@gmail.com', attr: {}, authInfo: { token: { payload: {
+      iss: 'https://x.accounts.ondemand.com', sub: 'who@gmail.com', email: 'who@gmail.com', given_name: 'Who',
+    } } } };
+    const row = await provisionDbUser(user);
+    expect(row?.ID).toBe('u-new');
+    // Both a Users insert and a UserIdentities link insert happened.
+    expect(captured.insertVals).toBeTruthy();
+  });
+
+  it('returns null when a brand-new identity carries no usable claims', async () => {
+    const { provisionDbUser } = await import('../../packages/core/resolve-db-user.js');
+    stub.identityRow = null; stub.usersRows = [];
+    const bare = { id: 'u', attr: {}, authInfo: { token: { payload: { iss: 'https://x.accounts.ondemand.com', sub: 'uuid-no-email' } } } };
+    expect(await provisionDbUser(bare)).toBeNull();
   });
 });
