@@ -73,7 +73,7 @@ export { toBuffer } from './buffers.js';
 // recompute-tutorial-progress.js
 export { recomputeTutorialProgress } from './recompute-tutorial-progress.js';
 // resolve-db-user.js (moved T8)
-export { resolveUserSapId, resolveDbUser, emailFromUser, backfillUserProfile, provisionDbUser } from './resolve-db-user.js';
+export { resolveUserSapId, resolveDbUser, emailFromUser, backfillUserProfile, provisionDbUser, isIasToken, iasEmailFromToken, resolveIasSapId, pinIasSapId } from './resolve-db-user.js';
 // user-progress.js (moved T8)
 export { getUserProgress, getMyCompletedTutorials, getMyCompletedTutorialsForPoints, getMyInProgressTutorials, getProgressLookup } from './user-progress.js';
 // tutorial-markdown.js (moved T8) — re-export all 4 named exports

@@ -7,3 +7,7 @@ export const resolveDbUser = mod.resolveDbUser;
 export const emailFromUser = mod.emailFromUser;
 export const backfillUserProfile = mod.backfillUserProfile;
 export const provisionDbUser = mod.provisionDbUser;
+export const isIasToken = mod.isIasToken;
+export const iasEmailFromToken = mod.iasEmailFromToken;
+export const resolveIasSapId = mod.resolveIasSapId;
+export const pinIasSapId = mod.pinIasSapId;
