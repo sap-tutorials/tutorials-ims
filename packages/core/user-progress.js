@@ -10,9 +10,16 @@ const MAX_LIMIT = 25;
 // uses both getUserProgress AND searchTutorials annotation doesn't pay two
 // lookups. Issue #343.
 async function resolveDbUserId(user) {
+  if (user.__dbUserId !== undefined) return user.__dbUserId;
+  // Fast-path: the before('*') pin has already resolved the Users.ID.
+  // Covers no-sapId (social / IAS pre-link) users; also short-circuits the
+  // sapId-based lookup for SAP users when the pin is present. (#2552)
+  if (user?.attr?.dbUserId) {
+    user.__dbUserId = user.attr.dbUserId;
+    return user.__dbUserId;
+  }
   const sapId = resolveUserSapId(user);
   if (!sapId) return null;
-  if (user.__dbUserId !== undefined) return user.__dbUserId;
   try {
     const { Users } = cds.entities('com.sap.developers.ims');
     const dbUser = await SELECT.one.from(Users).columns('ID').where({ sapId });
