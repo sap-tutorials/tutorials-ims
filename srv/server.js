@@ -95,7 +95,7 @@ import { defaultLoadChallengeAnswer } from './lib/challenge-grade-question-loade
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
 import { classifyRebuildMode, resolveSlugForEntity, resolveSlugsForTagRename, TAG_REVERSE_LOOKUP_CAP } from './lib/_classify-rebuild-mode.js';
 import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
-import { provisionDbUser, resolveDbUser, resolveUserSapId, emailFromUser } from './lib/resolve-db-user.js';
+import { provisionDbUser, resolveDbUser, resolveUserSapId, emailFromUser, pinResolvedUser } from './lib/resolve-db-user.js';
 import { registerMigrationModeHandler } from './lib/migration-mode.js';
 import { decodeBase64Upload } from './lib/decode-base64-upload.js';
 import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
@@ -2253,6 +2253,31 @@ cds.on('served', () => {
   if (installed) {
     cds.log('metrics-db-wrap').info('METRICS_DB_WRAP enabled: cds.db.run / cds.db.tx wrapped');
   }
+});
+
+// Identity pin (#2552): before any handler on any application service, resolve
+// the authenticated request to its Users row via the tiered (iss,sub) resolver
+// and pin it onto cds.context.user (sapId → authInfo.token.userId; row PK →
+// attr.dbUserId). This keeps the ~40 synchronous `resolveUserSapId` /
+// resolveDbUser callsites unchanged while making IAS + social logins resolve.
+// Fail-open: a resolution error is swallowed (WARN) and the request proceeds
+// unpinned — each per-user handler keeps its own fail-closed null-guard.
+cds.on('served', async () => {
+  if (globalThis.__identityPinHookRegistered) return;
+  for (const srv of Object.values(cds.services)) {
+    if (!(srv instanceof cds.ApplicationService)) continue;
+    srv.before('*', async (req) => {
+      // Only authenticated requests carry a resolvable identity; anonymous
+      // and tech-user paths no-op inside pinResolvedUser.
+      try {
+        await pinResolvedUser(req.user);
+      } catch (err) {
+        cds.log('identity-pin').warn('[before *] pin failed',
+          { service: srv.name, msg: err?.message ?? err });
+      }
+    });
+  }
+  globalThis.__identityPinHookRegistered = true;
 });
 
 // #2524 — Gorouter session affinity for Socket.IO. The engine.io handshake is
