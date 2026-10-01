@@ -51,10 +51,11 @@ import {
 // at CF deploy time, falls back to the bundled core.bundle.mjs.
 // Do NOT import from both sources (split-module-state).
 let resolveUserSapId;
+let pinIasSapId;
 try {
-  ({ resolveUserSapId } = await import('@tutorials/core/resolve-db-user.js'));
+  ({ resolveUserSapId, pinIasSapId } = await import('@tutorials/core/resolve-db-user.js'));
 } catch {
-  ({ resolveUserSapId } = await import('./lib/_shared/core.bundle.mjs'));
+  ({ resolveUserSapId, pinIasSapId } = await import('./lib/_shared/core.bundle.mjs'));
 }
 
 const LOG = cds.log('srv-mcp');
@@ -62,6 +63,25 @@ const LOG = cds.log('srv-mcp');
 export default class McpDeveloperService extends cds.ApplicationService {
 
   async init() {
+    // IAS identity resolution (#2550). mcp-remote authenticates via the IAS
+    // public-PKCE client; the resulting token carries a VERIFIED email (sub) but
+    // NO I-number — its user_uuid is a SCIM UUID, not the SAP ID. This before('*')
+    // hook runs AFTER CAP auth (so req.user is populated) and BEFORE every
+    // handler: for an IAS token it joins email → Users.email → sapId and pins
+    // the I-number onto req.user, so the synchronous resolveUserSapId calls in
+    // the handlers below resolve the real SAP ID instead of the SCIM UUID. No-op
+    // for XSUAA tokens (browser/PAT/platform) — that path is unchanged. Fail-
+    // closed: an unmatched email leaves the context unpinned, and each handler's
+    // own null/anonymous guard then rejects with 401.
+    this.before('*', async (req) => {
+      try {
+        await pinIasSapId(req.user);
+      } catch (err) {
+        LOG.warn('[srv-mcp] IAS sapId pin failed:', err?.message ?? err);
+        // Non-fatal: fall through unpinned; handler null-guards still apply.
+      }
+    });
+
     // --- 5 READ tools — local SELECTs via @tutorials/mcp handlers ---
 
     this.on('get_my_tutorials',        handleGetMyTutorials);
