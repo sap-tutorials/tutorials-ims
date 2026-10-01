@@ -76,6 +76,48 @@ export function issuerSubjectFromUser(user) {
 }
 
 /**
+ * Insert a UserIdentities link row for (issuer, subject) → user_ID. Idempotent:
+ * a concurrent/duplicate insert (the (issuer,subject) unique assert) is swallowed
+ * so self-heal never throws into a read path. Any non-uniqueness error rethrows.
+ *
+ * @param {string} user_ID — the Users.ID to link.
+ * @param {{issuer:string, subject:string}} isu
+ * @param {{provider?:string, email?:string, emailVerified?:boolean}} [meta]
+ */
+export async function writeIdentityLink(user_ID, isu, meta = {}) {
+  if (!user_ID || !isu) return;
+  try {
+    const { UserIdentities } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(UserIdentities).entries({
+      ID: cds.utils.uuid(),
+      user_ID,
+      issuer: isu.issuer,
+      subject: isu.subject,
+      provider: meta.provider ?? null,
+      email: meta.email ?? null,
+      emailVerified: meta.emailVerified ?? false,
+      linkedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    if (!/unique|duplicate/i.test(String(err?.message ?? ''))) throw err;
+  }
+}
+
+/**
+ * Classify the token issuer into a short provider tag for the link row.
+ * @param {string|undefined} issuer
+ * @returns {string}
+ */
+function providerFromIssuer(issuer) {
+  if (!issuer) return 'unknown';
+  if (/\.accounts\.ondemand\.com/i.test(issuer)) return 'ias';
+  if (/authentication\..*\.hana\.ondemand\.com/i.test(issuer)) return 'sap-id';
+  if (/github/i.test(issuer)) return 'github';
+  if (/google/i.test(issuer)) return 'google';
+  return 'oidc';
+}
+
+/**
  * Resolve the authenticated request to its Users row via the tiered identity
  * layer (#2552). Tiers, in order:
  *   1. (issuer, subject) link in UserIdentities — durable, all providers.
@@ -102,7 +144,27 @@ export async function resolveUser(user) {
     }
   }
 
-  // Tiers 2 & 3 added in later tasks.
+  // ── Tier 2: sapId fast-path (+ self-heal link write) ────────────────────
+  const sapId = resolveUserSapId(user);
+  // A canonical sapId is an SAP employee ID (letter + digits), NOT a SCIM UUID
+  // (IAS user_uuid) and NOT an email (XSUAA user.id fallback). Only treat a
+  // canonical value as a Tier-2 key — a SCIM-UUID or email here is not a sapId.
+  const canonicalSapId = sapId && !SCIM_UUID_RE.test(sapId) && !sapId.includes('@') ? sapId : null;
+  if (canonicalSapId) {
+    const row = await SELECT.one.from(Users).where({ sapId: canonicalSapId });
+    if (row) {
+      if (isu) {
+        await writeIdentityLink(row.ID, isu, {
+          provider: providerFromIssuer(isu.issuer),
+          email: user.authInfo?.token?.payload?.email ?? null,
+          emailVerified: true,
+        });
+      }
+      return row;
+    }
+  }
+
+  // Tier 3 added in Task 4.
   return null;
 }
 

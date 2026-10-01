@@ -18,6 +18,14 @@ vi.mock('@sap/cds', () => ({
   },
 }));
 
+// INSERT stub — records into `captured.insertEntity` and `captured.insertVals`.
+function installInsert() {
+  globalThis.INSERT = { into: (e) => ({ entries: (vals) => {
+    captured = { ...captured, insertEntity: e?.name || e, insertVals: vals };
+    return Promise.resolve({});
+  } }) };
+}
+
 // Chainable SELECT stub. Supports:
 //   SELECT.one.from(E).columns(...).where({...})
 //   SELECT.one.from(E).columns(...).where`lower(email) = ${v}`
@@ -70,8 +78,8 @@ describe('issuerSubjectFromUser', () => {
 });
 
 describe('resolveUser — Tier 1 (iss,sub) link', () => {
-  beforeEach(() => { captured = undefined; stub = {}; installSelect(); });
-  afterEach(() => { delete globalThis.SELECT; });
+  beforeEach(() => { captured = undefined; stub = {}; installSelect(); installInsert(); });
+  afterEach(() => { delete globalThis.SELECT; delete globalThis.INSERT; });
 
   it('returns the linked Users row when a UserIdentities link exists', async () => {
     stub.identityRow = { user_ID: 'u-1' };
@@ -84,5 +92,39 @@ describe('resolveUser — Tier 1 (iss,sub) link', () => {
     stub.identityRow = null;
     stub.usersRows = [];
     expect(await resolveUser(iasUser())).toBeNull();
+  });
+});
+
+describe('resolveUser — Tier 2 sapId fast-path + self-heal', () => {
+  beforeEach(() => { captured = undefined; stub = {}; installSelect(); installInsert(); });
+  afterEach(() => { delete globalThis.SELECT; delete globalThis.INSERT; });
+
+  const xsuaaUser = () => ({
+    id: 'thomas.jung@sap.com',
+    authInfo: { token: {
+      userId: 'I809764',
+      payload: { iss: 'https://tutorial-system.authentication.eu10-005.hana.ondemand.com', sub: 'thomas.jung@sap.com' },
+    } },
+  });
+
+  it('resolves by sapId on Tier-1 miss and writes a link row', async () => {
+    stub.identityRow = null;                                   // Tier-1 miss
+    stub.usersRows = [{ ID: 'u-1', sapId: 'I809764', email: 'thomas.jung@sap.com' }]; // Tier-2 hit
+    const row = await resolveUser(xsuaaUser());
+    expect(row.ID).toBe('u-1');
+    // self-heal: a UserIdentities link row was inserted for (iss,sub)
+    expect(captured.insertEntity).toMatch(/UserIdentities$/);
+    expect(captured.insertVals.user_ID).toBe('u-1');
+    expect(captured.insertVals.issuer).toBe('https://tutorial-system.authentication.eu10-005.hana.ondemand.com');
+    expect(captured.insertVals.subject).toBe('thomas.jung@sap.com');
+  });
+
+  it('does NOT write a link row when there is no (iss,sub) to link', async () => {
+    stub.identityRow = null;
+    stub.usersRows = [{ ID: 'u-1', sapId: 'I809764' }];
+    const noIsu = { id: 'tech', authInfo: { token: { userId: 'I809764', payload: {} } } };
+    const row = await resolveUser(noIsu);
+    expect(row.ID).toBe('u-1');          // still resolves by sapId
+    expect(captured.insertEntity).toBeUndefined(); // but no link write (no iss/sub)
   });
 });
