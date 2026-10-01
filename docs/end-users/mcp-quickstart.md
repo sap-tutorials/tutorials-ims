@@ -199,7 +199,7 @@ For builds that accept a pre-registered client, bridge through `mcp-remote`:
 > | Environment | `<base>` | `client_id` |
 > | --- | --- | --- |
 > | **Production** | `https://developers.sap.com` | `sb-tutorials-prod!t676072` |
-> | **Dev** | your dev route | `02782268-9593-409a-8481-701bfa44ebc7` |
+> | **Dev** | your dev route | `0b1e8b56-5f5d-4ebf-a9e9-28aae2964236` |
 >
 > **Dev** now authenticates against **IAS** (a public OIDC client — authorization_code
 > + PKCE S256, no secret), so the dev `client_id` is the IAS `tutorials-identity`

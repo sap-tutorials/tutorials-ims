@@ -202,7 +202,7 @@ describe('.well-known OAuth discovery — IAS issuer (MCP_ISSUER_KIND=ias)', () 
   const SAVED_VCAP = process.env.VCAP_SERVICES;
   const SAVED_MCP_URL = process.env.XSUAA_MCP_URL;
   const SAVED_ISSUER_KIND = process.env.MCP_ISSUER_KIND;
-  const IAS_ISSUER = 'https://alzmza7li.accounts.ondemand.com';
+  const IAS_ISSUER = 'https://atxgsg7zi.accounts.ondemand.com';
 
   beforeEach(() => {
     delete process.env.VCAP_SERVICES;

@@ -14,7 +14,7 @@ const EXPECTED = {
   baipAiLaunchpad:   'https://tutorial-system.ai-launchpad.prod.eu-central-1.aws.ai-prod.cloud.sap/aic/index.html',
   baipBtpSubaccount: 'https://emea.cockpit.btp.cloud.sap/cockpit/#/globalaccount/a0ec0d63-f690-42ab-8113-9f6567cd897e/subaccount/3c6fa3f1-db8c-4e47-9048-fa8c84b867cb/subaccountoverview',
   baipHanaCloud:     'https://devrel.hana-tooling.ingress.orchestration.prod-eu10.hanacloud.ondemand.com/hcs/sap/hana/cloud/index.html',
-  baipIasAdminConsole: 'https://alzmza7li.accounts.ondemand.com/admin/#/applications/8faf539d-55c1-4da5-b4f6-189becf3c569'
+  baipIasAdminConsole: 'https://atxgsg7zi.accounts.ondemand.com/admin/#/applications/17b636dd-fa87-4cd8-b0f2-0abd5f9a3042'
 };
 
 const TITLES = {
