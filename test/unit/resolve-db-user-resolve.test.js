@@ -128,3 +128,58 @@ describe('resolveUser — Tier 2 sapId fast-path + self-heal', () => {
     expect(captured.insertEntity).toBeUndefined(); // but no link write (no iss/sub)
   });
 });
+
+describe('resolveUser — Tier 3 trusted-token-email', () => {
+  beforeEach(() => { captured = undefined; stub = {}; installSelect(); installInsert(); });
+  afterEach(() => { delete globalThis.SELECT; delete globalThis.INSERT; });
+
+  it('matches token email → Users.email, prefers the non-SCIM-UUID row, writes a link', async () => {
+    stub.identityRow = null;    // T1 miss
+    // T2: IAS token has no canonical sapId (sub is the email), so T2 is skipped.
+    // T3: email match returns TWO rows — a stray SCIM-UUID row and the real I-number row.
+    stub.usersRows = [
+      { ID: 'u-scim', sapId: 'fbf099e2-f1b5-4cda-b590-866fed970a2a', email: 'thomas.jung@sap.com' },
+      { ID: 'u-real', sapId: 'I809764', email: 'thomas.jung@sap.com' },
+    ];
+    const row = await resolveUser(iasUser({ email: 'thomas.jung@sap.com' }));
+    expect(row.ID).toBe('u-real');                 // non-SCIM-UUID preferred
+    expect(captured.insertEntity).toMatch(/UserIdentities$/);
+    expect(captured.insertVals.user_ID).toBe('u-real');
+    expect(captured.insertVals.emailVerified).toBe(true);
+  });
+
+  it('skips a stored noreply.github.com row as a match target', async () => {
+    stub.identityRow = null;
+    stub.usersRows = [{ ID: 'u-gh', sapId: null, email: 'jung-thomas@users.noreply.github.com' }];
+    // token email differs from the synthetic stored one → no match → null
+    const row = await resolveUser(iasUser({ email: 'thomas.jung@sap.com' }));
+    // Our stub returns the row regardless of WHERE, so Tier 3 must FILTER it out:
+    expect(row).toBeNull();
+  });
+
+  it('returns null when the token carries no usable email', async () => {
+    stub.identityRow = null;
+    stub.usersRows = [];
+    const noEmail = { id: 'u', authInfo: { token: { payload: {
+      iss: 'https://atxgsg7zi.accounts.ondemand.com', sub: 'ba411614-uuid-not-email',
+    } } } };
+    expect(await resolveUser(noEmail)).toBeNull();
+  });
+});
+
+describe('tokenEmail', () => {
+  beforeEach(() => { installSelect(); });
+  afterEach(() => { delete globalThis.SELECT; });
+  it('prefers the email claim, lowercased', async () => {
+    const { tokenEmail } = await import('../../packages/core/resolve-db-user.js');
+    expect(tokenEmail(iasUser({ email: 'Thomas.Jung@SAP.com' }))).toBe('thomas.jung@sap.com');
+  });
+  it('falls back to an email-shaped sub', async () => {
+    const { tokenEmail } = await import('../../packages/core/resolve-db-user.js');
+    expect(tokenEmail(iasUser({ sub: 'a@b.com', email: undefined }))).toBe('a@b.com');
+  });
+  it('returns null for a non-email sub with no email claim', async () => {
+    const { tokenEmail } = await import('../../packages/core/resolve-db-user.js');
+    expect(tokenEmail(iasUser({ sub: 'uuid-not-email', email: undefined }))).toBeNull();
+  });
+});

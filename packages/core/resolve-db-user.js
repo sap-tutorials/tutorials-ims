@@ -164,7 +164,29 @@ export async function resolveUser(user) {
     }
   }
 
-  // Tier 3 added in Task 4.
+  // ── Tier 3: trusted-token-email → Users.email (+ self-heal link write) ──
+  const email = tokenEmail(user);
+  if (email) {
+    const rows = await SELECT.from(Users).where`lower(email) = ${email}`;
+    const candidates = (rows ?? []).filter(
+      (r) => r.email && !NOREPLY_GITHUB_RE.test(r.email),
+    );
+    if (candidates.length) {
+      // Prefer a row whose sapId is a real SAP ID (letter+digits) over a stray
+      // SCIM-UUID-keyed row sharing the same email (#2550 collision fix).
+      const real = candidates.find((r) => r.sapId && !SCIM_UUID_RE.test(r.sapId));
+      const row = real ?? candidates[0];
+      if (isu) {
+        await writeIdentityLink(row.ID, isu, {
+          provider: providerFromIssuer(isu.issuer),
+          email,
+          emailVerified: true,
+        });
+      }
+      return row;
+    }
+  }
+
   return null;
 }
 
@@ -206,6 +228,26 @@ export function isIasToken(user) {
   const iss = user?.authInfo?.token?.payload?.iss;
   return typeof iss === 'string' && IAS_ISSUER_RE.test(iss);
 }
+
+/**
+ * The email a token asserts, for Tier-3 identity resolution. The IdP enforces
+ * email verification before login, so a token email is trusted-verified. Prefer
+ * the explicit `email` claim; else use `sub` only when it is email-shaped.
+ * Lowercased for case-insensitive comparison against Users.email.
+ *
+ * @param {object} user
+ * @returns {string | null}
+ */
+export function tokenEmail(user) {
+  const p = user?.authInfo?.token?.payload;
+  const isEmail = (v) => typeof v === 'string' && v.includes('@');
+  const raw = (isEmail(p?.email) && p.email) || (isEmail(p?.sub) && p.sub) || null;
+  return raw ? raw.toLowerCase() : null;
+}
+
+// Stored GitHub-synthetic emails (contributor API) must never be a Tier-3 match
+// target — they are dirty data, not a login identity.
+const NOREPLY_GITHUB_RE = /@users\.noreply\.github\.com$/i;
 
 /**
  * The verified email carried by an IAS token. Prefers the `sub` claim (which
