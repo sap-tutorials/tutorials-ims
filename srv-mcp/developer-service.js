@@ -51,11 +51,11 @@ import {
 // at CF deploy time, falls back to the bundled core.bundle.mjs.
 // Do NOT import from both sources (split-module-state).
 let resolveUserSapId;
-let pinIasSapId;
+let pinResolvedUser;
 try {
-  ({ resolveUserSapId, pinIasSapId } = await import('@tutorials/core/resolve-db-user.js'));
+  ({ resolveUserSapId, pinResolvedUser } = await import('@tutorials/core/resolve-db-user.js'));
 } catch {
-  ({ resolveUserSapId, pinIasSapId } = await import('./lib/_shared/core.bundle.mjs'));
+  ({ resolveUserSapId, pinResolvedUser } = await import('./lib/_shared/core.bundle.mjs'));
 }
 
 const LOG = cds.log('srv-mcp');
@@ -63,21 +63,20 @@ const LOG = cds.log('srv-mcp');
 export default class McpDeveloperService extends cds.ApplicationService {
 
   async init() {
-    // IAS identity resolution (#2550). mcp-remote authenticates via the IAS
-    // public-PKCE client; the resulting token carries a VERIFIED email (sub) but
-    // NO I-number — its user_uuid is a SCIM UUID, not the SAP ID. This before('*')
-    // hook runs AFTER CAP auth (so req.user is populated) and BEFORE every
-    // handler: for an IAS token it joins email → Users.email → sapId and pins
-    // the I-number onto req.user, so the synchronous resolveUserSapId calls in
-    // the handlers below resolve the real SAP ID instead of the SCIM UUID. No-op
-    // for XSUAA tokens (browser/PAT/platform) — that path is unchanged. Fail-
-    // closed: an unmatched email leaves the context unpinned, and each handler's
-    // own null/anonymous guard then rejects with 401.
+    // Tiered identity resolution (#2552). Runs AFTER CAP auth (req.user populated)
+    // and BEFORE every handler. pinResolvedUser walks the three-tier resolver:
+    // Tier 1 — XSUAA/IAS tokens with a sapId attribute (fast path, no DB);
+    // Tier 2 — sapId fast-path with self-heal link;
+    // Tier 3 — trusted-token email match for IAS social users (no SAP ID).
+    // Pins resolved attrs (sapId / dbUserId) onto req.user so synchronous
+    // resolveUserSapId calls in READ handlers get the right identity. Fail-open:
+    // an unresolvable identity leaves the context unpinned; each handler's own
+    // null/anonymous guard then rejects with 401.
     this.before('*', async (req) => {
       try {
-        await pinIasSapId(req.user);
+        await pinResolvedUser(req.user);
       } catch (err) {
-        LOG.warn('[srv-mcp] IAS sapId pin failed:', err?.message ?? err);
+        LOG.warn('[srv-mcp] identity pin failed:', err?.message ?? err);
         // Non-fatal: fall through unpinned; handler null-guards still apply.
       }
     });
@@ -91,6 +90,11 @@ export default class McpDeveloperService extends cds.ApplicationService {
     this.on('get_tutorial_step',       handleGetTutorialStep);
 
     // --- 2 WRITE tools — forward to main tutorials-srv via remote binding ---
+
+    // NOTE (#2552): write-forward tools require a canonical sapId as actingSapId
+    // for the main-srv InternalWrite contract. A no-sapId (social) user resolves
+    // for READS (via attr.dbUserId) but cannot write-forward yet → 401. Known
+    // limitation, tracked for a follow-up main-srv actingId contract.
 
     this.on('complete_step', async (req) => {
       const actingSapId = resolveUserSapId(req.user);
