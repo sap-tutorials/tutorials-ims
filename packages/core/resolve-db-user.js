@@ -258,12 +258,21 @@ const NOREPLY_GITHUB_RE = /@users\.noreply\.github\.com$/i;
  * @returns {Promise<object | null>} The Users row (or null if not found / anonymous).
  */
 export async function resolveDbUser(user, columns) {
+  const { Users } = cds.entities('com.sap.developers.ims');
+  let q;
+  if (user?.attr?.dbUserId) {
+    // Fast-path: the before('*') pin has already resolved the Users row.
+    // For SAP users attr.dbUserId coexists with a sapId, but we prefer the PK
+    // for no-sapId (social / IAS pre-link) users. (#2552)
+    q = SELECT.one.from(Users);
+    if (columns && columns.length) q = q.columns(...columns);
+    return await q.where({ ID: user.attr.dbUserId });
+  }
   const sapId = resolveUserSapId(user);
   if (!sapId) return null;
-  const { Users } = cds.entities('com.sap.developers.ims');
-  let q = SELECT.one.from(Users).where({ sapId });
+  q = SELECT.one.from(Users);
   if (columns && columns.length) q = q.columns(...columns);
-  return await q;
+  return await q.where({ sapId });
 }
 
 /**

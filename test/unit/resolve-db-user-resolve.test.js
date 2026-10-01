@@ -225,3 +225,18 @@ describe('removed email-join exports', () => {
     expect(mod.pinIasSapId).toBeUndefined();
   });
 });
+
+describe('resolveDbUser — attr.dbUserId fallback (no-sapId user)', () => {
+  beforeEach(() => { captured = undefined; stub = {}; installSelect(); });
+  afterEach(() => { delete globalThis.SELECT; });
+
+  it('resolves by ID when sapId is null but attr.dbUserId is pinned', async () => {
+    const { resolveDbUser } = await import('../../packages/core/resolve-db-user.js');
+    stub.usersRows = [{ ID: 'u-social', sapId: null }];
+    const user = { id: 'who@gmail.com', attr: { dbUserId: 'u-social' },
+      authInfo: { token: { payload: { iss: 'https://x.accounts.ondemand.com', sub: 'who@gmail.com' } } } };
+    const row = await resolveDbUser(user, ['ID']);
+    expect(row.ID).toBe('u-social');
+    expect(String(captured.where && JSON.stringify(captured.where))).toContain('u-social');
+  });
+});
