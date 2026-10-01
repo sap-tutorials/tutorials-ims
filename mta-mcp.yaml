@@ -21,6 +21,13 @@ build-parameters:
       commands:
         - npm install
         - bash -c "node scripts/bundle-shared.cjs && npx cds build --production"
+        # Build-only impl-binding fix: cds build nests handlers under gen/srv-mcp/
+        # srv/ but the service @source is srv-mcp/*.cds, so CAP's sibling-impl
+        # auto-discovery misses and serves a generic ApplicationService with NO
+        # custom on-handlers → every MCP tools/call 'has no handler'. Inject
+        # @impl into the baked csn to bind McpDeveloperService. Structural follow-
+        # up (rename module folder to the srv/ convention) tracked in #2569.
+        - bash -c "node scripts/patch-mcp-impl.cjs"
         # @tutorials/core and @tutorials/mcp are workspace packages resolved via
         # esbuild bundles in gen/srv-mcp/srv/lib/_shared/. Remove them from the
         # gen/srv-mcp/package.json before mbt packages the module, otherwise
