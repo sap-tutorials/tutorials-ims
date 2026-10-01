@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readGameboardUrl, effectiveUrl } from '../../scripts/check-gameboard-url-mtaext.ts';
+import { readGameboardUrl, readParam, effectiveUrl } from '../../scripts/check-gameboard-url-mtaext.ts';
 
 describe('check-gameboard-url-mtaext parser', () => {
   const base = [
@@ -45,5 +45,25 @@ describe('check-gameboard-url-mtaext parser', () => {
   it('effectiveUrl: falls back to base placeholder when mtaext has no override', () => {
     const ext = 'ID: tutorials-ims-qa\nextends: tutorials-ims\nmodules:\n  - name: x';
     expect(effectiveUrl(base, ext)).toBe('UNSET-see-env-mtaext');
+  });
+
+  it('readParam: reads an arbitrary guarded param (srv-mcp-url)', () => {
+    const text = [
+      'parameters:',
+      '  gameboard-url: https://gb.example',
+      '  srv-mcp-url: https://mcp.example',
+      'modules:',
+      '  - name: x',
+    ].join('\n');
+    expect(readParam(text, 'srv-mcp-url')).toBe('https://mcp.example');
+    expect(readParam(text, 'gameboard-url')).toBe('https://gb.example');
+    expect(readParam(text, 'missing-url')).toBeNull();
+  });
+
+  it('effectiveUrl: resolves srv-mcp-url via override, else base placeholder', () => {
+    const baseMcp = 'parameters:\n  srv-mcp-url: UNSET-see-env-mtaext\nmodules:\n  - name: x';
+    const ext = 'extends: tutorials-ims\nparameters:\n  srv-mcp-url: https://prod-mcp.example\nmodules:\n  - name: x';
+    expect(effectiveUrl(baseMcp, ext, 'srv-mcp-url')).toBe('https://prod-mcp.example');
+    expect(effectiveUrl(baseMcp, 'modules:\n  - name: x', 'srv-mcp-url')).toBe('UNSET-see-env-mtaext');
   });
 });

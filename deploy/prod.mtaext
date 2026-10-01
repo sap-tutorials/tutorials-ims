@@ -8,6 +8,12 @@ extends: tutorials-ims
 # prod gameboard-srv (sap-community-gameboard MTA, deployed into this space).
 parameters:
   gameboard-url: https://tutorial-system-prod-gameboard-srv.cfapps.eu10-005.hana.ondemand.com
+  # srv-mcp-url forwards the approuter's /mcp-auth/* route to the separately-
+  # deployed tutorials-mcp MTA's tutorials-srv-mcp app. Base mta.yaml sets an
+  # invalid placeholder (UNSET-see-env-mtaext) that each env MUST override — it
+  # is resolved into the srv-mcp-api destination at approuter BOOT, so a missing
+  # override crash-loops the approuter (not just the route). Mirrors dev.mtaext.
+  srv-mcp-url: https://tutorial-system-prod-tutorials-srv-mcp.cfapps.eu10-005.hana.ondemand.com
 
 modules:
   - name: tutorials-srv
@@ -47,6 +53,18 @@ modules:
   - name: tutorials-approuter
     # REBUILD_API_KEY is credstore-only (PR #903 rollout step 3 / #871 follow-up);
     # APPROUTER_URL was removed (no runtime readers).
+    properties:
+      # MCP OAuth discovery (public PKCE via IAS). The IAS tenant is shared at
+      # the subaccount level, so prod uses the SAME issuer as dev (atxgsg7zi).
+      # Read at call-time by @sap/approuter well-known-oauth.js (NOT at boot).
+      # Base mta.yaml default is the invalid placeholder UNSET-see-env-mtaext;
+      # without this override /.well-known advertises a bad authorize/token
+      # endpoint and mcp-remote's public-PKCE exchange breaks. Mirrors dev.mtaext.
+      XSUAA_MCP_URL: https://atxgsg7zi.accounts.ondemand.com
+      # Issuer kind selects the discovery scope shape: 'ias' advertises plain
+      # `openid` (IAS JWTs carry no scopes), vs the XSUAA `<xsappname>.Everyone`
+      # form. MUST be 'ias' because XSUAA_MCP_URL points at an IAS tenant.
+      MCP_ISSUER_KIND: ias
     parameters:
       app-name: tutorials-prod-approuter
       instances: 2
