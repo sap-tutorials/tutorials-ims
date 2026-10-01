@@ -9,6 +9,7 @@ import { buildKttCompletionEntry, findExistingKttRecord } from './lib/ktt/comple
 import { mergeProgress } from './lib/ktt/merge.js';
 import { computeBanter } from './lib/ktt/banter.js';
 import { isFlagEnabled } from './lib/feature-flags/db-flags.js';
+import { resolveDbUser } from './lib/resolve-db-user.js';
 
 export default class KttService extends cds.ApplicationService {
   async init() {
@@ -26,7 +27,7 @@ export default class KttService extends cds.ApplicationService {
     this.on('completeLesson', async (req) => {
       if (!isFlagEnabled('KTT_ENABLED')) return req.reject(503, 'KTT is not enabled');
       const { legacyId, title } = req.data;
-      const dbUser = await SELECT.one.from(Users).where({ sapId: req.user.id });
+      const dbUser = await resolveDbUser(req.user, ['ID']);
       if (!dbUser) return req.reject(403, 'Unknown user');
       const existing = await findExistingKttRecord(TaskRecords, dbUser.ID, legacyId);
       if (existing) return { ok: true, alreadyDone: true };
@@ -41,7 +42,7 @@ export default class KttService extends cds.ApplicationService {
     this.on('syncProgress', async (req) => {
       if (!isFlagEnabled('KTT_ENABLED')) return req.reject(503, 'KTT is not enabled');
       const local = JSON.parse(req.data.localJson || '{}');
-      const dbUser = await SELECT.one.from(Users).where({ sapId: req.user.id });
+      const dbUser = await resolveDbUser(req.user, ['ID']);
       if (!dbUser) return req.reject(403, 'Unknown user');
 
       // Reconstruct remote state from HANA KTT_LESSON TaskRecords.
