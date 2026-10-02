@@ -467,9 +467,9 @@ Both IdPs federate through a single XSUAA instance. When a user authenticates vi
 
 When a user logs in via a social provider (GitHub, Google, etc. via IAS) **and the email address does not exist in any prior SAP ID login**:
 
-- A new `Users` database row is created with the social IdP's `user_uuid` and email
-- Later, if the same user logs in via SAP ID Service with the same email but a different SAP `user_uuid`
-- The system detects the email collision but cannot automatically merge because they have different `user_uuid` values (issue #2552)
+- A new `Users` database row is created with `sapId = null`, linked to the social identity via a `UserIdentities` (issuer, subject) row
+- Later, if the same user logs in via SAP ID Service with the same email but a different identity key
+- The system detects the email collision but cannot automatically merge because they have different identity keys stored in `UserIdentities` (issue #2552)
 - **Workaround:** The user can manually merge accounts via the `/admin-ui/#account-merge` endpoint if they have `Admin` scope, or the DeveloperService can expose a user-facing merge endpoint in a future update
 
 This edge case only occurs for users who first log in socially without a pre-existing SAP ID. Most SAP developers have an existing SAP ID, so the happy path (same email, automatic merge) covers the common case.
