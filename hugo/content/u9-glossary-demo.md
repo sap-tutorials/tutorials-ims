@@ -18,9 +18,10 @@ body copy stays readable.
 ## What's covered
 
 This site teaches developers how to build cloud-native business apps on SAP
-BTP. The default stack is CAP — the SAP Cloud Application Programming Model —
-which leans on CDS for data and service modeling. ABAP developers building
-on S/4HANA Cloud will instead reach for RAP, the ABAP-side equivalent.
+Business AI Platform. The default stack is CAP — the SAP Cloud Application
+Programming Model — which leans on CDS for data and service modeling. ABAP
+developers building on S/4HANA Cloud will instead reach for RAP, the ABAP-side
+equivalent.
 
 ## Deployment story
 
@@ -28,11 +29,12 @@ Production apps ship as an MTA (multitarget application) bundle pushed to
 Cloud Foundry. The deployment binds an XSUAA instance for authentication, an
 HDI container for HANA schema isolation, and optionally an IAS tenant when
 the customer has a corporate IDP they want to federate against. The HANA
-database itself runs as a managed BTP service — no infrastructure to babysit.
+database itself runs as a managed SAP Business AI Platform service — no
+infrastructure to babysit.
 
 ## What you don't pay for
 
-Note how each acronym in this paragraph (BTP, CAP, CDS, RAP, MTA, XSUAA, HDI,
+Note how each acronym in this paragraph (CAP, CDS, RAP, MTA, XSUAA, HDI,
 IAS, IDP, HANA) appears underlined only on its *first* mention above. The
 second mention here renders as plain text — that's the "tag only the first
 occurrence per page" policy.

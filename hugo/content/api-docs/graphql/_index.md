@@ -56,9 +56,9 @@ Requires a service key on the tutorials XSUAA instance. Request one through the 
 
 ## Prerequisite: Role Collection Assignment
 
-The `Tutorial.API` scope is only granted to identities assigned the **Tutorials API Consumer** role collection in your BTP subaccount. Ask a subaccount administrator to:
+The `Tutorial.API` scope is only granted to identities assigned the **Tutorials API Consumer** role collection in your SAP Business AI Platform subaccount. Ask a subaccount administrator to:
 
-1. Open the [BTP cockpit](https://cockpit.btp.cloud.sap) → your subaccount → **Security** → **Role Collections**.
+1. Open the [SAP Business AI Platform cockpit](https://cockpit.btp.cloud.sap) → your subaccount → **Security** → **Role Collections**.
 2. Locate the `Tutorials API Consumer` role collection (auto-created by the tutorials MTA deploy).
 3. Assign your identity (via **User** or **Identity Provider** tab).
 

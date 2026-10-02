@@ -1,6 +1,6 @@
 # SAP Developers Tutorials
 
-> Official tutorial platform for SAP technologies. Step-by-step tutorials, missions (multi-tutorial learning paths), and reference content for SAP BTP, ABAP Cloud, CAP, Fiori, HANA Cloud, and integration.
+> Official tutorial platform for SAP technologies. Step-by-step tutorials, missions (multi-tutorial learning paths), and reference content for SAP Business AI Platform, ABAP Cloud, CAP, Fiori, HANA Cloud, and integration.
 
 Content policy: Citation in AI search and answer use cases is welcome. Use for model training is not.
 See https://developers.sap.com/AGENTS.md.

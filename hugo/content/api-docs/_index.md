@@ -32,7 +32,7 @@ These exist and are documented, but require elevated XSUAA scopes (`Tutorial.Aut
 
 ## sap-devs CLI
 
-`sap-devs` is a companion CLI that bundles the same SAP developer content and context this site consumes — CAP / BTP / ABAP tips, canonical code samples, error lookups, tutorial search, event listings, and more — so you can get to it without leaving your terminal.
+`sap-devs` is a companion CLI that bundles the same SAP developer content and context this site consumes — CAP / SAP Business AI Platform / ABAP tips, canonical code samples, error lookups, tutorial search, event listings, and more — so you can get to it without leaving your terminal.
 
 **Install** — the CLI ships as a self-contained binary (it's no longer published to npm). Pick your platform:
 
