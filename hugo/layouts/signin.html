@@ -1,0 +1,56 @@
+{{ define "main" }}
+<section class="signin-hero" aria-labelledby="signin-title">
+  <div class="signin-inner">
+    <ui5-illustrated-message name="tnt/Lock" design="Spot" class="signin-illus">
+      <h1 slot="title" id="signin-title" class="signin-title">Sign in to SAP Developers</h1>
+      <p slot="subtitle" class="signin-lede">
+        Choose how you'd like to sign in. Your progress and completions are the
+        same account whichever you pick.
+      </p>
+    </ui5-illustrated-message>
+    <div class="signin-actions">
+      <a class="fd-button fd-button--emphasized signin-btn" href="/login?sap_idp=sap.default">
+        Sign in with SAP
+      </a>
+      <a class="fd-button fd-button--transparent signin-btn" href="/login?sap_idp=sap.custom">
+        Sign in with SAP Universal ID
+      </a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .signin-hero {
+    padding: 4rem 1.5rem;
+    background: var(--sapBackgroundColor, #f5f6f7);
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .signin-inner {
+    max-width: 640px;
+    text-align: center;
+    background: var(--sapTile_Background, #ffffff);
+    padding: 3rem 2rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.08);
+  }
+  .signin-illus { display: block; margin: 0 auto 1.25rem; max-width: 100%; }
+  .signin-title { font-size: 1.625rem; margin: 0 0 0.5rem; color: var(--sapTextColor, #32363a); }
+  .signin-lede {
+    font-size: 1rem;
+    color: var(--sapContent_LabelColor, var(--sapTextColor, #32363a));
+    margin: 0 0 1.5rem;
+  }
+  .signin-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: center;
+  }
+  .signin-btn { min-width: 16rem; justify-content: center; }
+</style>
+{{- /* ui5Split: illustration assets for <ui5-illustrated-message>, mirrors 403.html (#1777 Task 7) */}}
+{{ if and (not site.Params.previewMode) site.Params.ui5Split }}<script type="module" src="{{ partial "island-src.html" "ui5-illustrations" }}"></script>{{ end }}
+{{ end }}
