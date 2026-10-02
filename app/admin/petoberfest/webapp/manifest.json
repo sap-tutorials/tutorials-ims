@@ -87,6 +87,19 @@
                   "tableSettings": {
                     "selectionMode": "ForceMulti"
                   },
+                  "quickVariantSelection": {
+                    "showCounts": true,
+                    "paths": [
+                      {
+                        "key": "All",
+                        "annotationPath": "com.sap.vocabularies.UI.v1.SelectionVariant#All"
+                      },
+                      {
+                        "key": "Pending",
+                        "annotationPath": "com.sap.vocabularies.UI.v1.SelectionVariant#Pending"
+                      }
+                    ]
+                  },
                   "columns": {
                     "PhotoThumbColumn": {
                       "header": "Photo",
