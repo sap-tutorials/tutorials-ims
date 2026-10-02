@@ -99,11 +99,11 @@ blockquote.alert-important {
 }
 blockquote.alert-tip {
   border-left-color: var(--sapSuccessBorderColor, #30914c);
-  background-color: var(--sapSuccessBackground, #f1fdf6);
+  background-color: var(--sapSuccessBackground, #f5fae5);
 }
 blockquote.alert-warning {
-  border-left-color: var(--sapWarningBorderColor, #e76500);
-  background-color: var(--sapWarningBackground, #fef7f1);
+  border-left-color: var(--sapWarningBorderColor, #dd6100);
+  background-color: var(--sapWarningBackground, #fff8d6);
 }
 blockquote.alert-caution {
   border-left-color: var(--sapErrorBorderColor, #e90b0b);
@@ -111,9 +111,13 @@ blockquote.alert-caution {
 }
 ```
 
-(Exact fallback hex values to be read from the active Horizon token set during
-implementation; the `var(--sap…)` token is authoritative, the hex is only a
-fallback.)
+Fallback hex are the **canonical SAP Horizon-light values** (verified against
+`SAP/theming-base-content` `sap_horizon/css_variables.css`). The fallback is
+load-bearing: this project's theme-vars declare only `--sapInformation*` and
+`--sapPositive*`/`--sapNegativeColor` — `--sapSuccess*`, `--sapWarning*`, and
+`--sapError*` are NOT declared here, so `var()` resolves to the fallback. (Using
+the `--sapSuccess/Warning/Error*` names keeps us forward-compatible if the theme
+later adds them.)
 
 Then `npm run build:css` regenerates `sap-fundamental.css`. The generated file is
 committed (repo commits built CSS).
