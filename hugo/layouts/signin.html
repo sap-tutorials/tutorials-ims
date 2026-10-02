@@ -9,15 +9,28 @@
       </p>
     </ui5-illustrated-message>
     <div class="signin-actions">
-      <a class="fd-button fd-button--emphasized signin-btn" href="/login?sap_idp=sap.default">
-        Sign in with SAP
+      <a class="fd-button fd-button--emphasized signin-btn" data-signin-idp href="/login?sap_idp=sap.default">
+        Sign in with SAP Account
       </a>
-      <a class="fd-button fd-button--transparent signin-btn" href="/login?sap_idp=sap.custom">
-        Sign in with SAP Universal ID
+      <a class="fd-button fd-button--transparent signin-btn" data-signin-idp href="/login?sap_idp=sap.custom">
+        Sign In if you don't already have an SAP Account
       </a>
     </div>
   </div>
 </section>
+
+<script>
+  // Carry a safe relative returnTo through the IdP choice so the user lands
+  // back where they started after auth. Mirrors login-redirect.html's
+  // open-redirect guard: only same-origin relative paths, never //host.
+  (function () {
+    var rt = new URLSearchParams(window.location.search).get('returnTo');
+    if (!rt || rt.charAt(0) !== '/' || rt.startsWith('//')) return;
+    document.querySelectorAll('a[data-signin-idp]').forEach(function (a) {
+      a.href += '&returnTo=' + encodeURIComponent(rt);
+    });
+  })();
+</script>
 
 <style>
   .signin-hero {

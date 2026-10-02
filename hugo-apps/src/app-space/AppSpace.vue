@@ -251,6 +251,14 @@ function goBack() {
   selectedTrack.value = null
 }
 
+// Start the deliberate sign-in flow — same destination as the shellbar profile
+// click in hugo/layouts/partials/header.html: the /signin IdP chooser, carrying
+// a safe relative returnTo so the user lands back on this page after auth.
+function startLogin() {
+  const returnTo = window.location.pathname + window.location.search
+  window.location.href = '/signin?returnTo=' + encodeURIComponent(returnTo)
+}
+
 function handleItemClick(track: AppSpaceTrack, index: number, item: AppSpaceItem) {
   if (item.type === 'TUTORIAL' && isItemUnlocked(track, index) && item.url) {
     window.open(item.url, '_blank')
@@ -347,7 +355,16 @@ const emptyStateMessage = computed(() => {
           { icon: '4', text: 'Earn your prize!' }
         ]" :key="i">
           <span class="instruction-icon">{{ step.icon }}</span>
-          <span class="instruction-text">{{ step.text }}</span>
+          <!-- Step 1 is a live sign-in affordance while anonymous: starts the
+               same flow as the shellbar profile click (→ /signin chooser). Once
+               logged in it reverts to a passive label. -->
+          <a
+            v-if="i === 0 && !isLoggedIn"
+            class="instruction-text instruction-text--login"
+            href="#"
+            @click.prevent="startLogin()"
+          >{{ step.text }}</a>
+          <span v-else class="instruction-text">{{ step.text }}</span>
         </div>
       </div>
     </section>
@@ -683,6 +700,20 @@ const emptyStateMessage = computed(() => {
 .instruction-text {
   font-size: 0.8125rem;
   opacity: 0.9;
+}
+
+/* Step 1 as a sign-in link while anonymous — inherits the hero's light text on
+   its dark background rather than a clashing default link color. */
+.instruction-text--login {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.instruction-text--login:hover,
+.instruction-text--login:focus-visible {
+  opacity: 1;
+  text-decoration-thickness: 2px;
 }
 
 

@@ -33,8 +33,8 @@ describe.skipIf(!hasBaseUrl())('e2e: /signin page (IAS social login, #2506)', ()
       expect(response, 'no response received').not.toBeNull();
       expect(response!.status(), 'unexpected status for /signin').toBe(200);
 
-      const sapBtn = page.getByRole('link', { name: 'Sign in with SAP', exact: true });
-      const uidBtn = page.getByRole('link', { name: 'Sign in with SAP Universal ID' });
+      const sapBtn = page.getByRole('link', { name: 'Sign in with SAP Account', exact: true });
+      const uidBtn = page.getByRole('link', { name: "Sign In if you don't already have an SAP Account", exact: true });
 
       await expect(sapBtn).toBeVisible();
       await expect(uidBtn).toBeVisible();
