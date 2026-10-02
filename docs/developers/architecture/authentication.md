@@ -418,6 +418,64 @@ Switch to a custom IAS tenant if you later need:
 
 ---
 
+### Two-Button Sign-In and IdP Pinning
+
+The platform provides a themed public sign-in page (`/signin`) that allows users to choose between two authentication flows, each routed to a different Identity Provider.
+
+#### Sign-In Page (`/signin`)
+
+The `/signin` page is a public, unauthenticated Hugo page (served by AppRouter with `authenticationType: "none"`). It presents two buttons:
+
+1. **"Sign in with SAP"** — Routes to `/login?sap_idp=sap.default` (SAP ID Service, the default universal IDP)
+2. **"Sign in with SAP Universal ID"** — Routes to `/login?sap_idp=sap.custom` (IAS tenant `atxgsg7zi`, which federates social providers like GitHub, Google, Microsoft)
+
+Both flows eventually reach the same app via XSUAA, which re-issues its own OAuth token. The user sees XSUAA's token in the session, not the upstream IdP's token.
+
+#### IdP Pinning via `sap_idp` Query Parameter
+
+The `/login` route in `xs-app.json` is configured with `dynamicIdentityProvider: true`. This enables the `sap_idp` query parameter:
+
+```
+/login?sap_idp=sap.default    → AppRouter sets login_hint={"origin":"sap.default"}
+/login?sap_idp=sap.custom     → AppRouter sets login_hint={"origin":"sap.custom"}
+```
+
+The AppRouter translates the `sap_idp` parameter into an XSUAA `login_hint` claim. XSUAA receives this hint and bypasses the IdP chooser screen, jumping directly to the specified IdP's authentication flow. This provides a seamless two-button experience — the user never sees an "Account Chooser" or "Which IdP?" dialog.
+
+#### Identity Resolution Across IdPs
+
+Both IdPs federate through a single XSUAA instance. When a user authenticates via either flow:
+
+1. **Authentication** happens at the upstream IdP (SAP ID Service or IAS)
+2. **Token re-issuance** happens at XSUAA — a new JWT is issued to the app with:
+   - `user_uuid` claim = stable unique identifier (either from SAP ID or IAS)
+   - `email` claim = user's email address (if provided by the IdP)
+   - `given_name`, `family_name` = user profile fields
+3. **Identity merge** (via the `(iss,sub)` resolver, #2552): If a user logs in via one IdP and later logs in via the other with the same email address, the system detects the email match and merges both logins to the same `user_uuid` in the database. This allows a user to seamlessly switch between "Sign in with SAP" and "Sign in with SAP Universal ID" without creating duplicate accounts.
+
+#### Session and IdP Switching
+
+**Caveat: Switching IdPs requires logout first.** This is an AppRouter/XSUAA constraint:
+
+- If a user logs in via `sap.default` (SAP ID Service) and gets a session cookie
+- And then tries to log in via `sap.custom` (IAS) **without logging out first**
+- The AppRouter sees the existing session and skips the authentication flow — the user remains logged in as the previous identity
+
+**Workaround:** The app's logout flow clears the session cookie. After logout, a user can click either sign-in button and be routed to the corresponding IdP.
+
+#### Known Boundary: Social Login Without SAP ID Account
+
+When a user logs in via a social provider (GitHub, Google, etc. via IAS) **and the email address does not exist in any prior SAP ID login**:
+
+- A new `Users` database row is created with `sapId = null`, linked to the social identity via a `UserIdentities` (issuer, subject) row
+- Later, if the same user logs in via SAP ID Service with the same email but a different identity key
+- The system detects the email collision but cannot automatically merge because they have different identity keys stored in `UserIdentities` (issue #2552)
+- **Workaround:** The user can manually merge accounts via the `/admin-ui/#account-merge` endpoint if they have `Admin` scope, or the DeveloperService can expose a user-facing merge endpoint in a future update
+
+This edge case only occurs for users who first log in socially without a pre-existing SAP ID. Most SAP developers have an existing SAP ID, so the happy path (same email, automatic merge) covers the common case.
+
+---
+
 ### XSUAA Configuration
 
 The XSUAA instance (`tutorials-xsuaa`) is configured via `xs-security.json`.

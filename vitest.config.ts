@@ -183,7 +183,7 @@ export default defineConfig({
         // avoid a second test-runner dependency.
         test: {
           name: 'e2e',
-          include: ['test/e2e/**/*.test.{js,ts}'],
+          include: ['test/e2e/**/*.{test,spec}.{js,ts}'],
           pool: 'forks',
           testTimeout: 120000,
           hookTimeout: 60000,
