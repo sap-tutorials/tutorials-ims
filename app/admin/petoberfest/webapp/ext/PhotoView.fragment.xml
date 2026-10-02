@@ -1,0 +1,18 @@
+<core:FragmentDefinition
+  xmlns:core="sap.ui.core"
+  xmlns:m="sap.m">
+  <!-- Issue #2597 follow-up: show the full-size submission photo on the
+       ObjectPage. The photo LOB is intentionally excluded from the
+       PetSubmissions OData projection (LOB locators expire when mixed with
+       non-BLOB columns on HANA — see srv/admin-service.cds), so the image is
+       fetched from the dedicated auth-gated express route. Omitting
+       ?size=thumb returns the 1280px display render. -->
+  <m:VBox class="sapUiMediumMargin">
+    <m:Image
+      src="{= '/admin/petoberfest/photo/' + ${ID} }"
+      densityAware="false"
+      alt="{= 'Photo of ' + (${petName} || 'submission') }"
+      width="100%"
+      class="sapUiResponsiveMargin" />
+  </m:VBox>
+</core:FragmentDefinition>

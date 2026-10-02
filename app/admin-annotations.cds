@@ -4255,7 +4255,7 @@ annotate AdminService.PetSubmissions with @(
     { Value: uploadedAt,   Label: 'Uploaded At' }
   ]},
   UI.Facets: [
-    { $Type: 'UI.ReferenceFacet', Label: 'Details', Target: '@UI.FieldGroup#Details' }
+    { $Type: 'UI.ReferenceFacet', ID: 'Details', Label: 'Details', Target: '@UI.FieldGroup#Details' }
   ],
   UI.Identification: [
     { $Type: 'UI.DataFieldForAction', Action: 'AdminService.approve', Label: 'Approve' },
