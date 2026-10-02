@@ -213,7 +213,10 @@
     if (!isAuthenticated) {
       try { localStorage.removeItem('autologin.optout'); } catch {}
       try { sessionStorage.setItem('autologin.tried', '1'); } catch {}
-      window.location.href = '/login?returnTo=' + encodeURIComponent(window.location.pathname + window.location.search);
+      // Deliberate sign-in: send to the /signin IdP chooser (not straight to
+      // /login) so the user picks an identity provider. maybeAutoLogin (silent
+      // returning-visitor SSO) still uses /login directly — see below.
+      window.location.href = '/signin?returnTo=' + encodeURIComponent(window.location.pathname + window.location.search);
       return;
     }
     closeAllExcept(userPopover);

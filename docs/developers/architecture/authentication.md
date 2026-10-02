@@ -426,8 +426,10 @@ The platform provides a themed public sign-in page (`/signin`) that allows users
 
 The `/signin` page is a public, unauthenticated Hugo page (served by AppRouter with `authenticationType: "none"`). It presents two buttons:
 
-1. **"Sign in with SAP"** — Routes to `/login?sap_idp=sap.default` (SAP ID Service, the default universal IDP)
-2. **"Sign in with SAP Universal ID"** — Routes to `/login?sap_idp=sap.custom` (IAS tenant `atxgsg7zi`, which federates social providers like GitHub, Google, Microsoft)
+1. **"Sign in with SAP Account"** — Routes to `/login?sap_idp=sap.default` (SAP ID Service, the default universal IDP)
+2. **"Sign In if you don't already have an SAP Account"** — Routes to `/login?sap_idp=sap.custom` (IAS tenant `atxgsg7zi`, which federates social providers like GitHub, Google, Microsoft)
+
+The `/signin` chooser is reached when an anonymous visitor deliberately signs in (the shellbar profile action redirects to `/signin?returnTo=<path>`); the chooser forwards that `returnTo` onto the chosen `/login?sap_idp=…` URL so the user lands back where they started. The silent returning-visitor auto-login (`maybeAutoLogin`, issue #1689) still targets `/login` directly — it resolves transparently against an existing IdP SSO session and must not surface the chooser.
 
 Both flows eventually reach the same app via XSUAA, which re-issues its own OAuth token. The user sees XSUAA's token in the session, not the upstream IdP's token.
 
