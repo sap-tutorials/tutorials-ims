@@ -455,8 +455,11 @@
   // transparently; if not, the IDP bounces straight back and the 'tried' flag
   // (set before the redirect) prevents a loop.
   function maybeAutoLogin() {
-    // Homepage (/) is exempt — never auto-redirect there.
-    if (window.location.pathname === '/') return;
+    // Homepage (/) and the deliberate IdP chooser (/signin) are exempt — never
+    // auto-redirect there. The chooser is where a returning visitor goes to pick
+    // an IdP (profile-click → /signin); auto-bouncing it to /login would skip the
+    // choice and silently SSO them in — the exact bug this guards against.
+    if (window.location.pathname === '/' || window.location.pathname.replace(/\/$/, '') === '/signin') return;
     // Returning-visitor gate: only auto-login browsers that have authenticated
     // here before. Fail closed (unreadable storage → don't bounce).
     try { if (localStorage.getItem('auth.returning') !== '1') return; } catch { return; }
