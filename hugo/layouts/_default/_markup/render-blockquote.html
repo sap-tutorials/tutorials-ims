@@ -1,0 +1,11 @@
+{{- /* Blockquote render hook (#2595).
+     Plain `>` (AlertType == "") renders byte-identical to Hugo's default so the
+     global blue blockquote style and single.html's scoped style both keep
+     matching. GitHub-style alerts (`> [!TYPE]`) get a semantic class; CSS in
+     sap-fundamental.src.css maps each to a SAP MessageStrip color (color-only).
+     Unknown designators resolve to AlertType "" and take the plain path. */ -}}
+{{- if eq .AlertType "" -}}
+<blockquote>{{ .Text }}</blockquote>
+{{- else -}}
+<blockquote class="alert alert-{{ .AlertType }}">{{ .Text }}</blockquote>
+{{- end -}}
