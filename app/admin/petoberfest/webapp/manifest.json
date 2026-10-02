@@ -125,7 +125,21 @@
           "options": {
             "settings": {
               "contextPath": "/PetSubmissions",
-              "editableHeaderContent": false
+              "editableHeaderContent": false,
+              "content": {
+                "body": {
+                  "sections": {
+                    "PhotoSection": {
+                      "title": "Photo",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "Details"
+                      },
+                      "template": "sap.tutorials.admin.petoberfest.ext.PhotoView"
+                    }
+                  }
+                }
+              }
             }
           }
         },
