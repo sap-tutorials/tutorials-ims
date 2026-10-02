@@ -83,12 +83,14 @@ export function issuerSubjectFromUser(user) {
  * @param {string} user_ID — the Users.ID to link.
  * @param {{issuer:string, subject:string}} isu
  * @param {{provider?:string, email?:string, emailVerified?:boolean}} [meta]
+ * @param {object} [db] — optional tx/service runner (e.g. cds.tx(req)); when
+ *   given, the INSERT runs on that transaction instead of a fresh ambient one.
  */
-export async function writeIdentityLink(user_ID, isu, meta = {}) {
+export async function writeIdentityLink(user_ID, isu, meta = {}, db) {
   if (!user_ID || !isu) return;
   try {
     const { UserIdentities } = cds.entities('com.sap.developers.ims');
-    await INSERT.into(UserIdentities).entries({
+    const stmt = INSERT.into(UserIdentities).entries({
       ID: cds.utils.uuid(),
       user_ID,
       issuer: isu.issuer,
@@ -98,6 +100,7 @@ export async function writeIdentityLink(user_ID, isu, meta = {}) {
       emailVerified: meta.emailVerified ?? false,
       linkedAt: new Date().toISOString(),
     });
+    await (db ? db.run(stmt) : stmt);
   } catch (err) {
     if (!/unique|duplicate/i.test(String(err?.message ?? ''))) throw err;
   }
@@ -130,20 +133,25 @@ const SCIM_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
  * Miss on all tiers → null (caller stays fail-closed).
  *
  * @param {object} user — CAP cds.context.user / req.user.
+ * @param {object} [db] — optional tx/service runner (e.g. cds.tx(req)); when
+ *   given, all reads/writes run on that transaction instead of a fresh ambient
+ *   one. Prevents single-connection SQLite deadlocks when a handler already
+ *   holds the request tx (#2552).
  * @returns {Promise<object|null>} the full Users row, or null.
  */
-export async function resolveUser(user) {
+export async function resolveUser(user, db) {
   if (!user || !user.id || user.id === 'anonymous') return null;
   const { Users, UserIdentities } = cds.entities('com.sap.developers.ims');
+  const run = (stmt) => (db ? db.run(stmt) : stmt);
 
   // ── Tier 1: (issuer, subject) link ──────────────────────────────────────
   const isu = issuerSubjectFromUser(user);
   if (isu) {
-    const link = await SELECT.one.from(UserIdentities)
+    const link = await run(SELECT.one.from(UserIdentities)
       .columns('user_ID')
-      .where({ issuer: isu.issuer, subject: isu.subject });
+      .where({ issuer: isu.issuer, subject: isu.subject }));
     if (link?.user_ID) {
-      const row = await SELECT.one.from(Users).where({ ID: link.user_ID });
+      const row = await run(SELECT.one.from(Users).where({ ID: link.user_ID }));
       if (row) return row;
     }
   }
@@ -155,14 +163,14 @@ export async function resolveUser(user) {
   // canonical value as a Tier-2 key — a SCIM-UUID or email here is not a sapId.
   const canonicalSapId = sapId && !SCIM_UUID_RE.test(sapId) && !sapId.includes('@') ? sapId : null;
   if (canonicalSapId) {
-    const row = await SELECT.one.from(Users).where({ sapId: canonicalSapId });
+    const row = await run(SELECT.one.from(Users).where({ sapId: canonicalSapId }));
     if (row) {
       if (isu) {
         await writeIdentityLink(row.ID, isu, {
           provider: providerFromIssuer(isu.issuer),
           email: user.authInfo?.token?.payload?.email ?? null,
           emailVerified: true,
-        });
+        }, db);
       }
       return row;
     }
@@ -171,7 +179,7 @@ export async function resolveUser(user) {
   // ── Tier 3: trusted-token-email → Users.email (+ self-heal link write) ──
   const email = tokenEmail(user);
   if (email) {
-    const rows = await SELECT.from(Users).where`lower(email) = ${email}`;
+    const rows = await run(SELECT.from(Users).where`lower(email) = ${email}`);
     const candidates = (rows ?? []).filter(
       (r) => r.email && !NOREPLY_GITHUB_RE.test(r.email),
     );
@@ -185,7 +193,7 @@ export async function resolveUser(user) {
           provider: providerFromIssuer(isu.issuer),
           email,
           emailVerified: true,
-        });
+        }, db);
       }
       return row;
     }
@@ -205,15 +213,18 @@ export async function resolveUser(user) {
  * fail-closed guard then applies.
  *
  * @param {object} user — CAP cds.context.user / req.user (mutated in place).
+ * @param {object} [db] — optional tx/service runner (e.g. cds.tx(req)) threaded
+ *   through to resolveUser so the pin's lookups join the request transaction
+ *   instead of opening a deadlock-prone ambient one on SQLite (#2552).
  * @returns {Promise<object|null>} the resolved Users row, or null.
  */
-export async function pinResolvedUser(user) {
+export async function pinResolvedUser(user, db) {
   if (!user || !user.id || user.id === 'anonymous') return null;
   // Idempotent: if already pinned this request, don't re-resolve.
   if (user.attr?.dbUserId) return { ID: user.attr.dbUserId, sapId: user.authInfo?.token?.userId ?? null };
   let row;
   try {
-    row = await resolveUser(user);
+    row = await resolveUser(user, db);
   } catch (err) {
     cds.log('resolve-db-user').warn('[pinResolvedUser] resolve failed',
       { email: tokenEmail(user), isu: issuerSubjectFromUser(user), msg: err?.message ?? err });

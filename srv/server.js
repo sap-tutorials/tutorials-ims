@@ -2269,8 +2269,12 @@ cds.on('served', async () => {
     srv.before('*', async (req) => {
       // Only authenticated requests carry a resolvable identity; anonymous
       // and tech-user paths no-op inside pinResolvedUser.
+      // Run the resolver's reads/writes on the REQUEST's own transaction
+      // (cds.tx(req)) rather than letting the bare SELECT/INSERT globals open a
+      // fresh ambient autocommit tx — on single-connection in-memory SQLite the
+      // ambient tx deadlocks against a handler's own cds.tx(...) (#2552).
       try {
-        await pinResolvedUser(req.user);
+        await pinResolvedUser(req.user, cds.tx(req));
       } catch (err) {
         cds.log('identity-pin').warn('[before *] pin failed',
           { service: srv.name, msg: err?.message ?? err });
