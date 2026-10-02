@@ -19,7 +19,7 @@ const EXPECTED = {
 
 const TITLES = {
   baipAiLaunchpad:   'AI Launchpad',
-  baipBtpSubaccount: 'BTP Subaccount',
+  baipBtpSubaccount: 'SAP Business AI Platform Subaccount',
   baipHanaCloud:     'HANA Cloud',
   baipIasAdminConsole: 'IAS Admin Console'
 };
