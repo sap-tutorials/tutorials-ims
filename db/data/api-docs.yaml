@@ -6,7 +6,7 @@
 # Coverage matrix (per spec §7.1):
 #   - CAP (8) — framework reference + cloud-sdk + cds
 #   - S/4HANA Cloud (15) — public OData v2 APIs (Business Partner, Sales Order, etc.)
-#   - BTP services (15) — Connectivity, Destination, Identity Authentication, Audit Log, etc.
+#   - SAP Business AI Platform services (15) — Connectivity, Destination, Identity Authentication, Audit Log, etc.
 #   - SAP Build / Workflow / Process Automation (4)
 #   - Integration Suite (5) — Cloud Integration, Open Connectors, API Management
 #   - Cloud SDK (4) — Java + JavaScript
@@ -242,32 +242,32 @@
   apiType: odata-v2
 
 # ============================================================================
-# BTP Services
+# SAP Business AI Platform Services
 # ============================================================================
 
 - sourceId: SAP_Cloud_Connector_Connectivity
-  title: SAP BTP — Connectivity Service API
+  title: SAP Business AI Platform — Connectivity Service API
   url: https://api.sap.com/package/SAPBTPConnectivityService
   description: |
-    REST API and SDK for the SAP BTP Connectivity Service. Manage Cloud
+    REST API and SDK for the SAP Business AI Platform Connectivity Service. Manage Cloud
     Connector tunnels, on-premise system mappings, and principal propagation
     configuration. Used to reach S/4HANA or other on-premise systems from
-    BTP-hosted applications.
+    SAP Business AI Platform-hosted applications.
   category: BTP
   apiType: rest
 
 - sourceId: SAP_BTP_Destination_Service
-  title: SAP BTP — Destination Service API
+  title: SAP Business AI Platform — Destination Service API
   url: https://api.sap.com/package/SAPBTPDestinationService
   description: |
-    REST API for the SAP BTP Destination Service. Configure HTTP, RFC, or
+    REST API for the SAP Business AI Platform Destination Service. Configure HTTP, RFC, or
     MAIL destinations with authentication tokens, certificates, and
     location-based routing. Consumed by approuter and CAP applications.
   category: BTP
   apiType: rest
 
 - sourceId: SAP_XSUAA_Authorization
-  title: SAP BTP — XSUAA Authentication & Authorization
+  title: SAP Business AI Platform — XSUAA Authentication & Authorization
   url: https://api.sap.com/package/SAPXSUAA
   description: |
     Reference for the XSUAA service (Cloud Foundry UAA fork). Covers JWT
@@ -282,62 +282,62 @@
   description: |
     REST API for the SAP Cloud Identity Services — Identity Authentication
     (IAS). Manage users, groups, SAML/OIDC trust configurations, and
-    branding. Used as the primary IdP for SAP BTP applications.
+    branding. Used as the primary IdP for SAP Business AI Platform applications.
   category: BTP
   apiType: rest
 
 - sourceId: SAP_BTP_AuditLog
-  title: SAP BTP — Audit Log Service
+  title: SAP Business AI Platform — Audit Log Service
   url: https://api.sap.com/package/SAPAuditLogService
   description: |
-    REST API for the SAP BTP Audit Log Service. Write security events,
+    REST API for the SAP Business AI Platform Audit Log Service. Write security events,
     personal-data accesses, and configuration changes. Reads via the Audit
     Log Retrieval API.
   category: BTP
   apiType: rest
 
 - sourceId: SAP_BTP_Credstore
-  title: SAP BTP — Credential Store Service
+  title: SAP Business AI Platform — Credential Store Service
   url: https://api.sap.com/package/SAPCredstore
   description: |
-    REST API for the SAP BTP Credential Store. Securely store, rotate,
+    REST API for the SAP Business AI Platform Credential Store. Securely store, rotate,
     and retrieve secrets (passwords, keys, OAuth tokens) for applications
     bound to a credstore service instance. Supports JWE-encrypted payloads.
   category: BTP
   apiType: rest
 
 - sourceId: SAP_BTP_AlertNotification
-  title: SAP BTP — Alert Notification Service
+  title: SAP Business AI Platform — Alert Notification Service
   url: https://api.sap.com/package/SAPAlertNotificationService
   description: |
-    REST API for the SAP BTP Alert Notification Service. Send operational
+    REST API for the SAP Business AI Platform Alert Notification Service. Send operational
     events to channels (email, Slack, webhook, ServiceNow) with subscription
     + filter management.
   category: BTP
   apiType: rest
 
 - sourceId: SAP_BTP_FeatureFlags
-  title: SAP BTP — Feature Flags Service
+  title: SAP Business AI Platform — Feature Flags Service
   url: https://api.sap.com/package/SAPFeatureFlagsService
   description: |
-    REST API for the SAP BTP Feature Flags service. Define boolean and
+    REST API for the SAP Business AI Platform Feature Flags service. Define boolean and
     string-typed flags with rollout rules; consume via the SAP Cloud SDK
     or direct REST.
   category: BTP
   apiType: rest
 
 - sourceId: SAP_BTP_BusinessRules
-  title: SAP BTP — Business Rules Service
+  title: SAP Business AI Platform — Business Rules Service
   url: https://api.sap.com/package/SAPBusinessRulesService
   description: |
-    REST API for the SAP BTP Business Rules service. Author decision
+    REST API for the SAP Business AI Platform Business Rules service. Author decision
     tables and rule sets in the rules editor; execute via runtime API
     from CAP or other applications.
   category: BTP
   apiType: rest
 
 - sourceId: SAP_BTP_DocumentInformation
-  title: SAP BTP — Document Information Extraction
+  title: SAP Business AI Platform — Document Information Extraction
   url: https://api.sap.com/package/SAPDocumentInformationExtraction
   description: |
     REST API for the Document Information Extraction service. Submit PDFs
@@ -347,19 +347,19 @@
   apiType: rest
 
 - sourceId: SAP_BTP_DocumentClassification
-  title: SAP BTP — Document Classification
+  title: SAP Business AI Platform — Document Classification
   url: https://api.sap.com/package/SAPDocumentClassification
   description: |
-    REST API for the SAP BTP Document Classification service. Submit
+    REST API for the SAP Business AI Platform Document Classification service. Submit
     documents for ML-driven classification into custom-trained categories.
   category: BTP
   apiType: rest
 
 - sourceId: SAP_BTP_PrintService
-  title: SAP BTP — Print Service
+  title: SAP Business AI Platform — Print Service
   url: https://api.sap.com/package/SAPPrintService
   description: |
-    REST API for the SAP BTP Print Service. Submit print jobs to network
+    REST API for the SAP Business AI Platform Print Service. Submit print jobs to network
     printers via SAP-managed queue infrastructure.
   category: BTP
   apiType: rest
@@ -374,17 +374,17 @@
   apiType: rest
 
 - sourceId: SAP_BTP_Mobile_Services
-  title: SAP BTP — Mobile Services API
+  title: SAP Business AI Platform — Mobile Services API
   url: https://api.sap.com/package/SAPMobileServices
   description: |
-    REST API and SDK for SAP BTP Mobile Services. Manage mobile app
+    REST API and SDK for SAP Business AI Platform Mobile Services. Manage mobile app
     registrations, push-notification dispatch, offline OData sync, and
     feature flags scoped per-app.
   category: BTP
   apiType: rest
 
 - sourceId: SAP_BTP_HtmlSrv
-  title: SAP BTP — HTML5 Application Repository Service
+  title: SAP Business AI Platform — HTML5 Application Repository Service
   url: https://api.sap.com/package/SAPHTMLApplicationRepositoryService
   description: |
     REST API for managing static HTML5 application bundles deployed via
@@ -422,7 +422,7 @@
   description: |
     Reference for the SAP Build Apps (formerly AppGyver) runtime. Covers
     Composer Pro logic, data resources, REST integration patterns, and
-    deployment via SAP BTP.
+    deployment via SAP Business AI Platform.
   category: SAP Build
   apiType: reference
 
@@ -474,7 +474,7 @@
   description: |
     REST and AMQP 1.0 API for SAP Event Mesh. Publish events on topics,
     create durable queues, manage subscriptions, and consume via push or
-    pull. Foundation for event-driven architecture on BTP.
+    pull. Foundation for event-driven architecture on SAP Business AI Platform.
   category: Integration Suite
   apiType: rest
 
@@ -584,7 +584,7 @@
   url: https://api.sap.com/package/SAPJouleAgent
   description: |
     Reference for the SAP Joule agent framework. Build composite agents
-    that orchestrate skills, retrieve context from BTP services, and
+    that orchestrate skills, retrieve context from SAP Business AI Platform services, and
     converse with users via the Joule shell or embedded experiences.
   category: AI
   apiType: reference

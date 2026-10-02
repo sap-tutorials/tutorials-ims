@@ -191,7 +191,7 @@
            scheduled-job failures, and rebuild-dispatch failures
            (srv/lib/alerting.js, resolved via srv/lib/runtime-config/alert-settings.js).
            DB-backed (no env var) so ops can toggle live without a restart. The ANS
-           email action must be configured in the BTP cockpit first, else alerts
+           email action must be configured in the SAP Business AI Platform cockpit first, else alerts
            have nowhere to go. Rollback by flipping this back off — no redeploy. -->
       <Panel headerText="{i18n>alertsSection}" expandable="true" expanded="true" class="sapUiSmallMarginBottom">
         <f:SimpleForm editable="true" layout="ResponsiveGridLayout">

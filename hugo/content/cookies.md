@@ -33,7 +33,7 @@ required cookies.
 | Name | Purpose | Set by | Duration |
 | --- | --- | --- | --- |
 | Session cookie (XSUAA) | Keeps you signed in after you log in with your SAP account | SAP Application Router (XSUAA) | Session |
-| Routing cookie (`__VCAP_ID__`) | Routes your requests to the same backend instance for stable sessions | SAP BTP Cloud Foundry router | Session |
+| Routing cookie (`__VCAP_ID__`) | Routes your requests to the same backend instance for stable sessions | SAP Business AI Platform Cloud Foundry router | Session |
 | SAP Identity Provider cookies | Set during the login flow when you authenticate with your SAP account | `accounts.sap.com` | Session / persistent — see the [SAP Trust Center privacy statement](https://www.sap.com/about/legal/privacy.html) |
 
 ### Functional {#functional}

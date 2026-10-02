@@ -34,7 +34,7 @@ const SEED: SeedEntry[] = [
   // ─── Unit 1: Core Platform ───────────────────────────────────────────────────
   {
     tla: 'SAP', expansion: 'Systems, Applications, Products in Data Processing',
-    blurb: 'The full name of the company behind your daily BTP adventures. Founded in Walldorf, 1972.',
+    blurb: 'The full name of the company behind your daily SAP Business AI Platform adventures. Founded in Walldorf, 1972.',
     category: 'company',
     unitId: 'unit-1-platform', lessonIdx: 0,
     distractors: ['Software Architecture Platform', 'Service Automation Protocol'],
@@ -42,26 +42,26 @@ const SEED: SeedEntry[] = [
     kasimirWrong: 'SAP = Systems, Applications, Products in Data Processing. It\'s literally on the letterhead!',
   },
   {
-    tla: 'BTP', expansion: 'SAP Business Technology Platform',
-    blurb: 'SAP\'s unified cloud platform for building, extending, and integrating business applications. The successor to SAP Cloud Platform (SCP).',
+    tla: 'BTP', expansion: 'SAP Business Technology Platform (retired — now SAP Business AI Platform)',
+    blurb: 'The former name of SAP\'s unified cloud platform. "SAP Business Technology Platform" and its BTP acronym are now retired — the platform is called SAP Business AI Platform (see BAIP).',
     category: 'platform',
     unitId: 'unit-1-platform', lessonIdx: 0,
     distractors: ['SAP Big-data Transaction Platform', 'SAP Business Transaction Processing'],
-    kasimirRight: 'BTP — the cloud with a view from Walldorf! Nicely done. ☁️',
-    kasimirWrong: 'BTP = SAP Business Technology Platform. The "T" is Technology, not Transaction.',
+    kasimirRight: 'Correct — and these days that platform is called SAP Business AI Platform. ☁️',
+    kasimirWrong: 'BTP stood for SAP Business Technology Platform, now retired in favour of SAP Business AI Platform.',
   },
   {
     tla: 'SCP', expansion: 'SAP Cloud Platform',
-    blurb: 'The former name of SAP BTP (deprecated 2021). You\'ll still see SCP in older tutorials and Stack Overflow answers.',
+    blurb: 'An early former name of SAP Business AI Platform (deprecated 2021, when it became SAP BTP). You\'ll still see SCP in older tutorials and Stack Overflow answers.',
     category: 'platform',
     unitId: 'unit-1-platform', lessonIdx: 0,
     distractors: ['SAP Continuous Provisioning', 'SAP Core Protocol'],
-    kasimirRight: 'SCP — the old BTP. Nostalgia is allowed. 📜',
-    kasimirWrong: 'SCP = SAP Cloud Platform, the predecessor to BTP. History matters in enterprise software!',
+    kasimirRight: 'SCP — one of the platform\'s old names. Nostalgia is allowed. 📜',
+    kasimirWrong: 'SCP = SAP Cloud Platform, an early name for what is now SAP Business AI Platform. History matters in enterprise software!',
   },
   {
     tla: 'IAS', expansion: 'SAP Identity Authentication Service',
-    blurb: 'SAP\'s cloud-based Identity Provider (IdP) on BTP. Handles authentication for SAP apps and custom services via SAML 2.0 and OIDC.',
+    blurb: 'SAP\'s cloud-based Identity Provider (IdP) on SAP Business AI Platform. Handles authentication for SAP apps and custom services via SAML 2.0 and OIDC.',
     category: 'security',
     unitId: 'unit-1-platform', lessonIdx: 0,
     distractors: ['Integrated Authorization Service', 'Internal Application Server'],
@@ -80,16 +80,16 @@ const SEED: SeedEntry[] = [
   },
   {
     tla: 'BAS', expansion: 'SAP Business Application Studio',
-    blurb: 'SAP\'s browser-based IDE on BTP, built on VS Code Open Source. The recommended tool for CAP, Fiori, and ABAP Cloud development.',
+    blurb: 'SAP\'s browser-based IDE on SAP Business AI Platform, built on VS Code Open Source. The recommended tool for CAP, Fiori, and ABAP Cloud development.',
     category: 'tooling',
     unitId: 'unit-1-platform', lessonIdx: 1,
     distractors: ['Backend Automation System', 'Business API Services'],
     kasimirRight: 'BAS — where humans write the code that Kasimir reviews. Well played! 💻',
-    kasimirWrong: 'BAS = SAP Business Application Studio — the cloud IDE on BTP, not a backend system.',
+    kasimirWrong: 'BAS = SAP Business Application Studio — the cloud IDE on SAP Business AI Platform, not a backend system.',
   },
   {
     tla: 'SDK', expansion: 'Software Development Kit',
-    blurb: 'A bundle of tools, libraries, and documentation for building on a platform. SAP Cloud SDK adds BTP destinations, resilience, and type-safe OData clients.',
+    blurb: 'A bundle of tools, libraries, and documentation for building on a platform. SAP Cloud SDK adds SAP Business AI Platform destinations, resilience, and type-safe OData clients.',
     category: 'tooling',
     unitId: 'unit-1-platform', lessonIdx: 1,
     distractors: ['Service Deployment Kit', 'Standard Data Keyring'],
@@ -108,25 +108,25 @@ const SEED: SeedEntry[] = [
   // Lesson 1-3
   {
     tla: 'MTA', expansion: 'Multi-Target Application',
-    blurb: 'SAP\'s deployment artefact format for BTP. A single `.mtar` archive bundles multiple modules (backend, UI, DB) and wires up service bindings automatically.',
+    blurb: 'SAP\'s deployment artefact format for SAP Business AI Platform. A single `.mtar` archive bundles multiple modules (backend, UI, DB) and wires up service bindings automatically.',
     category: 'deployment',
     unitId: 'unit-1-platform', lessonIdx: 2,
     distractors: ['Managed Tenant Architecture', 'Module Transfer Archive'],
     kasimirRight: 'MTA — one package to rule them all! Purrfectly correct. 📦',
-    kasimirWrong: 'MTA = Multi-Target Application. It bundles all your BTP modules into one deployable archive.',
+    kasimirWrong: 'MTA = Multi-Target Application. It bundles all your SAP Business AI Platform modules into one deployable archive.',
   },
   {
     tla: 'ANS', expansion: 'SAP Alert Notification Service',
-    blurb: 'A BTP service that sends real-time alerts about application events to email, Slack, or custom webhooks. Used in tutorials-ims for operational monitoring.',
+    blurb: 'A SAP Business AI Platform service that sends real-time alerts about application events to email, Slack, or custom webhooks. Used in tutorials-ims for operational monitoring.',
     category: 'operations',
     unitId: 'unit-1-platform', lessonIdx: 2,
     distractors: ['Automated Notification System', 'Application Node Service'],
-    kasimirRight: 'ANS — the smoke alarm of your BTP app. Alert! You\'re correct! 🚨',
+    kasimirRight: 'ANS — the smoke alarm of your SAP Business AI Platform app. Alert! You\'re correct! 🚨',
     kasimirWrong: 'ANS = SAP Alert Notification Service. It notifies, alerts, and generally keeps you from sleeping.',
   },
   {
     tla: 'SAC', expansion: 'SAP Analytics Cloud',
-    blurb: 'SAP\'s SaaS business intelligence platform for dashboards, planning, and predictive analytics. Lives on BTP.',
+    blurb: 'SAP\'s SaaS business intelligence platform for dashboards, planning, and predictive analytics. Lives on SAP Business AI Platform.',
     category: 'analytics',
     unitId: 'unit-1-platform', lessonIdx: 2,
     distractors: ['SAP Application Console', 'SAP Automation Center'],
@@ -201,7 +201,7 @@ const SEED: SeedEntry[] = [
   },
   {
     tla: 'ABAP', expansion: 'Advanced Business Application Programming',
-    blurb: 'SAP\'s original high-level programming language, born in the 1980s and still the heart of S/4HANA. ABAP Cloud is its clean-core, BTP-ready modern incarnation — and the foundation RAP is built on.',
+    blurb: 'SAP\'s original high-level programming language, born in the 1980s and still the heart of S/4HANA. ABAP Cloud is its clean-core, cloud-ready modern incarnation — and the foundation RAP is built on.',
     category: 'framework',
     unitId: 'unit-2-cds', lessonIdx: 1,
     distractors: ['Automated Batch Application Processing', 'ABAP Business Application Platform'],
@@ -256,7 +256,7 @@ const SEED: SeedEntry[] = [
   },
   {
     tla: 'CLI', expansion: 'Command-Line Interface',
-    blurb: 'A text-based tool for interacting with software. CAP provides `cds` CLI; BTP has `btp`; CF has `cf`. Together they\'re the developer\'s Swiss army knife.',
+    blurb: 'A text-based tool for interacting with software. CAP provides `cds` CLI; SAP Business AI Platform has `btp`; CF has `cf`. Together they\'re the developer\'s Swiss army knife.',
     category: 'tooling',
     unitId: 'unit-2-cds', lessonIdx: 2,
     distractors: ['Cloud Layer Interface', 'Component Library Index'],
@@ -267,7 +267,7 @@ const SEED: SeedEntry[] = [
   // ─── Unit 3: HANA & Data ──────────────────────────────────────────────────────
   {
     tla: 'HANA', expansion: 'High-performance ANalytic Appliance',
-    blurb: 'SAP\'s in-memory relational database. Processes analytical and transactional workloads simultaneously ("HTAP"). The default production database for CAP apps on BTP.',
+    blurb: 'SAP\'s in-memory relational database. Processes analytical and transactional workloads simultaneously ("HTAP"). The default production database for CAP apps on SAP Business AI Platform.',
     category: 'database',
     unitId: 'unit-3-hana', lessonIdx: 0,
     distractors: ['Hybrid Application and Network Architecture', 'Hosted Analytical Node Application'],
@@ -388,7 +388,7 @@ const SEED: SeedEntry[] = [
   // ─── Unit 4: Security & Ops ───────────────────────────────────────────────────
   {
     tla: 'XSUAA', expansion: 'Extended Services for User Account and Authorization',
-    blurb: 'SAP BTP\'s OAuth 2.0 authorization service (also called "Authorization and Trust Management Service"). Manages roles, scopes, and JWT tokens for CAP apps.',
+    blurb: 'SAP Business AI Platform\'s OAuth 2.0 authorization service (also called "Authorization and Trust Management Service"). Manages roles, scopes, and JWT tokens for CAP apps.',
     category: 'security',
     unitId: 'unit-4-security', lessonIdx: 0,
     distractors: ['External Single-Use Authentication API', 'eXtended Security User Application API'],
@@ -397,7 +397,7 @@ const SEED: SeedEntry[] = [
   },
   {
     tla: 'UAA', expansion: 'User Account and Authentication',
-    blurb: 'Cloud Foundry\'s open-source OAuth 2.0 / OpenID Connect server. SAP\'s XSUAA is a proprietary extension of UAA, adding BTP-specific scopes and role collections.',
+    blurb: 'Cloud Foundry\'s open-source OAuth 2.0 / OpenID Connect server. SAP\'s XSUAA is a proprietary extension of UAA, adding SAP Business AI Platform-specific scopes and role collections.',
     category: 'security',
     unitId: 'unit-4-security', lessonIdx: 0,
     distractors: ['Universal Access Authority', 'Unified App Authenticator'],
@@ -406,7 +406,7 @@ const SEED: SeedEntry[] = [
   },
   {
     tla: 'SSO', expansion: 'Single Sign-On',
-    blurb: 'Log in once, access everything. SAP IAS federates identity to BTP, SAP S/4HANA, and third-party apps so users don\'t need separate passwords per system.',
+    blurb: 'Log in once, access everything. SAP IAS federates identity to SAP Business AI Platform, SAP S/4HANA, and third-party apps so users don\'t need separate passwords per system.',
     category: 'security',
     unitId: 'unit-4-security', lessonIdx: 0,
     distractors: ['Secure Session Object', 'Synchronised Sign-Out'],
@@ -415,7 +415,7 @@ const SEED: SeedEntry[] = [
   },
   {
     tla: 'JWT', expansion: 'JSON Web Token',
-    blurb: 'A compact, URL-safe token format (RFC 7519) for conveying claims between parties. BTP uses JWTs to carry XSUAA scopes and user info between services.',
+    blurb: 'A compact, URL-safe token format (RFC 7519) for conveying claims between parties. SAP Business AI Platform uses JWTs to carry XSUAA scopes and user info between services.',
     category: 'security',
     unitId: 'unit-4-security', lessonIdx: 0,
     distractors: ['JavaScript Web Transfer', 'JSON Workflow Trigger'],
@@ -425,7 +425,7 @@ const SEED: SeedEntry[] = [
   // Lesson 4-2
   {
     tla: 'IDP', expansion: 'Identity Provider',
-    blurb: 'A system that authenticates users and issues identity tokens. SAP IAS is a BTP Identity Provider. Corporate IdPs (Azure AD, Okta) can be federated into IAS.',
+    blurb: 'A system that authenticates users and issues identity tokens. SAP IAS is a SAP Business AI Platform Identity Provider. Corporate IdPs (Azure AD, Okta) can be federated into IAS.',
     category: 'security',
     unitId: 'unit-4-security', lessonIdx: 1,
     distractors: ['Internal Data Processor', 'Interface Definition Protocol'],
@@ -434,7 +434,7 @@ const SEED: SeedEntry[] = [
   },
   {
     tla: 'MFA', expansion: 'Multi-Factor Authentication',
-    blurb: 'Requiring ≥2 verification methods (password + OTP, biometric, hardware key). SAP IAS supports MFA for BTP admin and application users.',
+    blurb: 'Requiring ≥2 verification methods (password + OTP, biometric, hardware key). SAP IAS supports MFA for SAP Business AI Platform admin and application users.',
     category: 'security',
     unitId: 'unit-4-security', lessonIdx: 1,
     distractors: ['Managed Federation Access', 'Modular Flow Authentication'],
@@ -443,7 +443,7 @@ const SEED: SeedEntry[] = [
   },
   {
     tla: 'TLS', expansion: 'Transport Layer Security',
-    blurb: 'The cryptographic protocol that secures HTTPS connections (successor to SSL). All BTP endpoints use TLS; CAP enforces it in production profiles automatically.',
+    blurb: 'The cryptographic protocol that secures HTTPS connections (successor to SSL). All SAP Business AI Platform endpoints use TLS; CAP enforces it in production profiles automatically.',
     category: 'security',
     unitId: 'unit-4-security', lessonIdx: 1,
     distractors: ['Token Lifecycle Service', 'Trusted Link System'],
@@ -462,7 +462,7 @@ const SEED: SeedEntry[] = [
   // Lesson 4-3
   {
     tla: 'ERP', expansion: 'Enterprise Resource Planning',
-    blurb: 'Software that integrates core business processes (finance, HR, supply chain). SAP S/4HANA is the flagship ERP; it\'s why CAP and BTP exist — to extend and integrate ERP.',
+    blurb: 'Software that integrates core business processes (finance, HR, supply chain). SAP S/4HANA is the flagship ERP; it\'s why CAP and SAP Business AI Platform exist — to extend and integrate ERP.',
     category: 'business',
     unitId: 'unit-4-security', lessonIdx: 2,
     distractors: ['Enterprise Reporting Platform', 'Event-Routing Protocol'],
@@ -480,7 +480,7 @@ const SEED: SeedEntry[] = [
   },
   {
     tla: 'AMS', expansion: 'SAP Authorization Management Service',
-    blurb: 'A BTP service (`@cap-js/ams`) providing policy-based authorization for CAP applications via the `@ams` CDS annotation. An alternative to pure XSUAA role checks.',
+    blurb: 'A SAP Business AI Platform service (`@cap-js/ams`) providing policy-based authorization for CAP applications via the `@ams` CDS annotation. An alternative to pure XSUAA role checks.',
     category: 'security',
     unitId: 'unit-4-security', lessonIdx: 2,
     distractors: ['Application Monitoring Service', 'API Management Suite'],
@@ -489,12 +489,12 @@ const SEED: SeedEntry[] = [
   },
   {
     tla: 'RBAC', expansion: 'Role-Based Access Control',
-    blurb: 'Assigning permissions to roles, then roles to users — rather than granting permissions directly. XSUAA role collections implement RBAC for BTP apps.',
+    blurb: 'Assigning permissions to roles, then roles to users — rather than granting permissions directly. XSUAA role collections implement RBAC for SAP Business AI Platform apps.',
     category: 'security',
     unitId: 'unit-4-security', lessonIdx: 2,
     distractors: ['Resource-Bound API Control', 'Runtime Backend Access Cache'],
     kasimirRight: 'RBAC — roles for the role, access for the few. Permission granted! 🎖️',
-    kasimirWrong: 'RBAC = Role-Based Access Control. XSUAA role collections ARE the RBAC mechanism in BTP.',
+    kasimirWrong: 'RBAC = Role-Based Access Control. XSUAA role collections ARE the RBAC mechanism in SAP Business AI Platform.',
   },
 
   // ─── Unit 5: SAP & AI ─────────────────────────────────────────────────────────
@@ -537,7 +537,7 @@ const SEED: SeedEntry[] = [
   // Lesson 5-2
   {
     tla: 'BAIP', expansion: 'SAP Business AI Platform',
-    blurb: 'SAP\'s platform for building, deploying, and governing AI across business processes — bringing generative and predictive AI to BTP apps with enterprise data grounding.',
+    blurb: 'SAP\'s platform for building, deploying, and governing AI across business processes — bringing generative and predictive AI to SAP Business AI Platform apps with enterprise data grounding.',
     category: 'ai',
     unitId: 'unit-5-ai', lessonIdx: 1,
     distractors: ['Business Application Integration Platform', 'BTP Analytics & Insights Portal'],
@@ -555,7 +555,7 @@ const SEED: SeedEntry[] = [
   },
   {
     tla: 'ISLM', expansion: 'Intelligent Scenario Lifecycle Management',
-    blurb: 'SAP\'s framework for managing embedded machine-learning scenarios end to end — training, deploying, and monitoring predictive models inside S/4HANA and BTP apps.',
+    blurb: 'SAP\'s framework for managing embedded machine-learning scenarios end to end — training, deploying, and monitoring predictive models inside S/4HANA and SAP Business AI Platform apps.',
     category: 'ai',
     unitId: 'unit-5-ai', lessonIdx: 1,
     distractors: ['Integrated Service Layer Model', 'Intelligent System Learning Module'],
@@ -582,7 +582,7 @@ const UNITS: UnitMeta[] = [
     title: 'SAP Core Platform',
     icon: '🏗️',
     order: 1,
-    lessonTitles: ['Who\'s SAP, and what\'s BTP?', 'The CAP Stack', 'Deploying & Operating'],
+    lessonTitles: ['Who\'s SAP, and what\'s SAP Business AI Platform?', 'The CAP Stack', 'Deploying & Operating'],
     lessonIntros: [
       'Ah, a fresh student! Before we write a single line of CDS, let\'s settle the most fundamental questions: who runs this show, and what platform are we on?',
       'Now we\'re cooking! CAP is where the magic happens. Let me introduce you to my favourite framework — and no, I\'m not biased just because it\'s named after something a professor wears.',
