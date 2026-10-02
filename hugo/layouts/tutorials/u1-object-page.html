@@ -499,6 +499,15 @@
 {{ $js := resources.Get "js/tutorial.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $js.RelPermalink }}" defer></script>
 {{ end }}
+{{/* Issue #173: load the OS-picker runtime only when the page has OS-flavored
+     option blocks (hasOsOptions=true) — matches the picker guard above. Without
+     this, os-toggle.ts never mounts, the picker stays inert, and every OS panel
+     renders stacked (the CSS hide/show rules are gated on [data-os-options-hydrated],
+     which only this script sets). */}}
+{{ if and .Params.hasOsOptions (not site.Params.previewMode) }}
+{{ $osToggle := resources.Get "js/os-toggle.ts" | js.Build (dict "minify" true) }}
+<script src="{{ $osToggle.RelPermalink }}" defer></script>
+{{ end }}
 <script type="module" src="{{ partial "island-src.html" "nav-dropdown" }}"></script>
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip-launcher" }}"></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-rating" }}" defer></script>{{ end }}
