@@ -101,6 +101,15 @@ Subsystem one-liners:
 
   `mbt build` only `cp`'s `hugo/public/` into the approuter — it does **not** run Hugo or `fetch-tutorials`. Local builds MUST run `npm run build:all` before `mbt build`; skipping ships stale approuter (missing NEW badges, license icons, progress UI). Always confirm deploy scope with maintainer (backend-only / +content / +QA).
 
+- **The MCP server is a SEPARATE MTA (`tutorials-mcp`, `mta-mcp.yaml`)** — the command above deploys only the main `tutorials-ims` MTA (`.deploy/mta.yaml`), which serves the anonymous `/mcp/*`, PAT `/mcp-pat/*`, and admin `/mcp-admin/*` surfaces. The authenticated `/mcp-auth/*` surface runs in the `tutorials-srv-mcp` app of the separate `tutorials-mcp` MTA. `npm run deploy` / `scripts/deploy-mta.cjs` do NOT cover it — deploy it by hand from repo root:
+
+  ```bash
+  mbt build -e mta-mcp.yaml -t mta_archives
+  cf deploy mta_archives/*.mtar -e deploy/mcp-dev.mtaext -f   # or deploy/mcp-prod.mtaext
+  ```
+
+  The MCP MTA adopts the main MTA's services (hana/xsuaa/identity/credstore/destination) as `existing-service`, so deploy the main MTA first on a fresh space. Feature flag `MCP_AUTH_ENABLED` targets `tutorials-srv-mcp`; `MCP_PAT_MINT_ENABLED`/`KG_STEP_SLICER_ENABLED` target `tutorials-srv`. See [mta-deployment.md § MCP MTA](docs/developers/operations/mta-deployment.md#mcp-mta-tutorials-mcp).
+
 - **Local deploy is envsubst-free** — All four secrets (`CONTENT_API_KEY`, `REBUILD_API_KEY`, `APPROUTER_URL`, `GITHUB_DISPATCH_TOKEN`) formerly injected via `envsubst` now live exclusively in the BTP Credential Store (or have been removed entirely, in APPROUTER_URL's case). Run `cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f` directly. Rotation happens through `/admin-ui/#secrets` on the target env's approuter. See [mta-deployment.md](docs/developers/operations/mta-deployment.md) "Local deploy no longer needs envsubst" for the full context.
 
 - **PR over direct merge** — Default to `gh pr create` from a feature branch; subagent code review is not a substitute for PR review. Only fast-merge to `main` if explicitly told to skip the PR.

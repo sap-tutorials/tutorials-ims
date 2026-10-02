@@ -7,39 +7,56 @@ description: SAP BTP Cloud Foundry deployment — MTA modules, BTP service bindi
 
 > Source: extracted from project README, 2026-05-25.
 
-Single MTA deployment to SAP BTP Cloud Foundry:
+Two MTAs deploy to SAP BTP Cloud Foundry: the **main** `tutorials-ims` MTA
+([.deploy/mta.yaml](../../../.deploy/mta.yaml)) and the **MCP** `tutorials-mcp` MTA
+([mta-mcp.yaml](../../../mta-mcp.yaml)). The main MTA owns the service instances; the MCP MTA
+adopts them. Main-MTA deploy:
 
 ```bash
 mbt build
-cf deploy mta_archives/tutorials-ims_1.0.0.mtar
+cf deploy mta_archives/*.mtar
 ```
+
+MCP-MTA deploy is separate and manual (`npm run deploy` does not cover it):
+
+```bash
+mbt build -e mta-mcp.yaml -t mta_archives
+cf deploy mta_archives/*.mtar -e deploy/mcp-dev.mtaext -f
+```
+
+See [operations/mta-deployment.md](mta-deployment.md) for the full runbook.
 
 #### MTA Modules
 
-The deployment in [.deploy/mta.yaml](../../../.deploy/mta.yaml) defines five modules — the prod and QA channels share an AppRouter and XSUAA instance but each gets its own srv app and HDI container.
+The main MTA ([.deploy/mta.yaml](../../../.deploy/mta.yaml)) defines five modules — the prod and QA channels share an AppRouter and XSUAA instance but each gets its own srv app and HDI container. The MCP MTA ([mta-mcp.yaml](../../../mta-mcp.yaml)) adds a sixth deploy unit, `tutorials-srv-mcp`.
 
-| Module | Type | Source | Requires | Purpose |
-| --- | --- | --- | --- | --- |
-| `tutorials-db-deployer` | `hdb` | `gen/db` | `tutorials-hana`, `tutorials-cloud-logging` | Prod HANA schema + indexes (one-shot HDI deploy). Cloud Logging binding forwards deployer stdout for ~30-day forensic retention (#257). |
-| `tutorials-db-qa-deployer` | `hdb` | `gen/db-qa` | `tutorials-hana-qa`, `tutorials-cloud-logging` | QA HANA schema (peer of `db/`, namespace `com.sap.developers.ims.qa`). Cloud Logging binding mirrors prod for QA forensic parity. |
-| `tutorials-srv` | `nodejs` | `gen/srv` | hana, xsuaa, destination, mail, audit-log, cloud-logging, aicore | CAP backend (9 services + jobs + Socket.IO + content store + RAG) |
-| `tutorials-srv-qa` | `nodejs` | `gen/srv-qa` | hana-qa, xsuaa | QA-channel CAP srv (re-renders author drafts via `srv-qa/lib/parsers.bundle.mjs`) |
-| `tutorials-approuter` | `approuter.nodejs` | `approuter/` | xsuaa, `srv-api` (destination), `srv-qa-api` (destination) | XSUAA login + static delivery + reverse proxy to both srv apps |
+| Module | MTA | Type | Source | Requires | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| `tutorials-db-deployer` | main | `hdb` | `gen/db` | `tutorials-hana`, `tutorials-cloud-logging` | Prod HANA schema + indexes (one-shot HDI deploy). Cloud Logging binding forwards deployer stdout for ~30-day forensic retention (#257). |
+| `tutorials-db-qa-deployer` | main | `hdb` | `gen/db-qa` | `tutorials-hana-qa`, `tutorials-cloud-logging` | QA HANA schema (peer of `db/`, namespace `com.sap.developers.ims.qa`). Cloud Logging binding mirrors prod for QA forensic parity. |
+| `tutorials-srv` | main | `nodejs` | `gen/srv` | hana, xsuaa, destination, mail, audit-log, cloud-logging, aicore | CAP backend (9 services + jobs + Socket.IO + content store + RAG); serves `/mcp/*`, `/mcp-pat/*`, `/mcp-admin/*` |
+| `tutorials-srv-qa` | main | `nodejs` | `gen/srv-qa` | hana-qa, xsuaa | QA-channel CAP srv (re-renders author drafts via `srv-qa/lib/parsers.bundle.mjs`) |
+| `tutorials-approuter` | main | `approuter.nodejs` | `approuter/` | xsuaa, `srv-api` (destination), `srv-qa-api` (destination), `srv-mcp-api` (destination) | XSUAA login + static delivery + reverse proxy to both srv apps AND the MCP app |
+| `tutorials-srv-mcp` | **mcp** | `nodejs` | `gen/srv-mcp` | hana, xsuaa, identity (IAS), credstore, destination | Authenticated MCP backend — serves ONLY `/mcp-auth/*`; adopts the main MTA's services as existing-service |
 
-The AppRouter routes `^/tutorials-qa/(.*)`, `^/qa-search/(.*)` to the `srv-qa-api` destination and everything else (`/api/*`, `/admin/*`, `/display/*`, `/content/*`, etc.) to `srv-api`. WebSocket paths (`^/socket\.io/`, `^/ws/`) are `authenticationType: 'none'` because the scope check happens at namespace join.
+The AppRouter routes `^/tutorials-qa/(.*)`, `^/qa-search/(.*)` to the `srv-qa-api` destination, `^/mcp-auth/(.*)` to the `srv-mcp-api` destination (the external MCP app), and everything else (`/api/*`, `/admin/*`, `/display/*`, `/content/*`, `/mcp/*`, `/mcp-pat/*`, `/mcp-admin/*`, etc.) to `srv-api`. WebSocket paths (`^/socket\.io/`, `^/ws/`) are `authenticationType: 'none'` because the scope check happens at namespace join.
 
 #### BTP Service Bindings
 
 | Resource | Service / plan | Required by | Notes |
 | --- | --- | --- | --- |
-| `tutorials-hana` | `hana` / `hdi-shared` | `tutorials-srv`, `tutorials-db-deployer` | Prod HDI container (`com.sap.xs.hdi-container`) |
+| `tutorials-hana` | `hana` / `hdi-shared` | `tutorials-srv`, `tutorials-db-deployer`, `tutorials-srv-mcp` | Prod HDI container (`com.sap.xs.hdi-container`) |
 | `tutorials-hana-qa` | `hana` / `hdi-shared` | `tutorials-srv-qa`, `tutorials-db-qa-deployer` | QA-channel HDI container — separate from prod, no cross-foreign-keys |
-| `tutorials-xsuaa` | `xsuaa` / `application` | all srv apps + approuter | Configured from [.deploy/xs-security.json](../../../.deploy/xs-security.json) (Admin, MobileApp, DisplayApp, Tutorial.Author, ConsolidationScope, DeveloperApp scopes) |
-| `tutorials-destination` | `destination` / `lite` | `tutorials-srv` | NGDS + SCI remote endpoints |
+| `tutorials-xsuaa` | `xsuaa` / `application` | all srv apps + approuter + `tutorials-srv-mcp` | Configured from [.deploy/xs-security.json](../../../.deploy/xs-security.json) (Admin, MobileApp, DisplayApp, Tutorial.Author, ConsolidationScope, DeveloperApp scopes) |
+| `tutorials-identity` | `identity` / IAS | `tutorials-srv-mcp` | IAS public-PKCE client for `/mcp-auth/*` `mcp-remote` clients (primary auth; XSUAA is the fallback) |
+| `tutorials-destination` | `destination` / `lite` | `tutorials-srv`, `tutorials-srv-mcp` | NGDS + SCI remote endpoints; the MCP app uses it for the main-srv write-forward destination |
+| `tutorials-credstore` | `credstore` / `standard` | `tutorials-srv`, `tutorials-srv-mcp` | BTP Credential Store (deploy-time secrets) |
 | `tutorials-mail` | `mail` / `standard` | `tutorials-srv` | SMTP for notification escalation emails |
 | `tutorials-audit-log` | `auditlog` / `standard` (optional) | `tutorials-srv` | `@cap-js/audit-logging` sink for `@PersonalData` events |
 | `tutorials-cloud-logging` | `cloud-logging` / `standard` (optional) | `tutorials-srv`, `tutorials-db-deployer`, `tutorials-db-qa-deployer` | OTLP ingest enabled; backs the `cfLogsUrl` virtual on `PipelineLog` / `JobExecutionLog`. Deployer bindings (#257) capture HDI deploy stdout for ~30-day forensic retention. |
 | `tutorials-aicore` | `aicore` / `extended` (optional) | `tutorials-srv` | Backs `ChatService` + embeddings + RAG (`getRelevantSteps` tool) |
+
+The MCP MTA creates **none** of these — it declares each as `org.cloudfoundry.existing-service` and adopts the instances the main MTA owns.
 
 `optional: true` resources let `mbt build && cf deploy` succeed in a subaccount that hasn't entitled them yet (e.g., a fresh sandbox without AI Core). The srv app degrades gracefully when bindings are missing — chat returns 503, audit logging falls through to the console sink, OTLP export is no-op.
 

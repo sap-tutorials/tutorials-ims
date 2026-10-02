@@ -160,8 +160,13 @@ When CI is broken or you need a quick iterative deploy, build and push from `.de
 cf target -s <dev-space>
 cd .deploy
 mbt build
-cf deploy mta_archives/tutorials-ims_1.0.0.mtar -e ../deploy/dev.mtaext -f
+cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f
 ```
+
+> This deploys the **main** `tutorials-ims` MTA only. The authenticated MCP surface
+> (`/mcp-auth/*`) ships as a **separate** `tutorials-mcp` MTA that deploys by hand:
+> `mbt build -e mta-mcp.yaml -t mta_archives && cf deploy mta_archives/*.mtar -e deploy/mcp-dev.mtaext -f`
+> (from repo root). See [operations/mta-deployment.md § MCP MTA](operations/mta-deployment.md#mcp-mta-tutorials-mcp).
 
 ### Optional env vars
 
