@@ -31,29 +31,44 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = process.env.CHECK_GAMEBOARD_URL_ROOT || join(__dirname, '..');
 const PLACEHOLDER = 'UNSET-see-env-mtaext';
 
-/** Extract a top-level `parameters.gameboard-url` value from a YAML-ish mta(ext)
+/** Extract a top-level `parameters.<key>` value from a YAML-ish mta(ext)
  *  file without a full YAML parser — matches the repo's other lightweight
  *  lint scripts. Returns null if not present. */
-export function readGameboardUrl(text: string): string | null {
+export function readParam(text: string, key: string): string | null {
   const lines = text.split(/\r?\n/);
   let inParams = false;
+  const re = new RegExp(`^\\s+${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:\\s*(\\S+)\\s*$`);
   for (const line of lines) {
     if (/^parameters:\s*$/.test(line)) { inParams = true; continue; }
     // a new top-level key ends the parameters block
     if (inParams && /^\S/.test(line) && !/^\s/.test(line)) inParams = false;
     if (inParams) {
-      const m = line.match(/^\s+gameboard-url:\s*(\S+)\s*$/);
+      const m = line.match(re);
       if (m) return m[1];
     }
   }
   return null;
 }
 
-export function effectiveUrl(baseText: string, extText: string): string | null {
-  const ext = readGameboardUrl(extText);
-  if (ext !== null) return ext;
-  return readGameboardUrl(baseText);
+/** Back-compat alias retained for the existing unit test. */
+export function readGameboardUrl(text: string): string | null {
+  return readParam(text, 'gameboard-url');
 }
+
+export function effectiveUrl(baseText: string, extText: string, key = 'gameboard-url'): string | null {
+  const ext = readParam(extText, key);
+  if (ext !== null) return ext;
+  return readParam(baseText, key);
+}
+
+// Top-level `parameters.<key>` entries whose base-mta default is the invalid
+// placeholder and that are resolved into an approuter destination. Each MUST be
+// overridden per-env or the approuter boots with a bad destination URL.
+// - gameboard-url : /gameboard/* route (config-cross-env-leak guard, original).
+// - srv-mcp-url   : /mcp-auth/* route; resolved at approuter BOOT, so a missing
+//                   override crash-loops the approuter (shipped once — this gate
+//                   exists so it can't recur). Added 2026-10.
+const GUARDED_PARAMS = ['gameboard-url', 'srv-mcp-url'] as const;
 
 function main(): number {
   const env = process.argv[2];
@@ -63,22 +78,27 @@ function main(): number {
   }
   const baseText = readFileSync(join(ROOT, '.deploy', 'mta.yaml'), 'utf8');
   const extText = readFileSync(join(ROOT, 'deploy', `${env}.mtaext`), 'utf8');
-  const url = effectiveUrl(baseText, extText);
 
-  if (url === null || url === PLACEHOLDER || !/^https:\/\/\S+/.test(url)) {
-    console.error(
-      `[check-gameboard-url-mtaext] FAILED for env "${env}": effective gameboard-url is ` +
-      `${url === null ? '(unset)' : `"${url}"`}.\n` +
-      `  The approuter's /gameboard/* route forwards to this URL. Leaving it at the ` +
-      `placeholder would forward requests to a wrong/invalid host (config-cross-env-leak).\n` +
-      `  Fix: add to deploy/${env}.mtaext:\n` +
-      `    parameters:\n      gameboard-url: https://<${env}-gameboard-srv-host>\n` +
-      `  (Only add this once the ${env} sap-community-gameboard backend exists.)`,
-    );
-    return 1;
+  let failed = false;
+  for (const key of GUARDED_PARAMS) {
+    const url = effectiveUrl(baseText, extText, key);
+    if (url === null || url === PLACEHOLDER || !/^https:\/\/\S+/.test(url)) {
+      failed = true;
+      console.error(
+        `[check-gameboard-url-mtaext] FAILED for env "${env}": effective ${key} is ` +
+        `${url === null ? '(unset)' : `"${url}"`}.\n` +
+        `  The approuter resolves this into a runtime destination. Leaving it at the ` +
+        `placeholder forwards requests to a wrong/invalid host (config-cross-env-leak) ` +
+        `and, for srv-mcp-url, crash-loops the approuter at boot.\n` +
+        `  Fix: add to deploy/${env}.mtaext:\n` +
+        `    parameters:\n      ${key}: https://<${env}-${key.replace(/-url$/, '')}-host>\n` +
+        `  (Only add this once the ${env} backend for ${key} exists.)`,
+      );
+    } else {
+      console.log(`[check-gameboard-url-mtaext] OK — env "${env}" ${key} = ${url}`);
+    }
   }
-  console.log(`[check-gameboard-url-mtaext] OK — env "${env}" gameboard-url = ${url}`);
-  return 0;
+  return failed ? 1 : 0;
 }
 
 // Only run when invoked directly (not when imported by the unit test).
