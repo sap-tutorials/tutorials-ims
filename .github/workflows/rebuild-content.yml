@@ -738,6 +738,30 @@ jobs:
           APPROUTER_URL: ${{ steps.url.outputs.approuter_url }}
         run: npx tsx scripts/seed-sitemap-from-deployed.ts
 
+      # Preserve /llms-full.txt across catalog-only rebuilds (same wipe class as
+      # /browse/ + /authors/ + /sitemap.xml above). Reported as issue #2584 (5
+      # consecutive prod rebuild failures; "Verify SEO catalog freshness" red with
+      # `expected 722 to be greater than 10000`). /llms-full.txt is served from the
+      # HANA `page-llms-full.txt` blob (packages/core/page-key-map.js IN_SCOPE_PAGES)
+      # and publish-content.ts republishes it on every non-slug rebuild. Its body is
+      # rendered by hugo/layouts/_default/llmsfull.txt ranging .Site.RegularPages of
+      # Type "tutorials"; catalog-only skips "Fetch tutorials", so the Hugo build
+      # just above bakes a ~722-byte llms-full.txt holding only the committed
+      # test-tutorial fixture — publishing that would wipe the live full catalog
+      # (~1.4k tutorials, >10 KB). Like sitemap.xml (and UNLIKE the browse/author
+      # preserve steps, which re-hydrate build INPUTS before the build), llms-full is
+      # a build OUTPUT with no JSON input, so this runs AFTER the build and overwrites
+      # the freshly-baked thin file with the one the approuter is CURRENTLY serving.
+      # Fails the run (non-zero) rather than ship a wiped llms-full.txt if the
+      # deployed body is unreadable or below the catalog-fresh threshold. Not needed
+      # in `full` (regenerates it) or `slug-targeted` (page-llms-full.txt is not
+      # republished).
+      - name: Preserve llms-full.txt for catalog-only rebuild
+        if: ${{ steps.mode.outputs.effective_mode == 'catalog-only' }}
+        env:
+          APPROUTER_URL: ${{ steps.url.outputs.approuter_url }}
+        run: npx tsx scripts/seed-llms-full-from-deployed.ts
+
       # Fail-closed net for the sitemap wipe class. Runs in the modes that
       # republish the page-sitemap.xml blob (full + catalog-only; slug-targeted
       # does not touch it). Fails BEFORE the HANA publish if the sitemap about to
