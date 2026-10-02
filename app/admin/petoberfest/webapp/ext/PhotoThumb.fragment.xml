@@ -1,11 +1,17 @@
 <core:FragmentDefinition
   xmlns:core="sap.ui.core"
-  xmlns:m="sap.m">
+  xmlns:m="sap.m"
+  core:require="{ handler: 'sap/tutorials/admin/petoberfest/ext/PhotoThumb' }">
+  <!-- Issue #2597: press the thumbnail to open a centered, full-size preview
+       (replaces the non-functional "Open in New Tab"). sap.m.Image has no
+       hover event, so press is used — also keyboard/touch accessible. -->
   <m:Image
     src="{= '/admin/petoberfest/photo/' + ${ID} + '?size=thumb' }"
     width="60px"
     height="60px"
-    decorative="true"
     densityAware="false"
+    press="handler.onEnlarge"
+    alt="{= 'Photo of ' + (${petName} || 'submission') + ' — click to enlarge' }"
+    tooltip="Click to enlarge"
     class="sapUiTinyMargin" />
 </core:FragmentDefinition>

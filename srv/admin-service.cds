@@ -173,6 +173,12 @@ service AdminService {
   // A Tutorial.Author-only user (without Admin) cannot reach this service.
   entity PetSubmissions as projection on ims.PetSubmissions {
     ID, petName, uploaderName, moderation, sizeBytes, uploadedAt,
+    // uploaderName is NULL when the uploader's token lacked given_name/
+    // family_name claims (#2597). Flatten the uploader's email from the
+    // user association so moderators can always identify/contact the
+    // submitter. Scalar path expression (like contestSlug below) — no LOB,
+    // no redirect (Users is not projected into AdminService).
+    user.email as uploaderEmail,
     petoberfest.slug as contestSlug, petoberfest.title as contestTitle
   } actions {
     @(requires: ['Tutorial.Author', 'Admin'])

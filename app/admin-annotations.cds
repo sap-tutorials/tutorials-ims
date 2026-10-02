@@ -4229,6 +4229,7 @@ annotate AdminService.PetSubmissions with @(
   UI.LineItem: [
     { $Type: 'UI.DataField', Value: petName,      Label: 'Pet Name' },
     { $Type: 'UI.DataField', Value: uploaderName, Label: 'Uploader' },
+    { $Type: 'UI.DataField', Value: uploaderEmail, Label: 'Email' },
     { $Type: 'UI.DataField', Value: contestTitle, Label: 'Contest' },
     { $Type: 'UI.DataField', Value: moderation,   Label: 'Status' },
     { $Type: 'UI.DataField', Value: uploadedAt,   Label: 'Uploaded' },
@@ -4246,6 +4247,7 @@ annotate AdminService.PetSubmissions with @(
   UI.FieldGroup#Details: { Data: [
     { Value: petName,      Label: 'Pet Name' },
     { Value: uploaderName, Label: 'Uploader' },
+    { Value: uploaderEmail, Label: 'Email' },
     { Value: contestTitle, Label: 'Contest' },
     { Value: contestSlug,  Label: 'Contest Slug' },
     { Value: moderation,   Label: 'Status' },
@@ -4265,10 +4267,29 @@ annotate AdminService.PetSubmissions with @(
   Capabilities.UpdateRestrictions: { Updatable: false }
 );
 
+// Quick-filter tabs (#2597): one-click "Pending" vs "All" views with counts.
+// Wired as single-table quickVariantSelection in the FE manifest's
+// controlConfiguration for the LineItem. SelectionVariant#All uses an empty
+// SelectOptions so it shows the full queue.
+annotate AdminService.PetSubmissions with @(
+  UI.SelectionVariant #All: {
+    Text: 'All',
+    SelectOptions: []
+  },
+  UI.SelectionVariant #Pending: {
+    Text: 'Pending',
+    SelectOptions: [{
+      PropertyName: moderation,
+      Ranges: [{ Sign: #I, Option: #EQ, Low: 'PENDING' }]
+    }]
+  }
+);
+
 annotate AdminService.PetSubmissions with {
   ID           @Common.Label: 'ID';
   petName      @Common.Label: 'Pet Name';
   uploaderName @Common.Label: 'Uploader';
+  uploaderEmail @Common.Label: 'Email';
   moderation   @Common.Label: 'Status';
   sizeBytes    @Common.Label: 'Size (bytes)';
   uploadedAt   @Common.Label: 'Uploaded At';
