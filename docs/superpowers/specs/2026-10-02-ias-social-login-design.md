@@ -86,6 +86,20 @@ No code here — this section is a **verification obligation**, not a change.
 - Subsequent hits: Tier-1 `(iss, sub)` → O(1), no email dependency.
 - Grounding risk (from #2552): `Users.email` is NULL on ~97.6% of PROD rows and backfills lazily on login. A social user whose SAP-ID row has **no email yet** will Tier-3-miss and get a **separate** `Users` row (separate `user_uuid`) until a later explicit account-merge. This is the known, accepted #2552 boundary — call it out in testing, do not try to re-solve it here.
 
+## Section 3.5 — Styling (user requirement)
+
+The sign-in landing page must **match the site theme** — light/dark mode and our styles — the same way the **error pages** do. It should evoke the SAP Universal ID experience but rendered in our skin (not a raw SAP/IAS screen; that screen appears only *after* the user picks the Universal ID button and is handed to IAS).
+
+**Author it as a Hugo layout, NOT a hand-written approuter static file.** The error pages (403/404/500…) are Hugo-generated and copied into `approuter/static/` at build (`mta.yaml:98` `cp -r hugo/public/. approuter/static/`). A Hugo-sourced page inherits theming, build, and deploy automatically; a hand-edited `approuter/static/*.html` would be overwritten by the build (and is exactly the "ships dead / not deployed" trap in CLAUDE.md).
+
+Recipe (verified 2026-10-02):
+- **Clone** `hugo/layouts/403.html` — the closest auth-context analog (uses `fd-button`, `/logout`, `<ui5-illustrated-message>`). It's just a `{{ define "main" }}…{{ end }}` block; `<head>`, shellbar, footer, CSS links, and the theme script all come from `hugo/layouts/_default/baseof.html` + `partials/head.html`.
+- **Site CSS:** inherited via the shared head `<link>` chain (`fundamental-styles-icon`, `sap-theme-vars`, `sap-horizon-dark`, `chroma-light/dark`, `sap-fundamental`, `ui5-overrides`). Page-specific `<style>` uses `fd-*` classes + `var(--sap*)` tokens (`--sapBackgroundColor`, `--sapTextColor`, `--sapTile_Background`).
+- **Light/dark:** inherited for free from `head.html` pre-paint script — reads localStorage key **`theme`** (`"dark"`/`"light"`), falls back to `prefers-color-scheme`, sets `<html data-theme>` + `.dark` before first paint (no flash). Consistent cold or from an already-themed session. Toggle via the shared shellbar `[data-action="toggle-theme"]`.
+- **Logo/brand:** `/img/sap-logo.svg`, favicons `/favicon.svg` / `/favicon.ico` (root-absolute, served after the static copy).
+- **Buttons:** two `fd-button`s styled as site primary/secondary (`fd-button--emphasized` for the primary). The IAS/Universal ID button on-brand but visually distinct. Each is a link to the pinned `?sap_idp=` entry (Section 2).
+- **Ships via:** `build:hugo` → `hugo/public/` → `mta.yaml:98` copy → `mbt build`/`npm run deploy`. No manual copy into `approuter/static/`.
+
 ## Section 4 — Scope
 
 **In scope (code):**
@@ -118,10 +132,14 @@ No code here — this section is a **verification obligation**, not a change.
 - Admin-UI changes rule (CLAUDE.md): the landing page ships via the approuter static copy at `mbt build` — a FULL deploy, no `--skip-build`, no `-m` scoping; Step 3.5 bundle check applies.
 - `cf target` before any push; deploy from fresh `origin/DEV`, never a feature branch.
 
-## Open questions for review
+## Decisions (resolved 2026-10-02)
 
-1. **Gate scope:** per-route `dynamicIdentityProvider` on the sign-in route (recommended, minimal) vs. global `DYNAMIC_IDENTITY_PROVIDER` env (simpler, broader). Any route accepting `sap_idp` lets a crafted URL steer the IdP — per-route limits that surface.
-2. **Entry point:** add a NEW `/signin` page, or convert the existing `/login` → `/login-redirect.html` route into the two-button page? (Existing route at `xs-app.json:116-121`.)
-3. **Label:** "Sign in with SAP Universal ID" — confirm wording for the IAS button.
-4. **Default unauthenticated behavior:** force all unauthenticated entry to `/signin` (never reach XSUAA's chooser), or only use `/signin` as an explicit opt-in link? Forcing it is the true "no chooser ever" guarantee but touches the default path more.
-5. **Tenant drift:** a recalled note mentions a later swap to IAS tenant `alzmza7li`; live trust shows `atxgsg7zi` as the active `sap.custom`. Spec uses the live value. Confirm no pending re-trust.
+1. **Gate scope:** per-route `dynamicIdentityProvider` on the sign-in route only — minimal blast radius; other routes' login behavior unchanged. *(recommended, accepted)*
+2. **Entry point:** add a NEW `/signin` page; leave the existing `/login` → `/login-redirect.html` route in place as the callback-side plumbing. The two buttons live on `/signin`.
+3. **Label:** "Sign in with SAP Universal ID" for the IAS button, "Sign in with SAP" for the default. *(wording confirmable at implementation; not blocking)*
+4. **Default unauthenticated behavior:** force unauthenticated entry to `/signin` so XSUAA's raw chooser is never reachable by normal navigation — the true "no chooser ever" guarantee. Regression-test the default path (Section 5 #2) to ensure already-authenticated sessions are not bounced through `/signin`.
+5. **Styling:** Hugo-sourced sign-in layout cloned from `hugo/layouts/403.html`, inheriting site CSS + light/dark (localStorage `theme` key) + logo + build copy — per Section 3.5. *(user requirement, accepted)*
+
+## Open question — needs user confirm
+
+- **Tenant drift (Q5):** a recalled note mentions a later swap to IAS tenant `alzmza7li`; live `btp list security/trust` shows `atxgsg7zi` as the active `sap.custom`. Spec/plan use the **live** value `atxgsg7zi`/`sap.custom`. Confirm no pending re-trust to `alzmza7li` before implementation, or the `sap_idp` origin key stays `sap.custom` regardless of tenant (origin key is stable across tenant swap unless the trust was re-created with a new key).
