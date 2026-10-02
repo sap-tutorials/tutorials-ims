@@ -107,10 +107,10 @@ Each CDS service is mounted separately under `/mcp/*` over the [Model Context Pr
 
 **Signed-in tools** (your progress, recommendations, marking steps done) live behind two authenticated tiers:
 
-- **`/mcp-auth/*`** — OAuth 2.1 + PKCE. Requires the `Tutorial.MCP` scope (**Tutorials MCP Users** role collection). XSUAA has no dynamic client registration, so bridge through [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) with the pre-registered public client.
+- **`/mcp-auth/*`** — OAuth 2.1 authorization-code + PKCE against SAP Identity Authentication Service (IAS), as a **public client** (no secret). Point an MCP client with native HTTP OAuth straight at the mount — the authorization server, scopes, and PKCE method are advertised via [`/.well-known/oauth-protected-resource`](https://developers.sap.com/.well-known/oauth-protected-resource) and [`/.well-known/oauth-authorization-server`](https://developers.sap.com/.well-known/oauth-authorization-server), so no `mcp-remote` bridge is needed. In Claude Code: `"sap-developers-auth": { "type": "http", "url": "https://developers.sap.com/mcp-auth/api" }` — approve, and the browser sign-in completes the flow.
 - **`/mcp-pat/*`** — a **Personal Access Token** for headless / CI clients that can't do a browser flow. Mint one at [`/me/tokens/`](/me/tokens/) (self-service; requires the **Tutorials MCP Users** role collection), then send `Authorization: Bearer pat_...`. Scopes: `read` (read tools) or `write` (also allows `complete_step` / `reset_tutorial_progress`). The plaintext token is shown once.
 
-Full connection walkthrough (Claude Desktop, Claude Code, `mcp-remote`, PATs, troubleshooting): [MCP Quickstart](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/end-users/mcp-quickstart.md). Tool + parameter reference: [mcp-server.md](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/developers/reference/mcp-server.md).
+Full connection walkthrough (Claude Desktop, Claude Code, native HTTP OAuth, PATs, troubleshooting): [MCP Quickstart](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/end-users/mcp-quickstart.md). Tool + parameter reference: [mcp-server.md](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/developers/reference/mcp-server.md).
 
 ### Local `sap-devs` CLI MCP (over stdio)
 
