@@ -14,6 +14,7 @@ import { maybeAutoSendCompletion } from './lib/ngds-autosend.js';
 import { stampSubmissionId } from './lib/task-record-submission-id.js';
 import { rollUpParentsForCompletion } from './lib/completion-rollup.js';
 import { renderMarkdown } from './lib/markdown.js';
+import { buildTaskMap, resolveTask, effectiveLegacyId } from './lib/path-item-task-resolver.js';
 
 // Per-user rate limit for resetTutorialProgress — same window as the
 // IP-based feedback limiter below (5/hr) but keyed by sapId via a shared
@@ -567,43 +568,25 @@ export default class DeveloperService extends cds.ApplicationService {
         ? await SELECT.from(dbPathItems).where({ path_ID: { in: pathIds } }).orderBy('itemOrder')
         : [];
 
-      const taskLegacyIds = allItems.map(i => i.taskLegacyId);
+      // #1866: resolve tasks FK-first (tutorial_ID) with taskLegacyId fallback,
+      // so manually-authored items (taskLegacyId null, tutorial_ID set) resolve.
+      const taskMap = await buildTaskMap({
+        items: allItems,
+        entities: { Tutorials: dbTutorials, Checkpoints: dbCheckpoints, Petoberfests: dbPetoberfests },
+      });
 
-      const tutorials = taskLegacyIds.length > 0
-        ? await SELECT.from(dbTutorials).where({ legacyId: { in: taskLegacyIds } })
-        : [];
-      const checkpoints = taskLegacyIds.length > 0
-        ? await SELECT.from(dbCheckpoints).where({ legacyId: { in: taskLegacyIds } })
-        : [];
-      const petoberfests = taskLegacyIds.length > 0
-        ? await SELECT.from(dbPetoberfests).where({ legacyId: { in: taskLegacyIds } })
-        : [];
-
-      const taskMap = new Map();
-      for (const t of tutorials) taskMap.set(`TUTORIAL:${t.legacyId}`, t);
-      for (const c of checkpoints) taskMap.set(`CHECKPOINT:${c.legacyId}`, c);
-      for (const p of petoberfests) taskMap.set(`PETOBERFEST:${p.legacyId}`, p);
-
-      const missingSlugIds = allItems
-        .filter(i => i.taskType === 'TUTORIAL' && taskMap.has(`TUTORIAL:${i.taskLegacyId}`))
-        .filter(i => !taskMap.get(`TUTORIAL:${i.taskLegacyId}`).slug)
-        .map(i => i.taskLegacyId);
-
-      if (missingSlugIds.length > 0) {
-        const freshTutorials = await SELECT.from(dbTutorials)
-          .where({ legacyId: { in: missingSlugIds }, slug: { '!=': null } });
-        for (const t of freshTutorials) {
-          taskMap.set(`TUTORIAL:${t.legacyId}`, t);
-        }
-      }
+      // Effective legacyId per item (own taskLegacyId, else resolved tutorial's)
+      // drives both TaskRecord lookups and the output imsId.
+      const effLegacyByItem = new Map(allItems.map(i => [i, effectiveLegacyId(taskMap, i)]));
+      const recordLegacyIds = [...new Set([...effLegacyByItem.values()].filter(v => v != null))];
 
       let userRecords = [];
       const sapId = resolveUserSapId(user);
       const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
-      if (dbUser) {
+      if (dbUser && recordLegacyIds.length > 0) {
         userRecords = await SELECT.from(dbTaskRecords).where({
           user_ID: dbUser.ID,
-          taskLegacyId: { in: taskLegacyIds }
+          taskLegacyId: { in: recordLegacyIds }
         });
       }
       const recordMap = new Map();
@@ -628,10 +611,11 @@ export default class DeveloperService extends cds.ApplicationService {
           const items = allItems
             .filter(i => i.path_ID === p.ID)
             .map(i => {
-              const task = taskMap.get(`${i.taskType}:${i.taskLegacyId}`);
-              const record = recordMap.get(`${i.taskType}:${i.taskLegacyId}`);
+              const task = resolveTask(taskMap, i);
+              const effLegacyId = effLegacyByItem.get(i);
+              const record = recordMap.get(`${i.taskType}:${effLegacyId}`);
               return {
-                imsId: i.taskLegacyId,
+                imsId: effLegacyId,
                 title: task?.title || record?.titleSnapshot || '',
                 type: i.taskType,
                 status: record?.status || '',
@@ -700,30 +684,22 @@ export default class DeveloperService extends cds.ApplicationService {
         ? await SELECT.from(dbPathItems).where({ path_ID: { in: pathIds } }).orderBy('itemOrder')
         : [];
 
-      const taskLegacyIds = allItems.map(i => i.taskLegacyId);
+      // #1866: FK-first resolution (see getEventProgress / build-catalog.js).
+      const taskMap = await buildTaskMap({
+        items: allItems,
+        entities: { Tutorials: dbTutorials, Checkpoints: dbCheckpoints, Petoberfests: dbPetoberfests },
+      });
 
-      const tutorials = taskLegacyIds.length > 0
-        ? await SELECT.from(dbTutorials).where({ legacyId: { in: taskLegacyIds } })
-        : [];
-      const checkpoints = taskLegacyIds.length > 0
-        ? await SELECT.from(dbCheckpoints).where({ legacyId: { in: taskLegacyIds } })
-        : [];
-      const petoberfests = taskLegacyIds.length > 0
-        ? await SELECT.from(dbPetoberfests).where({ legacyId: { in: taskLegacyIds } })
-        : [];
-
-      const taskMap = new Map();
-      for (const t of tutorials) taskMap.set(`TUTORIAL:${t.legacyId}`, t);
-      for (const c of checkpoints) taskMap.set(`CHECKPOINT:${c.legacyId}`, c);
-      for (const p of petoberfests) taskMap.set(`PETOBERFEST:${p.legacyId}`, p);
+      const effLegacyByItem = new Map(allItems.map(i => [i, effectiveLegacyId(taskMap, i)]));
+      const recordLegacyIds = [...new Set([...effLegacyByItem.values()].filter(v => v != null))];
 
       let userRecords = [];
       const sapId = resolveUserSapId(user);
       const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
-      if (dbUser) {
+      if (dbUser && recordLegacyIds.length > 0) {
         userRecords = await SELECT.from(dbTaskRecords).where({
           user_ID: dbUser.ID,
-          taskLegacyId: { in: taskLegacyIds }
+          taskLegacyId: { in: recordLegacyIds }
         });
       }
       const recordMap = new Map();
@@ -741,10 +717,11 @@ export default class DeveloperService extends cds.ApplicationService {
           const items = allItems
             .filter(i => i.path_ID === p.ID)
             .map(i => {
-              const task = taskMap.get(`${i.taskType}:${i.taskLegacyId}`);
-              const record = recordMap.get(`${i.taskType}:${i.taskLegacyId}`);
+              const task = resolveTask(taskMap, i);
+              const effLegacyId = effLegacyByItem.get(i);
+              const record = recordMap.get(`${i.taskType}:${effLegacyId}`);
               return {
-                imsId: i.taskLegacyId,
+                imsId: effLegacyId,
                 title: task?.title || record?.titleSnapshot || '',
                 type: i.taskType,
                 status: record?.status || '',
