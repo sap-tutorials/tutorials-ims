@@ -116,6 +116,7 @@
     {
       "source": "^/login(\\?.*)?$",
       "authenticationType": "xsuaa",
+      "dynamicIdentityProvider": true,
       "target": "/login-redirect.html",
       "localDir": "static"
     },
