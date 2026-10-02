@@ -113,14 +113,17 @@ tutorials-ims/
 │   ├── improvements.md, TODO.md#   Feature backlog and gap tracking (largely historic)
 │   └── superpowers/specs/+plans/ # Feature specs and step-by-step implementation plans
 ├── .deploy/                    # MTA build + deploy artifacts
-│   ├── mta.yaml                #   MTA descriptor (modules: approuter, srv, srv-qa, db, db-qa, destinations)
+│   ├── mta.yaml                #   Main MTA descriptor (modules: approuter, srv, srv-qa, db, db-qa, destinations)
 │   ├── xs-security.json        #   XSUAA scopes + role collections (Admin, MobileApp, Tutorial.Author)
 │   ├── deploy-admin.sh         #   Standalone admin UI deploy helper (bypasses MTA build)
 │   └── DEPLOY.md               #   Deploy procedure documentation
+├── mta-mcp.yaml                # Separate MCP MTA descriptor (tutorials-mcp → module tutorials-srv-mcp, serves /mcp-auth/*; adopts main-MTA services)
 ├── deploy/                     # MTA extension descriptors (environment overrides)
-│   ├── dev.mtaext              #   Development overrides (instance counts, memory)
+│   ├── dev.mtaext              #   Main-MTA development overrides (instance counts, memory, srv-mcp-url)
 │   ├── qa.mtaext               #   QA/staging overrides
-│   └── prod.mtaext             #   Production overrides
+│   ├── prod.mtaext             #   Production overrides
+│   ├── mcp-dev.mtaext          #   MCP-MTA DEV overrides (tutorials-mcp-dev)
+│   └── mcp-prod.mtaext         #   MCP-MTA PROD overrides (tutorials-mcp-prod)
 ├── .github/workflows/          # CI/CD pipelines (GitHub Actions)
 │   ├── deploy.yml              #   Build MTA + deploy to BTP CF + post-deploy smoke tests
 │   ├── rebuild-content.yml     #   Re-fetch tutorials + rebuild Hugo + publish HTML to HANA

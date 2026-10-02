@@ -3,7 +3,7 @@
 Operator runbook for the anonymous Model Context Protocol surface at `/mcp/*`. The CAP adapter (`@cap-js/mcp@1.1.1`) exposes selected read-only services as MCP tools; visitors' MCP clients connect through the approuter with no XSUAA round-trip.
 
 Adapter: [`@cap-js/mcp@1.1.1`](https://www.npmjs.com/package/@cap-js/mcp) — cds10-compatible; registers itself under `cds.protocols.mcp` so no `protocols` block is needed in project `package.json`.
-Approuter route: `/mcp/*` → `srv-api`, `authenticationType: none`, `csrfProtection: false`. The parallel `/mcp-auth/*` prefix is **reserved for Phase 2** — do not repurpose.
+Approuter route: `/mcp/*` → `srv-api`, `authenticationType: none`, `csrfProtection: false`. The parallel `/mcp-auth/*` prefix is the **authenticated** surface, routed to the separate `tutorials-srv-mcp` app (MCP MTA) via the `srv-mcp-api` destination — see [Phase 2 — the authenticated surface](#phase-2-the-authenticated-surface-shipped).
 Services participating: `SearchService`, `HomepageService`, `KnowledgeGraphService` — each declares `@protocol: ['odata', ..., 'mcp']`. **Never** use the `@mcp` single-protocol shortcut alone: it replaces the default OData mount (same trap as [[cap-graphql-shortcut-replaces-odata]]).
 
 ## TL;DR
@@ -14,16 +14,32 @@ Services participating: `SearchService`, `HomepageService`, `KnowledgeGraphServi
 | Retire one tool (temporary) | Comment out the CDS function + its handler, redeploy | ~15 min |
 | Retire one service's whole MCP surface | Remove `'mcp'` from that service's `@protocol` list, redeploy | ~15 min |
 | Full MCP shutdown (ultima ratio) | `npm uninstall @cap-js/mcp`, redeploy | ~15 min |
-| Roll back the last change | `cf rollback tutorials-srv` | ~1 min |
+| Roll back the last change | `cf rollback tutorials-srv` (anonymous/PAT/admin) or `cf rollback tutorials-srv-mcp` (`/mcp-auth/*`) | ~1 min |
 
 ## Deploy
 
-The adapter is a normal CAP protocol plugin — it boots with the CAP process and has no separate lifecycle. There is no MCP-specific deploy step. Use the standard MTA workflow:
+The anonymous `/mcp/*`, PAT `/mcp-pat/*`, and admin `/mcp-admin/*` surfaces run inside the
+main `tutorials-srv` CAP runtime. The adapter is a normal CAP protocol plugin — it boots with
+that process and has no separate lifecycle. There is no MCP-specific deploy step for those
+surfaces; use the standard main-MTA workflow:
 
 ```bash
 npm run build:all
 cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f
 ```
+
+> **The authenticated `/mcp-auth/*` surface is a SEPARATE MTA.** As of the auth-split
+> (#2569/#2579/#2581) the OAuth MCP backend is the `tutorials-srv-mcp` app in its own
+> `tutorials-mcp` MTA (descriptor `mta-mcp.yaml`), not `tutorials-srv`. It deploys by hand:
+>
+> ```bash
+> mbt build -e mta-mcp.yaml -t mta_archives
+> cf deploy mta_archives/*.mtar -e deploy/mcp-dev.mtaext -f   # or deploy/mcp-prod.mtaext
+> ```
+>
+> `npm run deploy` / `scripts/deploy-mta.cjs` deploy ONLY the main MTA — there is no
+> orchestrated MCP-MTA path today, so the main-MTA deploy above does NOT ship `/mcp-auth/*`
+> changes. See [mta-deployment.md § MCP MTA (tutorials-mcp)](mta-deployment.md#mcp-mta-tutorials-mcp).
 
 On boot you'll see the plugin register under `cds.protocols.mcp` and each participating service serve at `/mcp/<serviceRoot>`. Endpoints are `/mcp/search`, `/mcp/homepage`, `/mcp/graph`.
 
@@ -67,10 +83,11 @@ The adapter is gone from `cds.protocols` on next boot; every `/mcp/*` request re
 
 ## Rollback
 
-There is no MCP-specific state — no manifest, no session store, no outbox rows. Standard app rollback recovers the entire surface:
+There is no MCP-specific state — no manifest, no session store, no outbox rows. Standard app rollback recovers the surface — but note the two backends roll back independently:
 
 ```bash
-cf rollback tutorials-srv
+cf rollback tutorials-srv       # anonymous /mcp/*, PAT /mcp-pat/*, admin /mcp-admin/*
+cf rollback tutorials-srv-mcp   # authenticated /mcp-auth/* (separate MCP MTA)
 ```
 
 If the change touched only `.cds` / `.js` files and not `db/`, this is safe to run at any time. If a schema change rode along, use the normal deploy-rollback procedure (see [mta-deployment.md](mta-deployment.md)).
@@ -107,7 +124,7 @@ Boot logs show `serving <Service> { at: '/mcp/<root>' }` for each MCP-enabled se
 
 `/mcp/*` is anonymous. If a client sees 401, the request is not hitting the anonymous route:
 
-- Verify the URL is `/mcp/search`, `/mcp/homepage`, or `/mcp/graph`. Anything else (including `/mcp-auth/*`) is not routed to `srv-api` as anonymous — `/mcp-auth/*` is reserved for Phase 2 and currently returns 404 or 401 depending on approuter config.
+- Verify the URL is `/mcp/search`, `/mcp/homepage`, or `/mcp/graph`. Anything else is not routed to `srv-api` as anonymous — notably `/mcp-auth/*` is the **authenticated** surface (separate `tutorials-srv-mcp` app) and requires an IAS/XSUAA bearer, so an anonymous `initialize` there is expected to 401.
 - Confirm the client isn't hitting an authenticated CAP service at a different path and appending `/mcp` to it. Only the three curated services participate.
 
 ### Connection resets after the first request
@@ -122,9 +139,15 @@ The adapter picks the response encoding from the client's `Accept` header. If a 
 
 No MCP-specific counters are exported yet. The general `srv-error-rate` alert on 5xx from `tutorials-srv` covers adapter-level failures — if the plugin throws on `tools/list`, that surfaces as a 500 and rolls into the standard alert. Per-tool call counts / latency histograms are a future enhancement (tracked as a nice-to-have; no issue open).
 
-## Phase 2 preparation
+## Phase 2 — the authenticated surface (shipped)
 
-The approuter reserves `/mcp-auth/*` for the authenticated MCP surface (Phase 2 — MCP calls that require an XSUAA bearer, e.g. tools that read a user's tutorial progress). **Do not squat on this prefix** for anything else. When Phase 2 lands, the plan is to mount an OAuth-protected sibling of the current adapter under `/mcp-auth/*` while keeping the anonymous `/mcp/*` surface unchanged.
+`/mcp-auth/*` is the authenticated MCP surface — MCP calls that require a bearer, e.g. tools
+that read or write a user's tutorial progress. It is **live**, and since the auth-split
+(#2569/#2579/#2581) it is served by the separate `tutorials-srv-mcp` app (the `tutorials-mcp`
+MTA), not the main `tutorials-srv` adapter. Inbound auth is hybrid IAS (public PKCE, for
+`mcp-remote` clients) with an XSUAA bearer fallback. The anonymous `/mcp/*` surface stays on
+`tutorials-srv` unchanged. See [architecture/mcp-server.md](../architecture/mcp-server.md) for
+the full topology.
 
 ## Phase 2 operations
 
@@ -152,18 +175,23 @@ curl -X POST https://<approuter-url>/pats/mintPAT \
 
 Three Phase 2 feature flags control the MCP surface. All default to `true` (enabled).
 
-```bash
-# Disable the authenticated MCP surface entirely
-cf set-env tutorials-srv MCP_AUTH_ENABLED false && cf restart tutorials-srv
+> **Flag target depends on the surface.** `MCP_AUTH_ENABLED` gates `/mcp-auth/*`, which now
+> runs in the **separate `tutorials-srv-mcp` app** (read in `srv-mcp/server.js`) — set it on
+> that app. `MCP_PAT_MINT_ENABLED` and `KG_STEP_SLICER_ENABLED` gate `/mcp-pat/*` and the
+> anonymous step-slicer on the **main `tutorials-srv`**.
 
-# Disable PAT minting (existing PATs continue to work)
+```bash
+# Disable the authenticated MCP surface entirely (separate MCP MTA app)
+cf set-env tutorials-srv-mcp MCP_AUTH_ENABLED false && cf restart tutorials-srv-mcp
+
+# Disable PAT minting (existing PATs continue to work) — main srv
 cf set-env tutorials-srv MCP_PAT_MINT_ENABLED false && cf restart tutorials-srv
 
-# Disable the step-HTML slicer (get_tutorial_step returns 404 for all slugs)
+# Disable the step-HTML slicer (get_tutorial_step returns 404 for all slugs) — main srv
 cf set-env tutorials-srv KG_STEP_SLICER_ENABLED false && cf restart tutorials-srv
 ```
 
-To restore a flag to default, `cf unset-env tutorials-srv <NAME> && cf restart tutorials-srv` (unset = default `true`).
+To restore a flag to default, `cf unset-env <app> <NAME> && cf restart <app>` (unset = default `true`) — using the same app the flag was set on above.
 
 ### Granting `Tutorials MCP Users` role collection
 
@@ -234,7 +262,7 @@ The `sap-devs` CLI and its bundled MCP server are a **downstream consumer** of t
 | Consumer shape | URL | Auth |
 | --- | --- | --- |
 | Anonymous curated tools (Phase 1, unchanged) | `<base>/mcp/search`, `/mcp/homepage`, `/mcp/graph` | none |
-| Authenticated / personalized tools (browser agent) | `<base>/mcp-auth/api` | OAuth 2.1 + PKCE via XSUAA; requires the `Tutorial.MCP` scope |
+| Authenticated / personalized tools (browser agent) | `<base>/mcp-auth/api` (separate `tutorials-srv-mcp` app) | OAuth 2.1 + PKCE via **IAS** (primary) with XSUAA fallback; requires the `Tutorial.MCP` scope on the XSUAA path |
 | Authenticated / personalized tools (headless CLI, CI) | `<base>/mcp-pat/api` | `Authorization: Bearer pat_…` |
 
 `<base>` on Dev is `https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com`. (Note this is the **actual CF route**, not the vanity `developers-dev.*` host — confirm the current route with `cf routes` before hardcoding.)
@@ -242,7 +270,7 @@ The `sap-devs` CLI and its bundled MCP server are a **downstream consumer** of t
 **What the owner must do**
 
 1. **Prefer PAT for the CLI.** A CLI is a headless agent — route personalized calls through `/mcp-pat/api` with a PAT minted at `/admin-ui/#pats`. Reserve `/mcp-auth/api` (interactive OAuth) for GUI clients like Claude Desktop.
-2. **Auto-discovery.** OAuth clients read `<base>/.well-known/oauth-authorization-server` and `<base>/.well-known/oauth-protected-resource` to self-configure. These are served statically by the approuter — if a client 404s on them, the approuter route order regressed (the specific static routes must precede the broad `^/.well-known/(.*)$` ORD route; guarded by `test/unit/approuter-mcp-route.test.js`).
+2. **Auto-discovery.** OAuth clients read `<base>/.well-known/oauth-authorization-server` and `<base>/.well-known/oauth-protected-resource` to self-configure. These are served by **runtime approuter middleware** (`insertMiddleware.first` in `approuter/server.js`, see [architecture/mcp-server.md § `.well-known` discovery](../architecture/mcp-server.md#well-known-discovery)) — values derive at request time from the bound XSUAA/IAS VCAP credentials and the request host. If a client 404s on them, the approuter middleware order regressed (the discovery middleware must run before the broad `^/.well-known/(.*)$` ORD route; guarded by `test/unit/approuter-mcp-route.test.js`).
 3. **Scope grant.** Interactive OAuth users need the `Tutorials MCP Users` role collection (grants `Tutorial.MCP`) — see [Granting `Tutorials MCP Users` role collection](#granting-tutorials-mcp-users-role-collection) above. PAT callers do **not** need the XSUAA scope; the PAT's own `scopes` array (`read` / `write`) governs access.
 4. **Do not depend on `@sap/`-internal MCP behavior.** The adapter is the public `@cap-js/mcp`; tool names and the `/mcp*` namespaces are stable across Phase 2→3 (Phase 3 only *adds* tools). Client configs will not need to change on the Phase 3 rollout.
 5. **Rate limits & failure modes.** Both authenticated paths converge on the same CAP handlers and rate limits as the anonymous surface — see [Rate limiting](#rate-limiting) and [Common failures](#common-failures). An expired/revoked PAT returns 401.
@@ -299,4 +327,6 @@ The `mcp_compose_fallback_total` counter is the canary for the adapter deep-impo
 
 - Adapter: [`@cap-js/mcp` on npm](https://www.npmjs.com/package/@cap-js/mcp)
 - Related memory: [[cap-graphql-shortcut-replaces-odata]] — why `@protocol:` must be a list, not a shortcut
-- Related runbook: [mta-deployment.md](mta-deployment.md) — standard deploy path
+- Related runbook: [mta-deployment.md](mta-deployment.md) — standard deploy path, incl. [§ MCP MTA (tutorials-mcp)](mta-deployment.md#mcp-mta-tutorials-mcp)
+- MCP MTA descriptors: `mta-mcp.yaml` (root), `deploy/mcp-dev.mtaext`, `deploy/mcp-prod.mtaext`
+- Architecture: [architecture/mcp-server.md](../architecture/mcp-server.md) — two-MTA topology, route-to-backend map

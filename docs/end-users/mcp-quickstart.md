@@ -161,7 +161,7 @@ The server speaks Streamable HTTP. Clients may send `Accept: application/json` o
 
 ## Troubleshooting
 
-- **`initialize` returns 401.** You hit `/mcp-auth/*` by mistake. That namespace is reserved for Phase 2 authenticated tools; use `/mcp/*` in Phase 1.
+- **`initialize` returns 401.** You hit `/mcp-auth/*`, the **authenticated** surface — it needs an OAuth bearer (IAS/XSUAA). For the anonymous tools use `/mcp/*` (`/mcp/search`, `/mcp/homepage`, `/mcp/graph`).
 - **`tools/list` returns an empty array.** Wrong service path. Each service is mounted separately — `/mcp/search`, `/mcp/homepage`, `/mcp/graph`. There is no aggregate `/mcp` root.
 - **First response is slow (5–15s).** Cold start. The CAP backend spins down when idle. Subsequent requests are fast.
 - **Nothing returns and no error.** Anonymous IP throttle. Back off and retry.

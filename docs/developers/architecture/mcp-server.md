@@ -2,34 +2,54 @@
 
 How the Model Context Protocol surface is structured across CAP services, approuter routes, and the shared step-HTML slicer. For the design rationale, see the spec at `docs/superpowers/specs/2026-07-08-mcp-server-phase2-design.md`.
 
-## Three-route stack
+## Deployment topology — two MTAs
+
+The MCP surface spans **two separately-deployed MTAs** (see
+[operations/mta-deployment.md](../operations/mta-deployment.md)):
+
+- **`tutorials-ims`** (main MTA, `.deploy/mta.yaml`) — the `tutorials-srv` CAP runtime +
+  the approuter. Serves the anonymous `/mcp/*`, PAT `/mcp-pat/*`, and admin `/mcp-admin/*`
+  surfaces, and **owns** the shared services (HANA, XSUAA, destination, credstore, …).
+- **`tutorials-mcp`** (MCP MTA, root `mta-mcp.yaml`) — a single `tutorials-srv-mcp` Node.js
+  app serving only the authenticated `/mcp-auth/*` surface. It **adopts** the main MTA's
+  services as `existing-service` (it creates none of its own) and authenticates inbound
+  requests with a hybrid IAS (public PKCE) + XSUAA scheme.
+
+The approuter (in the main MTA) fronts both: `/mcp-auth/*` is proxied to the external
+`tutorials-srv-mcp` app via the `srv-mcp-api` destination (`${srv-mcp-url}`); every other
+`/mcp*` route goes to the local `srv-api`.
+
+## Four-route stack
 
 ```
 Internet / MCP client
         |
   Approuter (xs-app.json)
         |
-   ┌────┴──────────────────────────────────────────────────────────┐
-   │  Route             Auth              Description               │
-   │  /mcp/*            none              Anonymous read-only tools  │
-   │  /mcp-auth/*       XSUAA OAuth JWT   Authenticated tools        │
-   │  /mcp-pat/*        Bearer PAT        Headless / CI agents       │
-   └───────────────────────────────────────────────────────────────┘
-        |
-  CAP runtime (tutorials-srv)
-        |
-   ┌────┴──────────────────────────────────────────────────────────┐
-   │  @cap-js/mcp adapter                                           │
-   │  Registers each @protocol:['odata','mcp'] service at          │
-   │  /mcp/<serviceRoot> (anonymous) and                           │
-   │  /mcp-auth/<serviceRoot> / /mcp-pat/<serviceRoot>              │
-   │  (via the approuter prefix routing above)                     │
-   └───────────────────────────────────────────────────────────────┘
+   ┌────┴──────────────────────────────────────────────────────────────┐
+   │  Route          Auth                   Backend app                  │
+   │  /mcp/*         none                    tutorials-srv  (srv-api)     │
+   │  /mcp-pat/*     Bearer PAT (in CAP)     tutorials-srv  (srv-api)     │
+   │  /mcp-admin/*   XSUAA (at approuter)    tutorials-srv  (srv-api)     │
+   │  /mcp-auth/*    IAS PKCE / XSUAA        tutorials-srv-mcp (srv-mcp-  │
+   │                 (in the MCP app)         api → separate MTA)         │
+   └─────────────────────────────────────────────────────────────────────┘
+        |                                              |
+  CAP runtime (tutorials-srv)                   MCP app (tutorials-srv-mcp)
+        |                                              |
+   ┌────┴───────────────────────────────┐    ┌────────┴──────────────────────┐
+   │  @cap-js/mcp adapter                │    │  srv-mcp/server.js rewrites    │
+   │  Registers each @protocol:          │    │  /mcp-auth/* → /mcp/* onto its │
+   │  ['odata','mcp'] service at         │    │  own DeveloperService handlers │
+   │  /mcp/<serviceRoot> (anonymous);    │    │  (the 7 authenticated MCP      │
+   │  /mcp-pat/<root> via PAT middleware;│    │  read/write tools). Hybrid     │
+   │  /mcp-admin/* via the compose layer │    │  IAS+XSUAA inbound auth.        │
+   └─────────────────────────────────────┘    └────────────────────────────────┘
 ```
 
-**Anonymous route (`/mcp/*`):** No XSUAA round-trip. The approuter's `authenticationType: none` route forwards directly to `srv-api`. Participating services: `SearchService`, `HomepageService`, `KnowledgeGraphService`.
+**Anonymous route (`/mcp/*`):** No XSUAA round-trip. The approuter's `authenticationType: none` route forwards directly to `srv-api` (the main `tutorials-srv`). Participating services: `SearchService`, `HomepageService`, `KnowledgeGraphService`.
 
-**Authenticated route (`/mcp-auth/*`):** The approuter enforces a valid XSUAA bearer. The CAP runtime receives `req.user` pre-populated by the XSUAA middleware. Participating services: `DeveloperService`, `HomepageService` (authenticated tools).
+**Authenticated route (`/mcp-auth/*`):** Served by the **separate `tutorials-srv-mcp` app** (MCP MTA), proxied through the approuter's `srv-mcp-api` destination with `authenticationType: none` at the approuter — the bearer is validated inside the MCP app, not at the approuter. Inbound auth is **hybrid**: an IAS public-PKCE client (primary, for `mcp-remote` clients) with an XSUAA bearer fallback. `srv-mcp/server.js` rewrites `/mcp-auth/*` → `/mcp/*` onto its own `DeveloperService` handlers (the 7 authenticated read/write tools). `HomepageService` authenticated tools are also reachable here.
 
 **PAT route (`/mcp-pat/*`):** The approuter uses `authenticationType: none` (the PAT is not a XSUAA token — the approuter cannot validate it). The CAP middleware `srv/lib/mcp-pat-middleware.js` intercepts every request before CAP's routing, validates the `Authorization: Bearer pat_...` header against the `PersonalAccessTokens` HANA table (SHA-256 comparison, TTL check), and synthesises a `req.user` object with the matched user's SAP ID and a `tokenSource: 'pat'` marker.
 
@@ -47,32 +67,34 @@ Full adapter reference: <https://cap.cloud.sap/docs/guides/protocols/mcp>.
 
 ## `req.user` resolution
 
-All authenticated tools ultimately call `resolveDbUser(req.user)` to look up the user's database row. Three paths converge on this function:
+All authenticated tools ultimately resolve the caller to a database row. Note the two paths
+run in **different processes**: `/mcp-auth/*` resolves inside the separate `tutorials-srv-mcp`
+app (MCP MTA), while `/mcp-pat/*` resolves inside the main `tutorials-srv` runtime.
 
 ```
-/mcp-auth/*  →  XSUAA middleware  →  req.user.id = SAP universal ID (from JWT sub)
-                                       req.user.tokenSource = undefined (JWT)
+/mcp-auth/*  →  tutorials-srv-mcp  →  IAS PKCE (primary) or XSUAA (fallback) bearer
+   (MCP MTA)                           ↓
+                                    tiered resolveUser(req.user) + pinResolvedUser (#2552)
+                                       req.user.id = SAP universal ID (from the token sub)
+                                       ↓
+                                    DB row from Users WHERE sapId = req.user.id
+
+/mcp-pat/*   →  tutorials-srv      →  mcp-pat-middleware → req.user.id = sapId from PAT
+   (main MTA)                          req.user.tokenSource = 'pat'
+                                       req.user.roles = ['pat-read'] + ['pat-write'] (if scopes include 'write')
                                        ↓
                                     resolveDbUser(req.user)
                                        ↓
                                     DB row from Users WHERE sapId = req.user.id
-
-/mcp-pat/*   →  mcp-pat-middleware →  req.user.id = sapId from PersonalAccessTokens
-                                       req.user.tokenSource = 'pat'
-                                       req.user.roles = ['pat-read'] + ['pat-write'] (if scopes include 'write')
-                                       ↓
-                                    resolveDbUser(req.user)  (same function)
-                                       ↓
-                                    DB row from Users WHERE sapId = req.user.id
 ```
 
-If `resolveDbUser` returns null (user not in the DB, stale OAuth clientId, or unmigrated user), the handler emits a WARN log `[mcp-dev] resolveDbUser miss` and rejects with 401. This surfaces stale-token issues without a silent zero-row response — see [[silent-user-resolution-hides-token-bugs]] in MEMORY.md.
+If user resolution returns null (user not in the DB, stale OAuth clientId, or unmigrated user), the handler emits a WARN log `[mcp-dev] resolveDbUser miss` and rejects with 401. This surfaces stale-token issues without a silent zero-row response — see [[silent-user-resolution-hides-token-bugs]] in MEMORY.md.
 
 ## Shared step-HTML slicer
 
 `srv/lib/tutorial-step-slicer.js` is the single implementation for extracting a step's HTML from the HANA content BLOB. Four consumers:
 
-1. `DeveloperService.get_tutorial_step` (authenticated MCP, `/mcp-auth/*`)
+1. `DeveloperService.get_tutorial_step` (authenticated MCP, `/mcp-auth/*`) — runs in the separate `tutorials-srv-mcp` app, which consumes the slicer logic via the shared `mcp.bundle.mjs` bundle (`scripts/bundle-shared.cjs`), not a second copy of the source
 2. `SearchService.get_tutorial_step` (anonymous MCP, `/mcp/search`)
 3. `srv/lib/code-check-step-loader.js` (Joule `checkStepCode`)
 4. `srv/lib/chat-context.js` server-side fallback
