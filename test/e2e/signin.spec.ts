@@ -26,20 +26,29 @@ describe.skipIf(!hasBaseUrl())('e2e: /signin page (IAS social login, #2506)', ()
     await browser?.close();
   });
 
-  it('renders both IdP-pinned sign-in buttons with correct hrefs', async () => {
+  it('renders the per-provider sign-in buttons with correct sap_idp hrefs', async () => {
     const { context, page } = await newPage(browser, { authenticated: false });
     try {
       const response = await page.goto('/signin', { waitUntil: 'domcontentloaded' });
       expect(response, 'no response received').not.toBeNull();
       expect(response!.status(), 'unexpected status for /signin').toBe(200);
 
-      const sapBtn = page.getByRole('link', { name: 'Sign in with SAP Account', exact: true });
-      const uidBtn = page.getByRole('link', { name: "Sign In if you don't already have an SAP Account", exact: true });
-
-      await expect(sapBtn).toBeVisible();
-      await expect(uidBtn).toBeVisible();
-      await expect(sapBtn).toHaveAttribute('href', '/login?sap_idp=sap.default');
-      await expect(uidBtn).toHaveAttribute('href', '/login?sap_idp=sap.custom');
+      // Each button deep-links to one IAS corporate IdP via the approuter's
+      // dynamicIdentityProvider (sap_idp → &idp=<Name> on the XSUAA authorize
+      // URL → IAS routes straight to that provider). Google/X are IAS social
+      // tiles (not idp-addressable) and live behind the "More options" pass-through.
+      const buttons: Array<[string, string]> = [
+        ['Sign in with SAP Universal ID', '/login?sap_idp=sap.default'],
+        ['Sign in with GitHub', '/login?sap_idp=GitHub'],
+        ['Sign in with LinkedIn', '/login?sap_idp=LinkedIn'],
+        ['Sign in with Hugging Face', '/login?sap_idp=Hugging%20Face'],
+        ['More options (Google, X, & more)', '/login?sap_idp=sap.custom'],
+      ];
+      for (const [name, href] of buttons) {
+        const link = page.getByRole('link', { name, exact: true });
+        await expect(link, `button "${name}" not visible`).toBeVisible();
+        await expect(link, `button "${name}" href`).toHaveAttribute('href', href);
+      }
     } finally {
       await context.close();
     }

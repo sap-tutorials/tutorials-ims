@@ -4,18 +4,35 @@
     <ui5-illustrated-message name="tnt/Lock" design="Spot" class="signin-illus">
       <h1 slot="title" id="signin-title" class="signin-title">Sign in to SAP Developers</h1>
       <p slot="subtitle" class="signin-lede">
-        Choose how you'd like to sign in. Your progress and completions are the
-        same account whichever you pick.
+        Choose a provider to continue.
       </p>
     </ui5-illustrated-message>
     <div class="signin-actions">
+      <!-- Per-provider deep-links. Each sap_idp value is the EXACT IAS corporate-IdP
+           trust Name (confirmed injecting `&idp=<Name>` into the XSUAA authorize URL,
+           which IAS routes straight to that provider). SAP uses the stable BTP origin
+           key sap.default. Google/X are IAS *social* tiles (not idp-addressable), so
+           they live behind the "More options" pass-through to the IAS page (sap.custom). -->
       <a class="fd-button fd-button--emphasized signin-btn" data-signin-idp href="/login?sap_idp=sap.default">
-        Sign in SAP Universal Account
+        Sign in with SAP Universal ID
+      </a>
+      <a class="fd-button signin-btn" data-signin-idp href="/login?sap_idp=GitHub">
+        Sign in with GitHub
+      </a>
+      <a class="fd-button signin-btn" data-signin-idp href="/login?sap_idp=LinkedIn">
+        Sign in with LinkedIn
+      </a>
+      <a class="fd-button signin-btn" data-signin-idp href="/login?sap_idp=Hugging%20Face">
+        Sign in with Hugging Face
       </a>
       <a class="fd-button fd-button--transparent signin-btn" data-signin-idp href="/login?sap_idp=sap.custom">
-        Other Options including Social Login
+        More options (Google, X, &amp; more)
       </a>
     </div>
+    <p class="signin-note">
+      Whichever you choose, it's the same account &mdash; your progress and
+      completions carry across providers.
+    </p>
   </div>
 </section>
 
@@ -63,6 +80,11 @@
     align-items: center;
   }
   .signin-btn { min-width: 16rem; justify-content: center; }
+  .signin-note {
+    font-size: 0.8125rem;
+    color: var(--sapContent_LabelColor, #6a6d70);
+    margin: 1.25rem 0 0;
+  }
 </style>
 {{- /* ui5Split: illustration assets for <ui5-illustrated-message>, mirrors 403.html (#1777 Task 7) */}}
 {{ if and (not site.Params.previewMode) site.Params.ui5Split }}<script type="module" src="{{ partial "island-src.html" "ui5-illustrations" }}"></script>{{ end }}
