@@ -95,7 +95,7 @@ import { defaultLoadChallengeAnswer } from './lib/challenge-grade-question-loade
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
 import { classifyRebuildMode, resolveSlugForEntity, resolveSlugsForTagRename, TAG_REVERSE_LOOKUP_CAP } from './lib/_classify-rebuild-mode.js';
 import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
-import { provisionDbUser, resolveDbUser, resolveUserSapId, emailFromUser, pinResolvedUser } from './lib/resolve-db-user.js';
+import { provisionDbUser, resolveDbUser, resolveUserSapId, emailFromUser, pinResolvedUser, issuerSubjectFromUser } from './lib/resolve-db-user.js';
 import { registerMigrationModeHandler } from './lib/migration-mode.js';
 import { decodeBase64Upload } from './lib/decode-base64-upload.js';
 import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
@@ -1932,6 +1932,29 @@ cds.on('served', async () => {
     }
   }
 
+  // #2615: classify which IdP the current user authenticated with, so the
+  // client can target "Manage my Account" correctly. Two IdPs are reachable via
+  // the /signin chooser: sap.default (SAP Universal ID / SAP ID Service →
+  // account.sap.com) and sap.custom (the IAS tenant). Primary source is the
+  // XSUAA SAML `origin` attribute (CAP copies non-standard token claims onto
+  // user.attr); IAS-issued tokens may omit `origin`, so fall back to the token
+  // issuer host — an *.accounts.ondemand.com issuer is the IAS tenant → treat as
+  // sap.custom. Returns null when neither is determinable (client defaults to
+  // the SAP account), so the link is never worse than the prior hardcode.
+  function resolveIdentityProvider(user) {
+    const origin = user?.attr?.origin;
+    if (origin === 'sap.default' || origin === 'sap.custom') return origin;
+    try {
+      const isu = issuerSubjectFromUser(user);
+      if (isu?.issuer) {
+        const host = new URL(isu.issuer).hostname;
+        if (host.endsWith('.accounts.ondemand.com')) return 'sap.custom';
+        if (host.endsWith('.hana.ondemand.com')) return 'sap.default';
+      }
+    } catch { /* malformed issuer URL → fall through to null */ }
+    return typeof origin === 'string' && origin ? origin : null;
+  }
+
   app.get('/auth/user', contextMw, authMw, async (req, res) => {
     // #1268: coarse deploy environment (DEV/PROD/QA/LOCAL) for the admin
     // header. Derived from the CF space name — safe to expose to anonymous
@@ -1989,6 +2012,15 @@ cds.on('served', async () => {
       isAdmin: user.is?.('Admin') === true,
       isAuthor: user.is?.('Tutorial.Author') === true,
       environment,
+      // #2615: expose the originating IdP so the client can point "Manage my
+      // Account" at the right place (SAP Universal ID vs the IAS tenant). The
+      // /signin chooser issues sap_idp=sap.default | sap.custom; XSUAA surfaces
+      // that as the SAML `origin` attribute on user.attr. IAS-issued tokens may
+      // omit `origin`, so fall back to classifying the token issuer: an IAS
+      // issuer host (*.accounts.ondemand.com) → 'sap.custom'. Null when neither
+      // is determinable — the client treats null as the SAP-account default, so
+      // the link is never worse than the previous hardcoded behavior.
+      identityProvider: resolveIdentityProvider(user),
       khorosId,
       khorosLogin,
       khorosAvatarUrl,

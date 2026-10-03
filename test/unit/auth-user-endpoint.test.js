@@ -59,4 +59,35 @@ describe('/auth/user', () => {
     expect(body.authenticated).toBe(false);
     expect(body.environment).toMatchObject({ id: 'local', label: 'LOCAL' });
   });
+
+  // Issue #2615 — expose the originating IdP so the client can target "Manage
+  // my Account" (sap.default → account.sap.com, sap.custom → the IAS tenant).
+  it('reflects attr.origin=sap.custom as identityProvider', async () => {
+    const credentials = Buffer.from('idpcustom:').toString('base64');
+    const res = await fetch(`${baseUrl}/auth/user`, {
+      headers: { Authorization: `Basic ${credentials}` }
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.identityProvider).toBe('sap.custom');
+  });
+
+  it('reflects attr.origin=sap.default as identityProvider', async () => {
+    const credentials = Buffer.from('idpdefault:').toString('base64');
+    const res = await fetch(`${baseUrl}/auth/user`, {
+      headers: { Authorization: `Basic ${credentials}` }
+    });
+    const body = await res.json();
+    expect(body.identityProvider).toBe('sap.default');
+  });
+
+  it('includes identityProvider:null when the caller carries no origin/issuer', async () => {
+    const credentials = Buffer.from('author:').toString('base64');
+    const res = await fetch(`${baseUrl}/auth/user`, {
+      headers: { Authorization: `Basic ${credentials}` }
+    });
+    const body = await res.json();
+    expect(body).toHaveProperty('identityProvider');
+    expect(body.identityProvider).toBeNull();
+  });
 });
