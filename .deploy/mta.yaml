@@ -359,16 +359,20 @@ modules:
           srv-mcp-url: ${srv-mcp-url}
     requires:
       - name: tutorials-xsuaa
-      # NOTE: the approuter is deliberately bound to ONLY the confidential
-      # tutorials-xsuaa (its login client). The PUBLIC tutorials-mcp issuer that
-      # .well-known OAuth discovery advertises is supplied as NON-SECRET config
-      # env (XSUAA_MCP_URL + XSUAA_MCP_XSAPPNAME, see properties below) — NOT a
-      # 2nd xsuaa binding. Binding a 2nd xsuaa would make @sap/approuter's own
-      # login handshake pick a binding non-deterministically (no route selector),
-      # risking 500s on every xsuaa-authed route. Keeping one binding avoids that.
+      # Dual auth binding (approuter 23.x). XSUAA is kept for authorization/scopes;
+      # tutorials-approuter-identity (IAS) fronts interactive login so native OIDC
+      # end_session fires on /logout (#2610 — clean logout on shared event machines).
+      # The former 16.x "one binding only / non-deterministic 500s" constraint no
+      # longer applies: 23.x supports XSUAA+IAS bound together. Routes set
+      # authenticationType:ias EXPLICITLY (approuter/xs-app.json) to avoid the
+      # per-request BTP-security-endpoint probe when both services are bound.
+      # NOTE: tutorials-identity (the PUBLIC mcp-remote PKCE client, client
+      # 0b1e8b56-…) is a SEPARATE instance and is intentionally NOT bound here.
+      # The .well-known MCP issuer stays NON-SECRET config env (XSUAA_MCP_URL +
+      # XSUAA_MCP_XSAPPNAME, see properties above), NOT a binding.
+      - name: tutorials-approuter-identity
       # approuter resolves runtime secrets from the credstore via
-      # approuter/lib/credstore-secret.js (same binding the srv uses). The retired
-      # /admin/rebuild handler (#1659 C.4) no longer reads from it.
+      # approuter/lib/credstore-secret.js (same binding the srv uses).
       - name: tutorials-credstore
       - name: srv-api
         group: destinations
@@ -472,6 +476,17 @@ resources:
       service-plan: application
       service-name: tutorials-xsuaa
       config-path: xs-security.json
+
+  # IAS instance fronting approuter interactive login so native OIDC end_session
+  # fires on /logout (#2610 — clean logout on shared event machines, tenant
+  # atxgsg7zi). Created out-of-band (like tutorials-identity) for a stable
+  # client_id and adopted here, so no provisioning time is added to the main MTA
+  # deploy. This is NOT the mcp-remote PUBLIC PKCE client — that is the separate
+  # tutorials-identity instance, which stays untouched.
+  - name: tutorials-approuter-identity
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: tutorials-approuter-identity
 
   - name: tutorials-destination
     type: org.cloudfoundry.managed-service
