@@ -71,6 +71,16 @@ modules:
       # is NOT server config — mcp-remote supplies it via --static-oauth-client-info
       # (see docs/end-users/mcp-quickstart.md); RFC 8414 discovery carries no client_id.
       MCP_ISSUER_KIND: ias
+      # GitHub-OIDC shim (approuter/lib/github-oidc-shim.js) toggle. The shim is
+      # a custom OpenID Connect IdP wrapping GitHub so IAS can federate GitHub as
+      # a corporate OIDC IdP (GitHub is OAuth2-only — no discovery/id_token/JWKS).
+      # Read via process.env.GITHUB_OIDC_ENABLED at call time; off ⇒ the handler
+      # is an inert no-op. MUST be a `properties:` entry, NOT `env:` (MTA silently
+      # drops module-level env — see the note at the top of this module). Secrets
+      # (GITHUB_CLIENT_ID/SECRET, GITHUB_OIDC_SIGNING_KEY, GITHUB_OIDC_STATE_SECRET,
+      # GITHUB_OIDC_IAS_CLIENT_ID/SECRET) live in the BTP Credential Store, read
+      # via approuter/lib/credstore-secret.js — never here.
+      GITHUB_OIDC_ENABLED: "true"
       # REBUILD_API_KEY was formerly injected here via envsubst against
       # deploy.yml's $REBUILD_API_KEY. Removed as the third and final rollout
       # step of PR #871 (issue #903): the approuter now reads REBUILD_API_KEY
