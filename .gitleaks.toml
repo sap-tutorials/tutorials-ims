@@ -43,9 +43,21 @@ description = "Project-specific false positives"
 # NOTE: the finding is anchored to the commit that introduced line 40; if that
 # comment is ever reworded, re-add the new introducing commit here (or drop the
 # literal PEM markers from the doc). Confirmed a placeholder (2026-07-23).
+# Suppress approuter/lib/github-oidc-keys.js (line 48, RuleID private-key) in
+# commit 75778103a: the `ensurePem()` helper contains the literal PEM armor
+# ("-----BEGIN PRIVATE KEY-----\n${wrapped}\n-----END PRIVATE KEY-----") it
+# uses to WRAP a credstore-sourced key string into PEM form. The literal is a
+# template, not a key body — no real secret (the actual signing key lives only
+# in the BTP Credential Store, alias GITHUB_OIDC_SIGNING_KEY). gitleaks'
+# private-key rule matches the header/footer literal in the code. Because
+# history is scanned (fetch-depth 0), this fails every PR after #2618 merged to
+# DEV. Same class as the srv/lib/github-app-token.js entry above. NOTE: anchored
+# to the introducing commit; if the helper is reworded, re-add the new commit
+# (or drop the literal PEM markers). Confirmed a placeholder (2026-10-03).
 commits = [
   "5153670f57cb30d9322af3603642fdaf980add74",
   "5a6dedf4345733040e9148dd503b6a62ed5a2b4c",
+  "75778103a5b7c54be258feba8f268cc2fa41b687",
 ]
 # Env-var references are the CORRECT, secret-free pattern — never flag them.
 regexes = [
