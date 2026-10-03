@@ -39,7 +39,7 @@ describe.skipIf(!hasBaseUrl())('e2e: /signin page (IAS social login, #2506)', ()
       // tiles (not idp-addressable) and live behind the "More options" pass-through.
       const buttons: Array<[string, string]> = [
         ['Continue with GitHub', '/login?sap_idp=sap.custom,GitHub'],
-        ['Continue with Google', '/login?sap_idp=sap.custom'],
+        ['Continue with Google', '/login?sap_idp=sap.custom,Google'],
         ['Continue with Hugging Face', '/login?sap_idp=sap.custom,Hugging%20Face'],
         ['Continue with LinkedIn', '/login?sap_idp=sap.custom,LinkedIn'],
         ['Continue with SAP ID', '/login?sap_idp=sap.default'],

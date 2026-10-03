@@ -25,9 +25,7 @@
             sap_idp=<Name> does NOT work (XSUAA has no such origin → falls through
             to default). Deep-linkable today: GitHub, LinkedIn, Hugging Face.
           - SAP ID = direct XSUAA trust origin sap.default.
-          - Google is NOT yet a corporate OIDC IdP in IAS (it's a social tile, not
-            idp-addressable), so its button routes to sap.custom (the IAS page) where
-            Google appears. Convert it to corporate OIDC to make it a true deep-link.
+          - Deep-linkable corporate OIDC IdPs: GitHub, Google, Hugging Face, LinkedIn.
             Apple is intentionally omitted (requires a paid Apple Developer account).
         NOTE: an existing IAS SSO session can be reused instead of honoring the
         chosen IdP (IAS prompt=login would force it, but the approuter does not
@@ -37,7 +35,7 @@
         <img class="signin-logo" src="/img/providers/Github.svg" alt="" aria-hidden="true" width="20" height="20" />
         <span>Continue with GitHub</span>
       </a>
-      <a class="fd-button fd-button--transparent signin-btn" data-signin-idp href="/login?sap_idp=sap.custom">
+      <a class="fd-button fd-button--transparent signin-btn" data-signin-idp href="/login?sap_idp=sap.custom,Google">
         <img class="signin-logo" src="/img/providers/Google.svg" alt="" aria-hidden="true" width="20" height="20" />
         <span>Continue with Google</span>
       </a>
