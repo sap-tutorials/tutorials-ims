@@ -2,11 +2,13 @@
   "oauth2-configuration": {
     "redirect-uris": [
       "https://*.cfapps.eu10-005.hana.ondemand.com/login/callback?authType=ias",
-      "https://developers.sap.com/login/callback?authType=ias"
+      "https://developers.sap.com/login/callback?authType=ias",
+      "https://developers-qa.sap.com/login/callback?authType=ias"
     ],
     "post-logout-redirect-uris": [
       "https://*.cfapps.eu10-005.hana.ondemand.com/**",
-      "https://developers.sap.com/**"
+      "https://developers.sap.com/**",
+      "https://developers-qa.sap.com/**"
     ]
   },
   "xsuaa-cross-consumption": true
