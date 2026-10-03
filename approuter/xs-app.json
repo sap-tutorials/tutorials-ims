@@ -38,7 +38,8 @@
   },
   "logout": {
     "logoutEndpoint": "/logout",
-    "logoutPage": "/"
+    "logoutPage": "/",
+    "backChannelLogoutEndpoint": "/backchannel-logout"
   },
   "errorPage": [
     { "status": 404, "file": "static/404.html" },
@@ -51,35 +52,35 @@
       "source": "^/scanner-ui/(.*)$",
       "target": "/scanner-ui/$1",
       "localDir": "static",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.MobileApp"
     },
     {
       "source": "^/scanner-vue/(.*)$",
       "target": "/scanner-vue/$1",
       "localDir": "static",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.MobileApp"
     },
     {
       "source": "^/scanner/(.*)$",
       "target": "/scanner/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.MobileApp"
     },
     {
       "source": "^/display-app/(.*)$",
       "target": "/display-app/$1",
       "localDir": "static",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.DisplayApp"
     },
     {
       "source": "^/analytics-ui/(.*)$",
       "target": "/analytics-ui/$1",
       "localDir": "static",
-      "authenticationType": "xsuaa"
+      "authenticationType": "ias"
     },
     {
       "source": "^/explore-ui/(.*)$",
@@ -97,32 +98,32 @@
       "source": "^/admin-ui/(.*)$",
       "target": "/admin-ui/$1",
       "localDir": "static",
-      "authenticationType": "xsuaa"
+      "authenticationType": "ias"
     },
     {
       "source": "^/data-inspector-ui/(.*)$",
       "target": "/data-inspector-ui/$1",
       "localDir": "static",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/odata/v4/data-inspector/(.*)$",
       "target": "/odata/v4/data-inspector/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/login(\\?.*)?$",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "dynamicIdentityProvider": true,
       "target": "/login-redirect.html",
       "localDir": "static"
     },
     {
       "source": "^/auth/user$",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "target": "/auth/user",
       "destination": "srv-api"
     },
@@ -178,13 +179,13 @@
       "source": "^/api/devtoberfest/join(\\?.*)?$",
       "target": "/api/devtoberfest/join$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa"
+      "authenticationType": "ias"
     },
     {
       "source": "^/api/devtoberfest/cat-game/award(\\?.*)?$",
       "target": "/api/devtoberfest/cat-game/award$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa"
+      "authenticationType": "ias"
     },
     { "source": "^/devtoberfest/?(\\?.*)?$", "target": "/content/pages/devtoberfest/$1", "destination": "srv-api", "authenticationType": "none" },
     {
@@ -197,14 +198,14 @@
       "source": "^/gameboard/getMyGameboard(.*)$",
       "target": "/gameboard/getMyGameboard$1",
       "destination": "gameboard-auth-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "httpMethods": ["GET", "HEAD"]
     },
     {
       "source": "^/gameboard/refreshGameboardCache(.*)$",
       "target": "/gameboard/refreshGameboardCache$1",
       "destination": "gameboard-auth-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "httpMethods": ["POST"]
     },
     {
@@ -218,7 +219,7 @@
       "source": "^/community/khoros/eventRegs/(.*)$",
       "target": "/community/khoros/eventRegs/$1",
       "destination": "gameboard-auth-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
@@ -243,69 +244,69 @@
       "source": "^/hcql/admin(.*)$",
       "target": "/hcql/admin$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/hcql/author(.*)$",
       "target": "/hcql/author$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
       "source": "^/hcql/analytics(.*)$",
       "target": "/hcql/analytics$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/hcql/exports(.*)$",
       "target": "/hcql/exports$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/hcql/consolidation(.*)$",
       "target": "/hcql/consolidation$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.ConsolidationScope"
     },
     {
       "source": "^/admin/exports/(.*)$",
       "target": "/admin/exports/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/admin/analytics/(.*)$",
       "target": "/admin/analytics/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/pats/(.*)$",
       "target": "/pats/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa"
+      "authenticationType": "ias"
     },
     {
       "source": "^/admin/(.*)$",
       "target": "/admin/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/author/(.*)$",
       "target": "/author/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
@@ -330,7 +331,7 @@
       "source": "^/graphql(\\?.*)?$",
       "target": "/graphql",
       "destination": "srv-api",
-      "authenticationType": "xsuaa"
+      "authenticationType": "ias"
     },
     {
       "source": "^/graph/(neighborhood(?:Full)?|Concepts|ConceptEdges|TutorialConceptLinks|pathBetween|conceptsForUser|explore-data|clusters-data|path|searchKG|PublishedConcepts)(\\(.*\\))?(/.*)?(\\?.*)?$",
@@ -342,21 +343,21 @@
       "source": "^/graph/(.*)$",
       "target": "/graph/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/display/(.*)$",
       "target": "/display/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.DisplayApp"
     },
     {
       "source": "^/api/v1/(.*)$",
       "target": "/api/v1/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.ConsolidationScope"
     },
     {
@@ -369,7 +370,7 @@
       "source": "^/chat/(.*)$",
       "target": "/chat/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa"
+      "authenticationType": "ias"
     },
     {
       "source": "^/api/advocates(/.*)?$",
@@ -405,7 +406,7 @@
       "source": "^/puzzle-api/(.*)$",
       "target": "/puzzle-api/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa"
+      "authenticationType": "ias"
     },
     {
       "source": "^/petoberfest-api/photo/(.*)$",
@@ -429,25 +430,25 @@
       "source": "^/petoberfest-api/(.*)/upload$",
       "target": "/petoberfest-api/$1/upload",
       "destination": "srv-api",
-      "authenticationType": "xsuaa"
+      "authenticationType": "ias"
     },
     {
       "source": "^/petoberfest-api/(.*)$",
       "target": "/petoberfest-api/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa"
+      "authenticationType": "ias"
     },
     {
       "source": "^/channel-submissions/(.*)$",
       "target": "/channel-submissions/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa"
+      "authenticationType": "ias"
     },
     {
       "source": "^/api/media-diet/my-picks(\\?.*)?$",
       "target": "/api/media-diet/my-picks$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa"
+      "authenticationType": "ias"
     },
     {
       "source": "^/api/media-diet/export(\\?.*)?$",
@@ -459,7 +460,7 @@
       "source": "^/api/(.*)$",
       "target": "/api/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa"
+      "authenticationType": "ias"
     },
     {
       "source": "^/search/(.*)$",
@@ -495,7 +496,7 @@
       "source": "^/homepage/personalized$",
       "target": "/homepage/personalized",
       "destination": "srv-api",
-      "authenticationType": "xsuaa"
+      "authenticationType": "ias"
     },
     {
       "source": "^/homepage/(.*)$",
@@ -543,7 +544,7 @@
       "source": "^/ktt/(.*)$",
       "target": "/ktt/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa"
+      "authenticationType": "ias"
     },
     {
       "source": "^/content/(.*)$",
@@ -576,7 +577,7 @@
       "source": "^/mcp-admin/(.*)$",
       "target": "/mcp-admin/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "csrfProtection": false,
       "scope": "$XSAPPNAME.Tutorial.MCP"
     },
@@ -584,7 +585,7 @@
       "source": "^/a2a/?$",
       "target": "/a2a",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "csrfProtection": false,
       "scope": "$XSAPPNAME.Tutorial.MCP"
     },
@@ -592,49 +593,49 @@
       "source": "^/tutorial-navigator-qa/?(\\?.*)?$",
       "target": "/content/pages/tutorial-navigator/$1",
       "destination": "srv-qa-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
       "source": "^/tutorials-qa/_nav\\.json$",
       "target": "/content/nav",
       "destination": "srv-qa-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
       "source": "^/qa-search/(.*)$",
       "target": "/search/$1",
       "destination": "srv-qa-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
       "source": "^/tutorials-qa/search/?(.*)$",
       "target": "/qa/search/$1",
       "localDir": "static",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
       "source": "^/tutorials-qa/?$",
       "target": "/qa/index.html",
       "localDir": "static",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
       "source": "^/tutorials-qa/((?:css|js|img|fonts|vendor)/.*)$",
       "target": "/$1",
       "localDir": "static",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
       "source": "^/tutorials-qa/(.*)$",
       "target": "/content/tutorials/$1",
       "destination": "srv-qa-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
@@ -671,14 +672,14 @@
       "source": "^/_dev/?(.*)$",
       "target": "/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/(\\$api-docs/.*)$",
       "target": "/$1",
       "destination": "srv-api",
-      "authenticationType": "xsuaa",
+      "authenticationType": "ias",
       "scope": "$XSAPPNAME.Admin"
     },
     {
