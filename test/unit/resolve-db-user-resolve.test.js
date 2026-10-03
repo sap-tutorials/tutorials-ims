@@ -27,6 +27,14 @@ function installInsert() {
   } }) };
 }
 
+// UPDATE stub — records the last githubLogin set so tests can assert it.
+function installUpdate() {
+  globalThis.UPDATE = (e) => ({ set: (vals) => ({ where: (w) => {
+    captured = { ...captured, updateEntity: e?.name || e, updateVals: vals, updateWhere: w };
+    return Promise.resolve({});
+  } }) });
+}
+
 // Chainable SELECT stub. Supports:
 //   SELECT.one.from(E).columns(...).where({...})
 //   SELECT.one.from(E).columns(...).where`lower(email) = ${v}`
@@ -54,7 +62,7 @@ function installSelect() {
   });
 }
 
-const { resolveUser, issuerSubjectFromUser } = await import('../../packages/core/resolve-db-user.js');
+const { resolveUser, issuerSubjectFromUser, githubIdentityFromUser } = await import('../../packages/core/resolve-db-user.js');
 
 const iasUser = (over = {}) => ({
   id: 'thomas.jung@sap.com',
@@ -277,3 +285,74 @@ describe('provisionDbUser — (iss,sub) get-or-create', () => {
     expect(await provisionDbUser(bare)).toBeNull();
   });
 });
+
+// ── GitHub-federated login (via the OIDC shim behind IAS) ────────────────────
+// After federation the app token's iss is the IAS tenant and sub is the GitHub
+// NUMERIC id; the login handle rides preferred_username. The resolver must remap
+// to the provider-canonical (issuer=https://github.com, subject=<id>) key and
+// set Users.githubLogin.
+const githubViaIasUser = (over = {}) => ({
+  id: 'thomas.jung@sap.com',
+  authInfo: { token: { payload: {
+    iss: 'https://atxgsg7zi.accounts.ondemand.com',   // IAS tenant, NOT github.com
+    sub: '12159356',                                   // GitHub numeric id (SNI=None)
+    preferred_username: 'jung-thomas',                 // GitHub login handle
+    email: 'thomas.jung@sap.com',
+    email_verified: true,
+    name: 'Thomas Jung',
+    ...over,
+  } } },
+});
+
+describe('githubIdentityFromUser', () => {
+  it('maps a GitHub-via-IAS token to the provider-canonical identity', () => {
+    expect(githubIdentityFromUser(githubViaIasUser())).toEqual({
+      issuer: 'https://github.com',
+      subject: '12159356',
+      login: 'jung-thomas',
+      email: 'thomas.jung@sap.com',
+      emailVerified: true,
+    });
+  });
+  it('returns null for a plain SAP-ID login (no github claims)', () => {
+    expect(githubIdentityFromUser(iasUser())).toBeNull();
+  });
+  it('returns null when the subject is not numeric (not a github id)', () => {
+    expect(githubIdentityFromUser(githubViaIasUser({ sub: 'thomas.jung@sap.com' }))).toBeNull();
+  });
+  it('recognises an explicit github IdP marker claim with a numeric subject', () => {
+    const u = githubViaIasUser({ preferred_username: undefined, identity_provider: 'GitHub' });
+    expect(githubIdentityFromUser(u)).toMatchObject({ issuer: 'https://github.com', subject: '12159356', login: null });
+  });
+});
+
+describe('resolveUser — GitHub provider-canonical link (Tier 0)', () => {
+  beforeEach(() => { captured = undefined; stub = {}; installSelect(); installInsert(); installUpdate(); });
+  afterEach(() => { delete globalThis.SELECT; delete globalThis.INSERT; delete globalThis.UPDATE; });
+
+  it('resolves on the GitHub (https://github.com, <id>) link and backfills githubLogin', async () => {
+    stub.identityRow = { user_ID: 'u-gh' };   // the first UserIdentities query (GitHub key) hits
+    stub.usersRows = [{ ID: 'u-gh', sapId: null, email: 'thomas.jung@sap.com', githubLogin: null }];
+    const row = await resolveUser(githubViaIasUser());
+    expect(row.ID).toBe('u-gh');
+    // githubLogin backfilled via UPDATE
+    expect(captured.updateEntity).toMatch(/\.Users$/);
+    expect(captured.updateVals.githubLogin).toBe('jung-thomas');
+  });
+
+  it('on a sapId (Tier-2) hit for a github login, writes the durable github link', async () => {
+    // Tier-0 miss (no github link yet), Tier-1 miss, Tier-2 sapId hit.
+    stub.identityRow = null;
+    stub.usersRows = [{ ID: 'u-1', sapId: 'I809764', email: 'thomas.jung@sap.com' }];
+    const u = githubViaIasUser({ /* IAS token also carries userId */ });
+    u.authInfo.token.userId = 'I809764';
+    const row = await resolveUser(u);
+    expect(row.ID).toBe('u-1');
+    // A github provider-canonical link was inserted (issuer=https://github.com).
+    expect(captured.insertVals?.issuer).toBe('https://github.com');
+    expect(captured.insertVals?.subject).toBe('12159356');
+    expect(captured.insertVals?.provider).toBe('github');
+    expect(captured.updateVals?.githubLogin).toBe('jung-thomas');
+  });
+});
+
