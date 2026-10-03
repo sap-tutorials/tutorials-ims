@@ -65,6 +65,15 @@ modules:
       # `openid` (IAS JWTs carry no scopes), vs the XSUAA `<xsappname>.Everyone`
       # form. MUST be 'ias' because XSUAA_MCP_URL points at an IAS tenant.
       MCP_ISSUER_KIND: ias
+      # GitHub-OIDC shim toggle (approuter/lib/github-oidc-shim.js) — mirrors
+      # dev.mtaext. Read via process.env at call time; off ⇒ inert no-op. MUST be
+      # a `properties:` entry, NOT `env:` (MTA silently drops module-level env).
+      # The shim is host-relative, so the PROD approuter serves a valid shim at
+      # the prod host; the shared-tenant IAS GitHub IdP's Discovery URL is pointed
+      # at this prod host (see the PROD topology decision). Secrets (GITHUB_CLIENT_ID
+      # /SECRET, GITHUB_OIDC_SIGNING_KEY, GITHUB_OIDC_STATE_SECRET, GITHUB_OIDC_IAS_
+      # CLIENT_ID/SECRET) live in the PROD BTP Credential Store, never here.
+      GITHUB_OIDC_ENABLED: "true"
     parameters:
       app-name: tutorials-prod-approuter
       instances: 2
