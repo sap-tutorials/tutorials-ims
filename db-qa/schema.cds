@@ -80,3 +80,27 @@ entity JobLogItems : cuid {
   status    : String(10) enum { SUCCESS; SKIPPED; WARN; ERROR; };
   message   : String(2000);
 }
+
+// Pre-publish quarantine snapshots (#2585) — mirrors prod entities
+// (db/tutorial-quarantine.cds); required by quarantineIngestHandler when
+// content-store runs under the QA namespace. A full QA rebuild posts its
+// quarantine snapshot here so QA parity matches prod. Shape kept identical
+// to the prod definitions so the deep-insert handler resolves cleanly.
+entity QuarantineSnapshots : cuid, managed {
+  runId           : String(60);
+  workflowUrl     : String(400);
+  manifestVersion : String(60);
+  buildMode       : String(20) default 'full';
+  isCurrent       : Boolean    default false;
+  eventCount      : Integer    default 0;
+  events          : Composition of many QuarantineEvents on events.snapshot = $self;
+}
+
+entity QuarantineEvents : cuid, managed {
+  snapshot    : Association to QuarantineSnapshots;
+  slug        : String(255) @mandatory;
+  sourceFile  : String(255);
+  sourceRepo  : String(120);
+  reason      : String(500) @mandatory;
+  sourceUrl   : String(600);
+}

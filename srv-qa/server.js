@@ -23,7 +23,7 @@ cds.on('bootstrap', (app) => {
     }
   });
 
-  const { serveHandler, navHandler, hashesHandler, sourceHashesHandler, publishHandler, rollbackHandler, beginHandler, appendHandler, commitHandler, abortHandler, contentAuthMiddleware, pipelineLogFailureHandler, pageServeHandler } =
+  const { serveHandler, navHandler, hashesHandler, sourceHashesHandler, publishHandler, rollbackHandler, beginHandler, appendHandler, commitHandler, abortHandler, contentAuthMiddleware, pipelineLogFailureHandler, quarantineIngestHandler, pageServeHandler } =
     createContentHandlers({ namespace: 'com.sap.developers.ims.qa', apiKeyEnv: 'CONTENT_API_KEY_QA', skipMetadataUpsert: true });
 
   // GET handlers serve in-flight author content from -Contribution repos. The
@@ -109,6 +109,11 @@ cds.on('bootstrap', (app) => {
   // endpoint. Writes a FAILED PipelineLog row in the QA namespace so QA build/
   // publish failures show up in the admin dashboard, not just a red CI run.
   app.post('/content/pipeline-log',    express.json({ limit: '256kb' }),  contentAuthMiddleware, pipelineLogFailureHandler);
+  // CI quarantine-snapshot reporter (#2585) — mirrors the prod srv endpoint.
+  // A full QA rebuild posts its pre-publish quarantine snapshot into the QA
+  // namespace (QuarantineSnapshots/QuarantineEvents, cloned in db-qa/schema.cds)
+  // so QA parity matches prod. Handler resolves entities via the QA namespace.
+  app.post('/content/quarantine-events', express.json({ limit: '2mb' }), contentAuthMiddleware, quarantineIngestHandler);
   app.post('/content/rollback', express.json(),                    contentAuthMiddleware, rollbackHandler);
   // NOTE (#1375): /content/validate-answer-specs is intentionally NOT
   // registered on srv-qa. The handler resolves entities from the prod
