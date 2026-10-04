@@ -31,7 +31,7 @@ import { decideHandler } from './lib/branch/decide.js';
 import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
-import { contentAuthMiddleware, publishHandler, serveHandler, markdownServeHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler } from './lib/content-store.js';
+import { contentAuthMiddleware, publishHandler, serveHandler, markdownServeHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler, quarantineIngestHandler } from './lib/content-store.js';
 import { imageSourceHandler } from './lib/image-source-handler.js';
 import { imageIngestHandler } from './lib/image-ingest-handler.js';
 import { attachmentSourceHandler } from './lib/attachment-source-handler.js';
@@ -972,6 +972,9 @@ cds.on('bootstrap', (app) => {
   // build, auth 503) — so they surface in the admin PipelineLog instead of only
   // going red in an unwatched CI tab. Same auth as /content/publish.
   app.post('/content/pipeline-log', express.json({ limit: '256kb' }), contentAuthMiddleware, pipelineLogFailureHandler);
+
+  // #2585 — CI full-rebuild quarantine snapshot. Same auth as /content/publish.
+  app.post('/content/quarantine-events', express.json({ limit: '2mb' }), contentAuthMiddleware, quarantineIngestHandler);
 
   // Deploy lifecycle alerts (#deploy-alerts): scripts/deploy-mta.cjs pings this
   // at start/end/fail of a deploy → ANS. Same bearer auth (CONTENT_API_KEY) as
