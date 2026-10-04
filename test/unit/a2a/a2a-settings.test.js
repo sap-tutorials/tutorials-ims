@@ -12,7 +12,7 @@ vi.mock('@sap/cds', () => ({
 // SELECT.one.from(ChatSettings) → resolve `row`
 globalThis.SELECT = { one: { from: () => Promise.resolve(row) } };
 
-import { resolveA2aSettings, _resetA2aSettingsCache } from '../../../srv/lib/runtime-config/a2a-settings.js';
+import { deriveIasTokenUrl, resolveA2aSettings, _resetA2aSettingsCache } from '../../../srv/lib/runtime-config/a2a-settings.js';
 
 describe('resolveA2aSettings', () => {
   beforeEach(() => { row = null; _resetA2aSettingsCache(); vi.clearAllMocks(); });
@@ -73,5 +73,20 @@ describe('resolveA2aSettings', () => {
     } finally {
       SELECT.one.from = from;
     }
+  });
+});
+
+describe('deriveIasTokenUrl', () => {
+  it('appends /oauth2/token to the IAS issuer base', () => {
+    expect(deriveIasTokenUrl('https://atxgsg7zi.accounts.ondemand.com'))
+      .toBe('https://atxgsg7zi.accounts.ondemand.com/oauth2/token');
+  });
+  it('trims a trailing slash on the issuer base', () => {
+    expect(deriveIasTokenUrl('https://atxgsg7zi.accounts.ondemand.com/'))
+      .toBe('https://atxgsg7zi.accounts.ondemand.com/oauth2/token');
+  });
+  it('returns empty string for a blank issuer', () => {
+    expect(deriveIasTokenUrl('')).toBe('');
+    expect(deriveIasTokenUrl(undefined)).toBe('');
   });
 });

@@ -12,6 +12,11 @@ let _cached = null;
 
 const DEFAULTS = { enabled: true, publicBaseUrl: '', tokenUrl: '' };
 
+export function deriveIasTokenUrl(issuerBase) {
+  if (!issuerBase || typeof issuerBase !== 'string') return '';
+  return `${issuerBase.replace(/\/+$/, '')}/oauth2/token`;
+}
+
 async function readRow() {
   try {
     const { ChatSettings } = cds.entities('com.sap.developers.ims');
@@ -47,10 +52,11 @@ export async function resolveA2aSettings() {
   const baseRaw    = pick(row, 'a2aPublicBaseUrl', 'A2APUBLICBASEURL');
   const tokenRaw   = pick(row, 'a2aTokenUrl', 'A2ATOKENURL');
 
+  const derivedTokenUrl = deriveIasTokenUrl(process.env.XSUAA_MCP_URL);
   _cached = {
     enabled: enabledRaw == null ? DEFAULTS.enabled : !!enabledRaw,
     publicBaseUrl: baseRaw || DEFAULTS.publicBaseUrl,
-    tokenUrl: tokenRaw || DEFAULTS.tokenUrl,
+    tokenUrl: tokenRaw || derivedTokenUrl || DEFAULTS.tokenUrl,
   };
   _cachedAt = now;
   return _cached;
