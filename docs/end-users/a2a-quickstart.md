@@ -13,10 +13,10 @@ agent: you hand it a natural-language task and it runs its own agentic loop (sea
 graph, progress) and returns a completed A2A `Task`.
 
 > **Two audiences, one endpoint.** The Agent Card is **public** — anyone can discover the agent
-> and its skills without a token. Actually *calling* a skill requires an XSUAA bearer with the
-> `Tutorial.MCP` scope via **OAuth2 client-credentials** — a machine-to-machine flow that is
-> provisioned by a BTP admin, not self-service. If you only want to inspect the agent, start at
-> [Public discovery](#public-discovery) and stop there.
+> and its skills without a token. Actually *calling* a skill requires a SAP IAS bearer token via
+> **OAuth2 client-credentials** (machine-to-machine) — provisioned by a BTP admin, not self-service.
+> There is no PKCE, interactive, or self-service PAT path for A2A. If you only want to inspect the
+> agent, start at [Public discovery](#public-discovery) and stop there.
 
 ## Available skills
 
@@ -25,11 +25,11 @@ to use `tutorial-chat`.
 
 | Skill (`skillId`) | Auth | What it does |
 |---|---|---|
-| `tutorial-chat` | scope | Conversational Q&A over tutorials, missions, and learning paths. Runs the full agentic loop. **Default**; supports streaming via `message/stream`. |
-| `search-tutorials` | scope | Semantic/keyword search over the tutorial catalog. |
-| `user-progress` | scope **+ forwarded user token** | The signed-in developer's tutorial/mission progress. Returns empty results if the end-user's identity is not forwarded. |
-| `knowledge-graph` | scope | Concept expansion and learning-path reasoning over the tutorial knowledge graph. |
-| `tutorial-steps` | scope | Returns the most relevant tutorial step content so a calling agent can quote exact instructions. |
+| `tutorial-chat` | IAS token | Conversational Q&A over tutorials, missions, and learning paths. Runs the full agentic loop. **Default**; supports streaming via `message/stream`. |
+| `search-tutorials` | IAS token | Semantic/keyword search over the tutorial catalog. |
+| `user-progress` | IAS token **+ forwarded user token** | The signed-in developer's tutorial/mission progress. Returns empty results if the end-user's identity is not forwarded. |
+| `knowledge-graph` | IAS token | Concept expansion and learning-path reasoning over the tutorial knowledge graph. |
+| `tutorial-steps` | IAS token | Returns the most relevant tutorial step content so a calling agent can quote exact instructions. |
 
 ## Base URLs
 
@@ -50,7 +50,7 @@ Key fields:
 
 - `url` — the JSON-RPC endpoint (`<base>/a2a`).
 - `skills[]` — the five skills above, with `id`, `description`, `tags`, and `examples`.
-- `securitySchemes.xsuaa.flows.clientCredentials.tokenUrl` — the XSUAA token endpoint you
+- `securitySchemes.ias.flows.clientCredentials.tokenUrl` — the SAP IAS token endpoint you
   authenticate against (see below).
 - `capabilities.streaming` — `true` (SSE via `message/stream`).
 - `documentationUrl` — points at `<base>/.well-known/a2a-instructions.md`, the canonical
@@ -60,46 +60,42 @@ Key fields:
 
 ## Authentication (internal / partner)
 
-All `/a2a` calls require an XSUAA bearer carrying the **`Tutorial.MCP`** scope, obtained via
-**OAuth2 client-credentials**. There is no PAT or interactive PKCE path — this is a
-machine-to-machine flow.
+All `/a2a` calls require a SAP IAS access token obtained via **OAuth2 client-credentials**
+(`grant_type=client_credentials`) against the IAS token endpoint
+`https://atxgsg7zi.accounts.ondemand.com/oauth2/token`. There is **no** PKCE, interactive
+browser, or self-service PAT path for A2A — this is a pure machine-to-machine flow.
 
 ### 1. Get client credentials
 
-You need a `client_id` / `client_secret` pair whose XSUAA instance is granted the `Tutorial.MCP`
-scope. There are two realistic paths:
+You need a `client_id` / `client_secret` pair from the A2A IAS client bound to the platform.
+The credentials live in the `tutorials-identity` IAS service binding (the `identity` service
+instance adopted as `existing-service`):
 
-- **Platform team (same app):** use the tutorial platform's own XSUAA service key, which already
-  owns the scope. Read it from the bound instance:
+```bash
+# dev
+cf env tutorials-srv      | jq '.VCAP_SERVICES.identity[0].credentials'
+# prod
+cf env tutorials-prod-srv | jq '.VCAP_SERVICES.identity[0].credentials'
+```
 
-  ```bash
-  # dev
-  cf env tutorials-srv      | sed -n '/xsuaa/,/}/p'   # → VCAP_SERVICES.xsuaa[0].credentials
-  # prod
-  cf env tutorials-prod-srv | sed -n '/xsuaa/,/}/p'
-  ```
+The `credentials` object carries `clientid` and `clientsecret`. Use these as `<client_id>` and
+`<client_secret>` in the token exchange below. The token endpoint is always
+`https://atxgsg7zi.accounts.ondemand.com/oauth2/token` (the IAS tenant is `atxgsg7zi`).
 
-  The `credentials` object carries `clientid`, `clientsecret`, and `url` (the XSUAA tenant base;
-  append `/oauth/token`). The `clientid` is environment-specific — `sb-tutorials!…` on dev,
-  `sb-tutorials-prod!…` on prod (dev and prod share one XSUAA tenant, so prod uses the distinct
-  `tutorials-prod` xsappname).
-
-- **A separate consumer (e.g. a standalone central Joule):** the consumer's own XSUAA instance
-  must be granted the `Tutorial.MCP` scope as a foreign-authority grant. **This is a BTP-admin
-  step** (an `xs-security.json` `granted-apps` / authority grant on the tutorial platform's side,
-  matched by the consumer's `xs-security.json`). It is not self-service — open an issue or contact
-  the platform team to arrange the grant for your subaccount. The exact grant recipe is
-  intentionally not reproduced here; it depends on the consuming app's xsappname.
+If you are integrating a separate consumer (e.g. a standalone central Joule instance), the
+consumer's IAS application must be registered in the same IAS tenant and granted the `openid`
+scope against the platform's IAS client. **This is a BTP-admin step** — contact the platform
+team to arrange the application registration. It is not self-service.
 
 ### 2. Exchange for a token
 
 ```bash
 export TOKEN_URL="$(curl -s <base>/.well-known/agent-card.json \
-  | jq -r '.securitySchemes.xsuaa.flows.clientCredentials.tokenUrl')"
+  | jq -r '.securitySchemes.ias.flows.clientCredentials.tokenUrl')"
 
 export TOKEN="$(curl -s "$TOKEN_URL" \
-  -u "$CLIENT_ID:$CLIENT_SECRET" \
-  -d 'grant_type=client_credentials' | jq -r '.access_token')"
+  -u "<client_id>:<client_secret>" \
+  -d 'grant_type=client_credentials&scope=openid' | jq -r '.access_token')"
 ```
 
 For `user-progress`, additionally forward the end-user's identity token (the platform reads the
@@ -174,7 +170,7 @@ not environment variables, and changes take effect within ~5 seconds without a r
 - **A2A Enabled** — master switch; off → `POST /a2a` returns 503 and the card signals unavailability.
 - **Public Base URL** — the base advertised in the Agent Card `url`; blank auto-detects from
   `VCAP_APPLICATION.application_uris`.
-- **OAuth Token URL** — the XSUAA token endpoint advertised in the card's security scheme.
+- **OAuth Token URL** — the SAP IAS token endpoint advertised in the card's `ias` security scheme.
 
 ## See also
 

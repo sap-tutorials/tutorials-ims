@@ -177,7 +177,7 @@ curl -X POST <base>/a2a \
 
 ### Auth
 
-Every `/a2a` call needs an XSUAA bearer carrying the `Tutorial.MCP` scope, obtained via **OAuth2 client-credentials** against the `tokenUrl` in the card's `securitySchemes.xsuaa`. This is a machine-to-machine flow — there is **no** self-service PAT/PKCE path like the MCP signed-in tools. The Agent Card itself is public; `user-progress` additionally needs the end-user's identity forwarded.
+Every `/a2a` call needs a SAP IAS access token (tenant `atxgsg7zi`), obtained via OAuth2 client-credentials against the `tokenUrl` in the agent card's `ias` security scheme. A2A is machine-to-machine: there is no interactive PKCE or self-service PAT path.
 
 Full connection walkthrough (public probe, client-credentials, streaming, errors, Joule wiring): [A2A Quickstart](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/end-users/a2a-quickstart.md). Canonical served guide: [`/.well-known/a2a-instructions.md`](https://github.com/sap-tutorials/tutorials-ims/blob/main/srv/mcp/a2a-instructions.md).
 

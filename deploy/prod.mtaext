@@ -30,6 +30,9 @@ modules:
       # resolveGithubToken (App-first, PAT fallback). Requires the GitHub App
       # installed on tutorials-ims with Actions:write + Contents:write.
       USE_GITHUB_APP: 'true'
+      # A2A agent card tokenUrl derivation (srv/lib/runtime-config/a2a-settings.js reads XSUAA_MCP_URL) — #2593
+      XSUAA_MCP_URL: https://atxgsg7zi.accounts.ondemand.com
+      MCP_ISSUER_KIND: ias
     parameters:
       # 2 instances: redundancy floor for prod (survives instance loss + rolling
       # deploys) without the downsides of higher counts. Was briefly 4 for the

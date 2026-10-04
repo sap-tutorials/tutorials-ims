@@ -42,9 +42,9 @@ export function buildAgentCard({ baseUrl, tokenUrl, enabled = true }) {
     defaultInputModes: ['text/plain'],
     defaultOutputModes: ['text/plain', 'application/json'],
     securitySchemes: {
-      xsuaa: { type: 'oauth2', flows: { clientCredentials: { tokenUrl: tokenUrl || '', scopes: { 'Tutorial.MCP': 'MCP/A2A protocol access — authenticated tutorial reads/writes' } } } },
+      ias: { type: 'oauth2', flows: { clientCredentials: { tokenUrl: tokenUrl || '', scopes: { openid: 'SAP IAS technical-user access — authenticated tutorial reads/writes' } } } },
     },
-    security: [{ xsuaa: ['Tutorial.MCP'] }],
+    security: [{ ias: ['openid'] }],
     skills: SKILLS,
     documentationUrl: `${baseUrl}/.well-known/a2a-instructions.md`,
     metadata: { available: enabled },
