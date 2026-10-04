@@ -60,6 +60,21 @@ describe('SearchService', () => {
       { slug: 'hana-cloud-setup', bodyText: 'Open the BTP cockpit and provision a HANA Cloud instance. Configure the firewall ipallowlist before connecting.' },
       { slug: 'cap-getting-started', bodyText: 'Run cds init to scaffold a project. Add an entity to db schema and a service projection.' },
     ]);
+
+    // #2631: the search_tutorials MCP tool now drops any slug that has no
+    // servable content in ContentCurrent (the serve-path source of truth), so a
+    // soft-deleted / unpublished tutorial never surfaces with a /tutorials/<slug>
+    // link that 404s. Seed ContentCurrent for every ACTIVE fixture tutorial that
+    // SHOULD remain searchable; deliberately omit `fiori-elements` to prove the
+    // content-presence gate drops a metadata row with no servable BLOB.
+    const { ContentCurrent } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(ContentCurrent).entries([
+      { slug: 'hana-cloud-setup' },
+      { slug: 'cap-getting-started' },
+      { slug: 'tag-only-1' }, { slug: 'tag-only-2' }, { slug: 'tag-only-3' },
+      { slug: 'tag-only-4' }, { slug: 'tag-only-5' },
+      { slug: 'rankprobe-tutorial' }, { slug: 'rankprobe-desc-tutorial' },
+    ]);
   });
 
   describe('SearchableItems', () => {
@@ -326,6 +341,26 @@ describe('SearchService', () => {
       // that this does NOT throw and does return rows).
       const { data } = await project.get('/search/SearchableItems?$search=in on');
       expect(Array.isArray(data.value)).toBe(true);
+    });
+  });
+
+  describe('search_tutorials (MCP tool)', () => {
+    async function searchTutorials(data) {
+      const srv = await cds.connect.to('SearchService');
+      return srv.send({ event: 'search_tutorials', data });
+    }
+
+    it('returns servable tutorials matching the query', async () => {
+      const rows = await searchTutorials({ query: 'hana' });
+      expect(rows.map(r => r.slug)).toContain('hana-cloud-setup');
+    });
+
+    // #2631: an ACTIVE tutorial present in SearchableItems but absent from
+    // ContentCurrent (unpublished without a status flip) must be dropped — its
+    // /tutorials/<slug> link 404s. fiori-elements has no ContentCurrent row.
+    it('excludes an ACTIVE tutorial with no servable content', async () => {
+      const rows = await searchTutorials({ query: 'fiori' });
+      expect(rows.map(r => r.slug)).not.toContain('fiori-elements');
     });
   });
 });
