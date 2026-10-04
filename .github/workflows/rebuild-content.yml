@@ -630,6 +630,15 @@ jobs:
 
       - name: Validate tutorials
         if: ${{ steps.mode.outputs.effective_mode != 'catalog-only' }}
+        env:
+          # [#2585] Persist the full-rebuild quarantine snapshot to HANA. The
+          # validator is fail-open and no-ops unless QUARANTINE_REPORT=full AND
+          # both CAP_BASE_URL + CONTENT_API_KEY are set — so only a full build posts.
+          CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
+          CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
+          RUN_ID: ${{ github.run_id }}
+          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          QUARANTINE_REPORT: ${{ steps.mode.outputs.effective_mode == 'full' && 'full' || '' }}
         run: npm run validate-tutorials
 
       # [#1659 Phase C.3] Seed the island name→hash manifest from the DEPLOYED
