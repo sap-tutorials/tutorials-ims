@@ -20,7 +20,7 @@ cf deploy mta_archives/*.mtar
 MCP-MTA deploy is separate and manual (`npm run deploy` does not cover it):
 
 ```bash
-mbt build -e mta-mcp.yaml -t mta_archives
+mbt build -f mta-mcp.yaml -t mta_archives
 cf deploy mta_archives/*.mtar -e deploy/mcp-dev.mtaext -f
 ```
 

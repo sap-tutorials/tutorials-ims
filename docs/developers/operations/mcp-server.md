@@ -33,7 +33,7 @@ cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext
 > `tutorials-mcp` MTA (descriptor `mta-mcp.yaml`), not `tutorials-srv`. It deploys by hand:
 >
 > ```bash
-> mbt build -e mta-mcp.yaml -t mta_archives
+> mbt build -f mta-mcp.yaml -t mta_archives
 > cf deploy mta_archives/*.mtar -e deploy/mcp-dev.mtaext -f   # or deploy/mcp-prod.mtaext
 > ```
 >
