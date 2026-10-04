@@ -2158,7 +2158,7 @@ annotate AdminService.ChatSettings with @(
   embeddingMinScore  @Common.Label: 'Min Similarity Score';
   a2aEnabled         @Common.Label: 'A2A Enabled' @description: 'Master switch for the /a2a endpoint and Agent Card. When off, /a2a returns 503 and the card signals unavailability.';
   a2aPublicBaseUrl   @Common.Label: 'A2A Public Base URL' @description: 'Base URL advertised in the Agent Card url; blank = auto-detect from platform (VCAP application_uris).';
-  a2aTokenUrl        @Common.Label: 'A2A Token URL' @description: 'OAuth token endpoint advertised in the Agent Card xsuaa security scheme.';
+  a2aTokenUrl        @Common.Label: 'A2A Token URL' @description: 'OAuth token endpoint advertised in the Agent Card ias security scheme.';
 };
 
 annotate AdminService.TutorialFeedback with {
