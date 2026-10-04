@@ -97,6 +97,11 @@
           "type": "cds.Timestamp",
           "@cds.persistence.name": "KHOROSLINKEDAT"
         },
+        "pictureUrl": {
+          "type": "cds.String",
+          "length": 1024,
+          "@cds.persistence.name": "PICTUREURL"
+        },
         "githubLogin": {
           "type": "cds.String",
           "length": 64,
