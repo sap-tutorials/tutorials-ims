@@ -915,7 +915,15 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
   // --- GET /content/tutorials/* ---
 
-  const VALID_SLUG = /^[a-z0-9][a-z0-9-]*$/;
+  // Underscores are permitted: source-repo tutorial folder names legitimately
+  // carry them (e.g. btp-integration-suite-creating_data_type-message_type) and
+  // the publish path stores the slug verbatim into ContentFiles/ContentCurrent
+  // (packages/content/content-publish-session.js — no _→- folding). Read and
+  // write MUST agree, or an underscore slug 404s at the gate below despite being
+  // in the ACTIVE snapshot (#2587 3a). Topic/concept slugs never reach here with
+  // an underscore — slugifyTopic() in packages/core/topic-slug.js folds every
+  // non-[a-z0-9] run to a hyphen at generation, so widening this is safe for them.
+  const VALID_SLUG = /^[a-z0-9][a-z0-9_-]*$/;
 
   // Render the published __404__ HTML page (or fall back to JSON if not published yet).
   // `status` lets callers reuse the styled page for other error classes — e.g. a
