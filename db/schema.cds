@@ -172,6 +172,12 @@ entity Users : cuid, managed, LegacyKeyed {
   khorosLogin               : String(64);
   khorosAvatarUrl           : String(1000);
   khorosLinkedAt            : Timestamp;
+  // Login-provider profile picture (#2628) — OIDC `picture` claim: GitHub
+  // avatar_url via the shim, or Google/LinkedIn/Hugging Face via IAS attribute
+  // mapping. Advisory, not identity; refreshed to the latest value on every
+  // login (URLs rotate/re-sign) by refreshUserPicture. Nullable. The Khoros
+  // avatar above takes precedence in the UI when the user has linked it.
+  pictureUrl                : String(1024);
   // GitHub login (e.g. "jung-thomas") — canonical signal for Tutorials.author
   // resolution at publish time (issue #777 followup). Source: parsed from
   // author_profile URL in tutorial markdown frontmatter. Backfilled from

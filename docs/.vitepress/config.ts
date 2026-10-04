@@ -204,6 +204,7 @@ export default defineConfig({
           { text: 'Runtime config',            link: '/developers/operations/runtime-config' },
           { text: 'Scheduler troubleshooting', link: '/developers/operations/scheduler-troubleshooting' },
           { text: 'Secrets tracking',          link: '/developers/operations/secrets-tracking' },
+          { text: 'Sign-in SSO re-auth follow-up', link: '/developers/operations/signin-sso-reauth-followup' },
           { text: 'SMTP credentials rotation', link: '/developers/operations/smtp-credentials-rotation' },
           { text: 'Testing endpoints',         link: '/developers/operations/testing-endpoints' },
           { text: 'Testing guide',             link: '/developers/operations/testing-guide' },

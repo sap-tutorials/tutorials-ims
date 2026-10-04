@@ -27,6 +27,7 @@ export const appendHandler = mod.appendHandler;
 export const commitHandler = mod.commitHandler;
 export const abortHandler = mod.abortHandler;
 export const pipelineLogFailureHandler = mod.pipelineLogFailureHandler;
+export const quarantineIngestHandler = mod.quarantineIngestHandler;
 export const pageServeHandler = mod.pageServeHandler;
 export const authorServeHandler = mod.authorServeHandler;
 export const advocateServeHandler = mod.advocateServeHandler;

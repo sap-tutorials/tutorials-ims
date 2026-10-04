@@ -167,29 +167,102 @@ npx cds bind --exec -- node -e "
 "
 ```
 
-### Step 8: Social Identity Providers (Optional)
+### Step 8: Social / Corporate Identity Providers (the live production setup)
 
-With IAS as trust point, add social logins:
+> **This is the configuration that ships today** (DEV + PROD, `GITHUB_OIDC_ENABLED: "true"` in `deploy/dev.mtaext` / `deploy/prod.mtaext`). The themed `/signin` page (`hugo/layouts/signin.html`) presents five sign-in buttons:
+>
+> | Button | `sap_idp` routing | IAS registration |
+> |--------|-------------------|------------------|
+> | **Continue with SAP ID** | `sap.default` | None — direct XSUAA trust to SAP ID Service |
+> | **Continue with GitHub** | `sap.custom,GitHub` | OIDC-Compliant Corporate IdP, backed by **our GitHub-OIDC shim** |
+> | **Continue with Google** | `sap.custom,Google` | OIDC-Compliant Corporate IdP (Google is OIDC-native) |
+> | **Continue with LinkedIn** | `sap.custom,LinkedIn` | OIDC-Compliant Corporate IdP (LinkedIn is OIDC-native) |
+> | **Continue with Hugging Face** | `sap.custom,Hugging Face` | OIDC-Compliant Corporate IdP (Hugging Face is OIDC-native) |
+>
+> **Not "Social IdPs" in IAS.** Despite the user-facing framing, none of these are configured under IAS's **Social Identity Providers** screen. All four non-SAP providers are registered as **Corporate Identity Providers → OpenID Connect Compliant**. This is deliberate: the chain-form `sap_idp=sap.custom,<Name>` deep-link (see [authentication.md](../architecture/authentication.md#idp-pinning-via-sap_idp)) routes XSUAA through the `sap.custom` IAS trust and then has IAS apply `idp=<Name>` to pick the specific provider — a mechanism that only works for Corporate IdPs that carry a stable trust **Name**.
+>
+> **The IdP trust Name is load-bearing.** The `<Name>` in each button's `sap_idp=sap.custom,<Name>` **must exactly match** the Corporate Identity Provider **Display Name** you set in IAS (`GitHub`, `Google`, `LinkedIn`, `Hugging Face`). Rename a provider in IAS and the matching `/signin` button breaks (falls through to the default IdP). If you change a Name, update `hugo/layouts/signin.html` in lockstep.
 
-#### Google
+#### Step 8a — Google (OIDC-native, simplest)
 
-1. Create OAuth credentials at [Google Cloud Console](https://console.cloud.google.com)
-   - Redirect URI: `https://<tenant-id>.accounts.ondemand.com/ui/oauth/googleCallback`
-2. **IAS Admin Console** → **Identity Providers** → **Social Identity Providers** → **Google**
-3. Enter Client ID and Client Secret
-4. Set Status = Active
+1. **Google Cloud Console** → create OAuth 2.0 credentials (Web application)
+   - Authorized redirect URI: `https://<tenant-id>.accounts.ondemand.com/oauth2/callback`
+2. **IAS Admin Console** → **Identity Providers** → **Corporate Identity Providers** → **Create**
+   - **Display Name**: `Google` *(must match the `/signin` button's `sap_idp=sap.custom,Google`)*
+   - **Type**: **OpenID Connect Compliant**
+3. **OpenID Connect Configuration**:
+   - **Discovery URL**: `https://accounts.google.com/.well-known/openid-configuration`
+   - **Client ID** / **Client Secret**: from step 1
+   - **Scopes**: `openid profile email`
+4. **Identity Federation** → "Use Identity Authentication user store" (email-based matching, so social users merge onto their existing SAP-ID row by email — see [identity continuity](#step-7-verify-identity-continuity)).
+5. Save, then **Enable** the IdP for the tutorials application under **Applications & Resources → Applications → <your app> → Identity Provider**.
 
-#### GitHub
+#### Step 8b — LinkedIn and Hugging Face (OIDC-native, same recipe as Google)
 
-1. Create OAuth app at [GitHub Developer Settings](https://github.com/settings/developers)
-   - Callback URL: `https://<tenant-id>.accounts.ondemand.com/ui/oauth/customIdpCallback`
-2. **IAS Admin Console** → **Social Identity Providers** → **Custom**
-3. Configure manually:
-   - Authorization: `https://github.com/login/oauth/authorize`
-   - Token: `https://github.com/login/oauth/access_token`
-   - User Info: `https://api.github.com/user`
-   - Scopes: `read:user`, `user:email`
-4. Set Status = Active
+Both expose a standard OIDC discovery document, so they follow the Google recipe exactly — only the provider-side app registration and discovery URL differ:
+
+| Provider | Register app at | Discovery URL | IAS Display Name |
+|----------|-----------------|---------------|------------------|
+| LinkedIn | [LinkedIn Developers](https://www.linkedin.com/developers/apps) → "Sign In with LinkedIn using OpenID Connect" product | `https://www.linkedin.com/oauth/.well-known/openid-configuration` | `LinkedIn` |
+| Hugging Face | [HF OAuth app settings](https://huggingface.co/settings/applications) | `https://huggingface.co/.well-known/openid-configuration` | `Hugging Face` |
+
+For each: redirect URI = `https://<tenant-id>.accounts.ondemand.com/oauth2/callback`, scopes `openid profile email`, Type = **OpenID Connect Compliant**, and the **Display Name must match the `/signin` button Name exactly** (note the space in `Hugging Face`).
+
+> **Apple is intentionally omitted** — "Sign in with Apple" requires a paid Apple Developer account. If you add it later, register it as another OIDC Corporate IdP and add a matching button to `signin.html`.
+
+#### Step 8c — GitHub (needs the GitHub-OIDC shim)
+
+GitHub is **OAuth 2.0 only** — it has no OIDC discovery document, no `id_token`, and no JWKS endpoint, so IAS cannot federate it as an OpenID Connect Corporate IdP directly. We bridge the gap with a small OIDC-compliant shim that runs **in the approuter** (`approuter/lib/github-oidc-shim.js`), wrapping GitHub's OAuth2 so IAS sees a normal OIDC provider.
+
+The shim mounts at `/github-oidc/*` on the approuter and exposes the full OIDC surface IAS needs:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /github-oidc/.well-known/openid-configuration` | OIDC discovery document |
+| `GET /github-oidc/authorize` | Validates the IAS request, 302 → GitHub |
+| `GET /github-oidc/callback` | Exchanges the GitHub code, fetches the profile, 302 → IAS |
+| `POST /github-oidc/token` | Verifies PKCE, mints the RS256 `id_token` |
+| `GET /github-oidc/jwks` | Public key for IAS to verify the `id_token` |
+
+**Flag:** the shim is gated by `GITHUB_OIDC_ENABLED` (approuter env, read at call time). Currently `"true"` on both DEV and PROD. Off ⇒ the handler is a no-op pass-through (GitHub button then falls through to the default IdP).
+
+**Prerequisites — five credstore secrets** (BTP Credential Store, resolved via `approuter/lib/credstore-secret.js`; never in `.mtaext` or source). Rotate via `/admin-ui/#secrets`:
+
+| Alias | What it is |
+|-------|-----------|
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | The GitHub **OAuth app** credentials (the shim is GitHub's client) |
+| `GITHUB_OIDC_IAS_CLIENT_ID` / `GITHUB_OIDC_IAS_CLIENT_SECRET` | The client credentials **IAS** uses to call the shim's `/token` back-channel (IAS is the shim's client) |
+| `GITHUB_OIDC_SIGNING_KEY` | RSA private key (PKCS#8 PEM) the shim signs `id_token`s with; the public JWK is derived from it on demand |
+| `GITHUB_OIDC_STATE_SECRET` | Any sufficiently-random string; seals the stateless authorize→token correlation (A256GCM) |
+
+**GitHub side** — create an OAuth app at [GitHub Developer Settings](https://github.com/settings/developers):
+- **Authorization callback URL**: `https://<approuter-host>/github-oidc/callback`
+- Copy the Client ID/Secret into the `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` credstore aliases.
+
+**IAS admin steps** — register the shim as a Corporate IdP:
+
+1. **IAS Admin Console** → **Identity Providers** → **Corporate Identity Providers** → **Create**
+   - **Display Name**: `GitHub` *(must match `sap_idp=sap.custom,GitHub`)*
+   - **Type**: **OpenID Connect Compliant**
+2. **OpenID Connect Configuration**:
+   - **Discovery URL**: `https://<approuter-host>/github-oidc/.well-known/openid-configuration` — IAS reads the shim's discovery, authorize, token, and JWKS endpoints from here automatically.
+   - **Client ID**: the value you put in `GITHUB_OIDC_IAS_CLIENT_ID`
+   - **Client Secret**: the value you put in `GITHUB_OIDC_IAS_CLIENT_SECRET`
+   - **Scopes**: `openid profile email`
+   - **PKCE**: S256 (the shim requires it)
+3. **Identity Federation** → "Use Identity Authentication user store" (email-based matching). **Caveat:** GitHub emails are advisory — the shim keys identity on the **GitHub numeric user id** (OIDC `sub`), never on email, because `/user.email` is frequently null and noreply synthetics are not unique. A GitHub user whose verified primary email is private, or whose SAP-ID row has no email yet, will land on a **separate** `Users` row until an explicit account merge (the known #2552 boundary — see [authentication.md](../architecture/authentication.md#known-boundary-social-login-without-sap-id-account)).
+4. Save, then **Enable** `GitHub` for the tutorials application (same place as Step 8a #5).
+
+**Verify the shim is reachable before registering in IAS:**
+
+```bash
+# Discovery doc should return JSON with issuer = https://<approuter-host>
+curl -s https://<approuter-host>/github-oidc/.well-known/openid-configuration | jq .issuer
+# JWKS should return one RS256 key
+curl -s https://<approuter-host>/github-oidc/jwks | jq '.keys[0].kty, .keys[0].alg'
+```
+
+If either returns a 503 `server_error`, a credstore secret is missing (`GITHUB_OIDC_SIGNING_KEY` for jwks, `GITHUB_CLIENT_ID` for authorize). If they 404, `GITHUB_OIDC_ENABLED` is not `"true"` on the approuter.
 
 ---
 

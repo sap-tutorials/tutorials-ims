@@ -418,42 +418,65 @@ Switch to a custom IAS tenant if you later need:
 
 ---
 
-### Two-Button Sign-In and IdP Pinning
+### Social Sign-In Page and IdP Pinning
 
-The platform provides a themed public sign-in page (`/signin`) that allows users to choose between two authentication flows, each routed to a different Identity Provider.
+The platform provides a themed public sign-in page (`/signin`) that presents a **per-provider picker** — one button per identity provider — and pins the chosen IdP so the user never sees XSUAA's raw IdP-chooser screen. The admin-console setup for each provider is documented in [ias-setup.md § Step 8](../operations/ias-setup.md#step-8-social--corporate-identity-providers-the-live-production-setup).
 
 #### Sign-In Page (`/signin`)
 
-The `/signin` page is a public, unauthenticated Hugo page (served by AppRouter with `authenticationType: "none"`). It presents two buttons:
+The `/signin` page is a public, unauthenticated Hugo page (`hugo/layouts/signin.html`, served by AppRouter with `authenticationType: "none"`). It presents **five** provider buttons (RPT-style: logo + label, full-width stacked):
 
-1. **"Sign in with SAP Account"** — Routes to `/login?sap_idp=sap.default` (SAP ID Service, the default universal IDP)
-2. **"Sign In if you don't already have an SAP Account"** — Routes to `/login?sap_idp=sap.custom` (IAS tenant `atxgsg7zi`, which federates social providers like GitHub, Google, Microsoft)
+| Button | Routes to | Backing IdP |
+|--------|-----------|-------------|
+| **Continue with GitHub** | `/login?sap_idp=sap.custom,GitHub` | IAS Corporate IdP `GitHub`, backed by the in-approuter [GitHub-OIDC shim](#github-oidc-shim) |
+| **Continue with Google** | `/login?sap_idp=sap.custom,Google` | IAS Corporate IdP `Google` (OIDC-native) |
+| **Continue with Hugging Face** | `/login?sap_idp=sap.custom,Hugging%20Face` | IAS Corporate IdP `Hugging Face` (OIDC-native) |
+| **Continue with LinkedIn** | `/login?sap_idp=sap.custom,LinkedIn` | IAS Corporate IdP `LinkedIn` (OIDC-native) |
+| **Continue with SAP ID** | `/login?sap_idp=sap.default` | SAP ID Service (direct XSUAA trust) |
 
-The `/signin` chooser is reached when an anonymous visitor deliberately signs in (the shellbar profile action redirects to `/signin?returnTo=<path>`); the chooser forwards that `returnTo` onto the chosen `/login?sap_idp=…` URL so the user lands back where they started. The silent returning-visitor auto-login (`maybeAutoLogin`, issue #1689) still targets `/login` directly — it resolves transparently against an existing IdP SSO session and must not surface the chooser.
+> **No Microsoft, no Apple.** Microsoft is not configured. Apple is intentionally omitted — "Sign in with Apple" requires a paid Apple Developer account. The live button set is exactly the five above; the authoritative source is `hugo/layouts/signin.html`.
 
-Both flows eventually reach the same app via XSUAA, which re-issues its own OAuth token. The user sees XSUAA's token in the session, not the upstream IdP's token.
+The `/signin` page is reached when an anonymous visitor deliberately signs in (the shellbar profile action redirects to `/signin?returnTo=<path>`); a same-origin-guarded inline script forwards that `returnTo` onto the chosen `/login?sap_idp=…` URL so the user lands back where they started. The silent returning-visitor auto-login (`maybeAutoLogin`, issue #1689) still targets `/login` directly — it resolves transparently against an existing IdP SSO session and must not surface the page.
+
+Every flow reaches the same app via XSUAA, which re-issues its own OAuth token. The user sees XSUAA's token in the session, not the upstream IdP's token.
 
 #### IdP Pinning via `sap_idp` Query Parameter
 
-The `/login` route in `xs-app.json` is configured with `dynamicIdentityProvider: true`. This enables the `sap_idp` query parameter:
+The `/login` route in `xs-app.json` is configured with `dynamicIdentityProvider: true`. This enables the `sap_idp` query parameter, which comes in two forms:
 
 ```
-/login?sap_idp=sap.default    → AppRouter sets login_hint={"origin":"sap.default"}
-/login?sap_idp=sap.custom     → AppRouter sets login_hint={"origin":"sap.custom"}
+/login?sap_idp=sap.default            → login_hint={"origin":"sap.default"}  (direct XSUAA trust)
+/login?sap_idp=sap.custom,<IAS Name>  → login_hint={"origin":"sap.custom"} + IAS idp=<Name>
 ```
 
-The AppRouter translates the `sap_idp` parameter into an XSUAA `login_hint` claim. XSUAA receives this hint and bypasses the IdP chooser screen, jumping directly to the specified IdP's authentication flow. This provides a seamless two-button experience — the user never sees an "Account Chooser" or "Which IdP?" dialog.
+- **Direct form** (`sap.default`) pins an XSUAA trust origin directly — SAP ID Service.
+- **Chain form** (`sap.custom,<Name>`) is required for every corporate OIDC IdP nested inside IAS. XSUAA routes to the `sap.custom` IAS trust origin, then IAS applies `idp=<Name>` to select the specific provider. **A bare `sap_idp=GitHub` does NOT work** — XSUAA has no such origin, so it falls through to the default IdP. The `<Name>` must exactly match the Corporate IdP **Display Name** configured in IAS (`GitHub`, `Google`, `Hugging Face`, `LinkedIn`).
+
+The AppRouter translates `sap_idp` into an XSUAA `login_hint` claim; XSUAA bypasses the chooser and jumps straight to the specified IdP. The user never sees an "Account Chooser" dialog.
+
+> **Caveat — IdP switch needs an existing-session bust.** An existing IAS SSO session can be reused instead of honoring the freshly-chosen IdP (IAS `prompt=login` would force a re-auth, but the approuter does not forward `prompt`). Switching providers reliably requires `/logout` first — see [Session and IdP Switching](#session-and-idp-switching). Tracked as a follow-up.
+
+#### GitHub-OIDC Shim
+
+GitHub is **OAuth 2.0 only** — no OIDC discovery document, no `id_token`, no JWKS — so IAS cannot federate it as an OpenID Connect Corporate IdP directly. A small OIDC-compliant shim runs **inside the approuter** (`approuter/lib/github-oidc-shim.js`, signing keys in `approuter/lib/github-oidc-keys.js`), wrapping GitHub's OAuth2 so IAS sees a standard OIDC provider.
+
+- **Mount:** `/github-oidc/*` on the approuter — `/.well-known/openid-configuration`, `/authorize`, `/callback`, `/token`, `/jwks`, `/userinfo`.
+- **IAS registration:** a Corporate IdP of type **OpenID Connect Compliant** pointed at `https://<approuter-host>/github-oidc/.well-known/openid-configuration`.
+- **Flag:** gated by `GITHUB_OIDC_ENABLED` (approuter env, read at call time). Currently `"true"` on DEV and PROD. Off ⇒ the GitHub button falls through to the default IdP.
+- **Tokens:** stateless (the authorize→token correlation is an encrypted A256GCM JWT used as the `code`), RS256 `id_token`s, PKCE S256 required.
+- **Secrets:** all in BTP Credential Store, never in `.mtaext` or source — see [ias-setup.md § Step 8c](../operations/ias-setup.md#step-8c--github-needs-the-github-oidc-shim) for the five aliases and the full GitHub + IAS admin steps.
+- **Identity key:** GitHub's **numeric user id** is the OIDC `sub`; the GitHub handle is carried separately as `githubLogin`. Email is advisory only and never keys identity (see [known boundary](#known-boundary-social-login-without-sap-id-account)).
 
 #### Identity Resolution Across IdPs
 
-Both IdPs federate through a single XSUAA instance. When a user authenticates via either flow:
+All IdPs federate through a single XSUAA instance. When a user authenticates via any flow:
 
-1. **Authentication** happens at the upstream IdP (SAP ID Service or IAS)
+1. **Authentication** happens at the upstream IdP (SAP ID Service directly, or a corporate/social provider via IAS)
 2. **Token re-issuance** happens at XSUAA — a new JWT is issued to the app with:
-   - `user_uuid` claim = stable unique identifier (either from SAP ID or IAS)
-   - `email` claim = user's email address (if provided by the IdP)
+   - `user_uuid` claim = stable unique identifier (from SAP ID or IAS)
+   - `email` claim = user's email address (if provided by the IdP; advisory for social providers)
    - `given_name`, `family_name` = user profile fields
-3. **Identity merge** (via the `(iss,sub)` resolver, #2552): If a user logs in via one IdP and later logs in via the other with the same email address, the system detects the email match and merges both logins to the same `user_uuid` in the database. This allows a user to seamlessly switch between "Sign in with SAP" and "Sign in with SAP Universal ID" without creating duplicate accounts.
+3. **Identity merge** (via the `(iss,sub)` resolver in `packages/core/resolve-db-user.js`, #2552): if the same human logs in via different providers with the same email, the resolver's email tier merges both logins to the same `user_uuid`. This lets a user switch between SAP ID and a social provider without creating duplicate accounts — subject to the [known boundary](#known-boundary-social-login-without-sap-id-account) below.
 
 #### Session and IdP Switching
 
@@ -467,14 +490,14 @@ Both IdPs federate through a single XSUAA instance. When a user authenticates vi
 
 #### Known Boundary: Social Login Without SAP ID Account
 
-When a user logs in via a social provider (GitHub, Google, etc. via IAS) **and the email address does not exist in any prior SAP ID login**:
+When a user logs in via a social provider (GitHub, Google, Hugging Face, LinkedIn via IAS) **and no matching email exists on a prior SAP ID login**:
 
-- A new `Users` database row is created with `sapId = null`, linked to the social identity via a `UserIdentities` (issuer, subject) row
-- Later, if the same user logs in via SAP ID Service with the same email but a different identity key
-- The system detects the email collision but cannot automatically merge because they have different identity keys stored in `UserIdentities` (issue #2552)
-- **Workaround:** The user can manually merge accounts via the `/admin-ui/#account-merge` endpoint if they have `Admin` scope, or the DeveloperService can expose a user-facing merge endpoint in a future update
+- A new `Users` database row is created with `sapId = null`, keyed by the provider's `(issuer, subject)`. For GitHub specifically the subject is the **numeric GitHub user id** (never the email, which is advisory and often null); the GitHub handle is stored as `githubLogin`.
+- Later, if the same human logs in via SAP ID Service with the same email but a different identity key, the resolver detects the email collision but **cannot auto-merge** because the two logins carry different `(iss, sub)` keys (issue #2552).
+- **Why email can't rescue this:** `Users.email` is NULL on the large majority of PROD rows and backfills lazily on login, so a social user whose SAP-ID row has no email yet will miss the email-match tier and get a separate `user_uuid`.
+- **Workaround:** an explicit account merge via `/admin-ui/#account-merge` (requires `Admin` scope), or a future user-facing merge endpoint.
 
-This edge case only occurs for users who first log in socially without a pre-existing SAP ID. Most SAP developers have an existing SAP ID, so the happy path (same email, automatic merge) covers the common case.
+This edge case only affects users who sign in socially *before* ever having a resolvable SAP ID email on file. Most SAP developers have an existing SAP ID with a known email, so the happy path (same email → automatic merge) covers the common case.
 
 ---
 

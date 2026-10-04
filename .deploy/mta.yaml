@@ -10,7 +10,7 @@ ID: tutorials-ims
 # Bump this on each release you deploy — it's the version shown by `cf mtas`
 # and in the mtar filename (tutorials-ims_<version>.mtar). Deploy is manual:
 # `cd .deploy && mbt build && cf deploy mta_archives/tutorials-ims_<version>.mtar -e ../deploy/<env>.mtaext -f`.
-version: 1.34.0
+version: 1.35.0
 
 # Top-level parameters (overridable per-env via deploy/<env>.mtaext).
 parameters:
@@ -160,6 +160,7 @@ modules:
     requires:
       - name: tutorials-hana
       - name: tutorials-xsuaa
+      - name: tutorials-identity   # IAS hybrid auth — validates IAS tokens alongside XSUAA (#2593)
       - name: tutorials-destination
       - name: tutorials-audit-log
       - name: tutorials-cloud-logging
@@ -487,6 +488,13 @@ resources:
     type: org.cloudfoundry.existing-service
     parameters:
       service-name: tutorials-approuter-identity
+
+  # IAS identity service instance — adopted as existing-service (created out-of-band).
+  # Used as the IAS client for hybrid auth on tutorials-srv (IAS+xsuaa, #2593).
+  - name: tutorials-identity
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: tutorials-identity
 
   - name: tutorials-destination
     type: org.cloudfoundry.managed-service

@@ -101,6 +101,27 @@ describe('mcp-pat-middleware', () => {
     expect(req.user.is('pat-write')).toBe(false);
   });
 
+  it('pins attr.dbUserId so the shared resolvers resolve a no-sapId PAT (#2630)', async () => {
+    // Regression: installSyntheticUser used to put the resolved Users.ID on
+    // req.user._dbUserId, but resolveDbUser / resolveDbUserId fast-path on
+    // req.user.attr.dbUserId. A PAT carries no iss/sub/email token payload and
+    // the seed user has NO sapId (the migrated-legacy-user case), so without the
+    // attr.dbUserId pin resolution fell through to `WHERE sapId = <email>` and
+    // missed → 401 on strict MCP tools, silent [] on lenient reads (#2630).
+    const req = mockReq('Bearer pat_abcd1234_' + 'a'.repeat(48));
+    const res = mockRes(); const next = vi.fn();
+    await patMiddleware(req, res, next);
+    expect(next).toHaveBeenCalled();
+    expect(req.user.attr?.dbUserId).toBe('mw-user-uuid');
+
+    // End-to-end: the shared strict resolver must now return the exact Users row
+    // the PAT points at, despite the user having no sapId. This is the assertion
+    // that fails on the pre-fix code.
+    const { resolveDbUser } = await import('../../srv/lib/resolve-db-user.js');
+    const dbUser = await resolveDbUser(req.user);
+    expect(dbUser?.ID).toBe('mw-user-uuid');
+  });
+
   it('strips the Authorization header on a valid PAT (#1105 — xsuaa must not JWT-parse it)', async () => {
     // The core production fix: after PAT auth, the Bearer pat_ header MUST be
     // removed so CAP's downstream xsuaa/ias strategy no-ops (jwt-auth returns

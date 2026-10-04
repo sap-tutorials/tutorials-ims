@@ -6,6 +6,7 @@ import { handleSearchEvents } from './lib/mcp-events-search.js';
 import { handleSearchTechEd } from './lib/mcp-teched-search.js';
 import { handleSearchChannels } from './lib/mcp-channels-search.js';
 import { semanticSearch, clampTopK } from './lib/semantic-search.js';
+import { filterServableSlugs } from './lib/servable-slugs.js';
 import { resolveSearchSettings } from './lib/runtime-config/search-settings.js';
 import { createIpRateLimiter, IpRateLimitError } from './lib/ip-rate-limit.js';
 
@@ -356,12 +357,18 @@ export default class SearchService extends cds.ApplicationService {
       if (experience)     q.where({ experienceTag: experience });
 
       const rows = await cds.db.run(q);
-      return rows.map(r => ({
-        slug:    (r.slug ?? '').toLowerCase(),
-        title:   r.title ?? '',
-        snippet: (r.description ?? '').slice(0, 240),
-        tags:    r.primaryTag ? [r.primaryTag] : [],
-      }));
+      // #2631: drop any hit whose slug has no servable content in ContentCurrent
+      // (soft-deleted / unpublished — the /tutorials/<slug> link would 404).
+      // Fail-open inside the helper keeps results if the check itself errors.
+      const servable = await filterServableSlugs(cds.db, rows.map(r => r.slug));
+      return rows
+        .filter(r => servable.has((r.slug ?? '').toLowerCase()))
+        .map(r => ({
+          slug:    (r.slug ?? '').toLowerCase(),
+          title:   r.title ?? '',
+          snippet: (r.description ?? '').slice(0, 240),
+          tags:    r.primaryTag ? [r.primaryTag] : [],
+        }));
     });
 
     /**

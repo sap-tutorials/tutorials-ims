@@ -104,7 +104,7 @@ Subsystem one-liners:
 - **The MCP server is a SEPARATE MTA (`tutorials-mcp`, `mta-mcp.yaml`)** — the command above deploys only the main `tutorials-ims` MTA (`.deploy/mta.yaml`), which serves the anonymous `/mcp/*`, PAT `/mcp-pat/*`, and admin `/mcp-admin/*` surfaces. The authenticated `/mcp-auth/*` surface runs in the `tutorials-srv-mcp` app of the separate `tutorials-mcp` MTA. `npm run deploy` / `scripts/deploy-mta.cjs` do NOT cover it — deploy it by hand from repo root:
 
   ```bash
-  mbt build -e mta-mcp.yaml -t mta_archives
+  mbt build -f mta-mcp.yaml -t mta_archives
   cf deploy mta_archives/*.mtar -e deploy/mcp-dev.mtaext -f   # or deploy/mcp-prod.mtaext
   ```
 

@@ -14,8 +14,8 @@ It declares five skills: `tutorial-chat` (conversational, streaming), `search-tu
 
 ## Authentication
 
-All `/a2a` calls require an XSUAA JWT carrying the `Tutorial.MCP` scope (OAuth2
-client-credentials against the `tokenUrl` in the card's `securitySchemes.xsuaa`).
+All `/a2a` calls require a SAP IAS access token obtained via OAuth2
+client-credentials against the `tokenUrl` in the card's `securitySchemes.ias`.
 `user-progress` additionally needs the end-user's identity forwarded in the token;
 without it, it returns empty results.
 
@@ -64,7 +64,7 @@ panel on the Joule settings page), stored on the `ChatSettings` singleton:
   unavailability.
 - **Public Base URL** — the base advertised in the Agent Card `url`; leave blank to
   auto-detect from the platform (`VCAP_APPLICATION.application_uris`).
-- **OAuth Token URL** — the XSUAA token endpoint advertised in the card's security scheme.
+- **OAuth Token URL** — the SAP IAS token endpoint advertised in the card's `ias` security scheme.
 
 Changes take effect within ~5 seconds (no restart). These are DB-backed settings, not
 environment variables.

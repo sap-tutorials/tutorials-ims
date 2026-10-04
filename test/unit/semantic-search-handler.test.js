@@ -11,7 +11,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import path from 'node:path';
 import cds from '@sap/cds';
 
-import { _setTestEmbedClient } from '../../srv/lib/semantic-search.js';
+import { _setTestEmbedClient, _resetForTest as _resetSemModule } from '../../srv/lib/semantic-search.js';
 import { _resetForTest as _resetSvc } from '../../srv/search-service.js';
 import { _resetCacheForTests as _resetSearchSettings } from '../../srv/lib/runtime-config/search-settings.js';
 
@@ -41,6 +41,12 @@ beforeAll(async () => {
 
   SearchService = await cds.serve('SearchService').from('./srv/search-service');
 
+  // The cds-caching `memory` store is a process singleton that survives Vitest's
+  // per-file isolation; a sibling file in the same worker may have left a stale
+  // `semq:` entry (or mutated the global caching namespace). Evict it so this
+  // file's queries embed fresh against the fake client below.
+  await _resetSemModule();
+
   _setTestEmbedClient(async (inputs) => inputs.map(() => unitVec(0)));
 
   const { Tutorials, TutorialEmbedding } = cds.entities(NS);
@@ -53,6 +59,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   _resetSvc();
+  await _resetSemModule(); // evict this file's semq: entries so they can't poison siblings
   await cds.disconnect();
   delete cds.db;
   delete cds.model;

@@ -497,6 +497,41 @@ export async function backfillUserProfile(user) {
 }
 
 /**
+ * Issue #2628: refresh the login-provider profile picture (OIDC `picture`
+ * claim) on Users.pictureUrl.
+ *
+ * Unlike backfillUserProfile (blanks-only self-heal for firstName/lastName/
+ * email), the picture URL is NOT stable: GitHub bumps `?v=`, LinkedIn/Google
+ * return short-lived signed URLs. So this is deliberately "always overwrite
+ * with the latest non-null claim" rather than blanks-only — the row should
+ * carry whatever the most recent login produced.
+ *
+ * Preservation rule: a token WITHOUT a picture claim never clears an existing
+ * value. A provider that stops emitting the claim (or a login via SAP ID /
+ * Apple, which never do) must not wipe a good picture captured earlier.
+ *
+ * UPDATE-only, keyed on sapId — provisionDbUser handles the INSERT path by
+ * seeding pictureUrl directly on row creation.
+ *
+ * @returns {Promise<{updated: boolean, reason?: string}>}
+ */
+export async function refreshUserPicture(user) {
+  const sapId = resolveUserSapId(user);
+  if (!sapId) return { updated: false, reason: 'anonymous' };
+
+  const claimPicture = user.attr?.picture || null;
+  if (!claimPicture) return { updated: false, reason: 'no-claim' };
+
+  const { Users } = cds.entities('com.sap.developers.ims');
+  const dbUser = await SELECT.one.from(Users).where({ sapId }).columns('ID', 'pictureUrl');
+  if (!dbUser) return { updated: false, reason: 'no-user' };
+  if (dbUser.pictureUrl === claimPicture) return { updated: false, reason: 'unchanged' };
+
+  await UPDATE(Users).where({ sapId }).set({ pictureUrl: claimPicture });
+  return { updated: true };
+}
+
+/**
  * Get-or-create the Users row for the authenticated request, keyed on sapId.
  *
  * **Why this exists (SAGE ownership under-reporting):**
@@ -563,6 +598,8 @@ export async function provisionDbUser(user, columns) {
   if (existing) {
     await backfillUserProfile(user).catch((err) =>
       cds.log('resolve-db-user').warn('[provision-backfill]', err?.message ?? err));
+    await refreshUserPicture(user).catch((err) =>
+      cds.log('resolve-db-user').warn('[provision-picture]', err?.message ?? err));
     // Ensure a (iss,sub) link exists even if the hit came via Tier 1 already
     // (no-op on duplicate). Tiers 2/3 wrote one; Tier 1 means it exists.
     if (columns && columns.length) {
@@ -578,6 +615,7 @@ export async function provisionDbUser(user, columns) {
   const claimFirstName = user.attr?.given_name || user.attr?.givenName;
   const claimLastName  = user.attr?.family_name || user.attr?.familyName;
   const claimEmail     = emailFromUser(user);
+  const claimPicture   = user.attr?.picture || null;
   if (!claimEmail && !claimFirstName && !claimLastName && !canonicalSapId) return null;
 
   const db = await cds.connect.to('db');
@@ -591,6 +629,7 @@ export async function provisionDbUser(user, columns) {
       email: claimEmail || null,
       firstName: claimFirstName || null,
       lastName: claimLastName || null,
+      pictureUrl: claimPicture,         // login-provider avatar (#2628), nullable
     });
   } catch (err) {
     if (!/unique|duplicate/i.test(String(err?.message ?? ''))) throw err;

@@ -173,6 +173,7 @@ modules:
     requires:
       - name: tutorials-hana
       - name: tutorials-xsuaa
+      - name: tutorials-identity   # IAS hybrid auth — validates IAS tokens alongside XSUAA (#2593)
       - name: tutorials-destination
       - name: tutorials-mail
       - name: tutorials-audit-log
@@ -383,6 +384,13 @@ resources:
       service-plan: application
       service-name: tutorials-xsuaa
       path: ./xs-security.json
+
+  # IAS identity service instance — adopted as existing-service (created out-of-band).
+  # Used as the IAS client for hybrid auth on tutorials-srv (IAS+xsuaa, #2593).
+  - name: tutorials-identity
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: tutorials-identity
 
   - name: tutorials-destination
     type: org.cloudfoundry.managed-service

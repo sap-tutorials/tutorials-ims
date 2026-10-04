@@ -31,7 +31,7 @@ import { decideHandler } from './lib/branch/decide.js';
 import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
-import { contentAuthMiddleware, publishHandler, serveHandler, markdownServeHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler } from './lib/content-store.js';
+import { contentAuthMiddleware, publishHandler, serveHandler, markdownServeHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler, quarantineIngestHandler } from './lib/content-store.js';
 import { imageSourceHandler } from './lib/image-source-handler.js';
 import { imageIngestHandler } from './lib/image-ingest-handler.js';
 import { attachmentSourceHandler } from './lib/attachment-source-handler.js';
@@ -104,6 +104,7 @@ import { fetchPetPhoto } from './lib/petoberfest-photo-store.js';
 import { installDbWrap } from './lib/metrics-db-wrap.js';
 import './graphql-config.js';
 import { makeA2aRouter } from './lib/a2a/rpc-router.js';
+import { a2aIasAuthMiddleware } from './lib/a2a/ias-auth-mw.js';
 import { buildAgentCard } from './lib/a2a/agent-card.js';
 import { resolveA2aSettings } from './lib/runtime-config/a2a-settings.js';
 import { provenanceHandler, jwksHandler } from './lib/provenance-handlers.js';
@@ -972,6 +973,9 @@ cds.on('bootstrap', (app) => {
   // build, auth 503) — so they surface in the admin PipelineLog instead of only
   // going red in an unwatched CI tab. Same auth as /content/publish.
   app.post('/content/pipeline-log', express.json({ limit: '256kb' }), contentAuthMiddleware, pipelineLogFailureHandler);
+
+  // #2585 — CI full-rebuild quarantine snapshot. Same auth as /content/publish.
+  app.post('/content/quarantine-events', express.json({ limit: '2mb' }), contentAuthMiddleware, quarantineIngestHandler);
 
   // Deploy lifecycle alerts (#deploy-alerts): scripts/deploy-mta.cjs pings this
   // at start/end/fail of a deploy → ANS. Same bearer auth (CONTENT_API_KEY) as
@@ -1992,12 +1996,17 @@ cds.on('served', async () => {
     let khorosId = null;
     let khorosLogin = null;
     let khorosAvatarUrl = null;
+    // #2628: login-provider profile picture (OIDC `picture` claim). The live
+    // token claim is freshest (URLs rotate), so prefer it; fall back to the
+    // value refreshUserPicture persisted on the Users row at login.
+    let pictureUrl = user.attr?.picture || null;
     try {
-      const dbUser = await resolveDbUser(user, ['khorosId', 'khorosLogin', 'khorosAvatarUrl']);
+      const dbUser = await resolveDbUser(user, ['khorosId', 'khorosLogin', 'khorosAvatarUrl', 'pictureUrl']);
       if (dbUser) {
         khorosId       = dbUser.khorosId       ?? null;
         khorosLogin    = dbUser.khorosLogin    ?? null;
         khorosAvatarUrl = dbUser.khorosAvatarUrl ?? null;
+        if (!pictureUrl) pictureUrl = dbUser.pictureUrl ?? null;
       }
     } catch (err) {
       console.warn('[auth/user] khoros lookup failed (non-fatal):', err.message);
@@ -2024,6 +2033,12 @@ cds.on('served', async () => {
       khorosId,
       khorosLogin,
       khorosAvatarUrl,
+      // #2628: login-provider picture + resolved avatar. Precedence per the
+      // approved design: Khoros (SAP Community) avatar wins, login-provider
+      // picture is the fallback. The client can also apply this itself, but a
+      // server-resolved `avatarUrl` keeps the rule in one place.
+      pictureUrl,
+      avatarUrl: khorosAvatarUrl || pictureUrl || null,
     });
   });
 
@@ -2230,14 +2245,21 @@ cds.on('served', () => {
 
   cds.log('chat').info('POST /chat/stream registered');
 
-  // Wire A2A router through the same context+auth chain. makeA2aRouter()
+  // Wire A2A router through context + ROUTE-SCOPED IAS auth. makeA2aRouter()
   // returns a router with router.post('/') which matches POST /a2a because
   // Express strips the base path when dispatching to the router. (#1220)
+  //
+  // Auth note (#2593 fix): /a2a uses a2aIasAuthMiddleware (IAS + XSUAA fallback,
+  // validated in-process) instead of the generic CAP authMw. The service-wide
+  // cds.requires.auth kind that #2593 added was removed because it broke every
+  // XSUAA browser route; IAS validation is now scoped to this one M2M endpoint.
+  // contextMw still runs first to establish cds.context; rpc-router.js rejects
+  // anonymous (-32001/401) if the middleware leaves no authenticated user.
   const a2aRouter = makeA2aRouter();
   a2aHandler = (req, res, next) => {
     contextMw(req, res, (err) => {
       if (err) return next(err);
-      authMw(req, res, (err) => {
+      a2aIasAuthMiddleware(req, res, (err) => {
         if (err) return next(err);
         a2aRouter(req, res, next);
       });

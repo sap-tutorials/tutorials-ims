@@ -22,9 +22,12 @@ describe('buildAgentCard', () => {
     }
   });
 
-  it('injects tokenUrl into the xsuaa security scheme', () => {
-    expect(card.securitySchemes.xsuaa.flows.clientCredentials.tokenUrl).toBe('https://uaa.example/oauth/token');
-    expect(card.security).toEqual([{ xsuaa: ['Tutorial.MCP'] }]);
+  it('injects tokenUrl into the ias client-credentials scheme', () => {
+    expect(card.securitySchemes.ias.type).toBe('oauth2');
+    expect(card.securitySchemes.ias.flows.clientCredentials.tokenUrl)
+      .toBe('https://uaa.example/oauth/token');
+    expect(card.securitySchemes.xsuaa).toBeUndefined();
+    expect(card.security).toEqual([{ ias: ['openid'] }]);
   });
 
   it('signals unavailability when disabled but still returns a card', () => {

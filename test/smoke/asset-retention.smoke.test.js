@@ -47,10 +47,24 @@ describeIf('asset retention', () => {
     const manifest = await parseManifest(res);
     expect(Array.isArray(manifest)).toBe(true);
 
-    for (const { file } of manifest) {
-      const kind = file.endsWith('.css') ? 'css' : 'js';
-      const r = await fetchWithRetry(`${BASE_URL}/${kind}/${file}`, { method: 'HEAD', redirect: 'follow' });
-      expect(r.status, `${file} should serve 200`).toBe(200);
+    // Probe all bundles with bounded concurrency. The manifest holds the current
+    // build's bundles PLUS the prior build's retained ones (several hundred
+    // entries), so a sequential HEAD-per-bundle loop blows past the 30s default
+    // testTimeout and the whole smoke gate flaps "regressed" on a healthy deploy.
+    // A small worker pool keeps the live assertion but finishes in a few seconds.
+    const CONCURRENCY = 20;
+    const failures = [];
+    let cursor = 0;
+    async function worker() {
+      while (cursor < manifest.length) {
+        const { file } = manifest[cursor++];
+        const kind = file.endsWith('.css') ? 'css' : 'js';
+        const r = await fetchWithRetry(`${BASE_URL}/${kind}/${file}`, { method: 'HEAD', redirect: 'follow' });
+        if (r.status !== 200) failures.push(`${file} → ${r.status}`);
+      }
     }
-  });
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, manifest.length) }, worker));
+
+    expect(failures, `retained bundles must all serve 200; non-200: ${failures.join(', ')}`).toEqual([]);
+  }, 60000);
 });

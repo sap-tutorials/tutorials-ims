@@ -37,6 +37,9 @@ modules:
       # redeploy silently dropped — same override-survival reason as the KG
       # flag above. srv/lib/github-app-token.js reads this at resolveGithubToken.
       USE_GITHUB_APP: 'true'
+      # A2A agent card tokenUrl derivation (srv/lib/runtime-config/a2a-settings.js reads XSUAA_MCP_URL) — #2593
+      XSUAA_MCP_URL: https://atxgsg7zi.accounts.ondemand.com
+      MCP_ISSUER_KIND: ias
       # NOTE: KG_PATH_V2_ENABLED moved to DB-driven config (ImsConfig
       # flag.kg.pathV2, issue #2060). Enable it for DEV from the Admin UI /
       # setFeatureFlag action instead of pinning an env override here.

@@ -132,6 +132,11 @@ sections:
         driftMarkers:
           - "/pats"
           - "mintPAT"
+      - path: "/a2a"
+        auth: "IAS (client-credentials)"
+        purpose: 'A2A agent (JSON-RPC). Machine-to-machine — SAP IAS access token via OAuth2 client-credentials (tenant <code>atxgsg7zi</code>), no interactive/PKCE/PAT path. Agent card at <code>/.well-known/agent-card.json</code>.'
+        driftMarkers:
+          - "/a2a"
 
   feeds:
     columns: [path, format, contents]

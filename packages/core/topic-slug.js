@@ -1,8 +1,8 @@
 // URL-safe topic slug: lowercase, every run of non-[a-z0-9] → single hyphen,
 // trimmed. Real Tags.titlePath values carry spaces, colons and slashes
 // (e.g. "software product : technology platform / ... / open connectors");
-// the serve path (serveHandler VALID_SLUG=/^[a-z0-9][a-z0-9-]*$/) rejects any
-// slug that is not [a-z0-9-], so every character class outside that MUST be
+// the serve path (serveHandler VALID_SLUG=/^[a-z0-9][a-z0-9_-]*$/) rejects any
+// slug that is not [a-z0-9_-], so every character class outside that MUST be
 // folded to a hyphen here or the /topics/<slug> route 404s (#2099 defect).
 export function slugifyTopic(value) {
   return String(value)

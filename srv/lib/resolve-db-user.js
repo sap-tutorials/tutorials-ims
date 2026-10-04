@@ -6,6 +6,7 @@ export const resolveUserSapId = mod.resolveUserSapId;
 export const resolveDbUser = mod.resolveDbUser;
 export const emailFromUser = mod.emailFromUser;
 export const backfillUserProfile = mod.backfillUserProfile;
+export const refreshUserPicture = mod.refreshUserPicture;
 export const provisionDbUser = mod.provisionDbUser;
 export const resolveUser = mod.resolveUser;
 export const issuerSubjectFromUser = mod.issuerSubjectFromUser;

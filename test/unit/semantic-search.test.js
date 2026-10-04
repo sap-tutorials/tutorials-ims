@@ -47,19 +47,37 @@ function installFakeEmbed() {
 }
 
 async function seedCorpora() {
-  const { Tutorials, TutorialEmbedding, Concepts } = cds.entities(NS);
+  const { Tutorials, TutorialEmbedding, Concepts, ContentCurrent } = cds.entities(NS);
   const { ApiDocs, Samples, DevtoberfestSessions, TechEdSessions } = cds.entities(`${NS}.external`);
 
   // Tutorials: alpha scores 1.0 (dim 0), beta scores 0 (dim 1 → below floor).
+  // #2631: both are ACTIVE and both have servable content in ContentCurrent so
+  // the status + content-presence gates let them through unchanged.
+  //   - gone-inactive: ACTIVE-scoring embedding (dim 0) but status=INACTIVE
+  //     (soft-deleted) → must be dropped by the status gate.
+  //   - gone-nocontent: ACTIVE + ACTIVE-scoring embedding but NO ContentCurrent
+  //     row → must be dropped by the content-presence gate.
   await INSERT.into(Tutorials).entries([
-    { ID: 'tid-alpha', slug: 'tut-alpha', title: 'Tutorial Alpha' },
-    { ID: 'tid-beta', slug: 'tut-beta', title: 'Tutorial Beta' },
+    { ID: 'tid-alpha', slug: 'tut-alpha', title: 'Tutorial Alpha', status: 'ACTIVE' },
+    { ID: 'tid-beta', slug: 'tut-beta', title: 'Tutorial Beta', status: 'ACTIVE' },
+    { ID: 'tid-inactive', slug: 'tut-gone-inactive', title: 'Deleted Tutorial', status: 'INACTIVE' },
+    { ID: 'tid-nocontent', slug: 'tut-gone-nocontent', title: 'Unpublished Tutorial', status: 'ACTIVE' },
   ]);
   await INSERT.into(TutorialEmbedding).entries([
     { tutorial_ID: 'tid-alpha', stepNumber: 1, embeddingModel: 'text-embedding-3-small',
       stepText: 'Alpha step text about CAP', embedding: f32buf(unitVec(0)) },
     { tutorial_ID: 'tid-beta', stepNumber: 1, embeddingModel: 'text-embedding-3-small',
       stepText: 'Beta step text', embedding: f32buf(unitVec(1)) },
+    { tutorial_ID: 'tid-inactive', stepNumber: 1, embeddingModel: 'text-embedding-3-small',
+      stepText: 'Deleted step text about CAP', embedding: f32buf(unitVec(0)) },
+    { tutorial_ID: 'tid-nocontent', stepNumber: 1, embeddingModel: 'text-embedding-3-small',
+      stepText: 'Unpublished step text about CAP', embedding: f32buf(unitVec(0)) },
+  ]);
+  // Servable content exists only for the two live tutorials. tut-gone-inactive
+  // and tut-gone-nocontent have no ContentCurrent row.
+  await INSERT.into(ContentCurrent).entries([
+    { slug: 'tut-alpha' },
+    { slug: 'tut-beta' },
   ]);
 
   // Concept: ACTIVE + published + not merged, scores 1.0.
@@ -123,10 +141,11 @@ describe('semanticSearch (core module)', () => {
   beforeAll(async () => {
     await cds.deploy([path.join(process.cwd(), 'db')]).to('sqlite::memory:');
     await seedCorpora();
+    await _resetModule(); // evict any semq: entries leaked by a sibling file in this worker
   });
 
   afterAll(async () => {
-    _resetModule();
+    await _resetModule();
     await cds.disconnect();
     delete cds.db;
     delete cds.model;
@@ -149,6 +168,20 @@ describe('semanticSearch (core module)', () => {
     });
     expect(rows[0].score).toBeCloseTo(1, 5);
     expect(rows[0].snippet).toContain('Alpha step text');
+  });
+
+  // #2631: soft-deleted (status=INACTIVE) tutorials keep their embeddings but
+  // must never surface — their /tutorials/<slug> link now 404s.
+  it('tutorials corpus: excludes a soft-deleted (INACTIVE) tutorial even with a top-scoring embedding', async () => {
+    const rows = await semanticSearch({ query: 'q-inactive', corpus: 'tutorials', settings });
+    expect(rows.map((r) => r.slug)).not.toContain('tut-gone-inactive');
+  });
+
+  // #2631: an ACTIVE tutorial whose content was unpublished (no ContentCurrent
+  // row) must also be dropped — the metadata row survives but the link 404s.
+  it('tutorials corpus: excludes an ACTIVE tutorial with no servable content', async () => {
+    const rows = await semanticSearch({ query: 'q-nocontent', corpus: 'tutorials', settings });
+    expect(rows.map((r) => r.slug)).not.toContain('tut-gone-nocontent');
   });
 
   it('never leaks a vector/embedding in the wire shape', async () => {

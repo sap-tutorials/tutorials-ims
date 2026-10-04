@@ -7,13 +7,74 @@
   "build": {
     "target": "gen",
     "tasks": [
-      { "for": "hana", "src": "db", "dest": "db" },
-      { "for": "nodejs", "src": "srv", "dest": "srv", "options": { "model": ["srv", "db", "db/hana", "app", "@cap-js/data-inspector", "@cap-js/ai/srv/AICoreService", "cds-caching/db/cache-store", "cds-caching/db/statistics", "@cap-js/attachments/srv/malware-scanner/malwareScanner-mocked"] } },
-      { "for": "hana", "src": "db-qa", "dest": "db-qa", "options": { "model": ["db-qa"] } },
-      { "for": "nodejs", "src": "srv-qa", "dest": "srv-qa", "options": { "model": ["srv-qa", "db-qa"] } },
-      { "for": "nodejs", "src": "srv-mcp", "dest": "srv-mcp", "options": { "model": ["srv-mcp", "db"] } },
-      { "for": "cds-caching" },
-      { "for": "hana", "src": "db", "dest": "db", "options": { "model": ["cds-caching/db/statistics"] } }
+      {
+        "for": "hana",
+        "src": "db",
+        "dest": "db"
+      },
+      {
+        "for": "nodejs",
+        "src": "srv",
+        "dest": "srv",
+        "options": {
+          "model": [
+            "srv",
+            "db",
+            "db/hana",
+            "app",
+            "@cap-js/data-inspector",
+            "@cap-js/ai/srv/AICoreService",
+            "cds-caching/db/cache-store",
+            "cds-caching/db/statistics",
+            "@cap-js/attachments/srv/malware-scanner/malwareScanner-mocked"
+          ]
+        }
+      },
+      {
+        "for": "hana",
+        "src": "db-qa",
+        "dest": "db-qa",
+        "options": {
+          "model": [
+            "db-qa"
+          ]
+        }
+      },
+      {
+        "for": "nodejs",
+        "src": "srv-qa",
+        "dest": "srv-qa",
+        "options": {
+          "model": [
+            "srv-qa",
+            "db-qa"
+          ]
+        }
+      },
+      {
+        "for": "nodejs",
+        "src": "srv-mcp",
+        "dest": "srv-mcp",
+        "options": {
+          "model": [
+            "srv-mcp",
+            "db"
+          ]
+        }
+      },
+      {
+        "for": "cds-caching"
+      },
+      {
+        "for": "hana",
+        "src": "db",
+        "dest": "db",
+        "options": {
+          "model": [
+            "cds-caching/db/statistics"
+          ]
+        }
+      }
     ]
   },
   "odata": {
@@ -22,12 +83,22 @@
   "requires": {
     "auth": {
       "kind": "mocked",
-      "[hybrid]": { "kind": "xsuaa", "restrict_all_services": false },
-      "[production]": { "kind": "xsuaa", "restrict_all_services": false },
+      "[hybrid]": {
+        "kind": "xsuaa",
+        "restrict_all_services": false
+      },
+      "[production]": {
+        "kind": "xsuaa",
+        "restrict_all_services": false
+      },
       "users": {
         "developer": {
           "password": "developer",
-          "roles": ["DeveloperApp", "Tutorial.Author", "authenticated-user"],
+          "roles": [
+            "DeveloperApp",
+            "Tutorial.Author",
+            "authenticated-user"
+          ],
           "attr": {
             "email": "dev@test.com",
             "given_name": "Test",
@@ -36,7 +107,11 @@
         },
         "P0009999001": {
           "password": "P0009999001",
-          "roles": ["DeveloperApp", "Tutorial.Author", "authenticated-user"],
+          "roles": [
+            "DeveloperApp",
+            "Tutorial.Author",
+            "authenticated-user"
+          ],
           "attr": {
             "email": "canonical@test.com",
             "given_name": "Canonical",
@@ -45,34 +120,77 @@
         },
         "admin": {
           "password": "admin",
-          "roles": ["Admin", "KnowledgeGraph.Admin", "DeveloperApp", "DisplayApp", "ContentAuthor", "ConsolidationScope", "Tutorial.Author", "authenticated-user"]
+          "roles": [
+            "Admin",
+            "KnowledgeGraph.Admin",
+            "DeveloperApp",
+            "DisplayApp",
+            "ContentAuthor",
+            "ConsolidationScope",
+            "Tutorial.Author",
+            "authenticated-user"
+          ]
         },
         "superadmin": {
           "password": "superadmin",
-          "roles": ["SuperAdmin", "Admin", "DeveloperApp", "DisplayApp", "authenticated-user"]
+          "roles": [
+            "SuperAdmin",
+            "Admin",
+            "DeveloperApp",
+            "DisplayApp",
+            "authenticated-user"
+          ]
         },
         "display": {
           "password": "display",
-          "roles": ["DisplayApp", "authenticated-user"]
+          "roles": [
+            "DisplayApp",
+            "authenticated-user"
+          ]
         },
         "consolidation": {
           "password": "consolidation",
-          "roles": ["ConsolidationScope", "authenticated-user"]
+          "roles": [
+            "ConsolidationScope",
+            "authenticated-user"
+          ]
         },
         "author": {
-          "roles": ["Tutorial.Author", "authenticated-user"]
+          "roles": [
+            "Tutorial.Author",
+            "authenticated-user"
+          ]
         },
         "idpcustom": {
-          "roles": ["authenticated-user"],
-          "attr": { "origin": "sap.custom" }
+          "roles": [
+            "authenticated-user"
+          ],
+          "attr": {
+            "origin": "sap.custom"
+          }
         },
         "idpdefault": {
-          "roles": ["authenticated-user"],
-          "attr": { "origin": "sap.default" }
+          "roles": [
+            "authenticated-user"
+          ],
+          "attr": {
+            "origin": "sap.default"
+          }
         },
         "apiuser": {
           "password": "apikey",
-          "roles": ["Tutorial.API", "authenticated-user"]
+          "roles": [
+            "Tutorial.API",
+            "authenticated-user"
+          ]
+        },
+        "withpicture": {
+          "roles": [
+            "authenticated-user"
+          ],
+          "attr": {
+            "picture": "https://avatars.githubusercontent.com/u/42?v=4"
+          }
         }
       }
     },

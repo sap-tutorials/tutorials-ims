@@ -165,7 +165,7 @@ cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f
 
 > This deploys the **main** `tutorials-ims` MTA only. The authenticated MCP surface
 > (`/mcp-auth/*`) ships as a **separate** `tutorials-mcp` MTA that deploys by hand:
-> `mbt build -e mta-mcp.yaml -t mta_archives && cf deploy mta_archives/*.mtar -e deploy/mcp-dev.mtaext -f`
+> `mbt build -f mta-mcp.yaml -t mta_archives && cf deploy mta_archives/*.mtar -e deploy/mcp-dev.mtaext -f`
 > (from repo root). See [operations/mta-deployment.md § MCP MTA](operations/mta-deployment.md#mcp-mta-tutorials-mcp).
 
 ### Optional env vars

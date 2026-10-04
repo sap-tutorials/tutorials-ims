@@ -975,6 +975,13 @@ annotate AdminService.AuthorAiRequests with @UI: {
 // in the same block further below.
 annotate AdminService.Tutorials with @UI: {
   Facets: [
+    // #2586 — active-quarantine section. Empty for a healthy tutorial; a row
+    // appears only when the most recent rebuild DROPPED this slug at pre-publish
+    // validation instead of publishing it (the "silent success" the Admin
+    // Rebuild button used to hide). Placed first so an operator who rebuilt a
+    // tutorial sees the real outcome at the top of its page.
+    { $Type: 'UI.ReferenceFacet', ID: 'QuarantineFacet', Label: 'Active Quarantine',
+      Target: 'quarantineCurrent/@UI.LineItem#OnTutorial' },
     { $Type: 'UI.ReferenceFacet', ID: 'General',  Label: 'General',  Target: '@UI.FieldGroup#General' },
     { $Type: 'UI.ReferenceFacet', ID: 'Lifecycle', Label: 'Lifecycle', Target: '@UI.FieldGroup#Lifecycle' },
     { $Type: 'UI.ReferenceFacet', Label: 'Categories', ID: 'CategoriesFacet', Target: 'categories/@UI.LineItem' },
@@ -2158,7 +2165,7 @@ annotate AdminService.ChatSettings with @(
   embeddingMinScore  @Common.Label: 'Min Similarity Score';
   a2aEnabled         @Common.Label: 'A2A Enabled' @description: 'Master switch for the /a2a endpoint and Agent Card. When off, /a2a returns 503 and the card signals unavailability.';
   a2aPublicBaseUrl   @Common.Label: 'A2A Public Base URL' @description: 'Base URL advertised in the Agent Card url; blank = auto-detect from platform (VCAP application_uris).';
-  a2aTokenUrl        @Common.Label: 'A2A Token URL' @description: 'OAuth token endpoint advertised in the Agent Card xsuaa security scheme.';
+  a2aTokenUrl        @Common.Label: 'A2A Token URL' @description: 'OAuth token endpoint advertised in the Agent Card ias security scheme.';
 };
 
 annotate AdminService.TutorialFeedback with {
@@ -4699,3 +4706,46 @@ annotate AdminService.ChannelTopicMap with @UI: {
     { Value: authoringStatus }
   ]}
 };
+
+// --- QuarantineEventsCurrent (read-only, filterable; #2585 current quarantine set) ---
+annotate AdminService.QuarantineEventsCurrent with {
+  slug       @Common.Label: 'Slug';
+  reason     @Common.Label: 'Reason';
+  sourceRepo @Common.Label: 'Source Repo';
+  sourceFile @Common.Label: 'Source File';
+  sourceUrl  @Common.Label: 'Source URL';
+  buildAt    @Common.Label: 'Last Seen Build';
+  runId      @Common.Label: 'Run';
+  workflowUrl @Common.Label: 'Workflow Run';
+};
+
+// #2586 — slug-scoped variant for the Tutorials Object Page "Active Quarantine"
+// facet. Omits the slug column (redundant inside one tutorial's page) and leads
+// with the reason + build time + a link to the Actions run that dropped it.
+annotate AdminService.QuarantineEventsCurrent with @UI.LineItem #OnTutorial: [
+  { Value: reason, Label: 'Reason' },
+  { Value: buildAt, Label: 'Build Time' },
+  { $Type: 'UI.DataFieldWithUrl', Value: workflowUrl, Url: workflowUrl, Label: 'Workflow Run' },
+  { $Type: 'UI.DataFieldWithUrl', Value: sourceUrl, Url: sourceUrl, Label: 'Source' }
+];
+
+annotate AdminService.QuarantineEventsCurrent with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Quarantined Tutorial', TypeNamePlural: 'Quarantined Tutorials',
+      Title: { Value: slug }
+    },
+    SelectionFields: [ sourceRepo, buildAt ],
+    LineItem: [
+      { Value: slug },
+      { Value: reason },
+      { Value: sourceRepo },
+      { Value: sourceFile },
+      { Value: buildAt },
+      { $Type: 'UI.DataFieldWithUrl', Value: sourceUrl, Url: sourceUrl, Label: 'Source' }
+    ]
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);

@@ -1,9 +1,8 @@
 sap.ui.define([
   "sap/ui/core/mvc/ControllerExtension",
   "sap/ui/model/json/JSONModel",
-  "sap/m/MessageBox",
-  "sap/m/MessageToast"
-], function (ControllerExtension, JSONModel, MessageBox, MessageToast) {
+  "sap/m/MessageBox"
+], function (ControllerExtension, JSONModel, MessageBox) {
   "use strict";
 
   // Hand-rolled markdown → HTML converter for the rendered preview tab.
@@ -206,10 +205,18 @@ sap.ui.define([
           );
 
           oAction.execute().then(function () {
-            MessageToast.show(sToastSuccess, { duration: 5000 });
+            // Dispatch accepted != rebuild done. The bound action returns
+            // {dispatched:true} the moment the GitHub workflow_dispatch is
+            // queued (fire-and-forget, srv/lib/rebuild-trigger.js) — long
+            // before validation/publish runs. Show a persistent information
+            // dialog (not a transient toast) so the operator reads that the
+            // real outcome lands in the "Active Quarantine" section (#2586),
+            // and refresh the context so an already-current quarantine shows.
+            try { oContext.refresh(); } catch (e) { /* best-effort */ }
+            MessageBox.information(sToastSuccess, { title: sDialogTitle });
           }).catch(function (err) {
             var msg = (err && err.message) ? err.message : String(err);
-            MessageBox.error(sToastError + msg);
+            MessageBox.error(sToastError + " " + msg);
           });
         }
       });
