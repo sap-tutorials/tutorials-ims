@@ -53,6 +53,21 @@
       </a>
     </div>
 
+    {{/*
+      Active-session nudge (follow-up to #2626). When the visitor already has an
+      IAS SSO session, clicking a provider silently reuses that session's IdP
+      instead of the chosen one (the approuter can't forward OIDC prompt=login,
+      and IAS has no idp-keyed force-reauth — verified on tenant atxgsg7zi). We
+      can't force re-auth without breaking the silent returning-visitor path, so
+      we make the state visible: tell the user to sign out first to switch IdP.
+      Hidden by default; revealed only when header.html's checkAuth resolves to
+      an authenticated session (data-authenticated="true" / auth-resolved event).
+    */}}
+    <p class="signin-session-nudge" id="signin-session-nudge" hidden>
+      Already signed in. To switch to a different provider,
+      <a href="#" id="signin-session-logout">sign out first</a>.
+    </p>
+
     <p class="signin-legal">
       By signing in, you accept our
       <a href="/privacy">Privacy Policy</a> and
@@ -71,6 +86,38 @@
     document.querySelectorAll('a[data-signin-idp]').forEach(function (a) {
       a.href += '&returnTo=' + encodeURIComponent(rt);
     });
+  })();
+
+  // Active-session nudge (#2626 follow-up). header.html's checkAuth() already
+  // probes /auth/user and records the result on <html data-authenticated> plus
+  // an 'auth-resolved' event. maybeAutoLogin is suppressed on /signin, so there
+  // is no redirect race — we only reveal the hint when a session is confirmed.
+  (function () {
+    var nudge = document.getElementById('signin-session-nudge');
+    if (!nudge) return;
+
+    function reveal(isAuthed) {
+      nudge.hidden = !isAuthed;
+    }
+
+    // Catch the event if it fires after this script, and the already-resolved
+    // case where the attribute is set before we attach the listener.
+    document.addEventListener('auth-resolved', function (e) {
+      reveal(!!(e.detail && e.detail.authenticated));
+    });
+    if (document.documentElement.dataset.authenticated === 'true') reveal(true);
+
+    var logout = document.getElementById('signin-session-logout');
+    if (logout) {
+      logout.addEventListener('click', function (e) {
+        e.preventDefault();
+        // Reuse header.html's logout (sets autologin.optout, clears joule.*
+        // session keys, then redirects to /logout). Fall back to /logout if the
+        // header hasn't exposed it yet.
+        if (typeof window.handleLogout === 'function') window.handleLogout();
+        else window.location.href = '/logout';
+      });
+    }
   })();
 </script>
 
@@ -156,5 +203,16 @@
     line-height: 1.4;
   }
   .signin-legal a { color: var(--sapLinkColor, #0070f2); }
+  .signin-session-nudge {
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--sapContent_LabelColor, #6a6d70);
+    background: var(--sapInformationBackground, #f0f6ff);
+    border: 1px solid var(--sapInformationBorderColor, #a6c8ff);
+    border-radius: 0.5rem;
+    padding: 0.625rem 0.875rem;
+    margin: 1rem 0 0;
+  }
+  .signin-session-nudge a { color: var(--sapLinkColor, #0070f2); }
 </style>
 {{ end }}
