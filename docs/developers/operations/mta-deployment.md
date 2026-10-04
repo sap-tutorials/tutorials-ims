@@ -91,7 +91,7 @@ hand:
 
 ```bash
 # From repo root (the descriptor's before-all runs from root, no `cd ..`)
-mbt build -e mta-mcp.yaml -t mta_archives
+mbt build -f mta-mcp.yaml -t mta_archives
 cf deploy mta_archives/*.mtar -e deploy/mcp-dev.mtaext -f    # DEV
 # PROD: cf deploy mta_archives/*.mtar -e deploy/mcp-prod.mtaext -f
 ```
