@@ -35,10 +35,13 @@ describe('slugify()', () => {
     expect(out.length).toBe(200);
   });
 
-  it('produces output matching the content-store VALID_SLUG contract', () => {
-    const VALID_SLUG = /^[a-z0-9][a-z0-9-]*$/;
+  it('produces hyphen-only output (narrower than the serve-side VALID_SLUG)', () => {
+    // slugify() folds every non-[a-z0-9] run to a hyphen, so its output is always
+    // hyphen-only — a strict subset of serveHandler's VALID_SLUG, which also
+    // accepts underscores for verbatim source-repo tutorial slugs (#2587).
+    const SLUGIFY_OUTPUT = /^[a-z0-9][a-z0-9-]*$/;
     for (const input of ['Test Group', 'Schöne!', '   leading', '___bad___', 'OK 1']) {
-      expect(slugify(input)).toMatch(VALID_SLUG);
+      expect(slugify(input)).toMatch(SLUGIFY_OUTPUT);
     }
   });
 });

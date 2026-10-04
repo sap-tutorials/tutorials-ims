@@ -18,8 +18,9 @@ process.env.CONTENT_API_KEY_QA = apiKey;
 // need to load db/schema.cds to satisfy the lock/log paths inside publishHandler.
 const project = cds.test('serve', 'srv-qa/search-service.cds', '--in-memory');
 
-// Test slug must pass the VALID_SLUG regex: /^[a-z0-9][a-z0-9-]*$/
-// (underscores are not allowed — __TEST__qa would return 400)
+// Test slug must pass the VALID_SLUG regex: /^[a-z0-9][a-z0-9_-]*$/
+// (first char must be [a-z0-9]; underscores are allowed mid-slug since #2587 —
+// e.g. __TEST__qa still returns 400 for its leading underscore + uppercase)
 const TEST_SLUG = 'test-qa-content';
 
 describe('QA content endpoints', () => {

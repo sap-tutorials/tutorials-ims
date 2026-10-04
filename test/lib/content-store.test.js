@@ -269,7 +269,10 @@ describe('content-store', () => {
     });
 
     it('serves the styled 404 for a malformed slug rather than raw JSON', async () => {
-      const res = await project.axios.get('/content/tutorials/Bad_Slug.html', {
+      // #2587: underscores are now VALID (source tutorial slugs carry them), so a
+      // genuinely malformed slug must use a char still outside VALID_SLUG — here a
+      // space. (This path reaches the 404 directly; it isn't a redirect candidate.)
+      const res = await project.axios.get('/content/tutorials/bad%20slug', {
         maxRedirects: 0,
         validateStatus: () => true
       });
@@ -307,6 +310,53 @@ describe('content-store', () => {
 
       const res = await project.axios.get('/content/tutorials/served-tut');
       expect(res.data).toBe(htmlV2);
+    });
+
+    // #2587 (3a): source-repo tutorial folder names legitimately contain
+    // underscores (e.g. btp-integration-suite-creating_data_type-message_type).
+    // The write path stores them verbatim, so the read path must accept them too.
+    // Before the VALID_SLUG fix these 404'd at the serveHandler validation gate
+    // BEFORE any ContentFiles lookup, despite being present in the ACTIVE snapshot.
+    describe('underscore slugs (#2587 3a)', () => {
+      const uHtml = '<h1>Underscore Tutorial</h1>';
+      const uMarkdown = '# Underscore Tutorial\n\nStep one.\n';
+      const uSlug = 'btp-integration-suite-creating_data_type-message_type';
+
+      beforeEach(async () => {
+        await project.axios.post('/content/publish', {
+          trigger: 'seed-underscore',
+          files: makePayload({ [uSlug]: uHtml }),
+          // Supply the markdown source so the /tutorials/<slug>.md alternate has
+          // sourceContent to serve — exercises the VALID_SLUG gate on the md path.
+          sources: makePayload({ [uSlug]: uMarkdown })
+        }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+      });
+
+      it('serves HTML for a slug containing underscores', async () => {
+        const res = await project.axios.get(`/content/tutorials/${uSlug}`, {
+          validateStatus: () => true
+        });
+        expect(res.status).toBe(200);
+        expect(res.data).toBe(uHtml);
+        expect(res.headers['content-type']).toContain('text/html');
+      });
+
+      it('serves the markdown alternate for an underscore slug', async () => {
+        const res = await project.axios.get(`/content/tutorials/${uSlug}.md`, {
+          validateStatus: () => true
+        });
+        expect(res.status).toBe(200);
+        expect(res.headers['content-type']).toContain('text/markdown');
+      });
+
+      it('301-redirects a mixed-case underscore slug to lowercase', async () => {
+        const res = await project.axios.get(
+          '/content/tutorials/BTP-Integration-Suite-Creating_Data_Type-Message_Type',
+          { maxRedirects: 0, validateStatus: () => true }
+        );
+        expect(res.status).toBe(301);
+        expect(res.headers['location']).toBe(`/tutorials/${uSlug}`);
+      });
     });
   });
 
