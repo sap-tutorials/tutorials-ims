@@ -11,6 +11,7 @@ using from '../db/devtoberfest-analytics';
 using from '../db/mcp-pats';
 using from '../db/tutorial-images';
 using from '../db/tutorial-assets';
+using from '../db/tutorial-quarantine';
 using from '../app/admin-annotations';
 using { external.devtoberfest as external_dtf } from '../db/external/devtoberfest';
 
@@ -270,6 +271,17 @@ service AdminService {
   entity TutorialRepositories as projection on ims.TutorialRepositories;
   entity ImsConfig as projection on ims.ImsConfig;
   entity StepFailures as projection on ims.StepFailures;
+
+  // #2585 — tutorial quarantine persistence. Raw projections for over-time /
+  // per-repo reporting; QuarantineEventsCurrent is the live set (events whose
+  // parent snapshot isCurrent) that the Admin list view binds to.
+  @readonly entity QuarantineSnapshots as projection on ims.QuarantineSnapshots;
+  @readonly entity QuarantineEvents    as projection on ims.QuarantineEvents;
+  @readonly @cds.redirection.target: false
+  entity QuarantineEventsCurrent as
+    projection on ims.QuarantineEvents
+    { *, snapshot.runId as runId, snapshot.workflowUrl as workflowUrl, snapshot.createdAt as buildAt }
+    where snapshot.isCurrent = true;
   entity NGDSFailedMessages as projection on ims.NGDSFailedMessages;
   entity DeveloperEnvironmentTabs as projection on ims.DeveloperEnvironmentTabs;
   @odata.draft.enabled
