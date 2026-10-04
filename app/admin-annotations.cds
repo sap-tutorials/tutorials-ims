@@ -975,6 +975,13 @@ annotate AdminService.AuthorAiRequests with @UI: {
 // in the same block further below.
 annotate AdminService.Tutorials with @UI: {
   Facets: [
+    // #2586 — active-quarantine section. Empty for a healthy tutorial; a row
+    // appears only when the most recent rebuild DROPPED this slug at pre-publish
+    // validation instead of publishing it (the "silent success" the Admin
+    // Rebuild button used to hide). Placed first so an operator who rebuilt a
+    // tutorial sees the real outcome at the top of its page.
+    { $Type: 'UI.ReferenceFacet', ID: 'QuarantineFacet', Label: 'Active Quarantine',
+      Target: 'quarantineCurrent/@UI.LineItem#OnTutorial' },
     { $Type: 'UI.ReferenceFacet', ID: 'General',  Label: 'General',  Target: '@UI.FieldGroup#General' },
     { $Type: 'UI.ReferenceFacet', ID: 'Lifecycle', Label: 'Lifecycle', Target: '@UI.FieldGroup#Lifecycle' },
     { $Type: 'UI.ReferenceFacet', Label: 'Categories', ID: 'CategoriesFacet', Target: 'categories/@UI.LineItem' },
@@ -4709,7 +4716,18 @@ annotate AdminService.QuarantineEventsCurrent with {
   sourceUrl  @Common.Label: 'Source URL';
   buildAt    @Common.Label: 'Last Seen Build';
   runId      @Common.Label: 'Run';
+  workflowUrl @Common.Label: 'Workflow Run';
 };
+
+// #2586 — slug-scoped variant for the Tutorials Object Page "Active Quarantine"
+// facet. Omits the slug column (redundant inside one tutorial's page) and leads
+// with the reason + build time + a link to the Actions run that dropped it.
+annotate AdminService.QuarantineEventsCurrent with @UI.LineItem #OnTutorial: [
+  { Value: reason, Label: 'Reason' },
+  { Value: buildAt, Label: 'Build Time' },
+  { $Type: 'UI.DataFieldWithUrl', Value: workflowUrl, Url: workflowUrl, Label: 'Workflow Run' },
+  { $Type: 'UI.DataFieldWithUrl', Value: sourceUrl, Url: sourceUrl, Label: 'Source' }
+];
 
 annotate AdminService.QuarantineEventsCurrent with @(
   UI: {
