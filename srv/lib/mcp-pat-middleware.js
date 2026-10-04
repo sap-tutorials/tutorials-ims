@@ -110,7 +110,14 @@ function installSyntheticUser(req, cached) {
     is: (role) => role === 'authenticated-user'
       || scopeRoles.has(role)
       || (Array.isArray(cached.roles) && cached.roles.includes(role)),
-    attr: cached.attr ?? {},
+    // Pin the resolved Users.ID where the shared resolvers look for it.
+    // resolveDbUser (resolve-db-user.js) and resolveDbUserId (user-progress.js)
+    // both fast-path on `user.attr.dbUserId`; a PAT carries no iss/sub/email
+    // token payload and migrated users often have a NULL sapId, so without this
+    // pin resolution falls through to `WHERE sapId = <email>` and misses —
+    // yielding 401 "unable to resolve user" on strict MCP tools and silent []
+    // on lenient reads even though the PAT already knows the exact Users row (#2630).
+    attr: { ...(cached.attr ?? {}), dbUserId: cached.userId },
     tokenSource: 'pat',
     authInfo: { token: { userId: cached.sapId } },
     _dbUserId: cached.userId,
