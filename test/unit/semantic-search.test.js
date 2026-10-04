@@ -123,10 +123,11 @@ describe('semanticSearch (core module)', () => {
   beforeAll(async () => {
     await cds.deploy([path.join(process.cwd(), 'db')]).to('sqlite::memory:');
     await seedCorpora();
+    await _resetModule(); // evict any semq: entries leaked by a sibling file in this worker
   });
 
   afterAll(async () => {
-    _resetModule();
+    await _resetModule();
     await cds.disconnect();
     delete cds.db;
     delete cds.model;

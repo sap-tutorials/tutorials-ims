@@ -59,8 +59,22 @@ const _testState = (globalThis[Symbol.for('ims.semanticSearch.testState')] ??= {
 });
 /** Inject a fake embed() for unit tests (returns [Float32Array]). */
 export function _setTestEmbedClient(fn) { _testState.embedFn = fn; }
-/** Reset module state — test-only. */
-export function _resetForTest() { _testState.embedFn = null; _testState.cachePromise = undefined; }
+/**
+ * Reset module state — test-only. Drops the fake embed and the memoized caching
+ * connection, and evicts the shared query-embedding store. The cds-caching
+ * `memory` store is a PROCESS singleton that survives Vitest's per-file isolation
+ * (and `cds.disconnect()` + `delete cds.db`), so without the `.clear()` a stale
+ * `semq:` entry written by an earlier file in the same worker — or a sibling
+ * subsystem test that mutated the global caching namespace — can poison a later
+ * query's embedding and silently drop every row. Awaitable so tests can clear
+ * before relying on a fresh embed. Fail-open: never throws.
+ */
+export async function _resetForTest() {
+  _testState.embedFn = null;
+  try { const c = await cache(); if (c) await c.clear(); }
+  catch (err) { LOG.warn('query-embedding cache clear failed', err.message); }
+  _testState.cachePromise = undefined;
+}
 function embedFn() { return _testState.embedFn || defaultEmbed; }
 
 // ---- Query-embedding cache ------------------------------------------------
