@@ -104,6 +104,7 @@ import { fetchPetPhoto } from './lib/petoberfest-photo-store.js';
 import { installDbWrap } from './lib/metrics-db-wrap.js';
 import './graphql-config.js';
 import { makeA2aRouter } from './lib/a2a/rpc-router.js';
+import { a2aIasAuthMiddleware } from './lib/a2a/ias-auth-mw.js';
 import { buildAgentCard } from './lib/a2a/agent-card.js';
 import { resolveA2aSettings } from './lib/runtime-config/a2a-settings.js';
 import { provenanceHandler, jwksHandler } from './lib/provenance-handlers.js';
@@ -2244,14 +2245,21 @@ cds.on('served', () => {
 
   cds.log('chat').info('POST /chat/stream registered');
 
-  // Wire A2A router through the same context+auth chain. makeA2aRouter()
+  // Wire A2A router through context + ROUTE-SCOPED IAS auth. makeA2aRouter()
   // returns a router with router.post('/') which matches POST /a2a because
   // Express strips the base path when dispatching to the router. (#1220)
+  //
+  // Auth note (#2593 fix): /a2a uses a2aIasAuthMiddleware (IAS + XSUAA fallback,
+  // validated in-process) instead of the generic CAP authMw. The service-wide
+  // cds.requires.auth kind that #2593 added was removed because it broke every
+  // XSUAA browser route; IAS validation is now scoped to this one M2M endpoint.
+  // contextMw still runs first to establish cds.context; rpc-router.js rejects
+  // anonymous (-32001/401) if the middleware leaves no authenticated user.
   const a2aRouter = makeA2aRouter();
   a2aHandler = (req, res, next) => {
     contextMw(req, res, (err) => {
       if (err) return next(err);
-      authMw(req, res, (err) => {
+      a2aIasAuthMiddleware(req, res, (err) => {
         if (err) return next(err);
         a2aRouter(req, res, next);
       });
