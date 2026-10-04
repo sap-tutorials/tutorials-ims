@@ -128,6 +128,15 @@ service AdminService {
     // KgCommunityMembers is an @readonly projection on ims.KgCommunity, which
     // already carries the slug column.
     communityMembership : Association to many AdminService.KgCommunityMembers on communityMembership.slug = $self.slug,
+    // #2586 — active quarantine facet. Links this tutorial to the live
+    // quarantine set (events whose parent snapshot isCurrent=true), joined by
+    // the lowercase-canonical slug. Non-empty iff the most recent rebuild
+    // DROPPED this slug at pre-publish validation (scripts/validate-tutorials.ts)
+    // instead of publishing it — the "silent success" case in #2586. Each row
+    // carries reason + sourceUrl + the snapshot's workflowUrl/buildAt (aliased
+    // on QuarantineEventsCurrent). The OP renders a "Quarantined / not published"
+    // facet from a $expand on this association; empty = no active quarantine.
+    quarantineCurrent : Association to many AdminService.QuarantineEventsCurrent on quarantineCurrent.slug = $self.slug,
   };
   // Filtered picklist for redirectTo value help — only ACTIVE tutorials can be redirect targets
   @readonly
