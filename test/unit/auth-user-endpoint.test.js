@@ -90,4 +90,30 @@ describe('/auth/user', () => {
     expect(body).toHaveProperty('identityProvider');
     expect(body.identityProvider).toBeNull();
   });
+
+  // Issue #2628 — surface the login-provider profile picture (OIDC `picture`
+  // claim). The live token claim is freshest, so it wins over the persisted
+  // Users.pictureUrl; with no Khoros link, avatarUrl resolves to it.
+  it('exposes attr.picture as pictureUrl and avatarUrl (no Khoros link)', async () => {
+    const credentials = Buffer.from('withpicture:').toString('base64');
+    const res = await fetch(`${baseUrl}/auth/user`, {
+      headers: { Authorization: `Basic ${credentials}` }
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.pictureUrl).toBe('https://avatars.githubusercontent.com/u/42?v=4');
+    expect(body.avatarUrl).toBe('https://avatars.githubusercontent.com/u/42?v=4');
+  });
+
+  it('emits pictureUrl:null and avatarUrl:null for a caller with no picture claim', async () => {
+    const credentials = Buffer.from('author:').toString('base64');
+    const res = await fetch(`${baseUrl}/auth/user`, {
+      headers: { Authorization: `Basic ${credentials}` }
+    });
+    const body = await res.json();
+    expect(body).toHaveProperty('pictureUrl');
+    expect(body).toHaveProperty('avatarUrl');
+    expect(body.pictureUrl).toBeNull();
+    expect(body.avatarUrl).toBeNull();
+  });
 });

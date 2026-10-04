@@ -140,6 +140,22 @@ describe('id_token minting', () => {
     expect(payload.email).toBeUndefined()
     expect(payload.email_verified).toBeUndefined()
   })
+
+  it('stamps the picture claim from the profile avatar URL', async () => {
+    const profile = { id: '9', login: 'octocat', name: 'The Octocat', email: null, emailVerified: false, avatarUrl: 'https://avatars.githubusercontent.com/u/9?v=4' }
+    const idToken = await shim.mintIdToken(BASE_URL, 'aud', profile, null)
+    const jwks = await keys.getJwks()
+    const { payload } = await jwtVerify(idToken, createLocalJWKSet(jwks), { issuer: BASE_URL, audience: 'aud' })
+    expect(payload.picture).toBe('https://avatars.githubusercontent.com/u/9?v=4')
+  })
+
+  it('omits the picture claim when the profile has no avatar URL', async () => {
+    const profile = { id: '10', login: 'ghost', name: null, email: null, emailVerified: false }
+    const idToken = await shim.mintIdToken(BASE_URL, 'aud', profile, null)
+    const jwks = await keys.getJwks()
+    const { payload } = await jwtVerify(idToken, createLocalJWKSet(jwks), { issuer: BASE_URL, audience: 'aud' })
+    expect(payload.picture).toBeUndefined()
+  })
 })
 
 describe('PKCE S256 verification', () => {

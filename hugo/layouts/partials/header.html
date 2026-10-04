@@ -381,17 +381,21 @@
     }
   }
 
-  function applyKhorosAvatar(khorosAvatarUrl, givenName) {
-    // Remove any previously injected khoros <img> children
+  function applyKhorosAvatar(avatarUrl, givenName) {
+    // #2628: renders whichever avatar won precedence. The server resolves
+    // `avatarUrl` as Khoros (SAP Community) → login-provider picture → null,
+    // so this one path covers both sources; a broken URL falls back to the
+    // initials already stamped by applyInitials. Class name kept as
+    // `khoros-avatar` so the existing CSS sizing/mask still applies.
     [avatar, avatarLarge].forEach(el => {
       const prev = el.querySelector('img.khoros-avatar');
       if (prev) prev.remove();
     });
-    if (!khorosAvatarUrl) return;
+    if (!avatarUrl) return;
     [avatar, avatarLarge].forEach(el => {
       const img = document.createElement('img');
       img.className = 'khoros-avatar';
-      img.src = khorosAvatarUrl;
+      img.src = avatarUrl;
       img.alt = givenName || 'profile';
       img.onerror = () => img.remove(); // broken URL falls back to initials
       el.appendChild(img);
@@ -422,7 +426,11 @@
     userEmail.textContent = u.email || '';
     document.documentElement.dataset.authenticated = 'true';
     applyInitials(given, family, id);
-    applyKhorosAvatar(u.khorosAvatarUrl || null, given);
+    // #2628: Khoros avatar wins, login-provider picture is the fallback. The
+    // server pre-resolves `avatarUrl` with that precedence; keep a client-side
+    // fallback (khorosAvatarUrl || pictureUrl) for cached users written before
+    // the field existed.
+    applyKhorosAvatar(u.avatarUrl || u.khorosAvatarUrl || u.pictureUrl || null, given);
     avatar.setAttribute('accessible-name', userName.textContent);
     document.documentElement.dataset.user = JSON.stringify({ firstName: given });
     document.querySelectorAll('.nav-auth-only').forEach(el => el.removeAttribute('hidden'));
@@ -506,7 +514,7 @@
         if (cached) applyAuthenticatedUser(cached);
         return;
       }
-      const toCache = { firstName: user.givenName, givenName: user.givenName, familyName: user.familyName, email: user.email, id: user.id, isAdmin: user.isAdmin === true, identityProvider: user.identityProvider ?? null, khorosId: user.khorosId ?? null, khorosLogin: user.khorosLogin ?? null, khorosAvatarUrl: user.khorosAvatarUrl ?? null };
+      const toCache = { firstName: user.givenName, givenName: user.givenName, familyName: user.familyName, email: user.email, id: user.id, isAdmin: user.isAdmin === true, identityProvider: user.identityProvider ?? null, khorosId: user.khorosId ?? null, khorosLogin: user.khorosLogin ?? null, khorosAvatarUrl: user.khorosAvatarUrl ?? null, pictureUrl: user.pictureUrl ?? null, avatarUrl: user.avatarUrl ?? null };
       try { sessionStorage.setItem(USER_KEY, JSON.stringify({ ts: Date.now(), value: toCache })); } catch {}
       applyAuthenticatedUser(user);
       // Live auth success: supersedes any prior intentional logout — re-enable

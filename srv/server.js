@@ -1995,12 +1995,17 @@ cds.on('served', async () => {
     let khorosId = null;
     let khorosLogin = null;
     let khorosAvatarUrl = null;
+    // #2628: login-provider profile picture (OIDC `picture` claim). The live
+    // token claim is freshest (URLs rotate), so prefer it; fall back to the
+    // value refreshUserPicture persisted on the Users row at login.
+    let pictureUrl = user.attr?.picture || null;
     try {
-      const dbUser = await resolveDbUser(user, ['khorosId', 'khorosLogin', 'khorosAvatarUrl']);
+      const dbUser = await resolveDbUser(user, ['khorosId', 'khorosLogin', 'khorosAvatarUrl', 'pictureUrl']);
       if (dbUser) {
         khorosId       = dbUser.khorosId       ?? null;
         khorosLogin    = dbUser.khorosLogin    ?? null;
         khorosAvatarUrl = dbUser.khorosAvatarUrl ?? null;
+        if (!pictureUrl) pictureUrl = dbUser.pictureUrl ?? null;
       }
     } catch (err) {
       console.warn('[auth/user] khoros lookup failed (non-fatal):', err.message);
@@ -2027,6 +2032,12 @@ cds.on('served', async () => {
       khorosId,
       khorosLogin,
       khorosAvatarUrl,
+      // #2628: login-provider picture + resolved avatar. Precedence per the
+      // approved design: Khoros (SAP Community) avatar wins, login-provider
+      // picture is the fallback. The client can also apply this itself, but a
+      // server-resolved `avatarUrl` keeps the rule in one place.
+      pictureUrl,
+      avatarUrl: khorosAvatarUrl || pictureUrl || null,
     });
   });
 

@@ -176,6 +176,7 @@ async function fetchGithubProfile(accessToken) {
     name: user.name || user.login || null,
     email,
     emailVerified,
+    avatarUrl: user.avatar_url || null, // → picture claim; may rotate, so re-stamped each login
   }
 }
 
@@ -194,7 +195,7 @@ function discoveryDocument(baseUrl) {
     scopes_supported: ['openid', 'profile', 'email'],
     token_endpoint_auth_methods_supported: ['client_secret_post', 'client_secret_basic'],
     code_challenge_methods_supported: ['S256'],
-    claims_supported: ['sub', 'iss', 'aud', 'exp', 'iat', 'nonce', 'preferred_username', 'email', 'email_verified', 'name'],
+    claims_supported: ['sub', 'iss', 'aud', 'exp', 'iat', 'nonce', 'preferred_username', 'email', 'email_verified', 'name', 'picture'],
   }
 }
 
@@ -212,6 +213,7 @@ async function mintIdToken(baseUrl, aud, profile, nonce) {
     email: profile.email ?? undefined,
     email_verified: profile.email ? profile.emailVerified : undefined,
     name: profile.name ?? undefined,
+    picture: profile.avatarUrl ?? undefined,
     nonce: nonce ?? undefined,
   })
     .setProtectedHeader({ alg: ALG, kid })

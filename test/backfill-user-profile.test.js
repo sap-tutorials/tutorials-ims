@@ -9,7 +9,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
-import { backfillUserProfile } from '../srv/lib/resolve-db-user.js';
+import { backfillUserProfile, refreshUserPicture } from '../srv/lib/resolve-db-user.js';
 
 cds.test('serve', '--project', '.', '--in-memory');
 
@@ -193,5 +193,72 @@ describe('backfillUserProfile (Issue #339)', () => {
     expect(first.backfilled).toBe(true);
     expect(second.backfilled).toBe(false);
     expect(second.reason).toBe('no-blanks');
+  });
+});
+
+// Issue #2628: the login-provider profile picture (OIDC `picture` claim —
+// GitHub avatar_url via the shim, or Google/LinkedIn/HF via IAS mapping).
+// Unlike firstName/lastName/email (blanks-only self-heal), the picture URL
+// ROTATES (GitHub ?v= bumps, LinkedIn re-signs), so refreshUserPicture is
+// "always overwrite with the latest non-null claim", NOT blanks-only.
+describe('refreshUserPicture (Issue #2628)', () => {
+  let Users;
+
+  beforeAll(async () => { Users = cds.entities('com.sap.developers.ims').Users; });
+  afterAll(async () => { await DELETE.from(Users).where({ sapId: SAP_ID }); });
+
+  const seedUser = async (pictureUrl = null) => {
+    await DELETE.from(Users).where({ sapId: SAP_ID });
+    await INSERT.into(Users).entries({
+      ID: USER_UUID, uuid: USER_UUID, sapId: SAP_ID, pictureUrl,
+    });
+  };
+  const buildUser = (claims = {}) => ({
+    id: 'someone@example.com', authInfo: { token: { userId: SAP_ID } }, attr: claims,
+  });
+
+  it('writes pictureUrl from the token picture claim when the row has none', async () => {
+    await seedUser(null);
+    const verdict = await refreshUserPicture(buildUser({ picture: 'https://img/a.png' }));
+    expect(verdict.updated).toBe(true);
+    const row = await SELECT.one.from(Users).where({ sapId: SAP_ID });
+    expect(row.pictureUrl).toBe('https://img/a.png');
+  });
+
+  it('OVERWRITES an existing pictureUrl when the claim changed (rotation)', async () => {
+    await seedUser('https://img/old.png?v=3');
+    const verdict = await refreshUserPicture(buildUser({ picture: 'https://img/new.png?v=4' }));
+    expect(verdict.updated).toBe(true);
+    const row = await SELECT.one.from(Users).where({ sapId: SAP_ID });
+    expect(row.pictureUrl).toBe('https://img/new.png?v=4');
+  });
+
+  it('no-ops when the claim equals the stored value', async () => {
+    await seedUser('https://img/same.png');
+    const verdict = await refreshUserPicture(buildUser({ picture: 'https://img/same.png' }));
+    expect(verdict.updated).toBe(false);
+    expect(verdict.reason).toBe('unchanged');
+  });
+
+  it('does NOT clear an existing pictureUrl when the token carries no picture claim', async () => {
+    await seedUser('https://img/keep.png');
+    const verdict = await refreshUserPicture(buildUser({}));  // no picture claim
+    expect(verdict.updated).toBe(false);
+    expect(verdict.reason).toBe('no-claim');
+    const row = await SELECT.one.from(Users).where({ sapId: SAP_ID });
+    expect(row.pictureUrl).toBe('https://img/keep.png');  // preserved, not nulled
+  });
+
+  it('no-ops (no-user) when no Users row exists', async () => {
+    await DELETE.from(Users).where({ sapId: SAP_ID });
+    const verdict = await refreshUserPicture(buildUser({ picture: 'https://img/a.png' }));
+    expect(verdict.updated).toBe(false);
+    expect(verdict.reason).toBe('no-user');
+  });
+
+  it('returns anonymous when the user is unauthenticated', async () => {
+    const verdict = await refreshUserPicture({ id: 'anonymous' });
+    expect(verdict.updated).toBe(false);
+    expect(verdict.reason).toBe('anonymous');
   });
 });
