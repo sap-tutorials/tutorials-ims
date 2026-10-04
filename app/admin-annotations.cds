@@ -4699,3 +4699,35 @@ annotate AdminService.ChannelTopicMap with @UI: {
     { Value: authoringStatus }
   ]}
 };
+
+// --- QuarantineEventsCurrent (read-only, filterable; #2585 current quarantine set) ---
+annotate AdminService.QuarantineEventsCurrent with {
+  slug       @Common.Label: 'Slug';
+  reason     @Common.Label: 'Reason';
+  sourceRepo @Common.Label: 'Source Repo';
+  sourceFile @Common.Label: 'Source File';
+  sourceUrl  @Common.Label: 'Source URL';
+  buildAt    @Common.Label: 'Last Seen Build';
+  runId      @Common.Label: 'Run';
+};
+
+annotate AdminService.QuarantineEventsCurrent with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Quarantined Tutorial', TypeNamePlural: 'Quarantined Tutorials',
+      Title: { Value: slug }
+    },
+    SelectionFields: [ sourceRepo, buildAt ],
+    LineItem: [
+      { Value: slug },
+      { Value: reason },
+      { Value: sourceRepo },
+      { Value: sourceFile },
+      { Value: buildAt },
+      { $Type: 'UI.DataFieldWithUrl', Value: sourceUrl, Url: sourceUrl, Label: 'Source' }
+    ]
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
