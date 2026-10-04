@@ -242,10 +242,6 @@
       }
     },
     "requires": {
-      "auth": {
-        "[hybrid]": { "kind": "ias", "xsuaa": true },
-        "[production]": { "kind": "ias", "xsuaa": true }
-      },
       "AICore": {
         "resourceGroup": "default",
         "[hybrid]": {
