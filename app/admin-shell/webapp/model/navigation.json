@@ -93,6 +93,7 @@
       "items": [
         { "key": "pipelinelog", "title": "Pipeline Log" },
         { "key": "joblog", "title": "Job Log" },
+        { "key": "quarantineEvents", "title": "Quarantined Tutorials", "requiredScope": "Admin" },
         { "key": "accounts", "title": "Account Merges" },
         { "key": "changelog", "title": "Change Log", "requiredScope": "Tutorial.Author", "adminPath": "/admin/", "authorPath": "/author/" },
         { "key": "board", "title": "Board" },

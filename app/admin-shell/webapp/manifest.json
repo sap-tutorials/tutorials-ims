@@ -80,6 +80,8 @@
       "sap.tutorials.admin.topicClusters": "./components/topicClusters",
       "sap.tutorials.admin.feedback": "./components/feedback",
       "sap.tutorials.admin.secrets": "./components/secrets",
+      "sap.tutorials.admin.semaphoreConfig": "./components/semaphoreConfig",
+      "sap.tutorials.admin.quarantineEvents": "./components/quarantine-events",
       "sap.tutorials.admin.uiEvents": "./components/uiEvents",
       "sap.tutorials.admin.search": "./components/search",
       "sap.tutorials.admin.navigator": "./components/navigator",
@@ -95,7 +97,6 @@
       "sap.tutorials.admin.videoRotation": "./components/video-rotation",
       "sap.tutorials.admin.pats": "./components/pats",
       "sap.tutorials.admin.featureFlags": "./components/featureFlags",
-      "sap.tutorials.admin.semaphoreConfig": "./components/semaphoreConfig",
       "sap.tutorials.admin.petoberfest": "./components/petoberfest",
       "sap.tutorials.admin.channels": "./components/channels",
       "sap.tutorials.admin.channelCollections": "./components/channel-collections",
@@ -303,6 +304,18 @@
         "componentData": {},
         "lazy": true
       },
+      "semaphoreConfigComponent": {
+        "name": "sap.tutorials.admin.semaphoreConfig",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "quarantineEventsComponent": {
+        "name": "sap.tutorials.admin.quarantineEvents",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
       "uiEventsSettingsComponent": {
         "name": "sap.tutorials.admin.uiEvents",
         "settings": {},
@@ -389,12 +402,6 @@
       },
       "featureFlagsComponent": {
         "name": "sap.tutorials.admin.featureFlags",
-        "settings": {},
-        "componentData": {},
-        "lazy": true
-      },
-      "semaphoreConfigComponent": {
-        "name": "sap.tutorials.admin.semaphoreConfig",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -769,6 +776,26 @@
           ]
         },
         {
+          "name": "semaphoreConfig",
+          "pattern": "semaphoreConfig",
+          "target": [
+            {
+              "name": "semaphoreConfigTarget",
+              "prefix": "sm"
+            }
+          ]
+        },
+        {
+          "name": "quarantineEvents",
+          "pattern": "quarantine-events",
+          "target": [
+            {
+              "name": "quarantineEventsTarget",
+              "prefix": "qu"
+            }
+          ]
+        },
+        {
           "name": "uiEvents",
           "pattern": "uiEvents",
           "target": [
@@ -935,16 +962,6 @@
             {
               "name": "featureFlagsTarget",
               "prefix": "ffl"
-            }
-          ]
-        },
-        {
-          "name": "semaphoreConfig",
-          "pattern": "semaphoreConfig",
-          "target": [
-            {
-              "name": "semaphoreConfigTarget",
-              "prefix": "smc"
             }
           ]
         },
@@ -1253,6 +1270,20 @@
           "viewLevel": 1,
           "prefix": "se"
         },
+        "semaphoreConfigTarget": {
+          "type": "Component",
+          "usage": "semaphoreConfigComponent",
+          "id": "semaphoreConfigTarget",
+          "viewLevel": 1,
+          "prefix": "sm"
+        },
+        "quarantineEventsTarget": {
+          "type": "Component",
+          "usage": "quarantineEventsComponent",
+          "id": "quarantineEventsTarget",
+          "viewLevel": 1,
+          "prefix": "qu"
+        },
         "uiEventsSettingsTarget": {
           "type": "Component",
           "usage": "uiEventsSettingsComponent",
@@ -1357,13 +1388,6 @@
           "id": "featureFlagsTarget",
           "viewLevel": 1,
           "prefix": "ffl"
-        },
-        "semaphoreConfigTarget": {
-          "type": "Component",
-          "usage": "semaphoreConfigComponent",
-          "id": "semaphoreConfigTarget",
-          "viewLevel": 1,
-          "prefix": "smc"
         },
         "petoberfestTarget": {
           "type": "Component",

@@ -2162,6 +2162,64 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
   }
 
+  // --- quarantineIngestHandler: Express handler for /content/quarantine-events ---
+  //
+  // Called by scripts/validate-tutorials.ts on a FULL rebuild (#2585). Writes an
+  // immutable snapshot of the current quarantine set + child events, and flips any
+  // prior isCurrent snapshot off, so "current quarantine set" = the newest
+  // isCurrent snapshot's children. Only mode=full posts (a partial run's set would
+  // wrongly clear out-of-scope slugs). Idempotent per runId: a repeat POST for the
+  // same runId replaces that run's snapshot. Same auth as /content/publish.
+  async function quarantineIngestHandler(req, res) {
+    try {
+      const { runId, workflowUrl, manifestVersion, buildMode, events } = req.body || {};
+      if (buildMode !== 'full') {
+        return res.status(400).json({ error: "Only buildMode 'full' may post a quarantine snapshot" });
+      }
+      if (!Array.isArray(events)) {
+        return res.status(400).json({ error: "'events' must be an array" });
+      }
+      const { QuarantineSnapshots } = cds.entities(namespace);
+      const db = await cds.connect.to('db');
+      const result = await db.tx(async (tx) => {
+        // Idempotency: drop any prior snapshot for this runId (its events cascade via composition).
+        if (runId) {
+          const prior = await tx.run(SELECT.from(QuarantineSnapshots).columns('ID').where({ runId: String(runId) }));
+          if (prior.length) {
+            await tx.run(DELETE.from(QuarantineSnapshots).where({ ID: prior.map(p => p.ID) }));
+          }
+        }
+        // Flip the existing current snapshot off.
+        await tx.run(UPDATE(QuarantineSnapshots).set({ isCurrent: false }).where({ isCurrent: true }));
+        // Insert the new current snapshot + its events via deep insert.
+        const snapshotId = cds.utils.uuid();
+        await tx.run(INSERT.into(QuarantineSnapshots).entries({
+          ID: snapshotId,
+          runId: runId ? String(runId).slice(0, 60) : null,
+          workflowUrl: workflowUrl ? String(workflowUrl).slice(0, 400) : null,
+          manifestVersion: manifestVersion ? String(manifestVersion).slice(0, 60) : null,
+          buildMode: 'full',
+          isCurrent: true,
+          eventCount: events.length,
+          events: events.map(e => ({
+            ID: cds.utils.uuid(),
+            slug: String(e.slug || '').toLowerCase().slice(0, 255),
+            sourceFile: e.sourceFile ? String(e.sourceFile).slice(0, 255) : null,
+            sourceRepo: e.sourceRepo ? String(e.sourceRepo).slice(0, 120) : null,
+            reason: String(e.reason || '').slice(0, 500),
+            sourceUrl: e.sourceUrl ? String(e.sourceUrl).slice(0, 600) : null,
+          })),
+        }));
+        return { snapshotId, eventCount: events.length };
+      });
+      LOG.warn(`[content/quarantine-events] recorded snapshot ${result.snapshotId} with ${result.eventCount} events (run ${runId || 'n/a'})`);
+      return res.status(201).json(result);
+    } catch (err) {
+      LOG.error(`[content/quarantine-events] ${err.message}`);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   return {
     contentAuthMiddleware,
     publishHandler,
@@ -2178,6 +2236,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     commitHandler,
     abortHandler,
     pipelineLogFailureHandler,
+    quarantineIngestHandler,
     pageServeHandler,
     authorServeHandler,
     advocateServeHandler
@@ -2204,6 +2263,7 @@ export const appendHandler = _defaults.appendHandler;
 export const commitHandler = _defaults.commitHandler;
 export const abortHandler = _defaults.abortHandler;
 export const pipelineLogFailureHandler = _defaults.pipelineLogFailureHandler;
+export const quarantineIngestHandler = _defaults.quarantineIngestHandler;
 export const pageServeHandler = _defaults.pageServeHandler;
 export const authorServeHandler = _defaults.authorServeHandler;
 export const advocateServeHandler = _defaults.advocateServeHandler;
