@@ -38,7 +38,8 @@
   },
   "logout": {
     "logoutEndpoint": "/logout",
-    "logoutPage": "/"
+    "logoutPage": "/",
+    "backChannelLogoutEndpoint": "/backchannel-logout"
   },
   "errorPage": [
     { "status": 404, "file": "static/404.html" },
@@ -116,6 +117,7 @@
     {
       "source": "^/login(\\?.*)?$",
       "authenticationType": "xsuaa",
+      "dynamicIdentityProvider": true,
       "target": "/login-redirect.html",
       "localDir": "static"
     },
@@ -718,6 +720,12 @@
     { "source": "^/puzzles/?(\\?.*)?$",              "target": "/content/puzzles-index",                "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/puzzles/([^/?]+)/?(\\?.*)?$",      "target": "/content/puzzles/$1",                   "destination": "srv-api", "authenticationType": "none" },
     { "source": "^/channels/(?!health(?:/|$)|media-diet(?:/|$)|crosswalk(?:/|$)|atlas(?:/|$))([^/?]+)/?(\\?.*)?$", "target": "/content/channel-detail/$1", "destination": "srv-api", "authenticationType": "none" },
+    {
+      "source": "^/signin/?(\\?.*)?$",
+      "authenticationType": "none",
+      "target": "/signin/index.html",
+      "localDir": "static"
+    },
     { "source": "^/(\\?.*)?$",                       "target": "/content/pages/$1",                     "destination": "srv-api", "authenticationType": "none" },
     {
       "source": "^(.*)$",

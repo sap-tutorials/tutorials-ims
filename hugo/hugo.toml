@@ -11,7 +11,7 @@ enableRobotsTXT = false  # we ship our own via the robots output format
   # instead of the monolithic ui5-bootstrap.ts bundle. Flag OFF by default; flip to
   # true once the split entries are validated. (#1777 Task 7)
   ui5Split = false
-  defaultDescription = 'Hands-on tutorials for SAP technologies — SAP BTP, ABAP Cloud, CAP, Fiori, HANA Cloud, and integration. Build, learn, and ship on SAP.'
+  defaultDescription = 'Hands-on tutorials for SAP technologies — SAP Business AI Platform, ABAP Cloud, CAP, Fiori, HANA Cloud, and integration. Build, learn, and ship on SAP.'
   heroDescription = 'Step-by-step tutorials, multi-tutorial missions, and reference content for every SAP developer technology. Tested, maintained, and free to use.'
   twitterHandle = '@sapdevs'
   defaultOgImage = '/img/og-default.png'

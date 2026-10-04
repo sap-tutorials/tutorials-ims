@@ -83,12 +83,14 @@ export function issuerSubjectFromUser(user) {
  * @param {string} user_ID — the Users.ID to link.
  * @param {{issuer:string, subject:string}} isu
  * @param {{provider?:string, email?:string, emailVerified?:boolean}} [meta]
+ * @param {object} [db] — optional tx/service runner (e.g. cds.tx(req)); when
+ *   given, the INSERT runs on that transaction instead of a fresh ambient one.
  */
-export async function writeIdentityLink(user_ID, isu, meta = {}) {
+export async function writeIdentityLink(user_ID, isu, meta = {}, db) {
   if (!user_ID || !isu) return;
   try {
     const { UserIdentities } = cds.entities('com.sap.developers.ims');
-    await INSERT.into(UserIdentities).entries({
+    const stmt = INSERT.into(UserIdentities).entries({
       ID: cds.utils.uuid(),
       user_ID,
       issuer: isu.issuer,
@@ -98,6 +100,7 @@ export async function writeIdentityLink(user_ID, isu, meta = {}) {
       emailVerified: meta.emailVerified ?? false,
       linkedAt: new Date().toISOString(),
     });
+    await (db ? db.run(stmt) : stmt);
   } catch (err) {
     if (!/unique|duplicate/i.test(String(err?.message ?? ''))) throw err;
   }
@@ -121,6 +124,101 @@ function providerFromIssuer(issuer) {
 // fbf099e2-f1b5-4cda-b590-866fed970a2a — never a real SAP ID.
 const SCIM_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// The durable, provider-canonical issuer we store for a GitHub login, so the
+// link key is stable regardless of which IAS tenant fronts it. providerFromIssuer
+// already classifies this as 'github'. See githubIdentityFromUser().
+const GITHUB_ISSUER = 'https://github.com';
+
+// Claim names that may carry the GitHub login handle, in preference order. The
+// shim stamps `preferred_username`; IAS re-issues it, but a tenant may remap it.
+// Defensive: accept the common OIDC + IAS variants (confirmed shim claim is
+// `preferred_username`; see github-oidc-shim.js mintIdToken).
+const GITHUB_LOGIN_CLAIMS = ['preferred_username', 'login', 'user_name', 'preferredUsername'];
+
+/**
+ * Detect a GitHub-federated login and return its PROVIDER-CANONICAL identity,
+ * independent of the IAS tenant that fronts it.
+ *
+ * GitHub is federated into IAS via a custom OIDC shim (approuter/lib/
+ * github-oidc-shim.js) registered as a corporate OIDC IdP. After federation the
+ * app token's `iss` is the IAS tenant (NOT github.com) and `sub` is the GitHub
+ * NUMERIC id (the shim sets it as `sub`; IAS Subject Name Identifier = None
+ * passes it through). So the IAS (iss,sub) alone can't be classified as GitHub
+ * by issuer — we recognise a GitHub login by the shim-origin claims instead and
+ * remap it to the stable (issuer=https://github.com, subject=<numeric id>) key.
+ *
+ * Recognition is deliberately permissive (the exact IAS-reissued claim names
+ * were not captured live — sticky-SSO blocked the browser capture — so this
+ * tolerates renames): a login is GitHub-origin when the token carries a GitHub
+ * login-handle claim AND a numeric subject, OR an explicit IdP/amr marker that
+ * names the GitHub corporate IdP.
+ *
+ * @param {object} user — CAP cds.context.user / req.user.
+ * @returns {{issuer:string, subject:string, login:string|null, email:string|null, emailVerified:boolean}|null}
+ */
+export function githubIdentityFromUser(user) {
+  const p = user?.authInfo?.token?.payload;
+  if (!p) return null;
+
+  const login = GITHUB_LOGIN_CLAIMS.map((c) => p[c]).find((v) => typeof v === 'string' && v);
+  const sub = typeof p.sub === 'string' ? p.sub : null;
+  // The GitHub subject the shim stamps is the numeric user id (digits only).
+  const numericSub = sub && /^\d+$/.test(sub) ? sub : null;
+
+  // Explicit IdP marker, if present (IAS may surface the corporate-IdP name or
+  // id in a claim; amr sometimes carries it). Best-effort, not required.
+  const idpMarker = [p.identity_provider, p.identityProvider, p.idp, p.amr]
+    .flat()
+    .filter((v) => typeof v === 'string')
+    .join(' ');
+  const idpSaysGithub = /github/i.test(idpMarker);
+
+  // GitHub-origin when: a login handle + numeric subject are present, or an
+  // explicit GitHub IdP marker is present with a numeric subject.
+  if (numericSub && (login || idpSaysGithub)) {
+    return {
+      issuer: GITHUB_ISSUER,
+      subject: numericSub,
+      login: login || null,
+      email: tokenEmail(user),
+      emailVerified: typeof p.email_verified === 'boolean' ? p.email_verified : true,
+    };
+  }
+  return null;
+}
+
+/**
+ * Write the provider-canonical GitHub link (issuer=https://github.com) and set
+ * Users.githubLogin from the login handle. Idempotent and non-throwing — a
+ * duplicate (iss,sub) link or a githubLogin unique-collision is swallowed so
+ * this never breaks a read/resolve path. Called wherever a Users row is
+ * resolved or created for a GitHub-origin login, IN ADDITION to the IAS
+ * (iss,sub) self-heal link, so Tier 1 resolves on both keys.
+ *
+ * @param {string} user_ID
+ * @param {ReturnType<typeof githubIdentityFromUser>} gh — non-null GitHub identity.
+ * @param {object} [db] — optional tx/service runner threaded through.
+ */
+async function linkGithubIdentity(user_ID, gh, db) {
+  if (!user_ID || !gh) return;
+  await writeIdentityLink(user_ID, { issuer: gh.issuer, subject: gh.subject }, {
+    provider: 'github',
+    email: gh.email,
+    emailVerified: gh.emailVerified,
+  }, db);
+  if (gh.login) {
+    try {
+      const { Users } = cds.entities('com.sap.developers.ims');
+      const stmt = UPDATE(Users).set({ githubLogin: gh.login }).where({ ID: user_ID });
+      await (db ? db.run(stmt) : stmt);
+    } catch (err) {
+      // githubLogin is @assert.unique — a collision (same handle already on
+      // another row) must not break login. Swallow unique/duplicate only.
+      if (!/unique|duplicate/i.test(String(err?.message ?? ''))) throw err;
+    }
+  }
+}
+
 /**
  * Resolve the authenticated request to its Users row via the tiered identity
  * layer (#2552). Tiers, in order:
@@ -130,21 +228,52 @@ const SCIM_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
  * Miss on all tiers → null (caller stays fail-closed).
  *
  * @param {object} user — CAP cds.context.user / req.user.
+ * @param {object} [db] — optional tx/service runner (e.g. cds.tx(req)); when
+ *   given, all reads/writes run on that transaction instead of a fresh ambient
+ *   one. Prevents single-connection SQLite deadlocks when a handler already
+ *   holds the request tx (#2552).
  * @returns {Promise<object|null>} the full Users row, or null.
  */
-export async function resolveUser(user) {
+export async function resolveUser(user, db) {
   if (!user || !user.id || user.id === 'anonymous') return null;
   const { Users, UserIdentities } = cds.entities('com.sap.developers.ims');
+  const run = (stmt) => (db ? db.run(stmt) : stmt);
+
+  // The IAS (tenant-local) (iss,sub) key, and — if this is a GitHub-federated
+  // login — the provider-canonical GitHub identity. GitHub's app-token iss is
+  // the IAS tenant, so the durable key is (https://github.com, <numeric id>).
+  const isu = issuerSubjectFromUser(user);
+  const gh = githubIdentityFromUser(user);
+
+  // ── Tier 0: GitHub provider-canonical link (durable across IAS tenants) ──
+  if (gh) {
+    const ghLink = await run(SELECT.one.from(UserIdentities)
+      .columns('user_ID')
+      .where({ issuer: gh.issuer, subject: gh.subject }));
+    if (ghLink?.user_ID) {
+      const row = await run(SELECT.one.from(Users).where({ ID: ghLink.user_ID }));
+      if (row) {
+        // Self-heal the IAS (iss,sub) link + githubLogin on repeat logins.
+        if (isu) await writeIdentityLink(row.ID, isu, {
+          provider: providerFromIssuer(isu.issuer), email: gh.email, emailVerified: gh.emailVerified,
+        }, db);
+        await linkGithubIdentity(row.ID, gh, db);
+        return row;
+      }
+    }
+  }
 
   // ── Tier 1: (issuer, subject) link ──────────────────────────────────────
-  const isu = issuerSubjectFromUser(user);
   if (isu) {
-    const link = await SELECT.one.from(UserIdentities)
+    const link = await run(SELECT.one.from(UserIdentities)
       .columns('user_ID')
-      .where({ issuer: isu.issuer, subject: isu.subject });
+      .where({ issuer: isu.issuer, subject: isu.subject }));
     if (link?.user_ID) {
-      const row = await SELECT.one.from(Users).where({ ID: link.user_ID });
-      if (row) return row;
+      const row = await run(SELECT.one.from(Users).where({ ID: link.user_ID }));
+      if (row) {
+        if (gh) await linkGithubIdentity(row.ID, gh, db);
+        return row;
+      }
     }
   }
 
@@ -155,15 +284,16 @@ export async function resolveUser(user) {
   // canonical value as a Tier-2 key — a SCIM-UUID or email here is not a sapId.
   const canonicalSapId = sapId && !SCIM_UUID_RE.test(sapId) && !sapId.includes('@') ? sapId : null;
   if (canonicalSapId) {
-    const row = await SELECT.one.from(Users).where({ sapId: canonicalSapId });
+    const row = await run(SELECT.one.from(Users).where({ sapId: canonicalSapId }));
     if (row) {
       if (isu) {
         await writeIdentityLink(row.ID, isu, {
           provider: providerFromIssuer(isu.issuer),
           email: user.authInfo?.token?.payload?.email ?? null,
           emailVerified: true,
-        });
+        }, db);
       }
+      if (gh) await linkGithubIdentity(row.ID, gh, db);
       return row;
     }
   }
@@ -171,7 +301,7 @@ export async function resolveUser(user) {
   // ── Tier 3: trusted-token-email → Users.email (+ self-heal link write) ──
   const email = tokenEmail(user);
   if (email) {
-    const rows = await SELECT.from(Users).where`lower(email) = ${email}`;
+    const rows = await run(SELECT.from(Users).where`lower(email) = ${email}`);
     const candidates = (rows ?? []).filter(
       (r) => r.email && !NOREPLY_GITHUB_RE.test(r.email),
     );
@@ -185,8 +315,9 @@ export async function resolveUser(user) {
           provider: providerFromIssuer(isu.issuer),
           email,
           emailVerified: true,
-        });
+        }, db);
       }
+      if (gh) await linkGithubIdentity(row.ID, gh, db);
       return row;
     }
   }
@@ -205,15 +336,18 @@ export async function resolveUser(user) {
  * fail-closed guard then applies.
  *
  * @param {object} user — CAP cds.context.user / req.user (mutated in place).
+ * @param {object} [db] — optional tx/service runner (e.g. cds.tx(req)) threaded
+ *   through to resolveUser so the pin's lookups join the request transaction
+ *   instead of opening a deadlock-prone ambient one on SQLite (#2552).
  * @returns {Promise<object|null>} the resolved Users row, or null.
  */
-export async function pinResolvedUser(user) {
+export async function pinResolvedUser(user, db) {
   if (!user || !user.id || user.id === 'anonymous') return null;
   // Idempotent: if already pinned this request, don't re-resolve.
   if (user.attr?.dbUserId) return { ID: user.attr.dbUserId, sapId: user.authInfo?.token?.userId ?? null };
   let row;
   try {
-    row = await resolveUser(user);
+    row = await resolveUser(user, db);
   } catch (err) {
     cds.log('resolve-db-user').warn('[pinResolvedUser] resolve failed',
       { email: tokenEmail(user), isu: issuerSubjectFromUser(user), msg: err?.message ?? err });
@@ -469,6 +603,11 @@ export async function provisionDbUser(user, columns) {
       emailVerified: true,
     });
   }
+  // For a GitHub-federated login also write the provider-canonical link
+  // (issuer=https://github.com) + githubLogin, so future logins resolve on the
+  // durable GitHub key regardless of the fronting IAS tenant.
+  const ghNew = githubIdentityFromUser(user);
+  if (ghNew) await linkGithubIdentity(newId, ghNew);
   const q = SELECT.one.from(Users).where({ ID: newId });
   return (columns && columns.length) ? await q.columns(...columns) : await q;
 }

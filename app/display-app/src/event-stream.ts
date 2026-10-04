@@ -15,7 +15,7 @@ export interface RecentEvent {
 export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'error'
 
 const DEMO_TAGS = [
-  'SAP BTP', 'SAP HANA Cloud', 'SAP Fiori', 'SAP Build',
+  'SAP Business AI Platform', 'SAP HANA Cloud', 'SAP Fiori', 'SAP Build',
   'SAP Integration Suite', 'SAP Analytics Cloud', 'ABAP Cloud',
   'SAP AI Core', 'SAP CAP', 'SAP Mobile',
 ]

@@ -63,7 +63,7 @@ This is the locked scope. Anything not listed is post-launch.
 
 ### Deployment
 
-- Single MTA deployment via [../.deploy/mta.yaml](../.deploy/mta.yaml) → SAP BTP Cloud Foundry (eu10-005, DevRel and Community Tools subaccount); see [mta-deployment.md](mta-deployment.md)
+- Two MTAs → SAP BTP Cloud Foundry (eu10-005, DevRel and Community Tools subaccount): the main [../.deploy/mta.yaml](../.deploy/mta.yaml) plus the separate MCP MTA [../mta-mcp.yaml](../mta-mcp.yaml) (`/mcp-auth/*`); see [mta-deployment.md](mta-deployment.md)
 - AppRouter + XSUAA + 2 HDI containers (prod + QA)
 - 3-tier testing: unit (in-memory SQLite), hybrid (real HANA via `cds bind --exec`), smoke (HTTP against deployed)
 - CI: [../.github/workflows/deploy.yml](../.github/workflows/deploy.yml), [../.github/workflows/rebuild-content.yml](../.github/workflows/rebuild-content.yml)

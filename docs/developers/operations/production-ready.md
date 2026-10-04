@@ -80,7 +80,7 @@ resources:
 
 Then deploy with:
 ```bash
-cf deploy mta_archives/tutorials-ims_1.0.0.mtar -e deploy/prod.mtaext
+cf deploy mta_archives/*.mtar -e deploy/prod.mtaext
 ```
 
 ---

@@ -280,6 +280,31 @@ for one OS, then ask the extension to "generate OS variants" — it returns tran
 macOS / Linux / BAS blocks you can review and accept inline. See the
 [VS Code extension docs](TODO: link added when plugin ships) for the workflow.
 
+### Alert callouts
+
+A plain blockquote (`>`) renders as the default blue **Information** callout.
+To signal a different kind of emphasis, start the blockquote with a
+GitHub-style alert designator on its own first line:
+
+```markdown
+> [!TIP]
+> Prefer the frontmatter `video:` field over an inline iframe.
+```
+
+| You write | Rendered emphasis | Color |
+|---|---|---|
+| `> text` (no designator) | Information (default) | blue |
+| `> [!NOTE]` | Information | blue |
+| `> [!IMPORTANT]` | Information | blue |
+| `> [!TIP]` | Success | green |
+| `> [!WARNING]` | Warning | amber |
+| `> [!CAUTION]` | Error | red |
+
+Pick the designator by *intent*, not loudness: use `[!TIP]` for helpful
+asides, `[!WARNING]`/`[!CAUTION]` only for genuine risk. An ordinary
+"additional note" can stay a plain `>` (blue) or use `[!NOTE]`. The callout is
+color-only — there is no icon or heading label.
+
 ### 3.6 Code blocks
 
 Use fenced code blocks with a language tag. Supported languages include `abap`, `js`, `ts`, `java`, `cds`, `sql`, `bash`, `yaml`, `json`, `xml`, `html`, `css`. CDS code uses dedicated highlighting (see `npm run build:highlight`).

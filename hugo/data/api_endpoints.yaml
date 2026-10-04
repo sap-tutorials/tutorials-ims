@@ -116,8 +116,8 @@ sections:
         auth: "XSUAA"
         purpose: 'Joule chat streaming endpoint (Server-Sent Events).'
       - path: "/mcp-auth/*"
-        auth: "XSUAA"
-        purpose: 'Hosted MCP — OAuth/JWT tier (scope <code>Tutorial.MCP</code>). Forwards your JWT to the user-scoped mounts (<code>/mcp/api</code> DeveloperService, <code>/mcp/homepage</code>): your progress, missions, events, recommendations. Bridge via <code>mcp-remote</code> with the pre-registered client.'
+        auth: "IAS (OAuth2 + PKCE)"
+        purpose: 'Hosted MCP — OAuth tier (SAP IAS, authorization-code + PKCE, public client, no secret). Forwards your token to the user-scoped mounts (<code>/mcp/api</code> DeveloperService, <code>/mcp/homepage</code>): your progress, missions, events, recommendations. Point a native-HTTP-OAuth MCP client straight at the mount — no <code>mcp-remote</code> bridge.'
         driftMarkers:
           - "/mcp-auth/*"
           - "/mcp/api"

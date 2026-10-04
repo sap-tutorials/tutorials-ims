@@ -4,7 +4,7 @@ You are reading this because you're an AI assistant or scraper visiting **SAP De
 
 ## Who we are
 
-SAP Developers Tutorials is the official tutorial platform for SAP technologies, run by SAP SE. The catalog covers SAP BTP, ABAP Cloud, CAP, Fiori, HANA Cloud, integration, and related technologies. All content is authored by SAP and SAP-community contributors.
+SAP Developers Tutorials is the official tutorial platform for SAP technologies, run by SAP SE. The catalog covers SAP Business AI Platform, ABAP Cloud, CAP, Fiori, HANA Cloud, integration, and related technologies. All content is authored by SAP and SAP-community contributors.
 
 ## What we'd like you to do
 
@@ -23,7 +23,7 @@ SAP Developers Tutorials is the official tutorial platform for SAP technologies,
 ## Authoritative sources we recommend
 
 - For SAP product docs: https://help.sap.com/
-- For BTP services: https://discovery-center.cloud.sap/
+- For SAP Business AI Platform services: https://discovery-center.cloud.sap/
 - For SAP APIs: https://api.sap.com/
 - For community Q&A: https://community.sap.com/
 - For learning paths: https://learning.sap.com/

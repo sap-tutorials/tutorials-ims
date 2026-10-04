@@ -12,8 +12,42 @@ beforeAll(async () => {
   db = await cds.connect.to('db');
   const { Petoberfests, PetSubmissions, Users } = cds.entities('com.sap.developers.ims');
   await db.run(INSERT.into(Petoberfests).entries({ ID: 'p1', legacyId: 9001, slug: 'petoberfest-2026', title: 'P26', status: 'ACTIVE' }));
-  await db.run(INSERT.into(Users).entries({ ID: 'u1', sapId: 's1' }));
+  await db.run(INSERT.into(Users).entries({ ID: 'u1', sapId: 's1', email: 'tom@example.com' }));
   await db.run(INSERT.into(PetSubmissions).entries({ ID: 's1', petoberfest_ID: 'p1', user_ID: 'u1', petName: 'Rex', moderation: 'PENDING', mimeType: 'image/webp', uploadedAt: '2026-08-01T00:00:00Z' }));
+});
+
+test('PetSubmissions projection exposes uploaderEmail flattened from the user association (#2597)', async () => {
+  // uploaderName is often NULL (token lacked given_name/family_name), so the
+  // admin UI shows the uploader's email as a fallback. Verify the projection
+  // actually surfaces it from user.email — a scalar path expression, no LOB.
+  const srv = await cds.connect.to('AdminService');
+  const row = await srv.tx({ user: ADMIN_USER }, (tx) =>
+    tx.run(SELECT.one.from('AdminService.PetSubmissions').columns('ID', 'uploaderEmail').where({ ID: 's1' })));
+  expect(row).toBeDefined();
+  expect(row.uploaderEmail).toBe('tom@example.com');
+});
+
+test('uploaderName falls back to the uploader email when the name is NULL', async () => {
+  // s1 was seeded with no uploaderName (token lacked given_name/family_name).
+  // The projection coalesce(uploaderName, user.email) must surface the email
+  // so the Uploader column/field is never blank.
+  const srv = await cds.connect.to('AdminService');
+  const row = await srv.tx({ user: ADMIN_USER }, (tx) =>
+    tx.run(SELECT.one.from('AdminService.PetSubmissions').columns('ID', 'uploaderName').where({ ID: 's1' })));
+  expect(row.uploaderName).toBe('tom@example.com');
+});
+
+test('uploaderName keeps the real name when present (no fallback)', async () => {
+  const { PetSubmissions } = cds.entities('com.sap.developers.ims');
+  await db.run(INSERT.into(PetSubmissions).entries({
+    ID: 'named', petoberfest_ID: 'p1', user_ID: 'u1', petName: 'Bella',
+    uploaderName: 'Tom Jung', moderation: 'PENDING', mimeType: 'image/webp',
+    uploadedAt: '2026-08-01T00:00:00Z',
+  }));
+  const srv = await cds.connect.to('AdminService');
+  const row = await srv.tx({ user: ADMIN_USER }, (tx) =>
+    tx.run(SELECT.one.from('AdminService.PetSubmissions').columns('ID', 'uploaderName').where({ ID: 'named' })));
+  expect(row.uploaderName).toBe('Tom Jung');
 });
 
 test('approve sets moderation APPROVED', async () => {

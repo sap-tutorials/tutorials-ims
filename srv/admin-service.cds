@@ -172,7 +172,16 @@ service AdminService {
   // admin user is provisioned (Admin + Tutorial.Author roles together).
   // A Tutorial.Author-only user (without Admin) cannot reach this service.
   entity PetSubmissions as projection on ims.PetSubmissions {
-    ID, petName, uploaderName, moderation, sizeBytes, uploadedAt,
+    ID, petName, moderation, sizeBytes, uploadedAt,
+    // uploaderName is NULL when the uploader's token lacked given_name/
+    // family_name claims (#2597). Fall back to the uploader's email so the
+    // Uploader column/field is never blank — moderators can always identify
+    // the submitter. The raw email is still surfaced separately as
+    // uploaderEmail below. coalesce over the user association is a scalar
+    // path expression (no LOB, no redirect; Users is not projected into
+    // AdminService).
+    coalesce(uploaderName, user.email) as uploaderName : String,
+    user.email as uploaderEmail,
     petoberfest.slug as contestSlug, petoberfest.title as contestTitle
   } actions {
     @(requires: ['Tutorial.Author', 'Admin'])

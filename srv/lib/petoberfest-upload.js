@@ -4,11 +4,39 @@ import { resolveOrCreatePetUser } from '../petoberfest-service.js';
 import { getNextLegacyId } from './legacy-id.js';
 import { stampSubmissionId } from './task-record-submission-id.js';
 import { rollUpParentsForCompletion } from './completion-rollup.js';
+import * as alerting from './alerting.js';
+
+const LOG = cds.log('petoberfest-upload');
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,254}$/;
 
 /** Decoded-image size cap (mirrors the former multer limit). */
 export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+
+// Pure alert builder (mirrors buildChannelSubmissionAlert in
+// channel-submission-service.js): takes the freshly-inserted submission facts
+// and returns the ANS alert envelope to raise, or null when there is nothing to
+// announce. No I/O, so subject/body are testable in isolation (#2597). A new
+// pet-photo submission awaiting moderation is informational, not urgent →
+// NOTICE, which routes to the devrel-deploys channel only, never paging on-call.
+export function buildPetoberfestSubmissionAlert(submission = {}) {
+  const id = submission.id || submission.ID;
+  if (!id) return null;
+  const contest = submission.contestTitle || submission.contestSlug || 'a contest';
+  const uploader = (submission.uploaderName || '').trim() || submission.uploaderEmail || 'an entrant';
+  const petName = (submission.petName || '').trim();
+  const bodyLines = [
+    `A new Petoberfest photo submission${petName ? ` ("${petName}")` : ''} from ${uploader} for ${contest} is awaiting approval.`,
+    'Review it in the admin moderation queue: /admin-ui/#Petoberfest-manage',
+  ];
+  return {
+    eventType: 'PetoberfestSubmissionPending',
+    severity: 'NOTICE',
+    subject: `Petoberfest submission awaiting approval: ${petName || contest}`,
+    body: bodyLines.join(' '),
+  };
+}
+
 
 /**
  * Decode a JSON upload payload into a raw image Buffer.
@@ -59,6 +87,28 @@ export async function uploadPetSubmission(db, { slug, user, buffer, mimeType, pe
     petName: petName ? String(petName).slice(0, 120) : null,
     uploaderName, ...processed,
   });
+
+  // #2597: notify DevRel that a new submission landed in the moderation queue.
+  // Fire-and-forget beside the persisted row — alerting.raise is itself
+  // fail-open (DB-gated via ChatSettings.alertsEnabled, 5s-capped, never
+  // throws), so a degraded ANS path can never break or slow the entrant's
+  // upload. Mirrors channel-submission-service.js. A per-ID resourceName keeps
+  // each distinct submission outside the plugin's dedup window. uploaderName is
+  // often null (token lacks given_name/family_name), so the builder falls back
+  // to the email for a useful alert body.
+  const alert = buildPetoberfestSubmissionAlert({
+    id,
+    petName,
+    uploaderName,
+    uploaderEmail: user.attr?.email,
+    contestTitle: contest.title,
+    contestSlug: contest.slug,
+  });
+  if (alert) {
+    alerting
+      .raise({ ...alert, category: 'ALERT', resource: { resourceName: `petoberfest-submission-${id}`, resourceType: 'moderation-queue' } })
+      .catch((err) => LOG.warn('petoberfest submission alert raise failed (swallowed):', err?.message ?? err));
+  }
 
   // Idempotent award: skip if a non-SUPERSEDED PETOBERFEST record already exists for this user+contest.
   const existing = await db.run(SELECT.one.from(TaskRecords).where({

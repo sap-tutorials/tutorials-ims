@@ -4077,8 +4077,12 @@ export default class AdminService extends cds.ApplicationService {
     // ── (#1032) Featured missions carousel admin handlers ──
     // recomputeFeaturedTopics — SuperAdmin manual trigger to force a fresh
     // snapshot materialisation without waiting for the nightly job.
-    this.on('recomputeFeaturedTopics', async () => {
-      const { count, computedAt } = await cds.tx(async (tx) => recomputeSnapshot(tx));
+    this.on('recomputeFeaturedTopics', async (req) => {
+      // Join the request's own DB transaction (cds.tx(req)) instead of opening
+      // a new root tx with cds.tx(async tx => ...). On single-connection
+      // in-memory SQLite a second root tx deadlocks against the identity-pin
+      // before('*') hook's request-tx read (#2552).
+      const { count, computedAt } = await recomputeSnapshot(cds.tx(req));
       resetFtCache();
       return { count, computedAt };
     });
@@ -4095,7 +4099,7 @@ export default class AdminService extends cds.ApplicationService {
     // fire a debounced rebuild so hugo/data/featured_topics.json refreshes.
     this.after(['CREATE', 'UPDATE', 'DELETE'], 'FeaturedTopics', async (_data, req) => {
       try {
-        await cds.tx(async (tx) => recomputeSnapshot(tx));
+        await recomputeSnapshot(cds.tx(req));
         resetFtCache();
       } catch (err) {
         cds.log('admin-featured').warn('inline recompute failed after write:', err.message);

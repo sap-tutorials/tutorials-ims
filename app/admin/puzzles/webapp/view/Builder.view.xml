@@ -53,7 +53,7 @@
         <FlexBox wrap="Wrap" class="sapUiSmallMarginBottom" alignItems="End">
           <VBox width="16rem" class="sapUiSmallMarginEnd sapUiSmallMarginBottom">
             <Label text="Title" required="true"/>
-            <Input id="titleInput" value="{b>/title}" placeholder="e.g. SAP BTP Basics"/>
+            <Input id="titleInput" value="{b>/title}" placeholder="e.g. SAP Business AI Platform Basics"/>
           </VBox>
           <VBox width="16rem" class="sapUiSmallMarginEnd sapUiSmallMarginBottom">
             <Label text="Slug" required="true"/>

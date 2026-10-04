@@ -1,6 +1,6 @@
 ---
 title: "Operate"
-description: "Run, deploy, secure, and govern what you build on BTP."
+description: "Run, deploy, secure, and govern what you build on SAP Business AI Platform."
 type: "verb"
 layout: "list"
 verbKey: "OPERATE"

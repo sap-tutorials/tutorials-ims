@@ -4,20 +4,34 @@ Complete deployment procedure for standing up the tutorials-ims stack in a CF sp
 
 ## Architecture
 
-```text
-tutorials-ims MTA
-├── tutorials-db-deployer  (type: hdb — deploys CDS schema to HDI container)
-├── tutorials-srv          (type: nodejs — CAP OData/REST backend)
-└── tutorials-approuter    (type: approuter.nodejs — serves static UI + proxies to srv)
+The stack is **two separately-deployed MTAs** sharing one set of service instances:
 
-Resources (created by MTA):
+```text
+tutorials-ims MTA  (.deploy/mta.yaml — the main MTA; OWNS the service instances)
+├── tutorials-db-deployer     (type: hdb — deploys CDS schema to HDI container)
+├── tutorials-db-qa-deployer  (type: hdb — QA channel HDI container)
+├── tutorials-srv             (type: nodejs — CAP backend; serves /mcp/*, /mcp-pat/*, /mcp-admin/*)
+├── tutorials-srv-qa          (type: nodejs — QA channel srv)
+└── tutorials-approuter       (type: approuter.nodejs — static UI + proxies to srv AND to the MCP app)
+
+tutorials-mcp MTA  (mta-mcp.yaml at repo root — the MCP microservice; ADOPTS the services above)
+└── tutorials-srv-mcp         (type: nodejs — serves ONLY the authenticated /mcp-auth/* surface)
+
+Resources (created/owned by the MAIN MTA; the MCP MTA references them as existing-service):
 ├── tutorials-hana         (HDI container — com.sap.xs.hdi-container)
 ├── tutorials-xsuaa        (XSUAA application — org.cloudfoundry.managed-service)
+├── tutorials-identity     (IAS — public PKCE client for the MCP app)
 ├── tutorials-destination  (Destination lite — org.cloudfoundry.managed-service)
+├── tutorials-credstore    (Credential Store — holds deploy-time secrets)
 ├── tutorials-mail         (optional — fails gracefully if plan unavailable)
 ├── tutorials-audit-log    (optional)
 └── tutorials-cloud-logging (optional)
 ```
+
+The approuter (main MTA) fronts both backends: `/mcp-auth/*` is proxied to the external
+`tutorials-srv-mcp` app via the `srv-mcp-api` destination (`${srv-mcp-url}`), everything else
+to the local `srv-api`. The MCP MTA creates **no** service instances of its own — it declares
+each resource as `org.cloudfoundry.existing-service` and adopts the main MTA's instances.
 
 ## Prerequisites
 
@@ -37,10 +51,11 @@ Resources (created by MTA):
 ```bash
 cd .deploy
 mbt build
-cf deploy mta_archives/tutorials-ims_1.0.0.mtar -e ../deploy/dev.mtaext
+cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext
 ```
 
-The `dev.mtaext` extension adds DEV-specific overrides (debug logging, approuter name suffix, expose CAP UI). For production, omit `-e` or provide a prod extension.
+The mtar filename carries the version from `.deploy/mta.yaml` (e.g.
+`tutorials-ims_1.33.0.mtar`); the `*.mtar` glob avoids pinning a stale version here. The `dev.mtaext` extension adds DEV-specific overrides (debug logging, approuter name suffix, expose CAP UI). For production, omit `-e` or provide a prod extension.
 
 ### Canonical app names per environment
 
@@ -65,6 +80,34 @@ The `cutover-rehearsal.cjs` orchestrator's Step 1 also asserts this invariant �
 5. `tutorials-approuter` builds admin-shell + scanner-ui into static assets, then starts
 
 **First deploy** takes ~10 minutes (HDI container creation + full schema deploy). Subsequent deploys are incremental.
+
+### MCP MTA (`tutorials-mcp`)
+
+The authenticated MCP surface (`/mcp-auth/*`) ships as a **separate MTA** (`mta-mcp.yaml` at
+repo root, module `tutorials-srv-mcp`). It is **not** part of the main MTA archive and the
+main-MTA deploy above does NOT ship `/mcp-auth/*` changes. There is **no orchestrated path** —
+`npm run deploy` / `scripts/deploy-mta.cjs` deploy only the main MTA. Deploy the MCP MTA by
+hand:
+
+```bash
+# From repo root (the descriptor's before-all runs from root, no `cd ..`)
+mbt build -e mta-mcp.yaml -t mta_archives
+cf deploy mta_archives/*.mtar -e deploy/mcp-dev.mtaext -f    # DEV
+# PROD: cf deploy mta_archives/*.mtar -e deploy/mcp-prod.mtaext -f
+```
+
+| Env | MCP MTA ext | MTA ID (ext) | Notes |
+| --- | --- | --- | --- |
+| dev | `deploy/mcp-dev.mtaext` | `tutorials-mcp-dev` | Overrides `dest-main-srv` → `tutorials-main-srv-api-dev` (DEV write-forward destination) |
+| prod | `deploy/mcp-prod.mtaext` | `tutorials-mcp-prod` | Overrides `tutorials-xsuaa` → `service-name: xsuaa-imsprod` (PROD XSUAA, xsappname `tutorials-prod`) |
+
+**Service adoption:** every `resources:` entry in `mta-mcp.yaml` is
+`org.cloudfoundry.existing-service` (`tutorials-identity`, `tutorials-xsuaa`,
+`tutorials-hana`, `tutorials-credstore`, `tutorials-destination`). The MCP MTA creates no
+instances — it binds the ones the **main MTA owns**. Deploy the main MTA first on a fresh
+space so those instances exist before the MCP MTA tries to adopt them. The approuter-side
+discovery/routing env (`srv-mcp-url`, `XSUAA_MCP_URL`, `MCP_ISSUER_KIND`) stays in the
+**main** MTA's `deploy/*.mtaext` (the approuter lives in the main MTA).
 
 ## Step 2: Populate Data (First Deploy Only)
 
@@ -152,10 +195,12 @@ curl -s -o /dev/null -w "%{http_code}" "$APPROUTER/tutorials/abap-dev-get-starte
 
 | File | Purpose |
 |------|---------|
-| `.deploy/mta.yaml` | Main MTA deployment descriptor |
-| `deploy/dev.mtaext` | DEV-specific extension (debug logging, app name suffix) |
+| `.deploy/mta.yaml` | Main MTA (`tutorials-ims`) deployment descriptor |
+| `mta-mcp.yaml` | MCP MTA (`tutorials-mcp`) descriptor — the separate `/mcp-auth/*` app |
+| `deploy/dev.mtaext` | Main-MTA DEV extension (debug logging, app name suffix, `srv-mcp-url`) |
+| `deploy/mcp-dev.mtaext` / `deploy/mcp-prod.mtaext` | MCP-MTA env extensions |
 | `xs-security.json` | XSUAA scopes, role templates, role collections |
-| `approuter/xs-app.json` | AppRouter route definitions |
+| `approuter/xs-app.json` | AppRouter route definitions (incl. the `/mcp-auth/*` → `srv-mcp-api` route) |
 | `.cdsrc-private.json` | Local hybrid bindings (gitignored) |
 
 ## Parallel Operation with Legacy IMS
@@ -207,6 +252,13 @@ The rename touches **two** identity domains that Cloud Foundry tracks independen
 | --- | --- | --- |
 | MTA `ID:` | `tutorials-poc` → `tutorials-ims` in `mta.yaml` and `.deploy/mta.yaml` | CF creates a NEW MTA registration. Service instances are NOT recreated because every `resources:` entry declares an explicit `service-name:` — the deployer adopts the existing `tutorials-hana`, `tutorials-xsuaa`, `tutorials-credstore`, etc. |
 | `xsappname` | `tutorials-poc` → `tutorials-ims` in `xs-security.json` and `.deploy/xs-security.json` | XSUAA service instance is **updated** (not recreated) — `cf update-service tutorials-xsuaa -c xs-security.json` flips the scope namespace. Every issued JWT scope literal changes from `tutorials-poc!t<n>.*` to `tutorials-ims!t<n>.*`. Existing role-collection bindings become empty (they reference scopes that no longer exist) and must be re-bound. |
+
+> **MCP-MTA note (post-split).** The `tutorials-poc` → `tutorials-ims` cutover below predates
+> the MCP split and touched only the main MTA. For any **future** rename of a shared service
+> (xsuaa/hana/credstore), remember the separately-deployed `tutorials-mcp` MTA adopts those
+> same instances by `service-name:` — after the main-MTA rename lands, redeploy the MCP MTA
+> (`cf deploy … -e deploy/mcp-<env>.mtaext`) so `tutorials-srv-mcp` re-binds the renamed
+> instances.
 
 ### What is and isn't safe
 
@@ -356,7 +408,7 @@ Same procedure, scheduled into the end-of-July 2026 AEM→IMS PROD window. Diffe
 
 ### Why not `cf undeploy --delete-services` first (as the issue originally specified)?
 
-The issue's original runbook assumed renaming the MTA `ID:` forced full service-instance recreation. That's only true when `resources:` entries lack explicit `service-name:` declarations. **This codebase already declares `service-name:` on every resource** (see `.deploy/mta.yaml:211-289`), which decouples instance identity from MTA identity. The `--delete-services` flag would actively destroy HANA schemas, force a fresh HDI deploy, and require restoring data from snapshot — the destructive path is exactly what `service-name:` is designed to avoid.
+The issue's original runbook assumed renaming the MTA `ID:` forced full service-instance recreation. That's only true when `resources:` entries lack explicit `service-name:` declarations. **This codebase already declares `service-name:` on every resource** (see the `resources:` block in `.deploy/mta.yaml`), which decouples instance identity from MTA identity. The `--delete-services` flag would actively destroy HANA schemas, force a fresh HDI deploy, and require restoring data from snapshot — the destructive path is exactly what `service-name:` is designed to avoid.
 
 ### Post-cutover lessons (2026-07-03 DEV cutover incident)
 

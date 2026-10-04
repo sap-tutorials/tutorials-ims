@@ -5,7 +5,7 @@
      falls back to linking the /missions/ index, like llms.txt. */ -}}
 # SAP Developers Tutorials — Site Map
 
-> Official tutorial platform for SAP technologies. Step-by-step tutorials, missions (multi-tutorial learning paths), and reference content for SAP BTP, ABAP Cloud, CAP, Fiori, HANA Cloud, and integration.
+> Official tutorial platform for SAP technologies. Step-by-step tutorials, missions (multi-tutorial learning paths), and reference content for SAP Business AI Platform, ABAP Cloud, CAP, Fiori, HANA Cloud, and integration.
 
 Semantic site map mirroring the site's navigation, with missions expanded to their ordered tutorials.
 

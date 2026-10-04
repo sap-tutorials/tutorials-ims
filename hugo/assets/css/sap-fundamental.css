@@ -2371,6 +2371,29 @@ blockquote {
   margin: 1rem 0;
 }
 
+/* Semantic alert callouts (#2595) — author opt-in via `> [!TYPE]`.
+   Base `blockquote` (blue Information) remains the default for plain `>`.
+   Color-only: override border + fill, nothing else. Horizon-light hex are
+   fallbacks because several --sap*Background/BorderColor tokens are not
+   declared in this project's theme-vars. */
+blockquote.alert-note,
+blockquote.alert-important {
+  border-left-color: var(--sapInformationBorderColor, #0070f2);
+  background-color: var(--sapInformationBackground, #e1f4ff);
+}
+blockquote.alert-tip {
+  border-left-color: var(--sapSuccessBorderColor, #30914c);
+  background-color: var(--sapSuccessBackground, #f5fae5);
+}
+blockquote.alert-warning {
+  border-left-color: var(--sapWarningBorderColor, #dd6100);
+  background-color: var(--sapWarningBackground, #fff8d6);
+}
+blockquote.alert-caution {
+  border-left-color: var(--sapErrorBorderColor, #e90b0b);
+  background-color: var(--sapErrorBackground, #ffeaf4);
+}
+
 /* Tutorial meta bar (tags + time) */
 .tutorial-meta {
   display: flex;

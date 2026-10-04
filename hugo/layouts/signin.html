@@ -1,0 +1,160 @@
+{{ define "main" }}
+<section class="signin-hero" aria-labelledby="signin-title">
+  <div class="signin-card">
+    <p class="signin-eyebrow">SAP&reg; ID</p>
+    <h1 id="signin-title" class="signin-title">Sign In</h1>
+    <p class="signin-subtitle">SAP Developers</p>
+
+    <p class="signin-desc">
+      Sign in to track your tutorial progress, earn completions, and personalize
+      your experience across SAP Developers.
+    </p>
+
+    <hr class="signin-sep" />
+
+    <p class="signin-choose">Choose your authentication service:</p>
+
+    <div class="signin-actions">
+      {{/*
+        Provider sign-in buttons, RPT-style (logo + label, full-width stacked).
+
+        Routing (approuter dynamicIdentityProvider → sap_idp):
+          - CORPORATE OIDC IdPs nested in IAS use the CHAIN form
+            sap_idp=sap.custom,<IAS trust Name>: XSUAA routes via the sap.custom
+            IAS trust, then IAS applies idp=<Name> to pick that provider. A bare
+            sap_idp=<Name> does NOT work (XSUAA has no such origin → falls through
+            to default). Deep-linkable today: GitHub, LinkedIn, Hugging Face.
+          - SAP ID = direct XSUAA trust origin sap.default.
+          - Deep-linkable corporate OIDC IdPs: GitHub, Google, Hugging Face, LinkedIn.
+            Apple is intentionally omitted (requires a paid Apple Developer account).
+        NOTE: an existing IAS SSO session can be reused instead of honoring the
+        chosen IdP (IAS prompt=login would force it, but the approuter does not
+        forward prompt) — tracked as a follow-up.
+      */}}
+      <a class="fd-button fd-button--transparent signin-btn" data-signin-idp href="/login?sap_idp=sap.custom,GitHub">
+        <img class="signin-logo" src="/img/providers/Github.svg" alt="" aria-hidden="true" width="20" height="20" />
+        <span>Continue with GitHub</span>
+      </a>
+      <a class="fd-button fd-button--transparent signin-btn" data-signin-idp href="/login?sap_idp=sap.custom,Google">
+        <img class="signin-logo" src="/img/providers/Google.svg" alt="" aria-hidden="true" width="20" height="20" />
+        <span>Continue with Google</span>
+      </a>
+      <a class="fd-button fd-button--transparent signin-btn" data-signin-idp href="/login?sap_idp=sap.custom,Hugging%20Face">
+        <img class="signin-logo" src="/img/providers/huggingface.svg" alt="" aria-hidden="true" width="20" height="20" />
+        <span>Continue with Hugging Face</span>
+      </a>
+      <a class="fd-button fd-button--transparent signin-btn" data-signin-idp href="/login?sap_idp=sap.custom,LinkedIn">
+        <img class="signin-logo" src="/img/providers/linkedin.webp" alt="" aria-hidden="true" width="20" height="20" />
+        <span>Continue with LinkedIn</span>
+      </a>
+      <a class="fd-button fd-button--emphasized signin-btn" data-signin-idp href="/login?sap_idp=sap.default">
+        <img class="signin-logo signin-logo--sap" src="/img/providers/SAP.svg" alt="" aria-hidden="true" width="20" height="20" />
+        <span>Continue with SAP ID</span>
+      </a>
+    </div>
+
+    <p class="signin-legal">
+      By signing in, you accept our
+      <a href="/privacy">Privacy Policy</a> and
+      <a href="/cookies">Cookie Statement</a>.
+    </p>
+  </div>
+</section>
+
+<script>
+  // Carry a safe relative returnTo through the IdP choice so the user lands
+  // back where they started after auth. Mirrors login-redirect.html's
+  // open-redirect guard: only same-origin relative paths, never //host.
+  (function () {
+    var rt = new URLSearchParams(window.location.search).get('returnTo');
+    if (!rt || rt.charAt(0) !== '/' || rt.startsWith('//')) return;
+    document.querySelectorAll('a[data-signin-idp]').forEach(function (a) {
+      a.href += '&returnTo=' + encodeURIComponent(rt);
+    });
+  })();
+</script>
+
+<style>
+  .signin-hero {
+    padding: 3rem 1.5rem;
+    background: var(--sapBackgroundColor, #f5f6f7);
+    min-height: 70vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .signin-card {
+    max-width: 26rem;
+    width: 100%;
+    text-align: center;
+    background: var(--sapGroup_ContentBackground, var(--sapTile_Background, #ffffff));
+    padding: 2.5rem 2rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 0.125rem 0.75rem rgba(0, 0, 0, 0.1);
+  }
+  .signin-eyebrow {
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--sapContent_LabelColor, #6a6d70);
+    margin: 0 0 0.25rem;
+  }
+  .signin-title {
+    font-size: 1.75rem;
+    margin: 0 0 0.125rem;
+    color: var(--sapTextColor, #32363a);
+  }
+  .signin-subtitle {
+    font-size: 1rem;
+    color: var(--sapContent_LabelColor, #6a6d70);
+    margin: 0 0 1.25rem;
+  }
+  .signin-desc {
+    font-size: 0.875rem;
+    line-height: 1.4;
+    color: var(--sapTextColor, #32363a);
+    margin: 0 0 1.25rem;
+  }
+  .signin-sep {
+    border: 0;
+    border-top: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+    margin: 0 0 1.25rem;
+  }
+  .signin-choose {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--sapTextColor, #32363a);
+    margin: 0 0 1rem;
+  }
+  .signin-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+  }
+  .signin-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    justify-content: flex-start;
+    height: 2.75rem;
+    padding: 0 1rem;
+  }
+  .signin-logo {
+    flex: 0 0 auto;
+    width: 1.25rem;
+    height: 1.25rem;
+    object-fit: contain;
+  }
+  /* The SAP mark is wide; let it keep aspect without forcing a square. */
+  .signin-logo--sap { width: 2rem; }
+  .signin-btn > span { flex: 1 1 auto; text-align: center; }
+  .signin-legal {
+    font-size: 0.75rem;
+    color: var(--sapContent_LabelColor, #6a6d70);
+    margin: 1.5rem 0 0;
+    line-height: 1.4;
+  }
+  .signin-legal a { color: var(--sapLinkColor, #0070f2); }
+</style>
+{{ end }}

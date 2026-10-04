@@ -10,7 +10,8 @@
 //
 // Pattern: matches admin-exports.smoke.test.js (the established admin smoke
 // test shape). XSUAA gates /admin/* and /admin-ui/* — anonymous requests
-// resolve to 401 / 302 / HTML-redirect to /oauth/authorize. With a
+// resolve to 401 / 302 / HTML-redirect to /oauth2?/authorize (IAS /oauth2 or
+// XSUAA /oauth). With a
 // SMOKE_ADMIN_TOKEN env var (tech user), we can hit the OData collection
 // directly and assert the four-field shape.
 
@@ -26,7 +27,7 @@ describe.runIf(APPROUTER && SRV)('admin homepage config smoke (#734)', () => {
     const res = await fetchWithRetry(`${APPROUTER}/admin-ui/`, { redirect: 'manual' });
     if (res.status === 200) {
       const body = await res.text();
-      expect(body).toMatch(/\/oauth\/authorize/);
+      expect(body).toMatch(/\/oauth2?\/authorize/);
     } else {
       expect([401, 302]).toContain(res.status);
     }
@@ -39,7 +40,7 @@ describe.runIf(APPROUTER && SRV)('admin homepage config smoke (#734)', () => {
     const res = await fetchWithRetry(`${SRV}/admin/HomepageConfig`, { redirect: 'manual' });
     if (res.status === 200) {
       const body = await res.text();
-      expect(body).toMatch(/\/oauth\/authorize/);
+      expect(body).toMatch(/\/oauth2?\/authorize/);
     } else {
       expect([401, 302]).toContain(res.status);
     }

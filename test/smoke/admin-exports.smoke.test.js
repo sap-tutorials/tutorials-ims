@@ -9,13 +9,13 @@ describe.runIf(APPROUTER && SRV)('admin exports smoke', () => {
     const res = await fetchWithRetry(`${APPROUTER}/admin/exports/exportLegacyData?format=csv`, { redirect: 'manual' });
     // Approuter may respond with:
     //   - 401 (HEAD-style direct rejection)
-    //   - 302 (server-side redirect to /oauth/authorize)
-    //   - 200 with a tiny HTML body that JS-redirects to /oauth/authorize and
+    //   - 302 (server-side redirect to /oauth2/authorize [IAS] or /oauth/authorize [XSUAA])
+    //   - 200 with a tiny HTML body that JS-redirects to /oauth2?/authorize and
     //     stashes the URL fragment in a cookie (the browser-friendly path).
-    // All three prove the route is XSUAA-protected.
+    // All three prove the route is auth-protected.
     if (res.status === 200) {
       const body = await res.text();
-      expect(body).toMatch(/\/oauth\/authorize/);
+      expect(body).toMatch(/\/oauth2?\/authorize/);
     } else {
       expect([401, 302]).toContain(res.status);
     }
