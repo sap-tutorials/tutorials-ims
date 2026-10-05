@@ -300,6 +300,106 @@ If either returns a 503 `server_error`, a credstore secret is missing (`GITHUB_O
 
 ---
 
+## Machine-to-Machine (client_credentials) on the shared IAS app
+
+The `/a2a` (agent-to-agent) and `/mcp-auth/*` surfaces accept **IAS
+client-credentials (M2M) bearer tokens** minted from the shared `tutorials-identity`
+IAS application instance. Two things must both be true for M2M to work in a space;
+they are independent and were each a separate root cause during the #2593→#2649
+rollout.
+
+### 1. The IAS instance must permit the `client_credentials` grant
+
+The MTA adopts `tutorials-identity` as an `existing-service` and passes **no**
+provisioning parameters, so the OAuth2 config lives on the **live instance**, not in
+the descriptor. By default the application plan permits only interactive grants
+(`authorization_code`, `authorization_code_pkce_s256`, `refresh_token`) and a token
+request with `grant_type=client_credentials` returns **HTTP 400
+`unsupported_grant_type`**.
+
+Add `client_credentials` **additively** (do not drop the interactive grants or the
+redirect URIs — the human login flow needs them) with `cf update-service`. This is
+the canonical M2M config for every space:
+
+```bash
+cf update-service tutorials-identity -c '{
+  "oauth2-configuration": {
+    "grant-types": [
+      "authorization_code",
+      "authorization_code_pkce_s256",
+      "refresh_token",
+      "client_credentials"
+    ],
+    "public-client": true,
+    "redirect-uris": [
+      "http://localhost:*/oauth/callback",
+      "http://localhost:*/callback",
+      "http://localhost:*/mcp-callback",
+      "http://127.0.0.1:*/oauth/callback",
+      "http://127.0.0.1:*/callback",
+      "http://127.0.0.1:*/mcp-callback"
+    ]
+  }
+}'
+```
+
+Notes:
+- `public-client: true` does **not** block `client_credentials` — the broker still
+  issues a `credential-type: SECRET` binding, so a service key / binding carries a
+  usable `clientsecret`.
+- An IAS M2M token is a **bare application token**: its claims are
+  `app_tid, aud, azp, azpacr, exp, iat, iss, jti, sap_id_type, sub` — there is **no
+  `scope`/`scopes` claim** (IAS M2M does not carry OAuth scopes the way XSUAA does).
+  `/a2a` and `/mcp-auth` therefore gate on *token validity → non-anonymous user*, not
+  on a scope string.
+
+### 2. The `/a2a` route-scoped middleware must resolve its bindings per-space
+
+`srv/lib/a2a/ias-auth-mw.js` validates the IAS bearer (with an optional XSUAA
+fallback) only on `/a2a`. It resolves:
+- **IAS** by instance name `tutorials-identity` (identical across spaces) — required.
+- **XSUAA** by service **label** `xsuaa` — optional fallback. The XSUAA *instance
+  name* differs per space (`tutorials-xsuaa` on dev, `xsuaa-imsprod` on prod), so it
+  must **not** be resolved by a hardcoded instance name. (#2649: an earlier version
+  looked XSUAA up by name in the same `getServices()` call as IAS; the prod name miss
+  threw and degraded `/a2a` to a full anonymous pass-through — valid IAS M2M tokens
+  got 401 on prod while `/mcp-auth` in the separate MCP MTA accepted them.)
+
+A missing/renamed XSUAA binding degrades to **IAS-only** (M2M still works); only a
+missing **IAS** binding degrades `/a2a` closed (anonymous → 401).
+
+### Verify M2M end-to-end (per space)
+
+Mint a token from a short-lived service key and smoke both surfaces. **Never print
+the token** — assert on HTTP status and response shape only.
+
+```bash
+cf create-service-key tutorials-identity sk-smoke
+# strip the "Getting key..." header line so the JSON parses
+cf service-key tutorials-identity sk-smoke | sed -n '/{/,$p' > sk.json
+CID=$(jq -r .credentials.clientid sk.json)
+CSEC=$(jq -r .credentials.clientsecret sk.json)
+URL=$(jq -r .credentials.url sk.json)
+TOK=$(curl -s -u "$CID:$CSEC" -d grant_type=client_credentials "$URL/oauth2/token" | jq -r .access_token)
+
+H=https://developers.sap.com   # dev: https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com
+A2A='{"jsonrpc":"2.0","id":"s","method":"message/send","params":{"message":{"role":"user","parts":[{"kind":"text","text":"ping"}],"messageId":"m1"}}}'
+MCP='{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+curl -s -o /dev/null -w "a2a anon   %{http_code}\n" -d "$A2A" "$H/a2a"                               # expect 401
+curl -s -o /dev/null -w "a2a bearer %{http_code}\n" -H "authorization: Bearer $TOK" -d "$A2A" "$H/a2a"  # expect 200
+curl -s -o /dev/null -w "mcp bearer %{http_code}\n" -X POST -H "authorization: Bearer $TOK" -H 'accept: application/json' -d "$MCP" "$H/mcp-auth/api"  # expect 200, 9 tools
+
+cf delete-service-key tutorials-identity sk-smoke -f
+rm -f sk.json
+```
+
+> **CF target drift:** `cf target` can drift dev→prod mid-session. Re-check the
+> space before every mutating `cf update-service` / service-key command, and
+> re-target explicitly before a prod smoke.
+
+---
+
 ## Rollback
 
 - **From Option B back to Option A:** Re-enable SAP ID Service default trust ("Available for User Logon: Yes"). Instant fix, no restart needed.

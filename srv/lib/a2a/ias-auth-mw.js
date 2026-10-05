@@ -31,8 +31,15 @@ const LOG = cds.log('a2a');
 // it defensively: a failure here degrades /a2a to anonymous, it does not crash.
 const IAS_AUTH_FACTORY_PATH = '@sap/cds/lib/srv/middlewares/auth/ias-auth';
 
-// Instance names of the bound services (see .deploy/mta.yaml / mta.yaml).
+// Bound service identifiers (see .deploy/mta.yaml / mta.yaml). The IAS instance
+// is named identically across spaces; the XSUAA instance is NOT (dev:
+// 'tutorials-xsuaa', prod: 'xsuaa-imsprod'), so XSUAA is resolved by its service
+// LABEL ('xsuaa') with the dev instance name as a fallback. Resolving XSUAA by a
+// single hardcoded instance name was the prod /a2a 401 root cause (#2649): the
+// name miss threw out of the combined getServices() and degraded /a2a to a full
+// anonymous pass-through, taking IAS-only M2M down with it.
 const IAS_BINDING_NAME = 'tutorials-identity';
+const XSUAA_SERVICE_LABEL = 'xsuaa';
 const XSUAA_BINDING_NAME = 'tutorials-xsuaa';
 
 // Pass-through used whenever IAS validation can't be wired. Leaves the user
@@ -68,15 +75,13 @@ function buildIasAuthMiddleware() {
     return PASS_THROUGH;
   }
 
+  // IAS is REQUIRED — it is the token source for a2a M2M. Resolve it alone so a
+  // missing/renamed XSUAA binding can never take IAS down with it.
   let ias;
-  let xsuaa;
   try {
-    ({ ias, xsuaa } = xsenv.getServices({
-      ias: { name: IAS_BINDING_NAME },
-      xsuaa: { name: XSUAA_BINDING_NAME },
-    }));
+    ({ ias } = xsenv.getServices({ ias: { name: IAS_BINDING_NAME } }));
   } catch (err) {
-    // Missing bindings (unit/local) — degrade closed, no a2a auth.
+    // No IAS binding (unit/local) — degrade closed, no a2a auth.
     LOG.warn(
       `/a2a IAS binding '${IAS_BINDING_NAME}' not found (${err.message}); ` +
         'a2a will reject as anonymous.',
@@ -87,6 +92,24 @@ function buildIasAuthMiddleware() {
   if (!ias || !ias.clientid) {
     LOG.warn(`/a2a IAS binding '${IAS_BINDING_NAME}' has no credentials; a2a will reject as anonymous.`);
     return PASS_THROUGH;
+  }
+
+  // XSUAA is OPTIONAL — a non-breaking fallback that lets human XSUAA bearers
+  // through /a2a during the token-source cutover. Resolve by service LABEL so it
+  // works regardless of the per-space instance name; fall back to the dev name.
+  // If absent, proceed IAS-ONLY (IAS M2M, the surface's real purpose, is intact).
+  let xsuaa;
+  try {
+    ({ xsuaa } = xsenv.getServices({ xsuaa: { label: XSUAA_SERVICE_LABEL } }));
+  } catch (byLabelErr) {
+    try {
+      ({ xsuaa } = xsenv.getServices({ xsuaa: { name: XSUAA_BINDING_NAME } }));
+    } catch (byNameErr) {
+      LOG.info(
+        `/a2a XSUAA fallback binding not found (label '${XSUAA_SERVICE_LABEL}': ${byLabelErr.message}); ` +
+          'proceeding IAS-only.',
+      );
+    }
   }
 
   // Expose the XSUAA binding under cds.env.requires.xsuaa.credentials so CAP's
@@ -108,7 +131,7 @@ function buildIasAuthMiddleware() {
     });
     LOG.info(
       `/a2a IAS auth wired (IAS '${IAS_BINDING_NAME}'` +
-        `${hasXsuaa ? ` + XSUAA fallback '${XSUAA_BINDING_NAME}'` : ''}).`,
+        `${hasXsuaa ? ` + XSUAA fallback (label '${XSUAA_SERVICE_LABEL}')` : ', IAS-only'}).`,
     );
     return typeof mw === 'function' ? mw : PASS_THROUGH;
   } catch (err) {
