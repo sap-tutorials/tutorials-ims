@@ -195,7 +195,7 @@ npx cds bind --exec -- node -e "
    - **Client ID** / **Client Secret**: from step 1
    - **Scopes**: `openid profile email`
 4. **Identity Federation** → "Use Identity Authentication user store" (email-based matching, so social users merge onto their existing SAP-ID row by email — see [identity continuity](#step-7-verify-identity-continuity)).
-5. Save, then **Enable** the IdP for the tutorials application under **Applications & Resources → Applications → <your app> → Identity Provider**.
+5. Save, then **Enable** the IdP for the tutorials application under **Applications & Resources → Applications → `<your app>` → Identity Provider**.
 
 #### Step 8b — LinkedIn and Hugging Face (OIDC-native, same recipe as Google)
 

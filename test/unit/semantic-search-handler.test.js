@@ -49,12 +49,15 @@ beforeAll(async () => {
 
   _setTestEmbedClient(async (inputs) => inputs.map(() => unitVec(0)));
 
-  const { Tutorials, TutorialEmbedding } = cds.entities(NS);
+  const { Tutorials, TutorialEmbedding, ContentCurrent } = cds.entities(NS);
   await INSERT.into(Tutorials).entries({ ID: 'h-tid', slug: 'handler-tut', title: 'Handler Tut' });
   await INSERT.into(TutorialEmbedding).entries({
     tutorial_ID: 'h-tid', stepNumber: 1, embeddingModel: 'text-embedding-3-small',
     stepText: 'Handler step text', embedding: f32buf(unitVec(0)),
   });
+  // #2631: the handler drops any ranked hit without a servable ContentCurrent
+  // row. Seed one so the live tutorial survives the content-presence gate.
+  await INSERT.into(ContentCurrent).entries({ slug: 'handler-tut' });
 });
 
 afterAll(async () => {
