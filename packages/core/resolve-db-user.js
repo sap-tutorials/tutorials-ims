@@ -306,10 +306,7 @@ export async function resolveUser(user, db) {
       (r) => r.email && !NOREPLY_GITHUB_RE.test(r.email),
     );
     if (candidates.length) {
-      // Prefer a row whose sapId is a real SAP ID (letter+digits) over a stray
-      // SCIM-UUID-keyed row sharing the same email (#2550 collision fix).
-      const real = candidates.find((r) => r.sapId && !SCIM_UUID_RE.test(r.sapId));
-      const row = real ?? candidates[0];
+      const row = pickCanonicalRow(candidates);
       if (isu) {
         await writeIdentityLink(row.ID, isu, {
           provider: providerFromIssuer(isu.issuer),
@@ -383,6 +380,28 @@ export function tokenEmail(user) {
 // Stored GitHub-synthetic emails (contributor API) must never be a Tier-3 match
 // target — they are dirty data, not a login identity.
 const NOREPLY_GITHUB_RE = /@users\.noreply\.github\.com$/i;
+
+/**
+ * Deterministic canonical pick when one human has multiple Users rows (#2651).
+ * Order: registration-bearing (tagged `__hasRegistration`) → real/canonical
+ * sapId → oldest createdAt → lowest legacyId. Pure; caller supplies rows.
+ */
+export function pickCanonicalRow(rows) {
+  const list = (rows ?? []).filter(Boolean);
+  if (list.length <= 1) return list[0] ?? null;
+  const isCanonical = (r) => r.sapId && !SCIM_UUID_RE.test(r.sapId) && !r.sapId.includes('@');
+  const score = (r) => [
+    r.__hasRegistration ? 0 : 1,
+    isCanonical(r) ? 0 : 1,
+    r.createdAt ? Date.parse(r.createdAt) : Number.MAX_SAFE_INTEGER,
+    typeof r.legacyId === 'number' ? r.legacyId : Number.MAX_SAFE_INTEGER,
+  ];
+  return list.slice().sort((a, b) => {
+    const sa = score(a), sb = score(b);
+    for (let i = 0; i < sa.length; i++) if (sa[i] !== sb[i]) return sa[i] - sb[i];
+    return 0;
+  })[0];
+}
 
 /**
  * Resolve to the migrated Users row (or null) for the authenticated request.
