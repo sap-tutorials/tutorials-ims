@@ -55,6 +55,49 @@ describe('provisionDbUser — IAS dedup (issue #2651)', () => {
     expect(all.length).toBe(1);
   });
 
+  it('after a race, returns the surviving row by email, not a new UUID', async () => {
+    // Simulate the racer: pre-INSERT a Users row that the "winner" created.
+    const winnerId = cds.utils.uuid();
+    await INSERT.into(Users).entries({
+      ID: winnerId,
+      uuid: cds.utils.uuid(),
+      email: 'race@example.com',
+      sapId: null,
+      legacyId: 900002,
+    });
+
+    // The "loser" call: token has iss/sub matching nothing in UserIdentities,
+    // but attr.email matches the winner's row. The loser's INSERT will either
+    // succeed (creating a duplicate) or be a no-op on uniqueness; the return
+    // block must re-resolve by email and give back the WINNING row.
+    //
+    // We force the "INSERT was a no-op" scenario by having resolveUser (get-path)
+    // find the winner via Tier-3 email match — so provisionDbUser returns the
+    // winner on the get-path. That covers the Task 1 case. The Task 3 guard also
+    // needs to handle when the INSERT went through on newId but the row with that
+    // newId is missing (racer committed between SELECT-empty and INSERT in the
+    // SAME call). We verify the steady-state: exactly 1 row for the email.
+    const user = {
+      id: 'race@example.com',
+      attr: { email: 'race@example.com' },
+      authInfo: { token: { payload: {
+        iss: 'https://racer-tenant.accounts.ondemand.com',
+        sub: 'racer-sub-unique-xyz',
+        // no payload.email — IAS token shape; attr.email is the source
+      } } },
+    };
+
+    const row = await provisionDbUser(user);
+
+    // Must return the surviving (winner) row.
+    expect(row).toBeTruthy();
+    expect(row.ID).toBe(winnerId);
+
+    // Exactly 1 row must exist for this email.
+    const all = await SELECT.from(Users).where`lower(email) = ${'race@example.com'}`;
+    expect(all.length).toBe(1);
+  });
+
   it('no email → still inserts a new row (regression guard)', async () => {
     const before = await SELECT.from(Users);
     const countBefore = before.length;

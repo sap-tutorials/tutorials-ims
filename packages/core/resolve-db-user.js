@@ -672,6 +672,18 @@ export async function provisionDbUser(user, columns) {
   // durable GitHub key regardless of the fronting IAS tenant.
   const ghNew = githubIdentityFromUser(user);
   if (ghNew) await linkGithubIdentity(newId, ghNew);
-  const q = SELECT.one.from(Users).where({ ID: newId });
+  // If a concurrent racer already minted the row (the INSERT above was caught
+  // as a duplicate / no-op), re-resolve by trusted email so we return the
+  // surviving row rather than a phantom newId. (#2651)
+  let finalId = newId;
+  const minted = await SELECT.one.from(Users).where({ ID: newId });
+  if (!minted) {
+    const te = tokenEmail(user);
+    const surv = te ? pickCanonicalRow(
+      ((await SELECT.from(Users).where`lower(email) = ${te}`) ?? [])
+        .filter((r) => r.email && !NOREPLY_GITHUB_RE.test(r.email))) : null;
+    if (surv) finalId = surv.ID;
+  }
+  const q = SELECT.one.from(Users).where({ ID: finalId });
   return (columns && columns.length) ? await q.columns(...columns) : await q;
 }
