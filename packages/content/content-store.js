@@ -871,7 +871,11 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
       // Schedule post-publish embeddings AFTER Steps metadata + body text upserts so
       // embedSlugs can find the Steps rows for fresh slugs without contentHash drift warnings.
-      if (!skipMetadataUpsert) {
+      // Skip under VITEST: this fire-and-forget setImmediate logs (ChatSettings
+      // absent in the unit in-memory DB) after the vitest worker tears down,
+      // rejecting a pending `onUserConsoleLog` RPC (EnvironmentTeardownError) and
+      // reding an otherwise-green suite. Nothing to embed in the unit env.
+      if (!skipMetadataUpsert && !process.env.VITEST) {
         setImmediate(async () => {
           try {
             const { ChatSettings } = cds.entities(namespace);
