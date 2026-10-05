@@ -637,6 +637,29 @@ export async function provisionDbUser(user, columns) {
   const claimPicture   = user.attr?.picture || null;
   if (!claimEmail && !claimFirstName && !claimLastName && !canonicalSapId) return null;
 
+  // Eager verified-email merge: before minting a row, if the token asserts a
+  // trusted email that already belongs to a Users row, reuse it (#2651). The
+  // IdP verifies email before login, so a token email is trusted. Excludes
+  // GitHub-synthetic noreply addresses (dirty data, never a login identity).
+  const trustedEmail = tokenEmail(user);
+  if (trustedEmail) {
+    const emailRows = await SELECT.from(Users).where`lower(email) = ${trustedEmail}`;
+    const emailCandidates = (emailRows ?? []).filter(
+      (r) => r.email && !NOREPLY_GITHUB_RE.test(r.email));
+    if (emailCandidates.length) {
+      const chosen = pickCanonicalRow(emailCandidates);
+      if (isu) {
+        await writeIdentityLink(chosen.ID, isu, {
+          provider: providerFromIssuer(isu.issuer), email: trustedEmail, emailVerified: true,
+        });
+      }
+      if (columns && columns.length) {
+        return await SELECT.one.from(Users).where({ ID: chosen.ID }).columns(...columns);
+      }
+      return chosen;
+    }
+  }
+
   const db = await cds.connect.to('db');
   const newId = cds.utils.uuid();
   try {
