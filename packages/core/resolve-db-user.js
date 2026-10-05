@@ -306,6 +306,14 @@ export async function resolveUser(user, db) {
       (r) => r.email && !NOREPLY_GITHUB_RE.test(r.email),
     );
     if (candidates.length) {
+      // Tag registration-bearing rows so pickCanonicalRow prefers them — the
+      // same tagging the reconciliation job applies, so login-canonical and
+      // job-canonical agree on which row wins for a cluster (#2651).
+      const { EventRegistrations } = cds.entities('com.sap.developers.ims');
+      for (const c of candidates) {
+        const reg = await run(SELECT.one.from(EventRegistrations).where({ user_ID: c.ID }));
+        c.__hasRegistration = !!reg;
+      }
       const row = pickCanonicalRow(candidates);
       if (isu) {
         await writeIdentityLink(row.ID, isu, {
