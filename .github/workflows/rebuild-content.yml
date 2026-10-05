@@ -47,6 +47,11 @@ on:
         required: false
         default: false
         type: boolean
+      allow-revert:
+        description: '[#672] Override the no-revert guard for the single slug in `slug`. The guard rejects a publish whose source-markdown hash matches an ABANDONED prior version (treating it as a roll-back); that also blocks the drift-clearing republish when a slug''s current upstream markdown hashes back to a pre-churn version (e.g. a trailing-whitespace strip that returns the source to an earlier byte-identical state). Requires `slug` to be set — refused on full/catalog rebuilds so an operator can only override the one tutorial they name. Threads `--allow-revert` into publish-content.ts.'
+        required: false
+        default: false
+        type: boolean
       publish-concurrency:
         description: 'Number of /content/publish/append batches in flight at once. Default raised 4 → 6 in issue #434 PR 2 (final stage) after 9 stable runs at 4/25. Restores the original pre-#422 throughput now that bulk SQL (#423) makes it safe. Lower below 6 if srv hits HeadersTimeoutError again.'
         required: false
@@ -895,6 +900,7 @@ jobs:
             --concurrency "${{ inputs.publish-concurrency || '4' }}" \
             --batch-size "${{ inputs.publish-batch-size || '25' }}" \
             ${{ inputs.force-publish == true && '--force' || '' }} \
+            ${{ (inputs.allow-revert == true && steps.mode.outputs.effective_mode == 'slug-targeted') && '--allow-revert' || '' }} \
             --verbose
         env:
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
