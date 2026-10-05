@@ -41,6 +41,13 @@ const checks = [
   // dynamic import shim (try/catch). Catches the 2026-09-28 DEV incident where
   // srv-mcp/server.js had a bare static import of @tutorials/core.
   'node scripts/check-no-bare-workspace-imports.cjs',
+  // Guard: the SAPUI5 version in both generated index.html files, every admin
+  // ui5.yaml framework.version, and the admin-shell manifest floor must match
+  // app/admin-shell/ui5-version.json. Drift means a `npm run apply:ui5-version`
+  // was skipped — e.g. someone edited index.html by hand or bumped the JSON
+  // without regenerating. Catches the 2026-10 1.136.0 CDN-purge outage class
+  // (PR #2658) at PR time instead of in PROD. Auto-fixable (see FIXABLE).
+  'node scripts/apply-ui5-version.cjs --check',
 ];
 
 // Guards that support a `--fix` flag. Only mechanically-derivable,
@@ -50,6 +57,14 @@ const checks = [
 const FIXABLE = new Set([
   'scripts/check-icon-imports.ts',
   'scripts/check-kg-meta-formatters-mirror.ts',
+]);
+
+// Guards whose --fix is a DIFFERENT command than the check (not just the check
+// with `--fix` appended). Maps the check command substring → the fix command.
+// apply-ui5-version runs with `--check` as the guard and bare (apply mode) as
+// the fix, so it can't use the generic `${cmd} --fix` path.
+const FIX_COMMAND_OVERRIDES = new Map<string, string>([
+  ['scripts/apply-ui5-version.cjs --check', 'node scripts/apply-ui5-version.cjs'],
 ]);
 
 const FIX = process.argv.includes('--fix');
@@ -65,8 +80,12 @@ function getName(cmd: string): string {
 
 function runCheck(cmd: string): Result {
   const name = getName(cmd);
-  const supportsFix = FIX && [...FIXABLE].some((f) => cmd.includes(f));
-  const fullCmd = supportsFix ? `${cmd} --fix` : cmd;
+  const override = FIX_COMMAND_OVERRIDES.get(cmd);
+  const supportsFix = FIX && (override !== undefined || [...FIXABLE].some((f) => cmd.includes(f)));
+  let fullCmd = cmd;
+  if (supportsFix) {
+    fullCmd = override ?? `${cmd} --fix`;
+  }
   const result = spawnSync('sh', ['-c', fullCmd], {
     stdio: 'inherit',
   });
