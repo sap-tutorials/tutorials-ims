@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-04T22:06:26.850Z",
+  "generatedAt": "2026-10-05T19:57:38.652Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,136 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2657",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2657,
+      "title": "fix(a2a): resolve prod /a2a 401 — label-based XSUAA resolution + IAS-only degrade (#2649)",
+      "summary": "Fixed authentication on the agent-to-agent endpoint so machine-to-machine clients can connect reliably in production.",
+      "category": "Fix",
+      "mergedAt": "2026-10-05T19:02:11Z",
+      "week": "2026-W41",
+      "weekStart": "2026-10-05",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2657"
+    },
+    {
+      "id": "tutorials-ims#2661",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2661,
+      "title": "fix(identity): resolve + reconcile duplicate Users rows — cat-game counter/leaderboard desync (#2651)",
+      "summary": "Signing in with SAP ID no longer creates a duplicate profile, so your Devtoberfest points and leaderboard standing stay in sync.",
+      "category": "Fix",
+      "mergedAt": "2026-10-05T19:01:45Z",
+      "week": "2026-W41",
+      "weekStart": "2026-10-05",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2661"
+    },
+    {
+      "id": "tutorials-ims#2660",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2660,
+      "title": "fix(ci): unbreak Docs Deploy + unit tests",
+      "summary": "Fixed broken documentation builds and a flaky search test to keep the platform's quality checks green.",
+      "category": "Fix",
+      "mergedAt": "2026-10-05T18:19:45Z",
+      "week": "2026-W41",
+      "weekStart": "2026-10-05",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2660"
+    },
+    {
+      "id": "tutorials-ims#2659",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2659,
+      "title": "Single source of truth for the Admin UI's SAPUI5 version",
+      "summary": "The Admin UI's SAPUI5 version now lives in one place with an automatic drift check, so a future version bump can't silently break the admin tools.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-05T17:51:56Z",
+      "week": "2026-W41",
+      "weekStart": "2026-10-05",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2659"
+    },
+    {
+      "id": "tutorials-ims#2658",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2658,
+      "title": "fix(admin): UI5 CDN pin 1.136.0 → 1.148.12 — PROD Admin UI outage",
+      "summary": "Restored the Admin UI after an SAPUI5 version was removed from SAP's CDN, repinning to the current long-term-support release.",
+      "category": "Fix",
+      "mergedAt": "2026-10-05T17:27:38Z",
+      "week": "2026-W41",
+      "weekStart": "2026-10-05",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2658"
+    },
+    {
+      "id": "tutorials-ims#2656",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2656,
+      "title": "feat(rebuild-content): add allow-revert input to clear #672-guarded source-hash drift",
+      "summary": "Added an option to the content-rebuild workflow that clears a stuck content-drift check.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-05T14:49:12Z",
+      "week": "2026-W41",
+      "weekStart": "2026-10-05",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2656"
+    },
+    {
+      "id": "tutorials-ims#2655",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2655,
+      "title": "feat(rebuild-content): add allow-revert input to clear #672-guarded source-hash drift",
+      "summary": "Added an option to the content-rebuild workflow that clears a stuck content-drift check.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-05T14:06:30Z",
+      "week": "2026-W41",
+      "weekStart": "2026-10-05",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2655"
+    },
+    {
+      "id": "tutorials-ims#2653",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2653,
+      "title": "feat(signin): warn SAP-ID holders a mismatched social login forks progress #2651",
+      "summary": "The sign-in screen now warns SAP ID holders that choosing a different social login can fork their progress onto a separate profile.",
+      "category": "Feature",
+      "mergedAt": "2026-10-05T13:13:28Z",
+      "week": "2026-W41",
+      "weekStart": "2026-10-05",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2653"
+    },
+    {
+      "id": "tutorials-ims#2652",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2652,
+      "title": "feat(signin): move SAP ID to top of provider list",
+      "summary": "Continue with SAP ID now appears first on the sign-in screen, ahead of the other login providers.",
+      "category": "Feature",
+      "mergedAt": "2026-10-05T10:39:29Z",
+      "week": "2026-W41",
+      "weekStart": "2026-10-05",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2652"
+    },
+    {
+      "id": "tutorials-ims#2648",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2648,
+      "title": "Release 1.35.0 promoted to production",
+      "summary": "Shipped the 1.35.0 release train, restoring developer-portal sign-in and moving agent-to-agent authentication onto SAP IAS.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-04T22:17:01Z",
+      "week": "2026-W40",
+      "weekStart": "2026-09-28",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2648"
+    },
     {
       "id": "tutorials-ims#2647",
       "repo": "tutorials-ims",

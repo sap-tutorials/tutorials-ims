@@ -14,6 +14,19 @@
 
     <p class="signin-choose">Choose your authentication service:</p>
 
+    {{/*
+      SAP-ID guidance (issue #2651). Users who already have an SAP ID but sign in
+      with a social provider whose identity does not match it can be resolved to a
+      SEPARATE profile — their existing progress, completions, and Devtoberfest
+      points do not carry over. Steer SAP-ID holders to the SAP ID button. Static
+      content, always shown; no JS.
+    */}}
+    <p class="signin-sapid-note" role="note">
+      <strong>Already have an SAP ID?</strong> Use <strong>Continue with SAP ID</strong>.
+      Signing in with a social provider that doesn&rsquo;t match your SAP ID can create
+      a separate profile, and your existing progress and points won&rsquo;t carry over.
+    </p>
+
     <div class="signin-actions">
       {{/*
         Provider sign-in buttons, RPT-style (logo + label, full-width stacked).
@@ -31,6 +44,10 @@
         chosen IdP (IAS prompt=login would force it, but the approuter does not
         forward prompt) — tracked as a follow-up.
       */}}
+      <a class="fd-button fd-button--emphasized signin-btn" data-signin-idp href="/login?sap_idp=sap.default">
+        <img class="signin-logo signin-logo--sap" src="/img/providers/SAP.svg" alt="" aria-hidden="true" width="20" height="20" />
+        <span>Continue with SAP ID</span>
+      </a>
       <a class="fd-button fd-button--transparent signin-btn" data-signin-idp href="/login?sap_idp=sap.custom,GitHub">
         <img class="signin-logo" src="/img/providers/Github.svg" alt="" aria-hidden="true" width="20" height="20" />
         <span>Continue with GitHub</span>
@@ -46,10 +63,6 @@
       <a class="fd-button fd-button--transparent signin-btn" data-signin-idp href="/login?sap_idp=sap.custom,LinkedIn">
         <img class="signin-logo" src="/img/providers/linkedin.webp" alt="" aria-hidden="true" width="20" height="20" />
         <span>Continue with LinkedIn</span>
-      </a>
-      <a class="fd-button fd-button--emphasized signin-btn" data-signin-idp href="/login?sap_idp=sap.default">
-        <img class="signin-logo signin-logo--sap" src="/img/providers/SAP.svg" alt="" aria-hidden="true" width="20" height="20" />
-        <span>Continue with SAP ID</span>
       </a>
     </div>
 
@@ -214,5 +227,16 @@
     margin: 1rem 0 0;
   }
   .signin-session-nudge a { color: var(--sapLinkColor, #0070f2); }
+  .signin-sapid-note {
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    text-align: left;
+    color: var(--sapTextColor, #32363a);
+    background: var(--sapWarningBackground, #fef7f1);
+    border: 1px solid var(--sapWarningBorderColor, #e76500);
+    border-radius: 0.5rem;
+    padding: 0.625rem 0.875rem;
+    margin: 0 0 1rem;
+  }
 </style>
 {{ end }}
