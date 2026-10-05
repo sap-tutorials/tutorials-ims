@@ -14,7 +14,7 @@
       "async": true
     },
     "dependencies": {
-      "minUI5Version": "1.136.0",
+      "minUI5Version": "1.148.0",
       "libs": {
         "sap.m": {},
         "sap.ui.core": {},
