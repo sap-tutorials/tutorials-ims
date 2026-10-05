@@ -306,10 +306,15 @@ export async function resolveUser(user, db) {
       (r) => r.email && !NOREPLY_GITHUB_RE.test(r.email),
     );
     if (candidates.length) {
-      // Prefer a row whose sapId is a real SAP ID (letter+digits) over a stray
-      // SCIM-UUID-keyed row sharing the same email (#2550 collision fix).
-      const real = candidates.find((r) => r.sapId && !SCIM_UUID_RE.test(r.sapId));
-      const row = real ?? candidates[0];
+      // Tag registration-bearing rows so pickCanonicalRow prefers them — the
+      // same tagging the reconciliation job applies, so login-canonical and
+      // job-canonical agree on which row wins for a cluster (#2651).
+      const { EventRegistrations } = cds.entities('com.sap.developers.ims');
+      for (const c of candidates) {
+        const reg = await run(SELECT.one.from(EventRegistrations).where({ user_ID: c.ID }));
+        c.__hasRegistration = !!reg;
+      }
+      const row = pickCanonicalRow(candidates);
       if (isu) {
         await writeIdentityLink(row.ID, isu, {
           provider: providerFromIssuer(isu.issuer),
@@ -376,13 +381,41 @@ export async function pinResolvedUser(user, db) {
 export function tokenEmail(user) {
   const p = user?.authInfo?.token?.payload;
   const isEmail = (v) => typeof v === 'string' && v.includes('@');
-  const raw = (isEmail(p?.email) && p.email) || (isEmail(p?.sub) && p.sub) || null;
+  // IAS tokens (post SAP ID Service migration) place email in xs.user.attributes
+  // (surfaced as user.attr.email) rather than the root payload.email claim.
+  // Fall back to attr.email so Tier-3 email match works for both token shapes.
+  const raw = (isEmail(p?.email) && p.email)
+    || (isEmail(p?.sub) && p.sub)
+    || (isEmail(user?.attr?.email) && user.attr.email)
+    || null;
   return raw ? raw.toLowerCase() : null;
 }
 
 // Stored GitHub-synthetic emails (contributor API) must never be a Tier-3 match
 // target — they are dirty data, not a login identity.
 const NOREPLY_GITHUB_RE = /@users\.noreply\.github\.com$/i;
+
+/**
+ * Deterministic canonical pick when one human has multiple Users rows (#2651).
+ * Order: registration-bearing (tagged `__hasRegistration`) → real/canonical
+ * sapId → oldest createdAt → lowest legacyId. Pure; caller supplies rows.
+ */
+export function pickCanonicalRow(rows) {
+  const list = (rows ?? []).filter(Boolean);
+  if (list.length <= 1) return list[0] ?? null;
+  const isCanonical = (r) => r.sapId && !SCIM_UUID_RE.test(r.sapId) && !r.sapId.includes('@');
+  const score = (r) => [
+    r.__hasRegistration ? 0 : 1,
+    isCanonical(r) ? 0 : 1,
+    r.createdAt ? Date.parse(r.createdAt) : Number.MAX_SAFE_INTEGER,
+    typeof r.legacyId === 'number' ? r.legacyId : Number.MAX_SAFE_INTEGER,
+  ];
+  return list.slice().sort((a, b) => {
+    const sa = score(a), sb = score(b);
+    for (let i = 0; i < sa.length; i++) if (sa[i] !== sb[i]) return sa[i] - sb[i];
+    return 0;
+  })[0];
+}
 
 /**
  * Resolve to the migrated Users row (or null) for the authenticated request.
@@ -647,6 +680,18 @@ export async function provisionDbUser(user, columns) {
   // durable GitHub key regardless of the fronting IAS tenant.
   const ghNew = githubIdentityFromUser(user);
   if (ghNew) await linkGithubIdentity(newId, ghNew);
-  const q = SELECT.one.from(Users).where({ ID: newId });
+  // If a concurrent racer already minted the row (the INSERT above was caught
+  // as a duplicate / no-op), re-resolve by trusted email so we return the
+  // surviving row rather than a phantom newId. (#2651)
+  let finalId = newId;
+  const minted = await SELECT.one.from(Users).where({ ID: newId });
+  if (!minted) {
+    const te = tokenEmail(user);
+    const surv = te ? pickCanonicalRow(
+      ((await SELECT.from(Users).where`lower(email) = ${te}`) ?? [])
+        .filter((r) => r.email && !NOREPLY_GITHUB_RE.test(r.email))) : null;
+    if (surv) finalId = surv.ID;
+  }
+  const q = SELECT.one.from(Users).where({ ID: finalId });
   return (columns && columns.length) ? await q.columns(...columns) : await q;
 }
