@@ -1,0 +1,5 @@
+{
+  "$comment": "SINGLE SOURCE OF TRUTH for the SAPUI5 version used by the Admin UI and display-app. Edit cdnVersion ONLY here, then run `npm run apply:ui5-version` from repo root (or let the prebuild hook do it). All ui5.yaml framework.version values and the CDN bootstrap URLs in the templated index.html files are derived from this. CI guard `check-ui5-version` fails the build if any consumer drifts. Pick a patch that is LIVE on https://ui5.sap.com/versionoverview.html — SAP purges versions ~1yr after end-of-maintenance (the 1.136.0 removal on 2026-10 took the whole Admin UI down; see PR #2658).",
+  "cdnVersion": "1.148.12",
+  "minVersionFloor": "1.148.0"
+}
