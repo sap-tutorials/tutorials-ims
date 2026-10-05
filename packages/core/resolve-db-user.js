@@ -373,7 +373,13 @@ export async function pinResolvedUser(user, db) {
 export function tokenEmail(user) {
   const p = user?.authInfo?.token?.payload;
   const isEmail = (v) => typeof v === 'string' && v.includes('@');
-  const raw = (isEmail(p?.email) && p.email) || (isEmail(p?.sub) && p.sub) || null;
+  // IAS tokens (post SAP ID Service migration) place email in xs.user.attributes
+  // (surfaced as user.attr.email) rather than the root payload.email claim.
+  // Fall back to attr.email so Tier-3 email match works for both token shapes.
+  const raw = (isEmail(p?.email) && p.email)
+    || (isEmail(p?.sub) && p.sub)
+    || (isEmail(user?.attr?.email) && user.attr.email)
+    || null;
   return raw ? raw.toLowerCase() : null;
 }
 

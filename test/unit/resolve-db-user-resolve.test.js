@@ -191,6 +191,29 @@ describe('tokenEmail', () => {
     const { tokenEmail } = await import('../../packages/core/resolve-db-user.js');
     expect(tokenEmail(iasUser({ sub: 'uuid-not-email', email: undefined }))).toBeNull();
   });
+
+  // IAS token shape — email lives in xs.user.attributes (user.attr.email), not
+  // payload.email. These four cases guard the fix for issue #2651.
+  it('IAS token shape (attr.email only) → returns the email', async () => {
+    const { tokenEmail } = await import('../../packages/core/resolve-db-user.js');
+    const user = { attr: { email: 'ida@example.com' }, authInfo: { token: { payload: { sub: 'some-ias-uuid' } } } };
+    expect(tokenEmail(user)).toBe('ida@example.com');
+  });
+  it('XSUAA token shape (payload.email) → still works', async () => {
+    const { tokenEmail } = await import('../../packages/core/resolve-db-user.js');
+    const user = { authInfo: { token: { payload: { email: 'xsuaa@example.com', sub: 'some-uuid' } } } };
+    expect(tokenEmail(user)).toBe('xsuaa@example.com');
+  });
+  it('payload.email takes precedence over attr.email when both present', async () => {
+    const { tokenEmail } = await import('../../packages/core/resolve-db-user.js');
+    const user = { attr: { email: 'attr@example.com' }, authInfo: { token: { payload: { email: 'payload@example.com' } } } };
+    expect(tokenEmail(user)).toBe('payload@example.com');
+  });
+  it('no email anywhere → null', async () => {
+    const { tokenEmail } = await import('../../packages/core/resolve-db-user.js');
+    const user = { authInfo: { token: { payload: { sub: 'some-uuid' } } } };
+    expect(tokenEmail(user)).toBeNull();
+  });
 });
 
 describe('pinResolvedUser', () => {
