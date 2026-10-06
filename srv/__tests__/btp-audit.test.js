@@ -113,3 +113,47 @@ describe('btp-audit classification core', () => {
       ['KEEP', 'NEEDS_REVIEW', 'REPLACE', 'STRIP_PREFIX']);
   });
 });
+
+import cds from '@sap/cds';
+import { collectCandidates } from '../../scripts/btp-audit/export.cjs';
+
+describe('btp-audit export.collectCandidates (in-memory sqlite)', () => {
+  // reuse a single served instance for the DB-backed tests
+  cds.test('serve', '--project', '.', '--in-memory');
+
+  it('selects only fields containing BTP variants, one record per field', async () => {
+    const db = await cds.connect.to('db');
+    const ents = cds.entities('com.sap.developers.ims');
+    const { HomepageShelves, VerbDefinitions } = ents;
+    await DELETE.from(HomepageShelves).where({ ID: { in: ['s-btp', 's-clean'] } });
+    await DELETE.from(VerbDefinitions).where({ verbKey: 'ZZTEST' });
+    await INSERT.into(HomepageShelves).entries([
+      { ID: 's-btp', verb: 'BUILD', shelf: 'TOOLS',
+        title: 'Deploy to SAP BTP', description: 'nothing here',
+        tagline: 'Use the BTP Cockpit', whyItMatters: 'plain text' },
+      { ID: 's-clean', verb: 'LEARN', shelf: 'REFERENCE',
+        title: 'Clean title', description: 'clean', tagline: 'clean', whyItMatters: 'clean' },
+    ]);
+    await INSERT.into(VerbDefinitions).entries([
+      { verbKey: 'ZZTEST', label: 'Build', tagline: 'On Business Technology Platform',
+        whyItMatters: 'clean' },
+    ]);
+
+    const found = await collectCandidates(db, ents);
+    const mine = found.filter(c =>
+      (c.entity === 'HomepageShelves' && ['s-btp', 's-clean'].includes(c.key)) ||
+      (c.entity === 'VerbDefinitions' && c.key === 'ZZTEST'));
+
+    // s-btp.title, s-btp.tagline, ZZTEST.tagline  => 3; s-clean => 0
+    expect(mine.map(c => `${c.entity}.${c.key}.${c.field}`).sort()).toEqual([
+      'HomepageShelves.s-btp.tagline',
+      'HomepageShelves.s-btp.title',
+      'VerbDefinitions.ZZTEST.tagline',
+    ]);
+    const title = mine.find(c => c.field === 'title');
+    expect(title.value).toBe('Deploy to SAP BTP');
+
+    await DELETE.from(HomepageShelves).where({ ID: { in: ['s-btp', 's-clean'] } });
+    await DELETE.from(VerbDefinitions).where({ verbKey: 'ZZTEST' });
+  });
+});
