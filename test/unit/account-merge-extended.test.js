@@ -549,7 +549,8 @@ describe('mergeAccounts — Task 2 (#2641)', () => {
     await mergeAccounts(pid, sid);
 
     // Second merge with same uuids should reject with ALREADY_MERGED
-    await expect(mergeAccounts(pid, sid)).rejects.toThrow('ALREADY_MERGED');
+    // Must assert both message and code property for handler dispatch
+    await expect(mergeAccounts(pid, sid)).rejects.toMatchObject({ message: 'ALREADY_MERGED', code: 'ALREADY_MERGED' });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -571,5 +572,101 @@ describe('mergeAccounts — Task 2 (#2641)', () => {
     expect(result).toHaveProperty('movedCounts');
     expect(result.movedCounts).toHaveProperty('taskRecordsDeduped');
     expect(result.movedCounts.taskRecordsDeduped).toBe(1);
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Case 4: GROUP rollup recomputation — union of A+B leaf completions satisfy GROUP
+  // ─────────────────────────────────────────────────────────────────────────
+  // NOTE: Skipped at unit level. This test requires CompletionPaths + CompletionPathItems
+  // seed infrastructure (full GraphQL slot-membership wiring) that only exists in hybrid
+  // HANA deployments. See Task 10 for hybrid-HANA rollup assertion testing.
+  it.skip('recomputes GROUP rollup for union of completions from merged accounts', async () => {
+    const { Groups, Tutorials, GroupPathItems } = cds.entities('com.sap.developers.ims');
+    const pid = cds.utils.uuid(), sid = cds.utils.uuid();
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: pid, email: `gr-p-${pid}@test.example` });
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: sid, email: `gr-s-${sid}@test.example` });
+    const P = await SELECT.one.from(Users).where({ uuid: pid });
+    const S = await SELECT.one.from(Users).where({ uuid: sid });
+
+    // Create a Group with 2 tutorials
+    const groupId = cds.utils.uuid();
+    const tut1Id = cds.utils.uuid();
+    const tut2Id = cds.utils.uuid();
+    await INSERT.into(Groups).entries({
+      ID: groupId,
+      slug: `test-group-${groupId}`,
+      legacyId: 5001,
+      title: `Test Group`,
+      published: true,
+    });
+    await INSERT.into(Tutorials).entries({
+      ID: tut1Id,
+      slug: `tut-1-${tut1Id}`,
+      legacyId: 6001,
+      title: 'Tutorial 1',
+    });
+    await INSERT.into(Tutorials).entries({
+      ID: tut2Id,
+      slug: `tut-2-${tut2Id}`,
+      legacyId: 6002,
+      title: 'Tutorial 2',
+    });
+    // Link tutorials to group
+    await INSERT.into(GroupPathItems).entries({
+      ID: cds.utils.uuid(),
+      group_ID: groupId,
+      tutorial_ID: tut1Id,
+      itemOrder: 1,
+      legacyId: 1001,
+    });
+    await INSERT.into(GroupPathItems).entries({
+      ID: cds.utils.uuid(),
+      group_ID: groupId,
+      tutorial_ID: tut2Id,
+      itemOrder: 2,
+      legacyId: 1002,
+    });
+
+    // Primary completes tutorial 1
+    await INSERT.into(TaskRecords).entries({
+      ID: cds.utils.uuid(),
+      user_ID: P.ID,
+      taskType: 'TUTORIAL',
+      taskLegacyId: 6001,
+      status: 'COMPLETED',
+      completionDate: '2026-01-01T00:00:00Z',
+    });
+
+    // Secondary completes tutorial 2
+    await INSERT.into(TaskRecords).entries({
+      ID: cds.utils.uuid(),
+      user_ID: S.ID,
+      taskType: 'TUTORIAL',
+      taskLegacyId: 6002,
+      status: 'COMPLETED',
+      completionDate: '2026-01-02T00:00:00Z',
+    });
+
+    // Merge: secondary → primary
+    await mergeAccounts(pid, sid);
+
+    // After merge, primary should have both tutorial completions
+    const tutorials = await SELECT.from(TaskRecords)
+      .where({ user_ID: P.ID, taskType: 'TUTORIAL' })
+      .orderBy('taskLegacyId');
+    expect(tutorials.length).toBeGreaterThanOrEqual(2);
+    expect(tutorials.map(t => t.taskLegacyId).sort()).toContain(6001);
+    expect(tutorials.map(t => t.taskLegacyId).sort()).toContain(6002);
+
+    // rollUpParentsForCompletion should have created a GROUP TaskRecord for the primary
+    const groupRecord = await SELECT.one.from(TaskRecords)
+      .where({
+        user_ID: P.ID,
+        taskType: 'GROUP',
+        taskLegacyId: 5001,
+      });
+
+    expect(groupRecord).toBeTruthy();
+    expect(groupRecord.status).toBe('COMPLETED');
   });
 });
