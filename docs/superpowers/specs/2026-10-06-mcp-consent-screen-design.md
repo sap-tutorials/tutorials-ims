@@ -1,7 +1,7 @@
 # MCP OAuth Consent Screen ("Application Access Request") — Design Spike
 
 **Date:** 2026-10-06
-**Status:** Research / spike proposal (no code written)
+**Status:** Research / spike proposal (no code written) — open questions RESOLVED by Tom 2026-10-06
 **Author:** Design spike for Tom
 **Related:** `2026-09-29-mcp-oauth-design-spec.md`, `2026-10-04-a2a-ias-auth-migration-design.md`, `docs/developers/architecture/mcp-server.md`
 
@@ -16,8 +16,10 @@ the OAuth authorization-code flow, before issuing a token. The reference screen:
 - A read-only panel: **Application ID** (the OAuth `client_id`) and
   **"Credentials will be sent to"** (the OAuth `redirect_uri`, e.g.
   `http://localhost:18766/mcp-callback`) — a phishing/mis-redirect check.
-- Three **independent acknowledgement checkboxes** the user must tick:
-  1. *"I acknowledge that <MCP Server> is powered by AI."*
+- The three **independent acknowledgement checkboxes** the user must tick. **Copy
+  is BYTE-IDENTICAL to the other SAP MCP tools' screen**, substituting only the
+  service name (`<MCP Server>` → "SAP Developers MCP"):
+  1. *"I acknowledge that SAP Developers MCP is powered by AI."*
   2. *"I acknowledge that I remain responsible for code compliance and security,
      must verify all results, continue using mandatory tools and processes."*
   3. *"I acknowledge to not enter any personal data."*
@@ -141,23 +143,31 @@ resource doc and the `401 WWW-Authenticate` challenge
    mcp-remote end-to-end against DEV.
 
 **Out of scope for the spike (follow-ups if it graduates):**
-- Recording acknowledgement (who/when/which version) for audit — likely a CAP
-  endpoint + table; the reference screen implies a compliance record.
 - Dynamic client registration (`/register`) — mcp-remote uses static client info
   today; not required for the UX.
-- Consent "remember" / re-prompt policy.
 - Localization of the consent copy.
 - PROD rollout + Akamai UA allowlisting for the token back-channel.
 
-## Open questions for Tom / stakeholders
+**Explicitly decided NOT needed (not deferred — ruled out):**
+- Acknowledgement persistence / audit record (decision 2).
+- Consent "remember" / re-prompt-policy logic — always re-prompt (decision 3).
 
-1. **Acknowledgement wording** — are the three statements fixed by SAP Legal/DevRel,
-   or do we draft? (Drives whether the copy is a constant or a managed document.)
-2. **Audit requirement** — must each Allow be persisted (user, client_id, timestamp,
-   ack-version)? If yes, the spike needs a CAP write-leg, not just approuter HTML.
-3. **Re-prompt policy** — every authorize, or once per client per user?
-4. **Scope** — does this gate ALL authenticated MCP access (`/mcp-auth`), or only
-   specific clients?
+## Resolved decisions (Tom, 2026-10-06)
+
+1. **Acknowledgement wording** — use the **exact same text** as the other SAP MCP
+   tools' consent screen, substituting only the service name. No Legal/DevRel
+   drafting round needed; the copy is a hard-coded constant (see Problem section).
+2. **No persistence.** Acknowledgement is NOT recorded — no audit table, no CAP
+   write-leg. The spike is **approuter-HTML-only**. (Matches the other tools: the
+   ack is a gate, not a stored compliance record.)
+3. **Re-prompt on EVERY authorize.** Consent is part of the login handshake and
+   shows each time the authorize flow runs (observed: ~weekly re-auth in Joule
+   Work Desktop for these MCPs). No "remember" / once-per-client logic — simpler.
+4. **Scope = every interactive user-auth-code flow only.** Gate `/mcp-auth` (the
+   browser authorize-code+PKCE flow). **Explicitly EXCLUDE** the PAT flow
+   (`/mcp-pat`) and any M2M / client-credentials flow — those never hit
+   `/mcp-oauth/authorize`, so they are naturally out of the path; no extra guard
+   needed beyond mounting consent only on the interactive authorize endpoint.
 
 ## Effort estimate
 
