@@ -3,6 +3,8 @@ import cds from '@sap/cds';
 export async function mergeAccounts(primaryUuid, secondaryUuid) {
   const { Users, TaskRecords, PrizeRecords, AccomplishmentRecords,
           UserIdentities, EventRegistrations, CatGameAwards,
+          PuzzleProgress, PetSubmissions, UserMetaData, UserLearningPreferences,
+          SessionFavorites, DeveloperEnvironmentTabs,
           PrimaryAccounts, SecondaryAccounts } = cds.entities('com.sap.developers.ims');
   const LOG = cds.log('account-merge');
 
@@ -103,6 +105,68 @@ export async function mergeAccounts(primaryUuid, secondaryUuid) {
       total -= trim;
     }
   }
+
+  // Puzzle progress: unique (user,puzzle) — keep primary's row on conflict.
+  async function transferPuzzleProgress(PuzzleProgress, pId, sId) {
+    let moved = 0;
+    const rows = await SELECT.from(PuzzleProgress).where({ user_ID: sId });
+    for (const r of rows) {
+      const dup = await SELECT.one.from(PuzzleProgress).where({ user_ID: pId, puzzle_ID: r.puzzle_ID });
+      if (dup) await DELETE.from(PuzzleProgress).where({ ID: r.ID });
+      else { await UPDATE(PuzzleProgress).where({ ID: r.ID }).set({ user_ID: pId }); moved++; }
+    }
+    return moved;
+  }
+  // Pet submissions: no per-user uniqueness — straight repoint.
+  async function transferPetSubmissions(PetSubmissions, pId, sId) {
+    const r = await UPDATE(PetSubmissions).where({ user_ID: sId }).set({ user_ID: pId });
+    return r | 0;
+  }
+  // Developer environment tabs: has ID, no per-user uniqueness — straight repoint.
+  async function transferEnvTabs(DeveloperEnvironmentTabs, pId, sId) {
+    const r = await UPDATE(DeveloperEnvironmentTabs).where({ user_ID: sId }).set({ user_ID: pId });
+    return r | 0;
+  }
+  // Session favorites: unique (user,sourceType,sessionRef) — drop secondary dup.
+  async function transferSessionFavorites(SessionFavorites, pId, sId) {
+    let moved = 0;
+    const rows = await SELECT.from(SessionFavorites).where({ user_ID: sId });
+    for (const r of rows) {
+      const dup = await SELECT.one.from(SessionFavorites)
+        .where({ user_ID: pId, sourceType: r.sourceType, sessionRef: r.sessionRef });
+      if (dup) await DELETE.from(SessionFavorites).where({ ID: r.ID });
+      else { await UPDATE(SessionFavorites).where({ ID: r.ID }).set({ user_ID: pId }); moved++; }
+    }
+    return moved;
+  }
+  // UserMetaData: PK (user_ID,key), NO ID column — A wins per key; else move B's.
+  async function transferUserMetaData(UserMetaData, pId, sId) {
+    let moved = 0;
+    const rows = await SELECT.from(UserMetaData).where({ user_ID: sId });
+    for (const r of rows) {
+      const dup = await SELECT.one.from(UserMetaData).where({ user_ID: pId, key: r.key });
+      if (dup) await DELETE.from(UserMetaData).where({ user_ID: sId, key: r.key });
+      else { await UPDATE(UserMetaData).where({ user_ID: sId, key: r.key }).set({ user_ID: pId }); moved++; }
+    }
+    return moved;
+  }
+  // UserLearningPreferences: PK user_ID only, NO ID — A wins if it has a row; else move B's.
+  async function transferLearningPrefs(UserLearningPreferences, pId, sId) {
+    const primary = await SELECT.one.from(UserLearningPreferences).where({ user_ID: pId });
+    if (primary) { await DELETE.from(UserLearningPreferences).where({ user_ID: sId }); return 0; }
+    const sec = await SELECT.one.from(UserLearningPreferences).where({ user_ID: sId });
+    if (!sec) return 0;
+    await UPDATE(UserLearningPreferences).where({ user_ID: sId }).set({ user_ID: pId });
+    return 1;
+  }
+
+  const moved = {};
+  moved.puzzleProgress   = await transferPuzzleProgress(PuzzleProgress, primaryUser.ID, secondaryUser.ID);
+  moved.petSubmissions   = await transferPetSubmissions(PetSubmissions, primaryUser.ID, secondaryUser.ID);
+  moved.envTabs          = await transferEnvTabs(DeveloperEnvironmentTabs, primaryUser.ID, secondaryUser.ID);
+  moved.sessionFavorites = await transferSessionFavorites(SessionFavorites, primaryUser.ID, secondaryUser.ID);
+  moved.userMetaData     = await transferUserMetaData(UserMetaData, primaryUser.ID, secondaryUser.ID);
+  moved.learningPrefs    = await transferLearningPrefs(UserLearningPreferences, primaryUser.ID, secondaryUser.ID);
 
   // Track the merge
   let primary = await SELECT.one.from(PrimaryAccounts).where({ uuid: primaryUuid });

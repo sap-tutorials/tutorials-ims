@@ -13,11 +13,15 @@ const { mergeAccounts } = await import('../../srv/lib/account-merge.js');
 
 describe('mergeAccounts — extended tables (#2651)', () => {
   let db;
-  let Users, Events, UserIdentities, EventRegistrations, CatGameAwards;
+  let Users, Events, UserIdentities, EventRegistrations, CatGameAwards,
+      Puzzles, PuzzleProgress, PetSubmissions, UserMetaData, UserLearningPreferences,
+      SessionFavorites, DeveloperEnvironmentTabs, Petoberfests;
 
   beforeAll(async () => {
     db = await cds.connect.to('db');
-    ({ Users, Events, UserIdentities, EventRegistrations, CatGameAwards } =
+    ({ Users, Events, UserIdentities, EventRegistrations, CatGameAwards,
+       Puzzles, PuzzleProgress, PetSubmissions, UserMetaData, UserLearningPreferences,
+       SessionFavorites, DeveloperEnvironmentTabs, Petoberfests } =
       cds.entities('com.sap.developers.ims'));
   });
 
@@ -300,5 +304,204 @@ describe('mergeAccounts — extended tables (#2651)', () => {
     // None left on secondary
     const secLeft = await SELECT.from(CatGameAwards).where({ user_ID: secondaryUser.ID });
     expect(secLeft.filter(a => a.event_ID === evId).length).toBe(0);
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Case 5: PuzzleProgress — unique (user,puzzle) — keep primary's row
+  // ─────────────────────────────────────────────────────────────────────────
+  it('PuzzleProgress: on (user,puzzle) conflict, primary row is kept and secondary dropped', async () => {
+    const pid = cds.utils.uuid(), sid = cds.utils.uuid();
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: pid, email: `pp-p-${pid}@test.example` });
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: sid, email: `pp-s-${sid}@test.example` });
+    const P = await SELECT.one.from(Users).where({ uuid: pid });
+    const S = await SELECT.one.from(Users).where({ uuid: sid });
+    const puz = cds.utils.uuid();
+    await INSERT.into(Puzzles).entries({ ID: puz, slug: `puz-${puz}` });
+    await INSERT.into(PuzzleProgress).entries({ ID: cds.utils.uuid(), user_ID: P.ID, puzzle_ID: puz, filledGrid: '{"0,0":"A"}' });
+    await INSERT.into(PuzzleProgress).entries({ ID: cds.utils.uuid(), user_ID: S.ID, puzzle_ID: puz, filledGrid: '{"0,0":"Z"}' });
+    await mergeAccounts(pid, sid);
+    const rows = await SELECT.from(PuzzleProgress).where({ puzzle_ID: puz });
+    expect(rows.length).toBe(1);
+    expect(rows[0].user_ID).toBe(P.ID);
+    expect(rows[0].filledGrid).toBe('{"0,0":"A"}'); // primary kept
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Case 6: UserLearningPreferences — PK user_ID only — A wins if present
+  // ─────────────────────────────────────────────────────────────────────────
+  it('UserLearningPreferences: if primary has a row, secondary is deleted; else secondary is moved', async () => {
+    const pid = cds.utils.uuid(), sid = cds.utils.uuid();
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: pid, email: `ulp-p-${pid}@test.example` });
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: sid, email: `ulp-s-${sid}@test.example` });
+    const P = await SELECT.one.from(Users).where({ uuid: pid });
+    const S = await SELECT.one.from(Users).where({ uuid: sid });
+
+    // Subcase 1: primary has row, secondary has row → secondary deleted
+    await INSERT.into(UserLearningPreferences).entries({
+      user_ID: P.ID, deployment: 'cloud', role: 'developer',
+    });
+    await INSERT.into(UserLearningPreferences).entries({
+      user_ID: S.ID, deployment: 'onprem', role: 'architect',
+    });
+    await mergeAccounts(pid, sid);
+    const after1 = await SELECT.from(UserLearningPreferences).where({ user_ID: P.ID });
+    expect(after1.length).toBe(1);
+    expect(after1[0].deployment).toBe('cloud');
+    const after1Sec = await SELECT.from(UserLearningPreferences).where({ user_ID: S.ID });
+    expect(after1Sec.length).toBe(0);
+
+    // Subcase 2: primary has no row, secondary has one → secondary moved
+    const pid2 = cds.utils.uuid(), sid2 = cds.utils.uuid();
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: pid2, email: `ulp-p2-${pid2}@test.example` });
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: sid2, email: `ulp-s2-${sid2}@test.example` });
+    const P2 = await SELECT.one.from(Users).where({ uuid: pid2 });
+    const S2 = await SELECT.one.from(Users).where({ uuid: sid2 });
+    await INSERT.into(UserLearningPreferences).entries({
+      user_ID: S2.ID, deployment: 'cloud', role: 'sysadmin',
+    });
+    await mergeAccounts(pid2, sid2);
+    const after2 = await SELECT.from(UserLearningPreferences).where({ user_ID: P2.ID });
+    expect(after2.length).toBe(1);
+    expect(after2[0].deployment).toBe('cloud');
+    expect(after2[0].role).toBe('sysadmin');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Case 7: UserMetaData — PK (user_ID,key) — A wins per key; distinct keys both end on A
+  // ─────────────────────────────────────────────────────────────────────────
+  it('UserMetaData: same key → A kept; distinct keys → both on A', async () => {
+    const pid = cds.utils.uuid(), sid = cds.utils.uuid();
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: pid, email: `umd-p-${pid}@test.example` });
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: sid, email: `umd-s-${sid}@test.example` });
+    const P = await SELECT.one.from(Users).where({ uuid: pid });
+    const S = await SELECT.one.from(Users).where({ uuid: sid });
+
+    // Primary has key='lang' → value='en'
+    await INSERT.into(UserMetaData).entries({
+      user_ID: P.ID, key: 'lang', value: 'en',
+    });
+    // Secondary has same key='lang' → value='de' (should be dropped)
+    await INSERT.into(UserMetaData).entries({
+      user_ID: S.ID, key: 'lang', value: 'de',
+    });
+    // Secondary has distinct key='theme' → value='dark' (should be moved)
+    await INSERT.into(UserMetaData).entries({
+      user_ID: S.ID, key: 'theme', value: 'dark',
+    });
+
+    await mergeAccounts(pid, sid);
+
+    const rows = await SELECT.from(UserMetaData).where({ user_ID: P.ID }).orderBy('key');
+    expect(rows.length).toBe(2);
+    const langRow = rows.find(r => r.key === 'lang');
+    const themeRow = rows.find(r => r.key === 'theme');
+    expect(langRow).toBeTruthy();
+    expect(langRow.value).toBe('en'); // primary kept
+    expect(themeRow).toBeTruthy();
+    expect(themeRow.value).toBe('dark'); // secondary moved
+    const secRows = await SELECT.from(UserMetaData).where({ user_ID: S.ID });
+    expect(secRows.length).toBe(0);
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Case 8: SessionFavorites — unique (user,sourceType,sessionRef) — one per combo on A
+  // ─────────────────────────────────────────────────────────────────────────
+  it('SessionFavorites: same (sourceType,sessionRef) → one on A; distinct → both on A', async () => {
+    const pid = cds.utils.uuid(), sid = cds.utils.uuid();
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: pid, email: `sf-p-${pid}@test.example` });
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: sid, email: `sf-s-${sid}@test.example` });
+    const P = await SELECT.one.from(Users).where({ uuid: pid });
+    const S = await SELECT.one.from(Users).where({ uuid: sid });
+
+    // Primary: TECHED / session-1
+    await INSERT.into(SessionFavorites).entries({
+      ID: cds.utils.uuid(), user_ID: P.ID, sourceType: 'TECHED', sessionRef: 'session-1',
+    });
+    // Secondary: same (TECHED, session-1) — should be dropped
+    await INSERT.into(SessionFavorites).entries({
+      ID: cds.utils.uuid(), user_ID: S.ID, sourceType: 'TECHED', sessionRef: 'session-1',
+    });
+    // Secondary: distinct (DEVTOBERFEST, task-123) — should be moved
+    await INSERT.into(SessionFavorites).entries({
+      ID: cds.utils.uuid(), user_ID: S.ID, sourceType: 'DEVTOBERFEST', sessionRef: 'task-123',
+    });
+
+    await mergeAccounts(pid, sid);
+
+    const rows = await SELECT.from(SessionFavorites).where({ user_ID: P.ID }).orderBy('sessionRef');
+    expect(rows.length).toBe(2);
+    const teched = rows.find(r => r.sourceType === 'TECHED');
+    const devtoberfest = rows.find(r => r.sourceType === 'DEVTOBERFEST');
+    expect(teched).toBeTruthy();
+    expect(teched.sessionRef).toBe('session-1');
+    expect(devtoberfest).toBeTruthy();
+    expect(devtoberfest.sessionRef).toBe('task-123');
+    const secRows = await SELECT.from(SessionFavorites).where({ user_ID: S.ID });
+    expect(secRows.length).toBe(0);
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Case 9: PetSubmissions — no per-user uniqueness — all B rows repoint to A
+  // ─────────────────────────────────────────────────────────────────────────
+  it('PetSubmissions: straight repoint — all B rows end on A', async () => {
+    const pid = cds.utils.uuid(), sid = cds.utils.uuid();
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: pid, email: `ps-p-${pid}@test.example` });
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: sid, email: `ps-s-${sid}@test.example` });
+    const P = await SELECT.one.from(Users).where({ uuid: pid });
+    const S = await SELECT.one.from(Users).where({ uuid: sid });
+
+    const petA = cds.utils.uuid();
+    const petB = cds.utils.uuid();
+    await INSERT.into(Petoberfests).entries({ ID: petA, slug: `pet-${petA}` });
+    await INSERT.into(Petoberfests).entries({ ID: petB, slug: `pet-${petB}` });
+
+    // Primary has one submission
+    await INSERT.into(PetSubmissions).entries({
+      ID: cds.utils.uuid(), user_ID: P.ID, petoberfest_ID: petA,
+    });
+    // Secondary has two submissions (no uniqueness constraint, can be multiple per petoberfest)
+    await INSERT.into(PetSubmissions).entries({
+      ID: cds.utils.uuid(), user_ID: S.ID, petoberfest_ID: petA,
+    });
+    await INSERT.into(PetSubmissions).entries({
+      ID: cds.utils.uuid(), user_ID: S.ID, petoberfest_ID: petB,
+    });
+
+    await mergeAccounts(pid, sid);
+
+    const primaryRows = await SELECT.from(PetSubmissions).where({ user_ID: P.ID });
+    expect(primaryRows.length).toBe(3);
+    const secRows = await SELECT.from(PetSubmissions).where({ user_ID: S.ID });
+    expect(secRows.length).toBe(0);
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Case 10: DeveloperEnvironmentTabs — no per-user uniqueness — all B rows repoint to A
+  // ─────────────────────────────────────────────────────────────────────────
+  it('DeveloperEnvironmentTabs: straight repoint — all B rows end on A', async () => {
+    const pid = cds.utils.uuid(), sid = cds.utils.uuid();
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: pid, email: `det-p-${pid}@test.example` });
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: sid, email: `det-s-${sid}@test.example` });
+    const P = await SELECT.one.from(Users).where({ uuid: pid });
+    const S = await SELECT.one.from(Users).where({ uuid: sid });
+
+    // Primary has one tab
+    await INSERT.into(DeveloperEnvironmentTabs).entries({
+      ID: cds.utils.uuid(), user_ID: P.ID, tabName: 'Tab-A', tabOrder: 1,
+    });
+    // Secondary has two tabs
+    await INSERT.into(DeveloperEnvironmentTabs).entries({
+      ID: cds.utils.uuid(), user_ID: S.ID, tabName: 'Tab-B', tabOrder: 1,
+    });
+    await INSERT.into(DeveloperEnvironmentTabs).entries({
+      ID: cds.utils.uuid(), user_ID: S.ID, tabName: 'Tab-C', tabOrder: 2,
+    });
+
+    await mergeAccounts(pid, sid);
+
+    const primaryRows = await SELECT.from(DeveloperEnvironmentTabs).where({ user_ID: P.ID });
+    expect(primaryRows.length).toBe(3);
+    const secRows = await SELECT.from(DeveloperEnvironmentTabs).where({ user_ID: S.ID });
+    expect(secRows.length).toBe(0);
   });
 });
