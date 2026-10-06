@@ -45,6 +45,11 @@ async function applyChangeset(db, entities, records, opts) {
     if (!meta) { log.push({ ...pick(r), status: 'skipped-unknown-entity' }); continue; }
     const row = await readCurrent(db, entities, meta, r.key);
     if (!row) { log.push({ ...pick(r), status: 'skipped-missing-row' }); continue; }
+    // Whitelist the field name against the fixed AUDIT_MAP so the HANA SQL
+    // identifier is provably from code, not from changeset.json data.
+    if (!meta.textFields.includes(r.field)) {
+      log.push({ ...pick(r), status: 'skipped-invalid-field' }); continue;
+    }
     const currentValue = row[r.field];
     const { status, write } = decideApply(r, currentValue);
     if (write && commit) {

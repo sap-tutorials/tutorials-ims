@@ -280,4 +280,24 @@ describe('btp-audit applyChangeset (in-memory sqlite)', () => {
 
     await DELETE.from(HomepageShelves).where({ ID: { in: ['a1', 'a2', 'a3'] } });
   });
+
+  it('rejects a record with a field name not in the AUDIT_MAP whitelist', async () => {
+    const db = await cds.connect.to('db');
+    const ents = cds.entities('com.sap.developers.ims');
+    const { HomepageShelves } = ents;
+    await DELETE.from(HomepageShelves).where({ ID: 'ax1' });
+    await INSERT.into(HomepageShelves).entries([
+      { ID: 'ax1', verb: 'BUILD', shelf: 'TOOLS', title: 'Deploy to SAP BTP' },
+    ]);
+    const records = [
+      { entity: 'HomepageShelves', key: 'ax1', field: 'notAFieldInMap',
+        oldValue: 'anything', newValue: 'injected', action: 'REPLACE' },
+    ];
+    const log = await applyChangeset(db, ents, records, { commit: true });
+    expect(log[0].status).toBe('skipped-invalid-field');
+    // confirm nothing was written
+    const row = await SELECT.one.from(HomepageShelves).where({ ID: 'ax1' });
+    expect(row.title).toBe('Deploy to SAP BTP');
+    await DELETE.from(HomepageShelves).where({ ID: 'ax1' });
+  });
 });
