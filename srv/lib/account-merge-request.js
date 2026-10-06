@@ -7,6 +7,7 @@ import { provisionDbUser } from './resolve-db-user.js';
 import { validateEmail } from './email-validation.js';
 import { isFlagEnabled } from './feature-flags/db-flags.js';
 import { sendNotificationEmail } from './mail-client.js';
+import { mergeAccounts } from './account-merge.js';
 
 const TTL_MIN = 30;
 const RATE_LIMIT_PER_HOUR = 5;
@@ -98,4 +99,41 @@ export async function handleRequestAccountMerge(req) {
     }
   }
   return { status: 'SENT', expiresInMinutes: TTL_MIN };
+}
+
+export async function handleConfirmAccountMerge(req) {
+  if (!isAccountMergeEnabled()) return req.reject(503, 'Account merge is disabled');
+  const A = await provisionDbUser(req.user);
+  if (!A) return req.error(401, 'unable to resolve user');
+
+  const token = String(req.data.token || '');
+  const hashHex = crypto.createHash('sha256').update(token).digest('hex');
+  const { AccountMergeRequests, Users } = cds.entities('com.sap.developers.ims');
+
+  const reqRow = await SELECT.one.from(AccountMergeRequests).where({ tokenHashHex: hashHex });
+  if (!reqRow) return { status: 'INVALID', movedCounts: '{}' };
+  if (reqRow.status !== 'PENDING') return { status: 'INVALID', movedCounts: '{}' };
+  if (new Date(reqRow.expiresAt).getTime() < Date.now()) {
+    await UPDATE(AccountMergeRequests).where({ ID: reqRow.ID }).set({ status: 'EXPIRED' });
+    return { status: 'EXPIRED', movedCounts: '{}' };
+  }
+  if (reqRow.requesterUser_ID !== A.ID) return { status: 'WRONG_ACCOUNT', movedCounts: '{}' };
+
+  const B = await SELECT.one.from(Users).where({ ID: reqRow.targetUser_ID });
+  if (!B) return { status: 'INVALID', movedCounts: '{}' };
+
+  try {
+    // Test seam: allow unit tests to simulate a non-ALREADY_MERGED failure.
+    if (process.env.NODE_ENV === 'test' && globalThis.__mergeAccountsShouldThrowForTest) {
+      throw new Error('simulated merge failure');
+    }
+    const result = await mergeAccounts(A.uuid, B.uuid);
+    await UPDATE(AccountMergeRequests).where({ ID: reqRow.ID })
+      .set({ status: 'MERGED', verifiedAt: new Date().toISOString(), mergedAt: new Date().toISOString() });
+    return { status: 'MERGED', movedCounts: JSON.stringify(result.movedCounts || {}) };
+  } catch (e) {
+    if (e.code === 'ALREADY_MERGED') return { status: 'ALREADY_MERGED', movedCounts: '{}' };
+    req.error(500, 'merge failed'); // rolls back the request tx
+    return { status: 'FAILED', movedCounts: '{}' };
+  }
 }

@@ -340,4 +340,13 @@ service DeveloperService {
     status          : String;
     expiresInMinutes : Integer;
   };
+
+  // #2641 — B opens the magic link while signed in as A, confirming ownership and
+  // triggering the synchronous merge. Returns MERGED, INVALID, EXPIRED, WRONG_ACCOUNT,
+  // ALREADY_MERGED, or FAILED.
+  @(requires: 'authenticated-user')
+  action confirmAccountMerge(token : String) returns {
+    status     : String;
+    movedCounts : String;
+  };
 }
