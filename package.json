@@ -142,7 +142,10 @@
     "build:sdl": "tsx scripts/emit-graphql-sdl.ts",
     "check:graphql-breaking": "tsx scripts/check-graphql-breaking.ts",
     "install-notify-workflows": "tsx scripts/install-notify-workflows.ts",
-    "lint:boundaries": "node scripts/lint-package-boundaries.cjs"
+    "lint:boundaries": "node scripts/lint-package-boundaries.cjs",
+    "btp-audit:export": "cds bind --exec -- node scripts/btp-audit/export.cjs",
+    "btp-audit:classify": "cds bind --exec -- node scripts/btp-audit/classify.cjs",
+    "btp-audit:apply": "cds bind --exec -- node scripts/btp-audit/apply.cjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
@@ -445,7 +448,9 @@
         "dedupWindowMs": 300000
       },
       "redis-websocket": {
-        "vcap": { "label": "redis-cache" }
+        "vcap": {
+          "label": "redis-cache"
+        }
       }
     },
     "hana": {
@@ -455,7 +460,9 @@
       "kind": "socket.io",
       "adapter": {
         "impl": "@socket.io/redis-adapter",
-        "options": { "key": "socket.io" }
+        "options": {
+          "key": "socket.io"
+        }
       }
     },
     "ord": {
