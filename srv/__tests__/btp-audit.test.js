@@ -233,3 +233,51 @@ describe('btp-audit apply core', () => {
       .toThrow(/org/i);
   });
 });
+
+import { applyChangeset } from '../../scripts/btp-audit/apply.cjs';
+
+describe('btp-audit applyChangeset (in-memory sqlite)', () => {
+  cds.test('serve', '--project', '.', '--in-memory');
+
+  it('writes REPLACE on --commit, skips on dry-run, guards concurrent edits', async () => {
+    const db = await cds.connect.to('db');
+    const ents = cds.entities('com.sap.developers.ims');
+    const { HomepageShelves } = ents;
+    await DELETE.from(HomepageShelves).where({ ID: { in: ['a1', 'a2', 'a3'] } });
+    await INSERT.into(HomepageShelves).entries([
+      { ID: 'a1', verb: 'BUILD', shelf: 'TOOLS', title: 'Deploy to SAP BTP' },
+      { ID: 'a2', verb: 'BUILD', shelf: 'TOOLS', title: 'Deploy to SAP BTP' }, // will be edited
+      { ID: 'a3', verb: 'BUILD', shelf: 'TOOLS', title: 'Open BTP Cockpit' },  // KEEP
+    ]);
+    const records = [
+      { entity: 'HomepageShelves', key: 'a1', field: 'title',
+        oldValue: 'Deploy to SAP BTP', newValue: 'Deploy to SAP Business AI Platform', action: 'REPLACE' },
+      { entity: 'HomepageShelves', key: 'a2', field: 'title',
+        oldValue: 'Deploy to SAP BTP', newValue: 'Deploy to SAP Business AI Platform', action: 'REPLACE' },
+      { entity: 'HomepageShelves', key: 'a3', field: 'title',
+        oldValue: 'Open BTP Cockpit', newValue: null, action: 'KEEP' },
+    ];
+
+    // dry-run: nothing written
+    const dry = await applyChangeset(db, ents, records, { commit: false });
+    expect(dry.find(r => r.key === 'a1').status).toBe('would-apply');
+    const a1dry = await SELECT.one.from(HomepageShelves).where({ ID: 'a1' });
+    expect(a1dry.title).toBe('Deploy to SAP BTP'); // unchanged
+
+    // simulate a concurrent edit to a2
+    await UPDATE(HomepageShelves).set({ title: 'Deploy to SAP BTP (hand-edited)' }).where({ ID: 'a2' });
+
+    // commit
+    const log = await applyChangeset(db, ents, records, { commit: true });
+    expect(log.find(r => r.key === 'a1').status).toBe('applied');
+    expect(log.find(r => r.key === 'a2').status).toBe('skipped-concurrent-edit');
+    expect(log.find(r => r.key === 'a3').status).toBe('skipped-action');
+
+    const a1 = await SELECT.one.from(HomepageShelves).where({ ID: 'a1' });
+    const a2 = await SELECT.one.from(HomepageShelves).where({ ID: 'a2' });
+    expect(a1.title).toBe('Deploy to SAP Business AI Platform');
+    expect(a2.title).toBe('Deploy to SAP BTP (hand-edited)'); // untouched
+
+    await DELETE.from(HomepageShelves).where({ ID: { in: ['a1', 'a2', 'a3'] } });
+  });
+});
