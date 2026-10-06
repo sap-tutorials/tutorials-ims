@@ -425,3 +425,21 @@ describe('confirmAccountMerge', () => {
     expect(Array.isArray(aliceTasks)).toBe(true);
   });
 });
+
+// ─── account-merge-verify template render (Task 6) ──────────────────────────────
+
+describe('account-merge-verify template', () => {
+  it('renders with initiatorEmail, link, and ttlMinutes variables', async () => {
+    const { loadTemplate, resolveTemplate } = await import('../../srv/lib/mail-client.js');
+    const template = loadTemplate('account-merge-verify');
+    const rendered = resolveTemplate(template, {
+      link: 'https://x/me/merge?token=T',
+      initiatorEmail: 'a@x',
+      ttlMinutes: '30'
+    });
+
+    expect(rendered).toContain('https://x/me/merge?token=T');
+    expect(rendered).toContain('a@x');
+    expect(rendered).toContain('30');
+  });
+});
