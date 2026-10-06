@@ -505,3 +505,71 @@ describe('mergeAccounts — extended tables (#2651)', () => {
     expect(secRows.length).toBe(0);
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Task 2 tests: TaskRecords dedupe + rollup recompute + idempotency
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('mergeAccounts — Task 2 (#2641)', () => {
+  let db;
+  let Users, TaskRecords, SecondaryAccounts;
+
+  beforeAll(async () => {
+    db = await cds.connect.to('db');
+    ({ Users, TaskRecords, SecondaryAccounts } =
+      cds.entities('com.sap.developers.ims'));
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Case 1: TaskRecords dedupe on (taskType, taskLegacyId)
+  // ─────────────────────────────────────────────────────────────────────────
+  it('TaskRecords: duplicate (taskType,taskLegacyId) dedupes keeping COMPLETED', async () => {
+    const pid = cds.utils.uuid(), sid = cds.utils.uuid();
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: pid, email: `tr-p-${pid}@test.example` });
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: sid, email: `tr-s-${sid}@test.example` });
+    const P = await SELECT.one.from(Users).where({ uuid: pid });
+    const S = await SELECT.one.from(Users).where({ uuid: sid });
+    await INSERT.into(TaskRecords).entries({ ID: cds.utils.uuid(), user_ID: P.ID, taskType: 'TUTORIAL', taskLegacyId: 42, status: 'IN_PROGRESS' });
+    await INSERT.into(TaskRecords).entries({ ID: cds.utils.uuid(), user_ID: S.ID, taskType: 'TUTORIAL', taskLegacyId: 42, status: 'COMPLETED', completionDate: '2026-01-01T00:00:00Z' });
+    await mergeAccounts(pid, sid);
+    const rows = await SELECT.from(TaskRecords).where({ user_ID: P.ID, taskType: 'TUTORIAL', taskLegacyId: 42 });
+    expect(rows.length).toBe(1);
+    expect(rows[0].status).toBe('COMPLETED');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Case 2: Idempotency guard — ALREADY_MERGED
+  // ─────────────────────────────────────────────────────────────────────────
+  it('throws ALREADY_MERGED when secondary already merged', async () => {
+    const pid = cds.utils.uuid(), sid = cds.utils.uuid();
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: pid, email: `idp-p-${pid}@test.example` });
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: sid, email: `idp-s-${sid}@test.example` });
+
+    // First merge should succeed
+    await mergeAccounts(pid, sid);
+
+    // Second merge with same uuids should reject with ALREADY_MERGED
+    await expect(mergeAccounts(pid, sid)).rejects.toThrow('ALREADY_MERGED');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Case 3: movedCounts includes taskRecordsDeduped
+  // ─────────────────────────────────────────────────────────────────────────
+  it('movedCounts includes taskRecordsDeduped count', async () => {
+    const pid = cds.utils.uuid(), sid = cds.utils.uuid();
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: pid, email: `mc-p-${pid}@test.example` });
+    await INSERT.into(Users).entries({ ID: cds.utils.uuid(), uuid: sid, email: `mc-s-${sid}@test.example` });
+    const P = await SELECT.one.from(Users).where({ uuid: pid });
+    const S = await SELECT.one.from(Users).where({ uuid: sid });
+
+    // Create duplicate TaskRecords to be deduped
+    await INSERT.into(TaskRecords).entries({ ID: cds.utils.uuid(), user_ID: P.ID, taskType: 'TUTORIAL', taskLegacyId: 100, status: 'IN_PROGRESS' });
+    await INSERT.into(TaskRecords).entries({ ID: cds.utils.uuid(), user_ID: S.ID, taskType: 'TUTORIAL', taskLegacyId: 100, status: 'COMPLETED', completionDate: '2026-01-01T00:00:00Z' });
+
+    const result = await mergeAccounts(pid, sid);
+
+    expect(result).toHaveProperty('movedCounts');
+    expect(result.movedCounts).toHaveProperty('taskRecordsDeduped');
+    expect(result.movedCounts.taskRecordsDeduped).toBe(1);
+  });
+});

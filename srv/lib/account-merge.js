@@ -14,12 +14,35 @@ export async function mergeAccounts(primaryUuid, secondaryUuid) {
   if (!primaryUser) throw new Error(`Primary user not found: ${primaryUuid}`);
   if (!secondaryUser) throw new Error(`Secondary user not found: ${secondaryUuid}`);
 
+  // Idempotency guard: reject if secondary is already marked as MERGED
+  const already = await SELECT.one.from(SecondaryAccounts).where({ uuid: secondaryUuid, status: 'MERGED' });
+  if (already) { const e = new Error('ALREADY_MERGED'); e.code = 'ALREADY_MERGED'; throw e; }
+
   LOG.info(`Merging ${secondaryUuid} → ${primaryUuid}`);
 
   // Transfer task records
   await UPDATE(TaskRecords)
     .where({ user_ID: secondaryUser.ID })
     .set({ user_ID: primaryUser.ID });
+
+  // Dedupe helper: (taskType, taskLegacyId) → keep COMPLETED over IN_PROGRESS, then earliest completionDate
+  async function dedupeTaskRecords(TaskRecords, pId) {
+    const rows = await SELECT.from(TaskRecords).where({ user_ID: pId });
+    const groups = new Map(); // key -> rows[]
+    for (const r of rows) {
+      const k = `${r.taskType}|${r.taskLegacyId}`;
+      (groups.get(k) ?? groups.set(k, []).get(k)).push(r);
+    }
+    const rank = s => (s === 'COMPLETED' ? 2 : s === 'IN_PROGRESS' ? 1 : 0);
+    let deduped = 0;
+    for (const [, g] of groups) {
+      if (g.length < 2) continue;
+      g.sort((a, b) => rank(b.status) - rank(a.status)
+        || String(a.completionDate ?? '9999').localeCompare(String(b.completionDate ?? '9999')));
+      for (const loser of g.slice(1)) { await DELETE.from(TaskRecords).where({ ID: loser.ID }); deduped++; }
+    }
+    return deduped;
+  }
 
   // Transfer prize records
   await UPDATE(PrizeRecords)
@@ -168,6 +191,23 @@ export async function mergeAccounts(primaryUuid, secondaryUuid) {
   moved.userMetaData     = await transferUserMetaData(UserMetaData, primaryUser.ID, secondaryUser.ID);
   moved.learningPrefs    = await transferLearningPrefs(UserLearningPreferences, primaryUser.ID, secondaryUser.ID);
 
+  // Dedupe TaskRecords on (taskType, taskLegacyId)
+  moved.taskRecordsDeduped = await dedupeTaskRecords(TaskRecords, primaryUser.ID);
+
+  // Recompute GROUP/MISSION rollups for the primary from the merged leaf set
+  const { rollUpParentsForCompletion } = await import('./completion-rollup.js');
+  const db = await cds.connect.to('db');
+  const LEAF = ['TUTORIAL', 'STEP', 'PUZZLE', 'CHECKPOINT', 'PETOBERFEST', 'KTT_LESSON'];
+  const leaves = await SELECT.from(TaskRecords)
+    .where({ user_ID: primaryUser.ID, status: 'COMPLETED', taskType: { in: LEAF } });
+  for (const r of leaves) {
+    await rollUpParentsForCompletion({
+      dbUser: primaryUser,
+      task: { taskType: r.taskType, taskLegacyId: r.taskLegacyId },
+      db,
+    });
+  }
+
   // Track the merge
   let primary = await SELECT.one.from(PrimaryAccounts).where({ uuid: primaryUuid });
   if (!primary) {
@@ -186,5 +226,5 @@ export async function mergeAccounts(primaryUuid, secondaryUuid) {
   });
 
   LOG.info(`Merge complete: ${secondaryUuid} → ${primaryUuid}`);
-  return { primaryUuid, secondaryUuid, status: 'MERGED' };
+  return { primaryUuid, secondaryUuid, status: 'MERGED', movedCounts: moved };
 }
