@@ -55,6 +55,16 @@ function isIasIssuer() {
   return (process.env.MCP_ISSUER_KIND || 'xsuaa').toLowerCase() === 'ias'
 }
 
+// When the self-hosted consent proxy (mcp-consent.js) is enabled, discovery must
+// advertise OUR /mcp-oauth/authorize + /mcp-oauth/token as the authorize/token
+// endpoints — that is where mcp-remote renders the "Application Access Request"
+// consent screen before we broker the real IAS leg behind it. Read at call time
+// so it tracks runtime config. See docs/superpowers/specs/2026-10-06-mcp-consent-
+// screen-design.md.
+function isConsentProxyEnabled() {
+  return String(process.env.MCP_CONSENT_ENABLED || '').toLowerCase() === 'true'
+}
+
 // OAuth discovery for the MCP tier must advertise the PUBLIC tutorials-mcp
 // instance (issuer + baseline scope). To avoid binding a SECOND xsuaa to the
 // approuter (which would make @sap/approuter's own confidential LOGIN handshake
@@ -147,6 +157,23 @@ function sendJson(res, status, body) {
 //   RFC 8414 doc here) keeps XSUAA's broken well-known out of the discovery
 //   path entirely; the actual authorize/token calls still hit XSUAA.
 function authorizationServerMetadata(issuer, endpointBase, scope) {
+  // Consent-proxy flip (highest precedence): when MCP_CONSENT_ENABLED, we ARE the
+  // authorization server the client talks to — advertise OUR /mcp-oauth endpoints
+  // and OUR self-URL (`issuer`, == baseUrl) as the issuer. mcp-consent.js brokers
+  // the real IAS leg behind these. RFC 9207 holds because the client's authorize-
+  // response iss is stamped by us (self), matching this advertised issuer.
+  if (isConsentProxyEnabled()) {
+    return {
+      issuer,
+      authorization_endpoint: `${issuer}/mcp-oauth/authorize`,
+      token_endpoint: `${issuer}/mcp-oauth/token`,
+      response_types_supported: ['code'],
+      grant_types_supported: ['authorization_code', 'refresh_token'],
+      code_challenge_methods_supported: ['S256'],
+      scopes_supported: ['openid'],
+      token_endpoint_auth_methods_supported: ['none'],
+    }
+  }
   // Endpoint paths differ by issuer: IAS serves /oauth2/authorize|/oauth2/token,
   // XSUAA serves /oauth/authorize|/oauth/token.
   const ias = isIasIssuer()

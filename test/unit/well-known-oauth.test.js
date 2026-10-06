@@ -289,3 +289,29 @@ describe('well-known-oauth: openid-configuration alias', () => {
     expect(doc.code_challenge_methods_supported).toContain('S256');
   });
 });
+
+describe('well-known-oauth: consent-proxy flip (MCP_CONSENT_ENABLED)', () => {
+  const SAVED = process.env.MCP_CONSENT_ENABLED;
+  afterEach(() => {
+    if (SAVED === undefined) delete process.env.MCP_CONSENT_ENABLED; else process.env.MCP_CONSENT_ENABLED = SAVED;
+  });
+
+  it('points authorize/token at OUR /mcp-oauth endpoints and advertises self as issuer', () => {
+    process.env.MCP_CONSENT_ENABLED = 'true';
+    const SELF = 'https://developers.sap.com';
+    const m = authorizationServerMetadata(SELF, 'https://tenant.accounts.ondemand.com', 'openid');
+    expect(m.issuer).toBe(SELF);
+    expect(m.authorization_endpoint).toBe(`${SELF}/mcp-oauth/authorize`);
+    expect(m.token_endpoint).toBe(`${SELF}/mcp-oauth/token`);
+    expect(m.scopes_supported).toEqual(['openid']);
+    expect(m.code_challenge_methods_supported).toContain('S256');
+    expect(m.token_endpoint_auth_methods_supported).toContain('none');
+  });
+
+  it('does NOT flip when the flag is off (falls through to IdP endpoints)', () => {
+    delete process.env.MCP_CONSENT_ENABLED;
+    const m = authorizationServerMetadata('https://developers.sap.com',
+      'https://t.authentication.eu10-005.hana.ondemand.com', 'tutorials-mcp.Everyone');
+    expect(m.authorization_endpoint).not.toContain('/mcp-oauth/');
+  });
+});
