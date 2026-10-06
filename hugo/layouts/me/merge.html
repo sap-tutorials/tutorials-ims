@@ -1,0 +1,13 @@
+{{ define "main" }}
+{{/* /me/merge — account history merge for combining progress from another account.
+     Hosts the `account-merge` Vue island, which talks to the
+     authenticated-user DeveloperService actions at /me/merge.
+     QA preview omits per-user data, mirroring /me (hugo/layouts/me/list.html). */}}
+{{ if not site.Params.qa }}
+<div class="me-page-wrap">
+  <div id="account-merge"></div>
+</div>
+
+<script type="module" src="{{ partial "island-src.html" "account-merge" }}"></script>
+{{ end }}
+{{ end }}
