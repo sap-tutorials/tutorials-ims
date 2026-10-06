@@ -208,6 +208,47 @@ describe('requestAccountMerge', () => {
     enableAccountMergeFlag();
     const r6 = await callAction(srv, 'requestAccountMerge', { targetEmail: BOB_EMAIL });
     expect(r6.status).toBe('RATE_LIMITED');
+
+    // Clean up rows created by this test so they don't leak into later describe blocks.
+    await DELETE.from(AccountMergeRequests).where({ requesterUser_ID: aliceId });
+  });
+
+  it('RATE_LIMITED after 5 requests to non-existent emails (FAILED outcomes count)', async () => {
+    enableAccountMergeFlag();
+
+    // Clear existing AMRs for alice first to reset state.
+    const { AccountMergeRequests } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(AccountMergeRequests).where({ requesterUser_ID: aliceId });
+
+    // Issue 5 requests to non-existent emails — each returns SENT (anti-enumeration)
+    // but is stored with status FAILED internally.
+    const nonExistentEmails = [
+      'nope1@does-not-exist.example',
+      'nope2@does-not-exist.example',
+      'nope3@does-not-exist.example',
+      'nope4@does-not-exist.example',
+      'nope5@does-not-exist.example',
+    ];
+    for (const email of nonExistentEmails) {
+      enableAccountMergeFlag();
+      const r = await callAction(srv, 'requestAccountMerge', { targetEmail: email });
+      expect(r.status).toBe('SENT'); // generic anti-enumeration response
+    }
+
+    // Confirm those 5 rows are recorded as FAILED (not PENDING).
+    const failedRows = await SELECT.from(AccountMergeRequests)
+      .where({ requesterUser_ID: aliceId, status: 'FAILED' });
+    expect(failedRows.length).toBe(5);
+
+    // 6th request — even to a REAL email (bob) — must be RATE_LIMITED because
+    // the counter now includes all statuses.
+    enableAccountMergeFlag();
+    const r6 = await callAction(srv, 'requestAccountMerge', { targetEmail: BOB_EMAIL });
+    expect(r6.status).toBe('RATE_LIMITED');
+
+    // Clean up rows created by this test so they don't leak into later describe blocks
+    // (the requestAccountMerge describe's afterEach does not delete AMRs).
+    await DELETE.from(AccountMergeRequests).where({ requesterUser_ID: aliceId });
   });
 });
 

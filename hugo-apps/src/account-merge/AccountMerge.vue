@@ -175,10 +175,21 @@ async function onConfirm() {
     if (r.status === 'MERGED' && r.movedCounts) {
       try {
         const counts = typeof r.movedCounts === 'string' ? JSON.parse(r.movedCounts) : r.movedCounts;
+        // Map engine keys to human-readable labels.
+        const LABELS: Record<string, string> = {
+          puzzleProgress:       'puzzle progress',
+          petSubmissions:       'pet submissions',
+          envTabs:              'environment tabs',
+          sessionFavorites:     'session favorites',
+          userMetaData:         'profile settings',
+          learningPrefs:        'learning preferences',
+          taskRecordsDeduped:   'duplicate completions removed',
+        };
         const parts: string[] = [];
-        if (counts.completions) parts.push(`${counts.completions} completion(s)`);
-        if (counts.points) parts.push(`${counts.points} point(s)`);
-        if (counts.tokens) parts.push(`${counts.tokens} token(s)`);
+        for (const [key, label] of Object.entries(LABELS)) {
+          const val = (counts as Record<string, number>)[key];
+          if (val && val > 0) parts.push(`${val} ${label}`);
+        }
         if (parts.length) movedSummary.value = `Moved: ${parts.join(', ')}.`;
       } catch {
         // movedCounts parse failed — skip summary, not load-bearing

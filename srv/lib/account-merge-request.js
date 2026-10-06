@@ -47,10 +47,13 @@ export async function handleRequestAccountMerge(req) {
 
   const { Users, AccountMergeRequests, SecondaryAccounts } = cds.entities('com.sap.developers.ims');
 
-  // Rate limit: PENDING requests by A in the last hour.
+  // Rate limit: ALL requests by A in the last hour (regardless of status).
+  // Counting only PENDING would let an attacker probe non-existent emails forever
+  // because those are recorded as FAILED and never counted. Counting all outcomes
+  // closes the enumeration window.
   const since = new Date(Date.now() - 3600 * 1000).toISOString();
   const recent = await SELECT.from(AccountMergeRequests)
-    .where({ requesterUser_ID: A.ID, status: 'PENDING', createdAt: { '>': since } });
+    .where({ requesterUser_ID: A.ID, createdAt: { '>': since } });
   if (recent.length >= RATE_LIMIT_PER_HOUR) return { status: 'RATE_LIMITED', expiresInMinutes: TTL_MIN };
 
   const B = await SELECT.one.from(Users).where({ email });
