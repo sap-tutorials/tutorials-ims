@@ -56,8 +56,11 @@ function toChangeset(records) {
 //   srv/lib/os-variant-generator.js:101  → (typeof response.getContent === 'function') ? (response.getContent() ?? '') : ''
 //   srv/lib/relevance-classifier.js:185  → typeof response.getContent === 'function' ? response.getContent() : String(response?.content ?? '')
 async function makeRealCallLlm() {
-  const { OrchestrationClient } = require('@sap-ai-sdk/orchestration');
-  const { resolveChatLlmSettings } = require('../../srv/lib/chat-settings-resolver.js');
+  // Dynamic import: chat-settings-resolver.js is an ESM module with top-level
+  // await, so a .cjs cannot require() it (ERR_REQUIRE_ASYNC_MODULE). Import the
+  // orchestration SDK the same way for ESM-interop consistency.
+  const { OrchestrationClient } = await import('@sap-ai-sdk/orchestration');
+  const { resolveChatLlmSettings } = await import('../../srv/lib/chat-settings-resolver.js');
   const { modelName, deploymentId } = await resolveChatLlmSettings();
   return async (system, user) => {
     const client = new OrchestrationClient(
