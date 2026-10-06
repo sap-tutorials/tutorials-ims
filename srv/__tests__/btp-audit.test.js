@@ -157,3 +157,48 @@ describe('btp-audit export.collectCandidates (in-memory sqlite)', () => {
     await DELETE.from(VerbDefinitions).where({ verbKey: 'ZZTEST' });
   });
 });
+
+import { classifyAll, renderReport, toChangeset } from '../../scripts/btp-audit/classify.cjs';
+
+describe('btp-audit classify orchestration (fake LLM)', () => {
+  const candidates = [
+    { entity: 'HomepageShelves', key: 's1', field: 'title', value: 'Deploy to SAP BTP' },
+    { entity: 'HomepageShelves', key: 's2', field: 'tagline', value: 'Open the BTP Cockpit' },
+    { entity: 'VerbDefinitions', key: 'BUILD', field: 'tagline', value: 'SAP BTP, Kyma runtime' },
+    { entity: 'HomepageShelves', key: 's3', field: 'description', value: 'Something BTP unclear' },
+  ];
+  // fake model keyed by field value
+  const fake = async (_system, user) => {
+    if (user.includes('Deploy to SAP BTP'))
+      return JSON.stringify({ action: 'REPLACE', newValue: 'Deploy to SAP Business AI Platform', rationale: 'platform' });
+    if (user.includes('BTP Cockpit'))
+      return JSON.stringify({ action: 'KEEP', newValue: null, rationale: 'tool name' });
+    if (user.includes('Kyma runtime'))
+      return JSON.stringify({ action: 'STRIP_PREFIX', newValue: 'Kyma runtime', rationale: 'service prefix' });
+    return 'garbage'; // → NEEDS_REVIEW
+  };
+
+  it('classifyAll maps each candidate via the injected LLM', async () => {
+    const recs = await classifyAll(candidates, fake);
+    expect(recs.map(r => r.action)).toEqual(['REPLACE', 'KEEP', 'STRIP_PREFIX', 'NEEDS_REVIEW']);
+    expect(recs[0].newValue).toBe('Deploy to SAP Business AI Platform');
+    expect(recs[2].newValue).toBe('Kyma runtime');
+    expect(recs[3].newValue).toBeNull();
+  });
+
+  it('renderReport groups by action and surfaces NEEDS_REVIEW', async () => {
+    const md = renderReport(await classifyAll(candidates, fake));
+    expect(md).toMatch(/## REPLACE/);
+    expect(md).toMatch(/## STRIP_PREFIX/);
+    expect(md).toMatch(/## KEEP/);
+    expect(md).toMatch(/## NEEDS_REVIEW/);
+    expect(md).toMatch(/Deploy to SAP Business AI Platform/);
+    expect(md).toMatch(/Something BTP unclear/);
+  });
+
+  it('toChangeset includes every record with its action', async () => {
+    const cs = toChangeset(await classifyAll(candidates, fake));
+    expect(cs.records).toHaveLength(4);
+    expect(cs.records.every(r => r.entity && r.field && r.action)).toBe(true);
+  });
+});
