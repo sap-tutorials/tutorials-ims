@@ -331,4 +331,13 @@ service DeveloperService {
     *,
     topics, links
   };
+
+  // #2641 — account history merge: caller (A) requests merge of B's history into A.
+  // A magic-link token is emailed to B; B confirms via confirmAccountMerge (Task 5).
+  // Returns SENT (anti-enumeration), BLOCKED_SELF, or RATE_LIMITED.
+  @(requires: 'authenticated-user')
+  action requestAccountMerge(targetEmail : String) returns {
+    status          : String;
+    expiresInMinutes : Integer;
+  };
 }
