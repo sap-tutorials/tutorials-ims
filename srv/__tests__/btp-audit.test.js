@@ -202,3 +202,34 @@ describe('btp-audit classify orchestration (fake LLM)', () => {
     expect(cs.records.every(r => r.entity && r.field && r.action)).toBe(true);
   });
 });
+
+import { decideApply, assertProdTarget } from '../../scripts/btp-audit/apply-core.cjs';
+
+describe('btp-audit apply core', () => {
+  const rec = { action: 'REPLACE', oldValue: 'Deploy to SAP BTP',
+                newValue: 'Deploy to SAP Business AI Platform' };
+
+  it('applies when current value still equals oldValue', () => {
+    expect(decideApply(rec, 'Deploy to SAP BTP')).toEqual({ status: 'applied', write: true });
+  });
+  it('skips when the row was edited since export (concurrent edit)', () => {
+    expect(decideApply(rec, 'Deploy to SAP BTP (edited)'))
+      .toEqual({ status: 'skipped-concurrent-edit', write: false });
+  });
+  it('skips as no-change when already applied (idempotent re-run)', () => {
+    expect(decideApply(rec, 'Deploy to SAP Business AI Platform'))
+      .toEqual({ status: 'skipped-no-change', write: false });
+  });
+  it('skips KEEP and NEEDS_REVIEW actions', () => {
+    expect(decideApply({ action: 'KEEP', oldValue: 'x', newValue: null }, 'x').write).toBe(false);
+    expect(decideApply({ action: 'NEEDS_REVIEW', oldValue: 'x', newValue: null }, 'x').status)
+      .toBe('skipped-action');
+  });
+  it('assertProdTarget throws unless org and space match', () => {
+    const txt = 'org: tutorial-system\nspace: prod\napi endpoint: ...';
+    expect(assertProdTarget(txt, { org: 'tutorial-system', space: 'prod' })).toBe(true);
+    expect(() => assertProdTarget(txt, { org: 'tutorial-system', space: 'dev' })).toThrow(/space/i);
+    expect(() => assertProdTarget('org: other\nspace: prod', { org: 'tutorial-system', space: 'prod' }))
+      .toThrow(/org/i);
+  });
+});
