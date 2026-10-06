@@ -164,7 +164,8 @@ describe('requestAccountMerge', () => {
     expect(row.tokenHashHex).not.toMatch(/^amt_/);
 
     // sendNotificationEmail was called: verify via FailedEmails queue
-    // (no SMTP transport in unit tests → mail-client queues the attempt).
+    // (no SMTP transport in unit tests → mail-client stores fully-resolved HTML
+    // in FailedEmails.body — resolveTemplate() runs before the transport check).
     const { FailedEmails } = cds.entities('com.sap.developers.ims');
     const [email] = await SELECT.from(FailedEmails)
       .where({ to: BOB_EMAIL })
@@ -173,6 +174,15 @@ describe('requestAccountMerge', () => {
     expect(email).toBeTruthy();
     expect(email.to).toBe(BOB_EMAIL);
     expect(email.subject).toContain('merging');
+
+    // body contains the magic link with the real plaintext token (never stored in DB).
+    // globalThis.__lastTokenForTest is set by newToken() when NODE_ENV==='test'.
+    const lastToken = globalThis.__lastTokenForTest;
+    expect(lastToken).toMatch(/^amt_[A-Za-z0-9_-]+$/);
+    expect(email.body).toContain(`/me/merge?token=${lastToken}`);
+
+    // body reflects the initiator's email (template variable ${initiatorEmail}).
+    expect(email.body).toContain(ALICE_EMAIL);
   });
 
   it('RATE_LIMITED after 5 pending requests in an hour', async () => {
