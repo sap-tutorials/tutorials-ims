@@ -24,6 +24,7 @@ const { wellKnownOAuthHandler } = require('./lib/well-known-oauth')
 const { gitHubOidcShimHandler } = require('./lib/github-oidc-shim')
 const { mcpManifestHandler } = require('./lib/well-known-mcp-manifest')
 const { mcpAuthChallengeHandler } = require('./lib/mcp-auth-challenge')
+const { mcpConsentHandler } = require('./lib/mcp-consent')
 const { securityTxtHandler } = require('./lib/security-txt')
 const { sitemapIndexRedirectHandler } = require('./lib/sitemap-index-redirect')
 const { searchRedirectHandler } = require('./lib/search-redirect')
@@ -597,6 +598,7 @@ ar.start({
         first: [
           { path: '/', handler: wellKnownOAuthHandler },
           { path: '/', handler: gitHubOidcShimHandler },
+          { path: '/', handler: mcpConsentHandler },
           { path: '/', handler: mcpManifestHandler },
           { path: '/', handler: securityTxtHandler },
           { path: '/', handler: sitemapIndexRedirectHandler },
