@@ -23,7 +23,7 @@ cds.on('bootstrap', (app) => {
     }
   });
 
-  const { serveHandler, navHandler, hashesHandler, sourceHashesHandler, publishHandler, rollbackHandler, beginHandler, appendHandler, commitHandler, abortHandler, contentAuthMiddleware, pipelineLogFailureHandler, quarantineIngestHandler, pageServeHandler } =
+  const { serveHandler, navHandler, hashesHandler, sourceHashesHandler, excludedSlugsHandler, publishHandler, rollbackHandler, beginHandler, appendHandler, commitHandler, abortHandler, contentAuthMiddleware, pipelineLogFailureHandler, quarantineIngestHandler, pageServeHandler } =
     createContentHandlers({ namespace: 'com.sap.developers.ims.qa', apiKeyEnv: 'CONTENT_API_KEY_QA', skipMetadataUpsert: true });
 
   // GET handlers serve in-flight author content from -Contribution repos. The
@@ -84,6 +84,8 @@ cds.on('bootstrap', (app) => {
   // Same dual-auth shape as /content/hashes — drift workflow uses the bearer
   // key, browser-shell callers come in with XSUAA Tutorial.Author scope.
   app.get('/content/source-hashes', hashesAuth, sourceHashesHandler);
+  // #2585 follow-up — mirrors prod; dual-auth like the other QA hash feeds.
+  app.get('/content/excluded-slugs', hashesAuth, excludedSlugsHandler);
   app.get('/content/tutorials/*slug', requireAuthorScope, serveHandler);
   // #1659 Task 5 — QA-channel content PAGES. #1675: the AppRouter route
   // `^/tutorial-navigator-qa/` → `/content/pages/tutorial-navigator/` now
