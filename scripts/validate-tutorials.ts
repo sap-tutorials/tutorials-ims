@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, writeFileSync, mkdirSync, renameSync, exists
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import matter from 'gray-matter'
+import { fetchExcludedSlugs } from './lib/publish-client.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..')
@@ -9,6 +10,11 @@ const TUTORIALS_DIR = join(ROOT, 'hugo', 'content', 'tutorials')
 const QUARANTINE_DIR = join(ROOT, '.tutorial-cache', 'quarantine')
 
 const REQUIRED_FIELDS = ['type', 'slug', 'title', 'time', 'stepCount'] as const
+
+/** Lowercased canonical slug from a tutorial .md filename. Exported for tests. */
+export function slugFromFile(file: string): string {
+  return file.replace(/\.md$/, '').toLowerCase()
+}
 
 /**
  * Source repos permitted to publish step-less tutorials (issue #2127).
@@ -160,7 +166,18 @@ async function main() {
   const quarantined: Array<{ file: string; slug: string; sourceRepo?: string; reason: string }> = []
   const repoBySlug = loadRepoBySlug()
 
+  // #2585 — never validate/quarantine a tutorial IMS has retired. Fail-open:
+  // unreachable endpoint → empty set → validate everything as before.
+  const excluded = await fetchExcludedSlugs({
+    baseUrl: process.env.CAP_BASE_URL ?? 'http://localhost:4004',
+    apiKey: process.env.CONTENT_API_KEY,
+  })
+
   for (const file of files) {
+    if (excluded.has(slugFromFile(file))) {
+      console.log(`  ⤼ ${file}: skipped (tutorial is DELETED/INACTIVE)`)
+      continue
+    }
     const content = readFileSync(join(TUTORIALS_DIR, file), 'utf-8')
     let reason: string | null = emptyContentCheck(content)
     let fm: any
