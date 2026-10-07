@@ -8,6 +8,7 @@
 import cds from '@sap/cds';
 import crypto from 'node:crypto';
 import * as metrics from './metrics.js';
+import { resolveAdminGrant } from './admin-grant.js';
 
 const LOG = cds.log('mcp-pat');
 const NS = 'com.sap.developers.ims';
@@ -126,12 +127,20 @@ function installSyntheticUser(req, cached) {
   };
 }
 
+async function computeRoles(scopes, dbUserId) {
+  if (Array.isArray(scopes) && scopes.includes('admin') && await resolveAdminGrant(dbUserId)) {
+    return ['Admin', 'Tutorial.API'];
+  }
+  return [];
+}
+
 async function lookupPAT(hashHex) {
   const { PATs, Users } = cds.entities(NS);
   const [row] = await SELECT.from(PATs).where({ hashHex });
   if (!row) return null;
   const [user] = await SELECT.from(Users).where({ ID: row.user_ID });
   if (!user) return null;
+  const roles = await computeRoles(row.scopes ?? [], row.user_ID);
   return {
     patId: row.ID,
     userId: row.user_ID,
@@ -140,7 +149,7 @@ async function lookupPAT(hashHex) {
     scopes: row.scopes ?? [],
     expiresAt: row.expiresAt ? new Date(row.expiresAt).getTime() : null,
     revokedAt: row.revokedAt ? new Date(row.revokedAt).getTime() : null,
-    roles: [],
+    roles,
     attr: { email: user.email, displayName: user.displayName }
   };
 }
@@ -213,5 +222,12 @@ export function pinPatUserToContext(req, _res, next) {
   }
   next();
 }
+
+export const __test = {
+  buildCached: async (row) => {
+    const roles = await computeRoles(row.scopes ?? [], row.user_ID);
+    return { ...row, roles };
+  },
+};
 
 export default patMiddleware;

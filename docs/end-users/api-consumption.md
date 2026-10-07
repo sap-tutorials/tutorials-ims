@@ -17,10 +17,10 @@ This page is the map: which API surfaces exist, which you can call from a **scri
 | **MCP — PAT** | `/mcp-pat/*` | ✅ Yes | `Authorization: Bearer pat_…` (self-service token) | [MCP quickstart › PAT](mcp-quickstart.md) |
 | **MCP — OAuth** | `/mcp-auth/*` | ✅ Yes (one interactive consent, then cached/refreshed) | OAuth 2.0 Authorization Code + PKCE, public client (no secret) | [MCP quickstart › OAuth](mcp-quickstart.md) |
 | **A2A** | (JSON-RPC) | ✅ Yes | see A2A guide | [A2A quickstart](a2a-quickstart.md) |
-| **Admin OData** | `/admin/*` | ❌ **No — browser session only** | Interactive XSUAA login + **Tutorials Admin** role | this page (below) |
-| **GraphQL** | `/graphql` | ❌ **No — browser session only** | Interactive XSUAA login | this page (below) |
+| **Admin OData** | `/admin-pat/*` | ✅ **Yes — PAT (`admin` scope)** | Mint a PAT with `admin` scope at `/me/tokens/` (requires the Tutorials Admin role); send it as `Authorization: Bearer pat_…` | this page (below) |
+| **GraphQL** | `/graphql-pat` | ✅ **Yes — PAT (`admin` scope)** | Same admin-scoped PAT; `Authorization: Bearer pat_…` | this page (below) |
 
-**Rule of thumb:** for programmatic/scripted access, use the **MCP** surface. The **Admin OData** and **GraphQL** surfaces are, today, only reachable from a browser where you're already signed in to the admin UI.
+**Rule of thumb:** for programmatic/scripted access, use the **MCP** surface for your own data. For **admin data**, use an **admin-scoped PAT** against the `/admin-pat/*` (OData) or `/graphql-pat` (GraphQL) surfaces, as shown below.
 
 ## MCP surface — the headless-capable one
 
@@ -35,39 +35,55 @@ The MCP server is the supported way to consume site data from your own tooling (
 
 See the quickstart for client config (Claude Desktop/Code, `mcp-remote`), the environment-specific `client_id`s, and the full tool list.
 
-## Admin OData surface — browser-session only (today)
+## Admin OData surface — headless with an admin-scoped PAT
 
-The admin OData service (`AdminService`, mounted at `/admin`) backs the admin UI. You can run rich OData queries against it, for example to monitor your own tutorials' completions and feedback:
+The admin OData service (`AdminService`) backs the admin UI. You can run rich OData queries against it headlessly via the `/admin-pat/*` prefix with an admin-scoped PAT:
 
 ```
-GET /admin/Tutorials?$filter=owner eq 'DJ Adams'
+GET /admin-pat/Tutorials?$filter=owner eq 'me@sap.com'
   &$select=title,slug
   &$expand=completionStats($select=completions),feedbackItems($select=npsScore,comment)
 ```
 
-**This query is valid** — `completionStats` and `feedbackItems` are real associations on the `Tutorials` projection, and `owner` is filterable. The catch is **authentication, not the query.**
+### How to authenticate
 
-### What works today
+1. Sign in to the admin UI and open `/me/tokens/`. Mint a PAT with the **admin** scope
+   (only offered if you hold the *Tutorials Admin* role). Copy the token — shown once.
+2. Call the OData surface headlessly via the `/admin-pat/*` prefix:
 
-- **In the browser.** While signed in to the admin UI (`/admin-ui/`, which requires the **Tutorials Admin** role), paste the full `/admin/Tutorials?...` URL into the same browser. Your existing session cookie authorizes it and you get JSON back. This is the supported way to run ad-hoc admin OData queries today.
+```bash
+curl -s -H "Authorization: Bearer pat_xxx" \
+  "https://<host>/admin-pat/Tutorials?\$filter=owner eq 'me@sap.com'&\$expand=completionStats,feedbackItems"
+```
 
-### What does NOT work today (and why)
+The same per-user Admin authorization applies as in the browser; a revoked grant (or an expired PAT) stops working within ~60 seconds.
 
-- **A PAT does not work on `/admin/*`.** PATs are scoped to the `/mcp-pat/*` namespace and never carry the `Admin` authorization. A PAT against `/admin/*` is redirected to login.
-- **Client-credentials (technical user) cannot reach it.** The `Admin` scope is granted only to **named users** who hold the Tutorials Admin role collection — it is not in the XSUAA instance's `authorities`, so a `client_credentials` token cannot carry it.
-- **So there is no headless/`curl` path to admin OData today.** If your `curl` with a bearer token redirects to the XSUAA login page, that is expected — not a misconfigured token.
+## GraphQL surface — headless with an admin-scoped PAT
 
-If you need admin data **programmatically**, the available option today is the **MCP PAT tier** for your own per-user data (progress/events/recommendations). Full headless admin-OData access is tracked as future work (see below).
+`/graphql-pat` is available headlessly with the same admin-scoped PAT. Example:
 
-## GraphQL surface — browser-session only (today)
+```bash
+curl -s -X POST -H "Authorization: Bearer pat_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"{ allTutorials(filter:{owner:\"me@sap.com\"}){title slug completions}}"}' \
+  "https://<host>/graphql-pat"
+```
 
-`/graphql` is likewise behind the interactive XSUAA session (CAP enforces the `Tutorial.API` requirement). Same situation as admin OData: usable from an authenticated browser session, no supported headless token flow today.
+Use the same admin PAT minted at `/me/tokens/` (see [Admin OData](#admin-odata-surface--headless-with-an-admin-scoped-pat) above).
+
+## Admin PAT security
+
+> **Admin PATs are high-value bearer credentials.** Store them in an environment
+> variable or a secret store — **never** commit them to client config files such as
+> Claude Code `settings.json`. Use the shortest TTL that works (admin PATs max out at
+> 90 days, default 30). Revoke when done via `/me/tokens/` or an admin
+> `revokeAdminGrant`. A Credential-Store-backed option for MCP-client PATs is tracked
+> separately (see follow-up ticket).
 
 ## Gaps & future work
 
 Documented honestly so you know where the edges are:
 
-- **Headless admin OData access** — enabling `curl`/script access to `/admin/*` (e.g. a per-user PAT tier extended to admin, or a reviewed technical-user scope) is a security-sensitive capability not yet built. Tracked in [#2574](https://github.com/sap-tutorials/tutorials-ims/issues/2574).
 - **developers.sap.com/api-docs/ portal restructure** — a reorganization of the public API-catalog pages for easier discovery is separate future work, tracked in [#2575](https://github.com/sap-tutorials/tutorials-ims/issues/2575).
 
 ## See also

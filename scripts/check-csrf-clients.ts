@@ -54,6 +54,11 @@ const CSRF_EXEMPT_SOURCES = new Set([
   '^/mcp-auth/(.*)$',
   '^/mcp-admin/(.*)$',
   '^/a2a/?$',
+  // #2574 headless admin PAT: non-browser bearer-PAT clients (curl/scripts),
+  // same JSON-RPC-style trust model as /mcp-pat — authenticated by the PAT, not a
+  // browser session, so CSRF tokens don't apply. Gated behind PAT_ADMIN_SCOPE_ENABLED.
+  '^/admin-pat/(.*)$',
+  '^/graphql-pat(\\?.*)?$',
 ]);
 
 function checkXsAppJson(): Violation[] {

@@ -64,6 +64,7 @@ import { FEATURE_FLAGS } from './lib/feature-flags/registry.js'; // #2060 bound 
 // source of truth for keys/defaults/valueTypes (also read by the sync job).
 import { SEMAPHORE_CONFIG_KEYS, SEMAPHORE_CONFIG_KEY_SET } from './lib/semaphore-sync/config-keys.js';
 import { resetFeaturedCache } from './lib/featured-resolve.js';
+import { revokeAdminGrant as revokeAdminGrantRow } from './lib/admin-grant.js';
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
 // column width verified in db/schema.cds:412.
@@ -4165,6 +4166,12 @@ export default class AdminService extends cds.ApplicationService {
         dispositionAt: new Date().toISOString(),
       }).where({ ID: id });
       return { status: 'ok' };
+    });
+
+    // --- revokeAdminGrant: kill a user's headless-admin grant (#2574) ---
+    this.on('revokeAdminGrant', async (req) => {
+      const n = await revokeAdminGrantRow(req.data.user_ID);
+      return { revoked: Number(n) || 0 };
     });
 
     await super.init();

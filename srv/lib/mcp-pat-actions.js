@@ -15,11 +15,14 @@ import { resolveDbUser } from './resolve-db-user.js';
 import { invalidateCacheByPatId } from './mcp-pat-middleware.js';
 import * as metrics from './metrics.js';
 import { isFlagEnabled } from './feature-flags/db-flags.js';
+import { upsertAdminGrant } from './admin-grant.js';
 
-const VALID_SCOPES = new Set(['read', 'write']);
+const VALID_SCOPES = new Set(['read', 'write', 'admin']);
 const MIN_TTL = 1;
 const MAX_TTL = 365;
 const DEFAULT_TTL = 90;
+const ADMIN_MAX_TTL = 90;
+const ADMIN_DEFAULT_TTL = 30;
 
 function assertValidScopes(scopes) {
   if (!Array.isArray(scopes) || scopes.length === 0) {
@@ -30,9 +33,11 @@ function assertValidScopes(scopes) {
   }
 }
 
-function clampTtl(ttlDays) {
-  const n = Number.isFinite(ttlDays) ? ttlDays : DEFAULT_TTL;
-  return Math.min(MAX_TTL, Math.max(MIN_TTL, n));
+function clampTtl(ttlDays, { admin = false } = {}) {
+  const def = admin ? ADMIN_DEFAULT_TTL : DEFAULT_TTL;
+  const max = admin ? ADMIN_MAX_TTL : MAX_TTL;
+  const n = Number.isFinite(ttlDays) ? ttlDays : def;
+  return Math.min(max, Math.max(MIN_TTL, n));
 }
 
 /**
@@ -58,8 +63,14 @@ export async function handleMintPAT(req) {
   const dbUser = await resolveDbUser(req.user);
   if (!dbUser) return req.error(401, 'unable to resolve user');
 
+  const wantsAdmin = Array.isArray(scopes) && scopes.includes('admin');
+  const ttl = clampTtl(ttlDays, { admin: wantsAdmin });
+  if (wantsAdmin) {
+    if (!isFlagEnabled('PAT_ADMIN_SCOPE_ENABLED')) return req.reject(503, 'admin-scoped PATs are disabled');
+    if (!req.user.is('Admin')) return req.error(403, 'admin scope requires the Tutorials Admin role');
+    await upsertAdminGrant(dbUser.ID, req.user.id, ttl);
+  }
   const { token, prefix, hashHex } = generateToken();
-  const ttl = clampTtl(ttlDays);
   const expiresAt = new Date(Date.now() + ttl * 24 * 3600 * 1000);
   const clientIP = (req.headers?.['x-forwarded-for'] || req._?.req?.ip || '').split(',')[0].trim().slice(0, 45);
 
@@ -103,3 +114,5 @@ export async function handleRevokePAT(req) {
   metrics.counter('mcp.pat.revoke');
   return { ok: true, revokedAt };
 }
+
+export const __test = { assertValidScopes, clampTtl };
