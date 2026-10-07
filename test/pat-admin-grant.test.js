@@ -3,6 +3,7 @@ import { __test } from '../srv/lib/mcp-pat-actions.js';
 import { __test as mwTest } from '../srv/lib/mcp-pat-middleware.js';
 import cds from '@sap/cds';
 import { resolveAdminGrant, upsertAdminGrant, revokeAdminGrant } from '../srv/lib/admin-grant.js';
+import { FEATURE_FLAGS } from '../packages/core/feature-flags/registry.js';
 
 const { SELECT, INSERT } = cds.ql;
 
@@ -103,5 +104,13 @@ describe('lookupPAT live admin role resolution', () => {
   it('read-only PAT with a grant present → no admin role', async () => {
     const cached = await mwTest.buildCached({ ID: 'p2', user_ID: uid, scopes: ['read'], expiresAt: null, revokedAt: null });
     expect(cached.roles).not.toContain('Admin');
+  });
+});
+
+describe('PAT_ADMIN_SCOPE_ENABLED flag', () => {
+  it('is registered and defaults OFF', () => {
+    const flag = FEATURE_FLAGS.find(f => f.key === 'PAT_ADMIN_SCOPE_ENABLED');
+    expect(flag).toBeDefined();
+    expect(flag.default).toBe(false);
   });
 });

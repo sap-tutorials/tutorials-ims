@@ -273,6 +273,13 @@ export const FEATURE_FLAGS = [
     howToChange: featureFlagUpsert('MCP_PAT_MINT_ENABLED', 'flag.mcp.patMint'),
   },
   {
+    key: 'PAT_ADMIN_SCOPE_ENABLED', label: 'PAT admin scope (headless admin)', category: 'MCP',
+    kind: 'db', imsConfigKey: 'flag.pat.adminScope',
+    valueType: 'boolean', default: false, issue: '#2574', status: 'beta',
+    description: 'Enables the headless admin PAT path: the `admin` PAT scope, the /admin-pat/* + /graphql-pat approuter routes, and live AdminGrants resolution. Default OFF; flip DEV-first after verification. DB-driven config (ImsConfig key flag.pat.adminScope); no env var.',
+    howToChange: featureFlagUpsert('PAT_ADMIN_SCOPE_ENABLED', 'flag.pat.adminScope'),
+  },
+  {
     key: 'MCP_PHASE3_ENABLED', label: 'MCP Phase-3 compose router', category: 'MCP',
     kind: 'db', imsConfigKey: 'flag.mcp.phase3',
     valueType: 'boolean', default: true, issue: '#1106', status: 'ga',
