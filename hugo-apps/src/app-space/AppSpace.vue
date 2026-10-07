@@ -1314,7 +1314,7 @@ const emptyStateMessage = computed(() => {
    ═══════════════════════════════════════════════════════════════════ */
 
 .app-space[data-theme="joule"] .hero {
-  background: linear-gradient(135deg, #5D36FF 0%, #7B42F0 40%, #A100C2 100%);
+  background: linear-gradient(135deg, #5D36FF 0%, #A100C2 100%);
 }
 
 .app-space[data-theme="joule"] .stat-card {
@@ -1393,7 +1393,7 @@ const emptyStateMessage = computed(() => {
    ═══════════════════════════════════════════════════════════════════ */
 
 .app-space[data-theme="joule"][data-dark] .hero {
-  background: linear-gradient(135deg, #2A1066 0%, #4B1A8A 40%, #6B0080 100%);
+  background: linear-gradient(135deg, #3A1F99 0%, #660079 100%);
 }
 
 .app-space[data-theme="joule"][data-dark] .stat-card {
