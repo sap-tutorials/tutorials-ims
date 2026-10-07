@@ -486,6 +486,9 @@ describe('confirmAccountMerge', () => {
     // making bob's uuid unresolvable (delete then restore bob from Users).
     // We achieve this by patching globalThis for the handler — easiest approach
     // that doesn't require vi.mock across CDS module boundaries: use a flag.
+    // Alice's task records count should be unchanged.
+    const aliceTasksBefore = await SELECT.from(TaskRecords).where({ user_ID: aliceRow.ID });
+
     globalThis.__mergeAccountsShouldThrowForTest = true;
 
     let r;
@@ -504,10 +507,84 @@ describe('confirmAccountMerge', () => {
     const after = await SELECT.one.from(AccountMergeRequests).where({ tokenHashHex: before.tokenHashHex });
     expect(after?.status).toBe('PENDING');
 
-    // Alice's task records count should be unchanged.
+    // Alice's task records count is unchanged (this seam throws before mergeAccounts
+    // runs, so nothing moved; the mid-merge-throw test below exercises the partial
+    // repoint + rollback instead).
     const aliceTasks = await SELECT.from(TaskRecords).where({ user_ID: aliceRow.ID });
-    // We just assert we can read without error; count is not critical here.
-    expect(Array.isArray(aliceTasks)).toBe(true);
+    expect(aliceTasks.length).toBe(aliceTasksBefore.length);
+  });
+
+  it('rollback (mid-merge): repointed TaskRecords return to B and ledger stays PENDING when mergeAccounts throws partway through', async () => {
+    enableAccountMergeFlag();
+    const { AccountMergeRequests, TaskRecords, Users, SecondaryAccounts } = cds.entities('com.sap.developers.ims');
+    const aliceRow = await SELECT.one.from(Users).where({ email: ALICE_EMAIL });
+    const bobRow   = await SELECT.one.from(Users).where({ email: BOB_EMAIL });
+
+    // Clean any prior SecondaryAccounts for bob so requestAccountMerge isn't blocked,
+    // and any leftover test TaskRecords so counts are deterministic.
+    await DELETE.from(SecondaryAccounts).where({ uuid: bobRow.uuid });
+    await DELETE.from(TaskRecords).where({ taskLegacyId: 'test-midmerge-tutorial-001' });
+
+    // Give BOB a TaskRecord. mergeAccounts repoints it to ALICE as its very first
+    // write; the mid-merge throw fires immediately after, so if the tx is atomic the
+    // row must end up back on BOB.
+    const bobTaskId = cds.utils.uuid();
+    await INSERT.into(TaskRecords).entries({
+      ID: bobTaskId,
+      user_ID: bobRow.ID,
+      taskType: 'TUTORIAL',
+      taskLegacyId: 'test-midmerge-tutorial-001',
+      status: 'COMPLETED',
+      completionDate: new Date().toISOString(),
+    });
+
+    // Capture Alice's pre-merge records so we can prove they're untouched.
+    const aliceTasksBefore = await SELECT.from(TaskRecords).where({ user_ID: aliceRow.ID });
+
+    // Alice requests merge of bob so we get a valid PENDING ledger row.
+    await callAction(srv, 'requestAccountMerge', { targetEmail: BOB_EMAIL }, ALICE_USER);
+    const token = globalThis.__lastTokenForTest;
+    const before = await SELECT.one.from(AccountMergeRequests).where({ status: 'PENDING' });
+    expect(before).toBeTruthy();
+
+    // Force mergeAccounts to throw AFTER the TaskRecords repoint but BEFORE the
+    // ledger/PrimaryAccounts writes — a genuine partial-merge state. (#2675)
+    globalThis.__mergeAccountsThrowMidwayForTest = true;
+
+    let r;
+    try {
+      r = await callAction(srv, 'confirmAccountMerge', { token }, ALICE_USER);
+    } catch {
+      r = { status: 'FAILED' };
+    } finally {
+      delete globalThis.__mergeAccountsThrowMidwayForTest;
+    }
+    expect(r.status).toBe('FAILED');
+
+    // 1) The repointed row is back on BOB, not Alice — the partial write rolled back.
+    const movedToAlice = await SELECT.one.from(TaskRecords)
+      .where({ user_ID: aliceRow.ID, taskLegacyId: 'test-midmerge-tutorial-001' });
+    expect(movedToAlice).toBeFalsy();
+    const stillOnBob = await SELECT.one.from(TaskRecords)
+      .where({ user_ID: bobRow.ID, taskLegacyId: 'test-midmerge-tutorial-001' });
+    expect(stillOnBob).toBeTruthy();
+    expect(stillOnBob.ID).toBe(bobTaskId);
+
+    // 2) Ledger row remains PENDING (not MERGED).
+    const after = await SELECT.one.from(AccountMergeRequests).where({ tokenHashHex: before.tokenHashHex });
+    expect(after?.status).toBe('PENDING');
+
+    // 3) No SecondaryAccounts MERGED row was written for bob (end-of-merge write undone).
+    const secMerged = await SELECT.one.from(SecondaryAccounts)
+      .where({ uuid: bobRow.uuid, status: 'MERGED' });
+    expect(secMerged).toBeFalsy();
+
+    // 4) Alice's pre-merge records are unchanged.
+    const aliceTasksAfter = await SELECT.from(TaskRecords).where({ user_ID: aliceRow.ID });
+    expect(aliceTasksAfter.length).toBe(aliceTasksBefore.length);
+
+    // Clean up the test TaskRecord.
+    await DELETE.from(TaskRecords).where({ taskLegacyId: 'test-midmerge-tutorial-001' });
   });
 });
 
