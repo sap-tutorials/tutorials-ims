@@ -2211,15 +2211,26 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   // same runId replaces that run's snapshot. Same auth as /content/publish.
   async function quarantineIngestHandler(req, res) {
     try {
-      const { runId, workflowUrl, manifestVersion, buildMode, events } = req.body || {};
+      const { runId, workflowUrl, manifestVersion, buildMode } = req.body || {};
       if (buildMode !== 'full') {
         return res.status(400).json({ error: "Only buildMode 'full' may post a quarantine snapshot" });
       }
-      if (!Array.isArray(events)) {
+      if (!Array.isArray(req.body?.events)) {
         return res.status(400).json({ error: "'events' must be an array" });
       }
-      const { QuarantineSnapshots } = cds.entities(namespace);
+      const { QuarantineSnapshots, Tutorials } = cds.entities(namespace);
       const db = await cds.connect.to('db');
+      // #2585 follow-up — never quarantine a tutorial that IMS has retired.
+      // DELETED/INACTIVE rows must not appear in the active-quarantine facet
+      // (the Admin join is slug-only). Dropping them here is the CAP-side
+      // chokepoint; the publisher also filters at discovery (defense in depth).
+      const retired = await SELECT.from(Tutorials)
+        .columns('slug')
+        .where({ status: { in: ['DELETED', 'INACTIVE'] } });
+      const retiredSet = new Set(retired.map(r => String(r.slug || '').toLowerCase()));
+      const events = (req.body?.events || []).filter(
+        e => !retiredSet.has(String(e.slug || '').toLowerCase())
+      );
       const result = await db.tx(async (tx) => {
         // Idempotency: drop any prior snapshot for this runId (its events cascade via composition).
         if (runId) {

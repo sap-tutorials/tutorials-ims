@@ -23,9 +23,10 @@ describe('quarantine ingest route', () => {
   beforeAll(async () => { await cds.connect.to('db'); });
 
   beforeEach(async () => {
-    const { QuarantineSnapshots, QuarantineEvents } = cds.entities(NS);
+    const { QuarantineSnapshots, QuarantineEvents, Tutorials } = cds.entities(NS);
     await DELETE.from(QuarantineEvents);
     await DELETE.from(QuarantineSnapshots);
+    await DELETE.from(Tutorials);
   });
 
   it('rejects non-full buildMode with 400', async () => {
@@ -88,5 +89,28 @@ describe('quarantine ingest route', () => {
     const cur = await SELECT.from(QuarantineSnapshots).where({ isCurrent: true });
     expect(cur.length).toBe(1);
     expect(cur[0].eventCount).toBe(0);
+  });
+
+  it('drops events whose slug is a DELETED/INACTIVE tutorial', async () => {
+    const { Tutorials, QuarantineEvents } = cds.entities(NS);
+    await DELETE.from(Tutorials);
+    await INSERT.into(Tutorials).entries([
+      { ID: cds.utils.uuid(), slug: 'gone-slug', title: 't', status: 'DELETED' },
+      { ID: cds.utils.uuid(), slug: 'hidden-slug', title: 't', status: 'INACTIVE' },
+      { ID: cds.utils.uuid(), slug: 'live-slug', title: 't', status: 'ACTIVE' },
+    ]);
+    const res = makeRes();
+    await quarantineIngestHandler(makeReq({
+      runId: 'filter-run', buildMode: 'full',
+      events: [
+        { slug: 'Gone-Slug', reason: 'bad stepCount' },
+        { slug: 'hidden-slug', reason: 'empty' },
+        { slug: 'live-slug', reason: 'unbalanced shortcode' },
+      ],
+    }), res);
+    expect(res._status).toBe(201);
+    const rows = await SELECT.from(QuarantineEvents);
+    const slugs = rows.map(r => r.slug).sort();
+    expect(slugs).toEqual(['live-slug']);
   });
 });
