@@ -15,6 +15,7 @@ import { stampSubmissionId } from './lib/task-record-submission-id.js';
 import { rollUpParentsForCompletion } from './lib/completion-rollup.js';
 import { renderMarkdown } from './lib/markdown.js';
 import { buildTaskMap, resolveTask, effectiveLegacyId } from './lib/path-item-task-resolver.js';
+import { handleRequestAccountMerge, handleConfirmAccountMerge } from './lib/account-merge-request.js';
 
 // Per-user rate limit for resetTutorialProgress — same window as the
 // IP-based feedback limiter below (5/hr) but keyed by sapId via a shared
@@ -516,6 +517,11 @@ export default class DeveloperService extends cds.ApplicationService {
     this.on('getMyInProgress', async (req) => {
       return getMyInProgressTutorials(req.user);
     });
+
+    // #2641 — account-history merge request (Task 4)
+    this.on('requestAccountMerge', handleRequestAccountMerge);
+    // #2641 — account-history merge confirm (Task 5)
+    this.on('confirmAccountMerge', handleConfirmAccountMerge);
 
     this.on('getMyFavorites', async (req) => {
       const { SessionFavorites } = cds.entities('com.sap.developers.ims');
