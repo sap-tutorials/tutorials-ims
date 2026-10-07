@@ -1250,6 +1250,33 @@ cds.on('bootstrap', (app) => {
     });
   });
 
+  // Headless admin PAT: recognize Bearer pat_ on /admin-pat/* and /graphql-pat,
+  // rewrite to the real /admin + /graphql routers. Flag-gated, fully additive.
+  // Mirrors the /mcp-pat block above — same root-mount rationale applies (#2574).
+  app.use((req, res, next) => {
+    const u = req.url;
+    const isAdminPat = u.startsWith('/admin-pat/') || u === '/admin-pat';
+    const isGqlPat = u === '/graphql-pat' || u.startsWith('/graphql-pat?');
+    if (!isAdminPat && !isGqlPat) return next();
+    if (!isFlagEnabled('PAT_ADMIN_SCOPE_ENABLED')) return next(); // flag off → path inert (404)
+    const authz = req.headers?.authorization;
+    if (!authz || !authz.startsWith('Bearer pat_')) {
+      res.setHeader('WWW-Authenticate', 'Bearer error="invalid_token"');
+      return res.status(401).json({ error: 'PAT required on headless admin routes' });
+    }
+    return patMiddleware(req, res, (err) => {
+      if (err) return next(err);
+      if (isAdminPat) {
+        const rest = req.url.slice('/admin-pat'.length) || '/';
+        req.url = '/admin' + rest;
+      } else {
+        req.url = '/graphql' + req.url.slice('/graphql-pat'.length); // preserves ?query
+      }
+      if (req.originalUrl) req.originalUrl = req.url;
+      next();
+    });
+  });
+
   // Phase 3 (#1106): mount the compose router for R/P-bearing services at their
   // MCP path so it serves tools + resources + prompts instead of @cap-js/mcp's
   // plain (tools-only) adapter.
