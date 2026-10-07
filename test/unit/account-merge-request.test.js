@@ -153,6 +153,9 @@ describe('requestAccountMerge', () => {
 
   it('SENT + stores hash-only + emails B when B exists', async () => {
     enableAccountMergeFlag();
+    // Clear the test seam so we await THIS request's spawned send, not a stale one
+    // left by an earlier test (avoids an order-dependent false pass).
+    delete globalThis.__accountMergeEmailJobForTest;
     const r = await callAction(srv, 'requestAccountMerge', { targetEmail: BOB_EMAIL });
     expect(r.status).toBe('SENT');
     expect(r.expiresInMinutes).toBe(30);
@@ -167,6 +170,12 @@ describe('requestAccountMerge', () => {
     expect(row.status).toBe('PENDING');
     // Plaintext MUST NOT be stored.
     expect(row.tokenHashHex).not.toMatch(/^amt_/);
+
+    // sendNotificationEmail is now dispatched fire-and-forget via cds.spawn (#2674),
+    // so the FailedEmails write lands AFTER the handler returns. Await the spawned
+    // job's completion (exposed via the test seam) before asserting on the queue.
+    expect(globalThis.__accountMergeEmailJobForTest).toBeInstanceOf(Promise);
+    await globalThis.__accountMergeEmailJobForTest;
 
     // sendNotificationEmail was called: verify via FailedEmails queue
     // (no SMTP transport in unit tests → mail-client stores fully-resolved HTML
@@ -188,6 +197,41 @@ describe('requestAccountMerge', () => {
 
     // body reflects the initiator's email (template variable ${initiatorEmail}).
     expect(email.body).toContain(ALICE_EMAIL);
+  });
+
+  it('no timing side-channel: email send is fire-and-forget, not awaited inline (#2674)', async () => {
+    enableAccountMergeFlag();
+    const { FailedEmails } = cds.entities('com.sap.developers.ims');
+
+    // Clear any prior queued mail to this target so we observe only this request.
+    await DELETE.from(FailedEmails).where({ to: BOB_EMAIL });
+    delete globalThis.__accountMergeEmailJobForTest;
+
+    const r = await callAction(srv, 'requestAccountMerge', { targetEmail: BOB_EMAIL });
+    expect(r.status).toBe('SENT');
+
+    // Core assertion: the handler returns BEFORE the detached send has run. Under the
+    // old inline `await sendNotificationEmail(...)` the FailedEmails row (mail-client's
+    // no-transport queue path, synchronous relative to the awaited send) would already
+    // be present here. With cds.spawn (setImmediate) it must NOT be yet — this is what
+    // keeps response latency independent of the exists-vs-absent branch.
+    const immediate = await SELECT.from(FailedEmails)
+      .where({ to: BOB_EMAIL }).orderBy('createdAt desc').limit(1);
+    expect(immediate.length).toBe(0);
+
+    // The handler exposes the spawned job so the detached send can be awaited.
+    expect(globalThis.__accountMergeEmailJobForTest).toBeInstanceOf(Promise);
+    await globalThis.__accountMergeEmailJobForTest;
+
+    // Once the spawned job completes, the email has been queued (retry behavior preserved).
+    const after = await SELECT.from(FailedEmails)
+      .where({ to: BOB_EMAIL }).orderBy('createdAt desc').limit(1);
+    expect(after.length).toBe(1);
+
+    // Clean up so later tests see a fresh queue + no leaked AMR rows.
+    await DELETE.from(FailedEmails).where({ to: BOB_EMAIL });
+    const { AccountMergeRequests } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(AccountMergeRequests).where({ requesterUser_ID: aliceId });
   });
 
   it('RATE_LIMITED after 5 pending requests in an hour', async () => {

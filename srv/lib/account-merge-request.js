@@ -84,7 +84,28 @@ export async function handleRequestAccountMerge(req) {
 
   if (B && !blocked) {
     const base = process.env.APPROUTER_URL || '';
-    try {
+    // Anti-enumeration (#2674): the email send is dispatched fire-and-forget via
+    // cds.spawn() rather than awaited inline. Awaiting SMTP I/O here would make the
+    // response latency longer on the "B exists" branch than on the "B absent" branch,
+    // reintroducing a timing side-channel that distinguishes a real inbox from a
+    // non-existent one — partly defeating the uniform-SENT response.
+    //
+    // This removes the DOMINANT signal (SMTP, tens-to-hundreds of ms). A small residual
+    // asymmetry remains: the B-exists branch still runs two extra SecondaryAccounts
+    // SELECTs above (sub-millisecond local DB reads), so the paths are near-constant-time,
+    // not byte-identical. That residual is accepted as not meaningfully distinguishing per
+    // the issue's acceptance criteria; hoist those lookups to run unconditionally if strict
+    // constant-time is ever required.
+    //
+    // cds.spawn() runs the callback as a detached continuation in its OWN root
+    // transaction (setImmediate when no after/every is given), inheriting the current
+    // user/tenant. This matters: by the time the send runs the request tx is closing,
+    // so sendNotificationEmail's internal INSERT.into(FailedEmails) (the retry-queue
+    // behavior we must preserve) must not ride the request tx. The spawned tx handles
+    // that correctly. sendNotificationEmail never throws — it funnels all failures into
+    // the FailedEmails queue — so the .on('failed') handler is a defensive backstop that
+    // only guards against an unexpected throw becoming an unhandled rejection.
+    const job = cds.spawn(async () => {
       await sendNotificationEmail({
         to: email,
         subject: 'Confirm merging your SAP tutorial history',
@@ -95,10 +116,15 @@ export async function handleRequestAccountMerge(req) {
           ttlMinutes: String(TTL_MIN),
         },
       });
-    } catch (err) {
-      // Email failure is non-fatal — the request record is already stored;
-      // the user can retry. Log and continue.
-      cds.log('account-merge').warn('sendNotificationEmail failed (non-fatal):', err.message);
+    });
+    job.on('failed', (err) =>
+      cds.log('account-merge').warn('sendNotificationEmail failed (non-fatal):', err?.message));
+    // Test seam: expose the spawned job's completion so unit tests can await the
+    // detached send deterministically (the FailedEmails write now lands after the
+    // handler returns). Inert outside test runs.
+    if (process.env.NODE_ENV === 'test') {
+      globalThis.__accountMergeEmailJobForTest =
+        new Promise((resolve) => job.on('done', resolve));
     }
   }
   return { status: 'SENT', expiresInMinutes: TTL_MIN };
