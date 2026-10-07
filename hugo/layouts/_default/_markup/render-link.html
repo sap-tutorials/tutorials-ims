@@ -34,5 +34,6 @@
        vbscript:, …) collapses to "#". KEEP this guard when editing the default branch. */ -}}
 {{- $lc := lower $dest -}}
 {{- $safe := or (hasPrefix $lc "http://") (hasPrefix $lc "https://") (hasPrefix $dest "/") (hasPrefix $dest "#") (hasPrefix $lc "mailto:") -}}
+{{- /* security-reviewed: .Text is Goldmark's pre-rendered, already-escaped markdown link text, and the href is scheme-allowlisted via $safe above (javascript:/data:/vbscript: collapse to "#"), so safeURL + safeHTML here match Hugo's built-in <a> emission. The #2680 XSS-guard comment block pushed the original line-24 marker out of the 3-line window — this restores it. */ -}}
 <a href="{{ if $safe }}{{ .Destination | safeURL }}{{ else }}#{{ end }}"{{ with .Title }} title="{{ . }}"{{ end }}{{ if strings.HasPrefix $dest "http" }} rel="noopener"{{ end }}>{{ .Text | safeHTML }}</a>
 {{- end -}}
