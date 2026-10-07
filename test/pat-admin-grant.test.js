@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { __test } from '../srv/lib/mcp-pat-actions.js';
+import { __test as mwTest } from '../srv/lib/mcp-pat-middleware.js';
 import cds from '@sap/cds';
 import { resolveAdminGrant, upsertAdminGrant, revokeAdminGrant } from '../srv/lib/admin-grant.js';
 
@@ -76,5 +77,31 @@ describe('admin scope + TTL', () => {
     expect(__test.clampTtl(365, { admin: true })).toBe(90);
     expect(__test.clampTtl(undefined, { admin: true })).toBe(30);
     expect(__test.clampTtl(365, { admin: false })).toBe(365);
+  });
+});
+
+describe('lookupPAT live admin role resolution', () => {
+  cds.test('serve', '--project', '.', '--in-memory');
+
+  let uid;
+
+  beforeAll(async () => {
+    const db = await cds.connect.to('db');
+    const { Users } = cds.entities('com.sap.developers.ims');
+    const { INSERT } = cds.ql;
+    const userId = cds.utils.uuid();
+    await db.run(INSERT.into(Users).entries({ ID: userId, email: 'pat-role-test@example.com', name: 'PAT Role Test' }));
+    uid = userId;
+  });
+
+  it('admin PAT + live grant → roles include Admin & Tutorial.API', async () => {
+    await upsertAdminGrant(uid, 'tom@sap.com', 30);
+    const cached = await mwTest.buildCached({ ID: 'p1', user_ID: uid, scopes: ['admin'], expiresAt: null, revokedAt: null });
+    expect(cached.roles).toEqual(expect.arrayContaining(['Admin', 'Tutorial.API']));
+  });
+
+  it('read-only PAT with a grant present → no admin role', async () => {
+    const cached = await mwTest.buildCached({ ID: 'p2', user_ID: uid, scopes: ['read'], expiresAt: null, revokedAt: null });
+    expect(cached.roles).not.toContain('Admin');
   });
 });
