@@ -1466,6 +1466,41 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
   }
 
+  // --- excludedSlugsHandler: GET /content/excluded-slugs (#2585 follow-up) ---
+  //
+  // Returns the lowercased slugs of tutorials whose IMS lifecycle status is
+  // DELETED or INACTIVE. The CI publisher (fetch-tutorials, validate-tutorials)
+  // fetches this to skip discovering/validating/quarantining them. Public-read
+  // on prod (anonymous), hashesAuth on qa — mirrors /content/source-hashes.
+  // Metadata-only query (no content/version join needed). Fail-open callers:
+  // a 404/503 here must be treated as "nothing excluded".
+  async function excludedSlugsHandler(req, res) {
+    try {
+      const db = await cds.connect.to('db');
+      const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+      const rows = isHana
+        ? (await db.run(
+            `SELECT DISTINCT LOWER(t."SLUG") AS "slug"
+               FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS" AS t
+              WHERE t."STATUS" IN ('DELETED','INACTIVE')`
+          ))
+        : (await db.run(
+            `SELECT DISTINCT LOWER(t.slug) AS slug
+               FROM com_sap_developers_ims_tutorials AS t
+              WHERE t.status IN ('DELETED','INACTIVE')`
+          ));
+      const slugs = [];
+      for (const row of rows) {
+        if (row.slug) slugs.push(row.slug);
+      }
+      res.setHeader('Cache-Control', 'no-cache');
+      res.json({ slugs });
+    } catch (err) {
+      LOG.error(`[content/excluded-slugs] ${err.message}`);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   // --- getRepoProvenance(slug) ---
   //
   // Returns { repo, branch } for a tutorial slug from RepoCatalog (the
@@ -2231,6 +2266,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     markdownServeHandler,
     hashesHandler,
     sourceHashesHandler,
+    excludedSlugsHandler,
     getTutorialSource,
     navHandler,
     rollbackHandler,
@@ -2258,6 +2294,7 @@ export const serveHandler = _defaults.serveHandler;
 export const markdownServeHandler = _defaults.markdownServeHandler;
 export const hashesHandler = _defaults.hashesHandler;
 export const sourceHashesHandler = _defaults.sourceHashesHandler;
+export const excludedSlugsHandler = _defaults.excludedSlugsHandler;
 export const getTutorialSource = _defaults.getTutorialSource;
 export const navHandler = _defaults.navHandler;
 export const rollbackHandler = _defaults.rollbackHandler;

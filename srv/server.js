@@ -31,7 +31,7 @@ import { decideHandler } from './lib/branch/decide.js';
 import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
-import { contentAuthMiddleware, publishHandler, serveHandler, markdownServeHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler, quarantineIngestHandler } from './lib/content-store.js';
+import { contentAuthMiddleware, publishHandler, serveHandler, markdownServeHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, excludedSlugsHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler, quarantineIngestHandler } from './lib/content-store.js';
 import { imageSourceHandler } from './lib/image-source-handler.js';
 import { imageIngestHandler } from './lib/image-ingest-handler.js';
 import { attachmentSourceHandler } from './lib/attachment-source-handler.js';
@@ -785,6 +785,9 @@ cds.on('bootstrap', (app) => {
   // Public-read like /content/hashes; see srv/lib/content-store.js for the
   // rationale (rendered HTML is volatile-by-design, source markdown isn't).
   app.get('/content/source-hashes', sourceHashesHandler);
+  // #2585 follow-up — DELETED/INACTIVE slugs for the publisher to skip. Public-
+  // read like /content/source-hashes (safe: exposes only slugs + lifecycle state).
+  app.get('/content/excluded-slugs', excludedSlugsHandler);
   // Sidecar hash feeds (#2464) — public-read like /content/hashes. The publish
   // client diffs these against locally-computed sidecar hashes to skip POSTing
   // contributors/validation-rules whose stored content is already current.
