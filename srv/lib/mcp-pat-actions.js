@@ -64,12 +64,12 @@ export async function handleMintPAT(req) {
   if (!dbUser) return req.error(401, 'unable to resolve user');
 
   const wantsAdmin = Array.isArray(scopes) && scopes.includes('admin');
+  const ttl = clampTtl(ttlDays, { admin: wantsAdmin });
   if (wantsAdmin) {
     if (!isFlagEnabled('PAT_ADMIN_SCOPE_ENABLED')) return req.reject(503, 'admin-scoped PATs are disabled');
     if (!req.user.is('Admin')) return req.error(403, 'admin scope requires the Tutorials Admin role');
-    await upsertAdminGrant(dbUser.ID, req.user.id, ADMIN_DEFAULT_TTL);
+    await upsertAdminGrant(dbUser.ID, req.user.id, ttl);
   }
-  const ttl = clampTtl(ttlDays, { admin: wantsAdmin });
   const { token, prefix, hashHex } = generateToken();
   const expiresAt = new Date(Date.now() + ttl * 24 * 3600 * 1000);
   const clientIP = (req.headers?.['x-forwarded-for'] || req._?.req?.ip || '').split(',')[0].trim().slice(0, 45);

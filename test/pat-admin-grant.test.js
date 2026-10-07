@@ -79,6 +79,59 @@ describe('admin scope + TTL', () => {
     expect(__test.clampTtl(undefined, { admin: true })).toBe(30);
     expect(__test.clampTtl(365, { admin: false })).toBe(365);
   });
+
+  it('clampTtl(90, admin) returns 90 — grant and PAT share the same lifetime', () => {
+    // Regression guard for #2574: a 90-day admin PAT must yield a 90-day grant.
+    expect(__test.clampTtl(90, { admin: true })).toBe(90);
+  });
+
+  it('clampTtl with no ttlDays and admin still defaults to 30', () => {
+    expect(__test.clampTtl(undefined, { admin: true })).toBe(30);
+  });
+});
+
+describe('admin grant TTL alignment (upsertAdminGrant receives clamped ttl)', () => {
+  cds.test('serve', '--project', '.', '--in-memory');
+
+  let uid;
+
+  beforeAll(async () => {
+    const db = await cds.connect.to('db');
+    const { Users } = cds.entities('com.sap.developers.ims');
+    const userId = cds.utils.uuid();
+    await db.run(INSERT.into(Users).entries({ ID: userId, email: 'ttl-align-test@example.com', name: 'TTL Align Test' }));
+    uid = userId;
+  });
+
+  it('upsertAdminGrant with ttl=90 sets expiresAt ~90 days out', async () => {
+    const before = Date.now();
+    await upsertAdminGrant(uid, 'tom@sap.com', 90);
+    const after = Date.now();
+    const db = await cds.connect.to('db');
+    const { AdminGrants } = cds.entities('com.sap.developers.ims');
+    const [row] = await db.run(SELECT.from(AdminGrants).where({ user_ID: uid }));
+    expect(row).toBeDefined();
+    const expiresMs = new Date(row.expiresAt).getTime();
+    const expectedMin = before + 89 * 24 * 3600 * 1000;
+    const expectedMax = after  + 91 * 24 * 3600 * 1000;
+    expect(expiresMs).toBeGreaterThanOrEqual(expectedMin);
+    expect(expiresMs).toBeLessThanOrEqual(expectedMax);
+  });
+
+  it('upsertAdminGrant with ttl=30 (default) sets expiresAt ~30 days out', async () => {
+    const before = Date.now();
+    await upsertAdminGrant(uid, 'tom@sap.com', 30);
+    const after = Date.now();
+    const db = await cds.connect.to('db');
+    const { AdminGrants } = cds.entities('com.sap.developers.ims');
+    const [row] = await db.run(SELECT.from(AdminGrants).where({ user_ID: uid }));
+    expect(row).toBeDefined();
+    const expiresMs = new Date(row.expiresAt).getTime();
+    const expectedMin = before + 29 * 24 * 3600 * 1000;
+    const expectedMax = after  + 31 * 24 * 3600 * 1000;
+    expect(expiresMs).toBeGreaterThanOrEqual(expectedMin);
+    expect(expiresMs).toBeLessThanOrEqual(expectedMax);
+  });
 });
 
 describe('lookupPAT live admin role resolution', () => {
