@@ -1,7 +1,8 @@
 // hugo-apps/src/navigator/urlSync.test.ts
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import {
   parseNavState, serializeNavState, persistFilters, readPersistedFilters,
+  readNavStateFromWindow, writeNavStateToWindow,
   EMPTY_STATE, PARAM, LS_KEY_V1, LS_KEY_LEGACY_NEW, LS_KEY_LEGACY_NO_LICENSE,
   type NavState,
 } from './urlSync'
@@ -297,5 +298,31 @@ describe('round-trip', () => {
     const a = serializeNavState(HOST, { ...EMPTY_STATE, types: ['tutorial', 'mission'] })
     const b = serializeNavState(HOST, { ...EMPTY_STATE, types: ['mission', 'tutorial'] })
     expect(a).toBe(b)
+  })
+})
+
+describe('window wrappers — no-window guard (#2641 CI flake)', () => {
+  // A debounced URL-sync timer (useNavigatorFilters.scheduleURLSync, 300ms)
+  // could fire during test teardown after the DOM env was torn down, so
+  // writeNavStateToWindow hit a top-level `window` reference and threw
+  // `ReferenceError: window is not defined`, failing the whole suite on exit.
+  // Both wrappers now short-circuit when `window` is undefined.
+  const savedWindow = (globalThis as { window?: unknown }).window
+
+  beforeEach(() => {
+    // Simulate the Node teardown condition: no window at all.
+    delete (globalThis as { window?: unknown }).window
+  })
+  afterEach(() => {
+    if (savedWindow === undefined) delete (globalThis as { window?: unknown }).window
+    else (globalThis as { window?: unknown }).window = savedWindow
+  })
+
+  it('writeNavStateToWindow does not throw when window is undefined', () => {
+    expect(() => writeNavStateToWindow({ ...EMPTY_STATE, q: 'cap' })).not.toThrow()
+  })
+
+  it('readNavStateFromWindow returns EMPTY_STATE when window is undefined', () => {
+    expect(readNavStateFromWindow()).toEqual(EMPTY_STATE)
   })
 })
