@@ -38,6 +38,8 @@ import { writeAuthorPages } from './lib/author-pages-writer.js'
 import { matchTechEdSessions, matchDevtoberfestSessions } from '../srv/lib/session-speaker-match.js'
 import type { AuthorSessions } from './parsers/author-index.js'
 import { buildContributorsSidecar } from './parsers/contributors-sidecar.js'
+import { fetchExcludedSlugs } from './lib/publish-client.js'
+import { applyExclusion } from './lib/discovery-exclusion.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -799,6 +801,13 @@ async function main() {
       ? JSON.parse(readFileSync(DISCOVERY_CACHE, 'utf-8'))
       : {}
     allTutorials = cachedFiles.map(slug => discoveryMap[slug] || { slug, repo: 'unknown', branch: 'main' })
+    {
+      const excluded = await fetchExcludedSlugs({
+        baseUrl: process.env.CAP_BASE_URL ?? 'http://localhost:4004',
+        apiKey: process.env.CONTENT_API_KEY,
+      })
+      if (excluded.size) allTutorials = applyExclusion(allTutorials, excluded)
+    }
     const unknownCount = allTutorials.filter(t => t.repo === 'unknown').length
     if (unknownCount > 0) {
       console.warn(`WARNING: ${unknownCount}/${allTutorials.length} tutorials have unknown repo (images will break).`)
@@ -819,6 +828,20 @@ async function main() {
 
     const discovery = await discoverAllTutorials()
     allTutorials = discovery.tutorials
+    // #2585 — skip DELETED/INACTIVE tutorials before any downstream consumer
+    // (cache write, HANA baseline, task map). Fail-open: unreachable endpoint
+    // → empty set → no filtering.
+    {
+      const excluded = await fetchExcludedSlugs({
+        baseUrl: process.env.CAP_BASE_URL ?? 'http://localhost:4004',
+        apiKey: process.env.CONTENT_API_KEY,
+      })
+      if (excluded.size) {
+        const before = allTutorials.length
+        allTutorials = applyExclusion(allTutorials, excluded)
+        console.log(`[fetch] excluded ${before - allTutorials.length} DELETED/INACTIVE tutorial(s) from discovery`)
+      }
+    }
     discoveryMs = performance.now() - discoveryStart
 
     // Persist discovery mapping so --regenerate can resolve image URLs
