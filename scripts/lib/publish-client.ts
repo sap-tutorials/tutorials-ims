@@ -213,3 +213,23 @@ export async function fetchRemoteSourceHashes({ baseUrl, apiKey }: { baseUrl: st
   }
   return res.json() as Promise<Record<string, string>>;
 }
+
+/**
+ * Fetch the lowercased slugs of DELETED/INACTIVE tutorials (#2585 follow-up).
+ * `/content/excluded-slugs` returns `{ slugs: string[] }`. The publisher uses
+ * this to skip discovering/validating/quarantining retired tutorials.
+ *
+ * Public-read on prod srv; srv-qa gates it behind hashesAuth, so pass apiKey
+ * when targeting QA. Fail-open: any non-OK status or error → empty Set, so a
+ * not-yet-deployed endpoint never breaks a rebuild.
+ */
+export async function fetchExcludedSlugs({ baseUrl, apiKey }: { baseUrl: string; apiKey?: string }): Promise<Set<string>> {
+  try {
+    const res = await fetch(`${baseUrl}/content/excluded-slugs`, apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : undefined);
+    if (!res.ok) return new Set();
+    const body = (await res.json()) as { slugs?: string[] };
+    return new Set((body.slugs || []).map(s => String(s).toLowerCase()));
+  } catch {
+    return new Set();
+  }
+}
