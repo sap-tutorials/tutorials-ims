@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
+import { __test } from '../srv/lib/mcp-pat-actions.js';
 import cds from '@sap/cds';
 import { resolveAdminGrant, upsertAdminGrant, revokeAdminGrant } from '../srv/lib/admin-grant.js';
 
@@ -63,5 +64,17 @@ describe('admin-grant helper', () => {
     await upsertAdminGrant(uid, 'tom@sap.com', 30);
     expect(await revokeAdminGrant(uid)).toBeGreaterThan(0);
     expect(await resolveAdminGrant(uid)).toBe(false);
+  });
+});
+
+describe('admin scope + TTL', () => {
+  it('accepts admin in valid scopes', () => {
+    expect(() => __test.assertValidScopes(['admin'])).not.toThrow();
+  });
+
+  it('clamps admin TTL to max 90 and default 30', () => {
+    expect(__test.clampTtl(365, { admin: true })).toBe(90);
+    expect(__test.clampTtl(undefined, { admin: true })).toBe(30);
+    expect(__test.clampTtl(365, { admin: false })).toBe(365);
   });
 });
