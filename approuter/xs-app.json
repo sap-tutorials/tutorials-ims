@@ -567,6 +567,20 @@
       "csrfProtection": false
     },
     {
+      "source": "^/admin-pat/(.*)$",
+      "target": "/admin-pat/$1",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/graphql-pat(\\?.*)?$",
+      "target": "/graphql-pat",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
       "source": "^/mcp-auth/(.*)$",
       "target": "/mcp-auth/$1",
       "destination": "srv-mcp-api",
