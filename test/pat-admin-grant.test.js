@@ -114,3 +114,34 @@ describe('PAT_ADMIN_SCOPE_ENABLED flag', () => {
     expect(flag.default).toBe(false);
   });
 });
+
+describe('AdminService.revokeAdminGrant', () => {
+  cds.test('serve', '--project', '.', '--in-memory');
+
+  let uid;
+
+  beforeAll(async () => {
+    const db = await cds.connect.to('db');
+    const { Users } = cds.entities('com.sap.developers.ims');
+    const userId = cds.utils.uuid();
+    await db.run(INSERT.into(Users).entries({ ID: userId, email: 'revoke-grant-test@example.com', name: 'Revoke Grant Test' }));
+    uid = userId;
+  });
+
+  it('deletes a user grant via the action (as Admin)', async () => {
+    // Arrange: upsert a grant and confirm it's live
+    await upsertAdminGrant(uid, 'tom@sap.com', 30);
+    expect(await resolveAdminGrant(uid)).toBe(true);
+
+    // Act: invoke the action through the service layer with Admin role
+    const admin = await cds.connect.to('AdminService');
+    const res = await admin.tx(
+      { user: { id: 'admin', roles: ['Admin', 'authenticated-user'] } },
+      tx => tx.send({ event: 'revokeAdminGrant', data: { user_ID: uid } })
+    );
+
+    // Assert
+    expect(res.revoked).toBeGreaterThanOrEqual(1);
+    expect(await resolveAdminGrant(uid)).toBe(false);
+  });
+});

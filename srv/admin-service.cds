@@ -1304,6 +1304,9 @@ service AdminService {
     sourceHash  : String;     // SHA-256 of the raw upstream bytes (null for legacy rows)
     contentHash : String;     // SHA-256 of the rendered HTML
   };
+
+  /** Revoke a user's headless-admin grant (kills their admin PATs within ~60s). */
+  action revokeAdminGrant(user_ID : String) returns { revoked : Integer };
 }
 
 // ── Rebuild-button action (issue: rebuild-button, spec: 2026-06-24-admin-tutorial-rebuild-button) ──
