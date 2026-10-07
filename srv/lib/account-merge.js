@@ -25,6 +25,16 @@ export async function mergeAccounts(primaryUuid, secondaryUuid) {
     .where({ user_ID: secondaryUser.ID })
     .set({ user_ID: primaryUser.ID });
 
+  // Test seam: simulate a failure AFTER at least one entity (TaskRecords) has been
+  // repointed but BEFORE the ledger/PrimaryAccounts/SecondaryAccounts writes. Unlike
+  // the handler's __mergeAccountsShouldThrowForTest seam (which throws before this
+  // function is ever called), this one exercises a genuine partial-merge DB write, so
+  // the rollback test proves the repointed rows are undone by the ambient request tx
+  // (atomicity), not merely that the catch branch runs. Inert outside test runs. (#2675)
+  if (process.env.NODE_ENV === 'test' && globalThis.__mergeAccountsThrowMidwayForTest) {
+    throw new Error('simulated mid-merge failure (post-TaskRecords repoint)');
+  }
+
   // Dedupe helper: (taskType, taskLegacyId) → keep COMPLETED over IN_PROGRESS, then earliest completionDate
   async function dedupeTaskRecords(TaskRecords, pId) {
     const rows = await SELECT.from(TaskRecords).where({ user_ID: pId });
