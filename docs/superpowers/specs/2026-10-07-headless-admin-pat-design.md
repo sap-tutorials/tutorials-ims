@@ -88,7 +88,9 @@ genuine XSUAA Admin check so a non-admin can never create one.
    - The already-global `pinPatUserToContext` (`after:'auth'`) propagates the PAT user
      to `cds.context.user` — no change.
 
-5. **Approuter route change** (`approuter/xs-app.json`) — **open sub-decision, see below.**
+5. **Approuter route change** (`approuter/xs-app.json`) — option A: dedicated
+   `/admin-pat/*` + `/graphql-pat` `none` routes, bootstrap-rewritten to `/admin` +
+   `/graphql`. See §"Approuter routing (DECIDED: option A)".
 
 6. **Mint-time gate + admin-grant revoke** (`srv/lib/mcp-pat-actions.js`, `srv/admin-service.*`)
    - Mint flow (below). Revoke: new `AdminService` action `revokeAdminGrant(user_ID)`
@@ -125,11 +127,12 @@ curl -H "Authorization: Bearer pat_…" https://…/admin/Tutorials?$filter=…
   → AdminService @requires:'Admin' satisfied by cds.context.user.is('Admin') → 200
 ```
 
-## Open sub-decision for review: approuter routing
+## Approuter routing (DECIDED: option A)
 
 `/admin/*` and `/graphql` currently require `authenticationType: xsuaa` at the
 approuter, which redirects a bearer PAT to login before it ever reaches the app.
-Two ways to let the PAT through:
+**Decision: option (A)** — dedicated `none` routes on a `/admin-pat/*` + `/graphql-pat`
+prefix, leaving the existing interactive routes untouched. Two options were weighed:
 
 - **(A) Dedicated `none` routes (recommended).** Add approuter routes that match a PAT
   request (e.g. by a distinct path prefix like `/admin-pat/*` → rewritten to `/admin`,
@@ -148,6 +151,12 @@ Two ways to let the PAT through:
 rewrite (exactly the `/mcp-pat/` pattern that already works), leaving every interactive
 route as-is. This keeps the change additive and reversible (delete the routes + the
 middleware to fully disable).
+
+**Implementer note (approuter query-string gotcha):** an approuter route `source`
+ending in `(/.*)?$` with no query group 404s any request carrying a `?query`. The
+headless use case is query-heavy (`?$filter=…&$expand=…`), so the `/admin-pat/*` +
+`/graphql-pat` route sources MUST match the query string (follow the exact `source`
+shape of the working `/admin/*` and `/mcp-pat/*` routes rather than inventing one).
 
 ## Error handling
 
