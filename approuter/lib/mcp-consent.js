@@ -167,10 +167,10 @@ function esc(s) {
 
 // ── IAS leg (stubbed in unit tests via the exported boundary) ────────────────
 // Exchange the IAS authorization code for tokens using our public-client PKCE
-// verifier (no client secret — public client).
-async function idpExchange({ code, redirectUri, codeVerifier }) {
+// verifier (no client secret — public client). clientId is the MCP client's own
+// id, forwarded from /authorize through the sealed state (NOT server config).
+async function idpExchange({ code, redirectUri, codeVerifier, clientId }) {
   const issuer = iasIssuer()
-  const clientId = iasClientId()
   if (!issuer || !clientId) throw new Error('IAS issuer/client not configured')
   const res = await fetch(`${issuer}/oauth2/token`, {
     method: 'POST',
@@ -331,6 +331,7 @@ async function handleConsent(req, res, baseUrl) {
   const { verifier, challenge } = newPkcePair()
   const idpState = await sealState({
     purpose: 'idp',
+    client_id: ctx.client_id,
     client_redirect_uri: ctx.client_redirect_uri,
     client_state: ctx.client_state,
     client_code_challenge: ctx.client_code_challenge,
@@ -375,6 +376,7 @@ async function handleCallback(req, res, baseUrl) {
       code: idpCode,
       redirectUri: `${baseUrl}${CALLBACK_PATH}`,
       codeVerifier: ctx.idp_code_verifier,
+      clientId: ctx.client_id,
     })
   } catch (err) {
     return errorRedirect(res, ctx.client_redirect_uri, ctx.client_state, 'server_error', String(err.message || err))
