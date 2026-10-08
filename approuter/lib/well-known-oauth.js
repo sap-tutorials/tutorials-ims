@@ -218,8 +218,18 @@ function authorizationServerMetadata(issuer, endpointBase, scope) {
 // satisfy both at once for a proxied IAS — it makes fetched-from(approuter) ≠
 // issuer(IAS) (8414 fails) or issuer(approuter) ≠ authorize-iss(IAS) (9207
 // fails). Pointing discovery straight at IAS makes both hosts consistent.
+//
+// Consent-proxy flip (highest precedence): when MCP_CONSENT_ENABLED, the consent
+// proxy (mcp-consent.js) IS a real RFC 8414 authorization server at the approuter
+// self-URL (baseUrl) with a correct RFC 9207 `iss`, so we advertise OURSELVES as
+// the authorization_server here too. This is load-bearing: the MCP client reads
+// protected-resource metadata FIRST and runs discovery against authorization_
+// servers[0]. If this still named IAS (as the plain IAS path does), the client
+// would discover IAS directly and never reach our flipped authorization-server
+// doc — the consent screen would be bypassed entirely. Must match the flip in
+// authorizationServerMetadata().
 function protectedResourceMetadata(baseUrl, scope) {
-  const authServer = isIasIssuer() ? resolveIssuer() : baseUrl
+  const authServer = isConsentProxyEnabled() ? baseUrl : (isIasIssuer() ? resolveIssuer() : baseUrl)
   return {
     resource: `${baseUrl}${MCP_RESOURCE_SUFFIX}`,
     authorization_servers: [authServer],

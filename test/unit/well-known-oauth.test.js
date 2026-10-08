@@ -292,8 +292,12 @@ describe('well-known-oauth: openid-configuration alias', () => {
 
 describe('well-known-oauth: consent-proxy flip (MCP_CONSENT_ENABLED)', () => {
   const SAVED = process.env.MCP_CONSENT_ENABLED;
+  const SAVED_KIND = process.env.MCP_ISSUER_KIND;
+  const SAVED_MCP_URL = process.env.XSUAA_MCP_URL;
   afterEach(() => {
     if (SAVED === undefined) delete process.env.MCP_CONSENT_ENABLED; else process.env.MCP_CONSENT_ENABLED = SAVED;
+    if (SAVED_KIND === undefined) delete process.env.MCP_ISSUER_KIND; else process.env.MCP_ISSUER_KIND = SAVED_KIND;
+    if (SAVED_MCP_URL === undefined) delete process.env.XSUAA_MCP_URL; else process.env.XSUAA_MCP_URL = SAVED_MCP_URL;
   });
 
   it('points authorize/token at OUR /mcp-oauth endpoints and advertises self as issuer', () => {
@@ -313,5 +317,27 @@ describe('well-known-oauth: consent-proxy flip (MCP_CONSENT_ENABLED)', () => {
     const m = authorizationServerMetadata('https://developers.sap.com',
       'https://t.authentication.eu10-005.hana.ondemand.com', 'tutorials-mcp.Everyone');
     expect(m.authorization_endpoint).not.toContain('/mcp-oauth/');
+  });
+
+  // The load-bearing fix: the MCP client reads protected-resource metadata FIRST
+  // and runs discovery against authorization_servers[0]. When consent is on, this
+  // MUST advertise the approuter (self) — NOT IAS — or the client discovers IAS
+  // directly and the consent screen is bypassed entirely (observed live: mcp-remote
+  // opened IAS /oauth2/authorize instead of our /mcp-oauth/authorize).
+  it('advertises SELF as authorization_servers even when the IAS issuer is active', () => {
+    process.env.MCP_CONSENT_ENABLED = 'true';
+    process.env.MCP_ISSUER_KIND = 'ias';
+    process.env.XSUAA_MCP_URL = 'https://atxgsg7zi.accounts.ondemand.com';
+    const SELF = 'https://developers.sap.com';
+    const m = protectedResourceMetadata(SELF, 'openid');
+    expect(m.authorization_servers).toEqual([SELF]);
+  });
+
+  it('protected-resource falls back to IAS when the consent flag is off', () => {
+    delete process.env.MCP_CONSENT_ENABLED;
+    process.env.MCP_ISSUER_KIND = 'ias';
+    process.env.XSUAA_MCP_URL = 'https://atxgsg7zi.accounts.ondemand.com';
+    const m = protectedResourceMetadata('https://developers.sap.com', 'openid');
+    expect(m.authorization_servers).toEqual(['https://atxgsg7zi.accounts.ondemand.com']);
   });
 });
