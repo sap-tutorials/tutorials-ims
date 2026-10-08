@@ -23,6 +23,17 @@
 {{- else -}}
 {{- /* security-reviewed: default link emission — .Destination | safeURL + .Text | safeHTML is Hugo's
        documented link render-hook pattern; .Text is the pre-rendered (already-escaped) markdown link
-       text, and safeURL preserves the author's destination exactly as the built-in <a> would. #1931 */ -}}
-<a href="{{ .Destination | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }}{{ if strings.HasPrefix $dest "http" }} rel="noopener"{{ end }}>{{ .Text | safeHTML }}</a>
+       text, and safeURL preserves the author's destination exactly as the built-in <a> would. #1931
+
+       XSS GUARD (#2680): registering this custom render hook bypasses Goldmark's built-in
+       link-URL sanitization, and safeURL disables Hugo's URL escaping — so without an explicit
+       scheme check a markdown link like [x](javascript:alert(1)) would reach the href verbatim.
+       (The build-time sanitizer in scripts/parsers/sanitize-html.ts only runs on raw-HTML <a>
+       tags, not markdown-syntax links, so it does not cover this path.) Allowlist safe schemes:
+       http(s), site-relative (/), fragment (#), and mailto:. Anything else (javascript:, data:,
+       vbscript:, …) collapses to "#". KEEP this guard when editing the default branch. */ -}}
+{{- $lc := lower $dest -}}
+{{- $safe := or (hasPrefix $lc "http://") (hasPrefix $lc "https://") (hasPrefix $dest "/") (hasPrefix $dest "#") (hasPrefix $lc "mailto:") -}}
+{{- /* security-reviewed: .Text is Goldmark's pre-rendered, already-escaped markdown link text, and the href is scheme-allowlisted via $safe above (javascript:/data:/vbscript: collapse to "#"), so safeURL + safeHTML here match Hugo's built-in <a> emission. The #2680 XSS-guard comment block pushed the original line-24 marker out of the 3-line window — this restores it. */ -}}
+<a href="{{ if $safe }}{{ .Destination | safeURL }}{{ else }}#{{ end }}"{{ with .Title }} title="{{ . }}"{{ end }}{{ if strings.HasPrefix $dest "http" }} rel="noopener"{{ end }}>{{ .Text | safeHTML }}</a>
 {{- end -}}

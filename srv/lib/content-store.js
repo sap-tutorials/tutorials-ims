@@ -18,6 +18,7 @@ export const serveHandler = mod.serveHandler;
 export const markdownServeHandler = mod.markdownServeHandler;
 export const hashesHandler = mod.hashesHandler;
 export const sourceHashesHandler = mod.sourceHashesHandler;
+export const excludedSlugsHandler = mod.excludedSlugsHandler;
 export const getTutorialSource = mod.getTutorialSource;
 export const navHandler = mod.navHandler;
 export const rollbackHandler = mod.rollbackHandler;

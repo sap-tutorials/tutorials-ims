@@ -8,11 +8,11 @@ hero:
     alt: SAP Tutorials
   actions:
     - theme: brand
-      text: Read the user guide
-      link: /end-users/
+      text: Start writing tutorials
+      link: /authors/writing-tutorials
     - theme: alt
-      text: Author a tutorial
-      link: /authors/
+      text: Request QA channel access
+      link: /authors/#requesting-qa-channel-access
 features:
   - title: For Readers
     details: How developers.sap.com works, signing in, progress, privacy, and accessibility.

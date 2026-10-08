@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, watch } from 'vue'
+import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { useRealtimeProgress } from './useRealtimeProgress'
 import { useConfetti } from '../composables/useConfetti'
 
@@ -7,7 +7,15 @@ import { useConfetti } from '../composables/useConfetti'
 const eventId = ref<number | null>(null)
 
 // ── Theme ─────────────────────────────────────────────────────────
-const isDark = ref(document.documentElement.dataset.theme === 'dark')
+// Dark mode is driven by html[data-theme] (set pre-paint in head.html from
+// localStorage/prefers-color-scheme, and toggled at runtime by the header
+// theme switch, which flips data-theme + .dark in lockstep). A one-shot ref
+// read at module-eval can latch a stale value (island hydrates before/after
+// the toggle) — which left html[data-dark] stuck on in light mode and let the
+// higher-specificity .app-space[data-theme="joule"][data-dark] .hero rule
+// override the correct light Joule gradient. Keep it in sync via an observer.
+const readIsDark = () => document.documentElement.dataset.theme === 'dark'
+const isDark = ref(readIsDark())
 const activeTheme = ref<'joule' | 'sapphire' | null>(null)
 const loadedEventName = ref('')
 const loadedEventDescription = ref('')
@@ -116,6 +124,14 @@ async function loadData(): Promise<AppSpaceData | null> {
 }
 
 onMounted(async () => {
+  // Re-sync dark mode after the pre-paint head script has settled, then track
+  // runtime theme toggles so html[data-dark] never latches a stale value.
+  const html = document.documentElement
+  isDark.value = readIsDark()
+  const themeObserver = new MutationObserver(() => { isDark.value = readIsDark() })
+  themeObserver.observe(html, { attributes: true, attributeFilter: ['data-theme'] })
+  onUnmounted(() => themeObserver.disconnect())
+
   const params = new URLSearchParams(window.location.search)
   const theme = params.get('theme')
   if (theme === 'joule' || theme === 'sapphire') {
@@ -1314,7 +1330,7 @@ const emptyStateMessage = computed(() => {
    ═══════════════════════════════════════════════════════════════════ */
 
 .app-space[data-theme="joule"] .hero {
-  background: linear-gradient(135deg, #5D36FF 0%, #7B42F0 40%, #A100C2 100%);
+  background: linear-gradient(135deg, #5D36FF 0%, #A100C2 100%);
 }
 
 .app-space[data-theme="joule"] .stat-card {
@@ -1393,7 +1409,7 @@ const emptyStateMessage = computed(() => {
    ═══════════════════════════════════════════════════════════════════ */
 
 .app-space[data-theme="joule"][data-dark] .hero {
-  background: linear-gradient(135deg, #2A1066 0%, #4B1A8A 40%, #6B0080 100%);
+  background: linear-gradient(135deg, #3A1F99 0%, #660079 100%);
 }
 
 .app-space[data-theme="joule"][data-dark] .stat-card {

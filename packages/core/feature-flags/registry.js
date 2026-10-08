@@ -273,6 +273,13 @@ export const FEATURE_FLAGS = [
     howToChange: featureFlagUpsert('MCP_PAT_MINT_ENABLED', 'flag.mcp.patMint'),
   },
   {
+    key: 'PAT_ADMIN_SCOPE_ENABLED', label: 'PAT admin scope (headless admin)', category: 'MCP',
+    kind: 'db', imsConfigKey: 'flag.pat.adminScope',
+    valueType: 'boolean', default: false, issue: '#2574', status: 'beta',
+    description: 'Enables the headless admin PAT path: the `admin` PAT scope, the /admin-pat/* + /graphql-pat approuter routes, and live AdminGrants resolution. Default OFF; flip DEV-first after verification. DB-driven config (ImsConfig key flag.pat.adminScope); no env var.',
+    howToChange: featureFlagUpsert('PAT_ADMIN_SCOPE_ENABLED', 'flag.pat.adminScope'),
+  },
+  {
     key: 'MCP_PHASE3_ENABLED', label: 'MCP Phase-3 compose router', category: 'MCP',
     kind: 'db', imsConfigKey: 'flag.mcp.phase3',
     valueType: 'boolean', default: true, issue: '#1106', status: 'ga',
@@ -442,5 +449,13 @@ export const FEATURE_FLAGS = [
     valueType: 'boolean', default: false, status: 'dev-only',
     description: 'When true, a successful content publish/rollback fires a fire-and-forget Akamai Fast-Purge (CCU v3) purge-by-tag for the changed slugs, AND the served content Cache-Control s-maxage is raised from 600s to 86400s (safe only because the purge now bounds staleness). Requires the AKAMAI_FASTPURGE_EDGERC JSON credential in Credential Store; inert (no-op, short TTL) without it. Fail-open. Numeric tunables: ImsConfig edgepurge.network (production|staging), edgepurge.timeoutMs. DB-driven config (ImsConfig key flag.edgepurge); no env var. Default OFF.',
     howToChange: featureFlagUpsert('EDGE_PURGE_ENABLED', 'flag.edgepurge'),
+  },
+  // ---- Account merge (#2641) ----
+  {
+    key: 'ACCOUNT_MERGE_ENABLED', label: 'Account history merge', category: 'Security',
+    kind: 'db', imsConfigKey: 'flag.accountMerge',
+    valueType: 'boolean', default: false, issue: '#2641', status: 'dev-only',
+    description: 'Enables the requestAccountMerge + confirmAccountMerge actions on DeveloperService. When OFF both actions reject 503. Default OFF (#2641).',
+    howToChange: featureFlagUpsert('ACCOUNT_MERGE_ENABLED', 'flag.accountMerge'),
   },
 ];

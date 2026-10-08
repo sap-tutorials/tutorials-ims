@@ -871,7 +871,11 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
       // Schedule post-publish embeddings AFTER Steps metadata + body text upserts so
       // embedSlugs can find the Steps rows for fresh slugs without contentHash drift warnings.
-      if (!skipMetadataUpsert) {
+      // Skip under VITEST: this fire-and-forget setImmediate logs (ChatSettings
+      // absent in the unit in-memory DB) after the vitest worker tears down,
+      // rejecting a pending `onUserConsoleLog` RPC (EnvironmentTeardownError) and
+      // reding an otherwise-green suite. Nothing to embed in the unit env.
+      if (!skipMetadataUpsert && !process.env.VITEST) {
         setImmediate(async () => {
           try {
             const { ChatSettings } = cds.entities(namespace);
@@ -1269,7 +1273,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
     const tut = tutorialsTableInfo(namespace, isHana);
     const tutHits = await db.run(
-      `SELECT ${tut.statusCol} AS "status", ${tut.redirectCol} AS "redirectTo_ID" FROM ${tut.table} WHERE LOWER(${tut.slugCol}) = ?`,
+      `SELECT ${tut.statusCol} AS "status", ${tut.redirectCol} AS "redirectTo_ID", ${tut.redirectUrlCol} AS "redirectUrl" FROM ${tut.table} WHERE LOWER(${tut.slugCol}) = ?`,
       [slug]
     );
     // Defensive: if multiple rows match (shouldn't happen post-canonicalization
@@ -1279,13 +1283,20 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
                  ?? null;
 
     if (tutMeta?.status === 'INACTIVE') {
+      const qIdx = req.url.indexOf('?');
+      const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+      // External redirect (#2690) takes precedence over tutorial-to-tutorial.
+      // Target was allowlist-validated on save (admin-service.js); redirect as-is.
+      if (tutMeta.redirectUrl) {
+        res.setHeader('Location', `${tutMeta.redirectUrl}${query}`);
+        res.setHeader('Cache-Control', 'public, max-age=300');
+        return res.status(301).end();
+      }
       if (tutMeta.redirectTo_ID) {
         const [target] = await SELECT.from(Tutorials)
           .where({ ID: tutMeta.redirectTo_ID })
           .columns('slug', 'status');
         if (target?.slug && target.status !== 'INACTIVE') {
-          const qIdx = req.url.indexOf('?');
-          const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
           res.setHeader('Location', `/tutorials/${target.slug}${query}`);
           res.setHeader('Cache-Control', 'public, max-age=300');
           return res.status(301).end();
@@ -1459,6 +1470,41 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     } catch (err) {
       console.error('[content/source-hashes]', err instanceof Error ? err.message : String(err));
       res.status(500).json({ error: 'Source-hash retrieval failed' });
+    }
+  }
+
+  // --- excludedSlugsHandler: GET /content/excluded-slugs (#2585 follow-up) ---
+  //
+  // Returns the lowercased slugs of tutorials whose IMS lifecycle status is
+  // DELETED or INACTIVE. The CI publisher (fetch-tutorials, validate-tutorials)
+  // fetches this to skip discovering/validating/quarantining them. Public-read
+  // on prod (anonymous), hashesAuth on qa — mirrors /content/source-hashes.
+  // Metadata-only query (no content/version join needed). Fail-open callers:
+  // a 404/503 here must be treated as "nothing excluded".
+  async function excludedSlugsHandler(req, res) {
+    try {
+      const db = await cds.connect.to('db');
+      const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+      const rows = isHana
+        ? (await db.run(
+            `SELECT DISTINCT LOWER(t."SLUG") AS "slug"
+               FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS" AS t
+              WHERE t."STATUS" IN ('DELETED','INACTIVE')`
+          ))
+        : (await db.run(
+            `SELECT DISTINCT LOWER(t.slug) AS slug
+               FROM com_sap_developers_ims_tutorials AS t
+              WHERE t.status IN ('DELETED','INACTIVE')`
+          ));
+      const slugs = [];
+      for (const row of rows) {
+        if (row.slug) slugs.push(row.slug);
+      }
+      res.setHeader('Cache-Control', 'no-cache');
+      res.json({ slugs });
+    } catch (err) {
+      LOG.error(`[content/excluded-slugs] ${err.message}`);
+      return res.status(500).json({ error: err.message });
     }
   }
 
@@ -2172,15 +2218,26 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   // same runId replaces that run's snapshot. Same auth as /content/publish.
   async function quarantineIngestHandler(req, res) {
     try {
-      const { runId, workflowUrl, manifestVersion, buildMode, events } = req.body || {};
+      const { runId, workflowUrl, manifestVersion, buildMode } = req.body || {};
       if (buildMode !== 'full') {
         return res.status(400).json({ error: "Only buildMode 'full' may post a quarantine snapshot" });
       }
-      if (!Array.isArray(events)) {
+      if (!Array.isArray(req.body?.events)) {
         return res.status(400).json({ error: "'events' must be an array" });
       }
-      const { QuarantineSnapshots } = cds.entities(namespace);
+      const { QuarantineSnapshots, Tutorials } = cds.entities(namespace);
       const db = await cds.connect.to('db');
+      // #2585 follow-up — never quarantine a tutorial that IMS has retired.
+      // DELETED/INACTIVE rows must not appear in the active-quarantine facet
+      // (the Admin join is slug-only). Dropping them here is the CAP-side
+      // chokepoint; the publisher also filters at discovery (defense in depth).
+      const retired = await SELECT.from(Tutorials)
+        .columns('slug')
+        .where({ status: { in: ['DELETED', 'INACTIVE'] } });
+      const retiredSet = new Set(retired.map(r => String(r.slug || '').toLowerCase()));
+      const events = (req.body?.events || []).filter(
+        e => !retiredSet.has(String(e.slug || '').toLowerCase())
+      );
       const result = await db.tx(async (tx) => {
         // Idempotency: drop any prior snapshot for this runId (its events cascade via composition).
         if (runId) {
@@ -2227,6 +2284,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     markdownServeHandler,
     hashesHandler,
     sourceHashesHandler,
+    excludedSlugsHandler,
     getTutorialSource,
     navHandler,
     rollbackHandler,
@@ -2254,6 +2312,7 @@ export const serveHandler = _defaults.serveHandler;
 export const markdownServeHandler = _defaults.markdownServeHandler;
 export const hashesHandler = _defaults.hashesHandler;
 export const sourceHashesHandler = _defaults.sourceHashesHandler;
+export const excludedSlugsHandler = _defaults.excludedSlugsHandler;
 export const getTutorialSource = _defaults.getTutorialSource;
 export const navHandler = _defaults.navHandler;
 export const rollbackHandler = _defaults.rollbackHandler;

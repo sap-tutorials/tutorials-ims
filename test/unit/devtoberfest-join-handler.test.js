@@ -115,14 +115,22 @@ describe('POST /api/devtoberfest/join', () => {
     expect(res.data.error).toBe('EVENT_NOT_CONFIGURED');
   });
 
-  it('403 when authenticated but no Users row matches sapId', async () => {
+  it('get-or-create: first-time user with no pre-existing Users row still joins (201) and the row is minted (#2649)', async () => {
     await DELETE.from(Users);   // wipe the admin row seeded by beforeEach
     const res = await project.axios.post('/api/devtoberfest/join',
       { termsVersion: 3 },
       { auth: { username: 'admin', password: 'admin' }, validateStatus: () => true },
     );
-    expect(res.status).toBe(403);
-    expect(res.data.error).toBe('USER_NOT_IN_DB');
+    // Previously this 403'd with USER_NOT_IN_DB because the handler did a
+    // read-only SELECT. It now provisions the row like every sibling endpoint.
+    expect(res.status).toBe(201);
+    expect(res.data.joined).toBe(true);
+
+    const minted = await SELECT.one.from(Users).where({ sapId: 'admin' });
+    expect(minted).toBeTruthy();
+    const regs = await SELECT.from(EventRegistrations);
+    expect(regs.length).toBe(1);
+    expect(regs[0].user_ID).toBe(minted.ID);
   });
 
   it('409 when re-joining (idempotent — second call fails on unique constraint)', async () => {

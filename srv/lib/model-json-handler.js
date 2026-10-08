@@ -53,10 +53,18 @@ export async function modelJsonHandler(req, res) {
         'averageTimeToComplete',
         'status',
         'redirectTo_ID',
+        'redirectUrl',
       );
 
     if (!tut) {
       return res.status(404).json({ error: `Tutorial not found: ${slug}` });
+    }
+
+    // External redirect (#2690) takes precedence: an INACTIVE tutorial may
+    // redirect to an off-platform URL (allowlist-validated on save).
+    if (tut.redirectUrl) {
+      res.setHeader('Location', `${tut.redirectUrl}${query}`);
+      return res.status(301).end();
     }
 
     // Admin renamed/redirected this tutorial → 301 to the live slug's model.json.

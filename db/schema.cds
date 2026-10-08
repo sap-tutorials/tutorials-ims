@@ -42,6 +42,10 @@ entity Tutorials : TaskBase {
   // in the DB at the moment a user clicks "mark complete" (issue #89).
   stepCount                 : Integer;
   redirectTo                : Association to Tutorials;
+  // External redirect target (#2690). Mutually exclusive with redirectTo.
+  // Only an https:// URL on the curated SAP host allowlist is accepted
+  // (srv/lib/redirect-allowlist.js). Set only on an INACTIVE tutorial.
+  redirectUrl               : String(1000);
   steps                     : Composition of many Steps on steps.tutorial = $self;
   tags                      : Association to many TutorialTags on tags.tutorial = $self;
   meta                      : Composition of many TutorialMeta on meta.tutorial = $self;

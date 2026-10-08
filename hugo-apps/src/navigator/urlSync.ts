@@ -180,6 +180,7 @@ export function readPersistedFilters(ls: Storage): Partial<NavState> {
 }
 
 export function readNavStateFromWindow(): NavState {
+  if (typeof window === 'undefined') return { ...EMPTY_STATE }
   const ls = (() => { try { return window.localStorage } catch { return null } })()
   try {
     return parseNavState(window.location.href, ls)
@@ -189,6 +190,12 @@ export function readNavStateFromWindow(): NavState {
 }
 
 export function writeNavStateToWindow(state: NavState): void {
+  // Guard the top-level `window` access: a debounced URL-sync timer
+  // (useNavigatorFilters.scheduleURLSync, 300ms) can fire during test
+  // teardown after the DOM env is gone, throwing `ReferenceError: window is
+  // not defined` and failing the whole suite on exit. In the browser this is
+  // always truthy; in Node teardown it short-circuits harmlessly.
+  if (typeof window === 'undefined') return
   const next = serializeNavState(window.location.href, state)
   if (next !== window.location.href) {
     try { window.history.replaceState({}, '', next) } catch { /* defensive */ }

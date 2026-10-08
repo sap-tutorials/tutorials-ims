@@ -31,7 +31,7 @@ import { decideHandler } from './lib/branch/decide.js';
 import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
-import { contentAuthMiddleware, publishHandler, serveHandler, markdownServeHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler, quarantineIngestHandler } from './lib/content-store.js';
+import { contentAuthMiddleware, publishHandler, serveHandler, markdownServeHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, excludedSlugsHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler, quarantineIngestHandler } from './lib/content-store.js';
 import { imageSourceHandler } from './lib/image-source-handler.js';
 import { imageIngestHandler } from './lib/image-ingest-handler.js';
 import { attachmentSourceHandler } from './lib/attachment-source-handler.js';
@@ -785,6 +785,9 @@ cds.on('bootstrap', (app) => {
   // Public-read like /content/hashes; see srv/lib/content-store.js for the
   // rationale (rendered HTML is volatile-by-design, source markdown isn't).
   app.get('/content/source-hashes', sourceHashesHandler);
+  // #2585 follow-up — DELETED/INACTIVE slugs for the publisher to skip. Public-
+  // read like /content/source-hashes (safe: exposes only slugs + lifecycle state).
+  app.get('/content/excluded-slugs', excludedSlugsHandler);
   // Sidecar hash feeds (#2464) — public-read like /content/hashes. The publish
   // client diffs these against locally-computed sidecar hashes to skip POSTing
   // contributors/validation-rules whose stored content is already current.
@@ -1245,6 +1248,33 @@ cds.on('bootstrap', (app) => {
       if (err) return next(err);
       const rest = req.url.slice('/mcp-pat'.length) || '/'; // '/api', '/search', …
       req.url = '/mcp' + rest;
+      if (req.originalUrl) req.originalUrl = req.url;
+      next();
+    });
+  });
+
+  // Headless admin PAT: recognize Bearer pat_ on /admin-pat/* and /graphql-pat,
+  // rewrite to the real /admin + /graphql routers. Flag-gated, fully additive.
+  // Mirrors the /mcp-pat block above — same root-mount rationale applies (#2574).
+  app.use((req, res, next) => {
+    const u = req.url;
+    const isAdminPat = u.startsWith('/admin-pat/') || u === '/admin-pat';
+    const isGqlPat = u === '/graphql-pat' || u.startsWith('/graphql-pat?');
+    if (!isAdminPat && !isGqlPat) return next();
+    if (!isFlagEnabled('PAT_ADMIN_SCOPE_ENABLED')) return next(); // flag off → path inert (404)
+    const authz = req.headers?.authorization;
+    if (!authz || !authz.startsWith('Bearer pat_')) {
+      res.setHeader('WWW-Authenticate', 'Bearer error="invalid_token"');
+      return res.status(401).json({ error: 'PAT required on headless admin routes' });
+    }
+    return patMiddleware(req, res, (err) => {
+      if (err) return next(err);
+      if (isAdminPat) {
+        const rest = req.url.slice('/admin-pat'.length) || '/';
+        req.url = '/admin' + rest;
+      } else {
+        req.url = '/graphql' + req.url.slice('/graphql-pat'.length); // preserves ?query
+      }
       if (req.originalUrl) req.originalUrl = req.url;
       next();
     });

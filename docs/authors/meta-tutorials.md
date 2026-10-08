@@ -12,7 +12,8 @@ anything reaches production. See [QA Channel Bootstrap](../developers/operations
 for how that channel is wired.
 
 > **Access.** The QA channel is XSUAA-gated and needs the `Tutorial.Author`
-> scope. Open the links below in a browser where you're logged in to the
+> scope. If you don't have it yet, see [Requesting QA channel access](README.md#requesting-qa-channel-access).
+> Open the links below in a browser where you're logged in to the
 > platform — an unauthenticated request lands on the login shell, not the page.
 
 **QA base URL (production deployment):**

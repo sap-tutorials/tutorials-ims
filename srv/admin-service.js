@@ -64,6 +64,7 @@ import { FEATURE_FLAGS } from './lib/feature-flags/registry.js'; // #2060 bound 
 // source of truth for keys/defaults/valueTypes (also read by the sync job).
 import { SEMAPHORE_CONFIG_KEYS, SEMAPHORE_CONFIG_KEY_SET } from './lib/semaphore-sync/config-keys.js';
 import { resetFeaturedCache } from './lib/featured-resolve.js';
+import { revokeAdminGrant as revokeAdminGrantRow } from './lib/admin-grant.js';
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
 // column width verified in db/schema.cds:412.
@@ -1415,14 +1416,16 @@ export default class AdminService extends cds.ApplicationService {
       await UPDATE(Tutorials).set({ status: 'INACTIVE' }).where({ ID });
     });
 
-    // Validate redirectTo on save:
-    //   - only an INACTIVE tutorial may have a redirectTo target
-    //   - cannot point to itself
-    //   - target must exist and be ACTIVE
+    // Validate redirectTo / redirectUrl on save:
+    //   - only an INACTIVE tutorial may have a redirect target
+    //   - redirectTo (tutorial FK): cannot point to itself; target must exist + be ACTIVE
+    //   - redirectUrl (external, #2690): must pass the SAP host allowlist (https:// only)
+    //   - redirectTo and redirectUrl are mutually exclusive
     this.before(['CREATE', 'UPDATE'], 'Tutorials', async (req) => {
-      const { ID, status, redirectTo_ID } = req.data;
+      const { ID, status, redirectTo_ID, redirectUrl } = req.data;
       const target = redirectTo_ID ?? req.data.redirectTo?.ID;
-      if (target === undefined) return; // no change to redirectTo
+      const urlChanged = 'redirectUrl' in req.data;
+      if (target === undefined && !urlChanged) return; // no change to either redirect field
 
       // Determine effective status (consider current DB value if not in payload)
       let effectiveStatus = status;
@@ -1431,11 +1434,31 @@ export default class AdminService extends cds.ApplicationService {
         effectiveStatus = row?.status;
       }
 
-      if (target === null) return; // clearing the redirect is always allowed
+      const hasTarget = target !== undefined && target !== null;
+      const hasUrl = urlChanged && redirectUrl != null && redirectUrl !== '';
+
+      if (hasTarget && hasUrl) {
+        return req.reject(400, 'Set either a redirect tutorial or an external redirect URL, not both');
+      }
+
+      // Clearing either redirect is always allowed
+      if (!hasTarget && !hasUrl) return;
 
       if (effectiveStatus !== 'INACTIVE') {
         return req.reject(400, 'Redirect target can only be set on a deleted (INACTIVE) tutorial');
       }
+
+      if (hasUrl) {
+        if (!isAllowedTarget(redirectUrl)) {
+          return req.reject(
+            400,
+            'Redirect URL must be an https:// URL on an approved SAP host (e.g. community.sap.com, help.sap.com)'
+          );
+        }
+        return;
+      }
+
+      // redirectTo (tutorial FK) branch
       if (ID && target === ID) {
         return req.reject(400, 'Tutorial cannot redirect to itself');
       }
@@ -4165,6 +4188,12 @@ export default class AdminService extends cds.ApplicationService {
         dispositionAt: new Date().toISOString(),
       }).where({ ID: id });
       return { status: 'ok' };
+    });
+
+    // --- revokeAdminGrant: kill a user's headless-admin grant (#2574) ---
+    this.on('revokeAdminGrant', async (req) => {
+      const n = await revokeAdminGrantRow(req.data.user_ID);
+      return { revoked: Number(n) || 0 };
     });
 
     await super.init();

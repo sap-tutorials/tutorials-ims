@@ -8,7 +8,7 @@
 // Test helpers (_resetForTest etc.) are not included in the barrel — use subpath imports.
 
 // content-store.js
-export { createContentHandlers, toBuffer, isCatalogSlug, dropCatalogSlugs, recomputeTutorialProgress, triggerPostPublishEmbeddings, DEFAULT_CONTENT_CACHE_TTL_MS, ContentCache, invalidateRenderCache, invalidateContentCache, contentAuthMiddleware, publishHandler, serveHandler, markdownServeHandler, hashesHandler, sourceHashesHandler, getTutorialSource, navHandler, rollbackHandler, orphanPurgeHandler, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler, quarantineIngestHandler, pageServeHandler, authorServeHandler, advocateServeHandler } from './content-store.js';
+export { createContentHandlers, toBuffer, isCatalogSlug, dropCatalogSlugs, recomputeTutorialProgress, triggerPostPublishEmbeddings, DEFAULT_CONTENT_CACHE_TTL_MS, ContentCache, invalidateRenderCache, invalidateContentCache, contentAuthMiddleware, publishHandler, serveHandler, markdownServeHandler, hashesHandler, sourceHashesHandler, excludedSlugsHandler, getTutorialSource, navHandler, rollbackHandler, orphanPurgeHandler, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler, quarantineIngestHandler, pageServeHandler, authorServeHandler, advocateServeHandler } from './content-store.js';
 // content-publish-session.js
 export { createSessionHelpers, classifyTouchedTutorials } from './content-publish-session.js';
 // catalog-data.js

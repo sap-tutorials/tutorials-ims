@@ -15,3 +15,15 @@ entity PATs : cuid, managed {
   revokedAt     : Timestamp;            // null = active.
   createdFromIP : String(45);           // IPv6-safe.
 }
+
+/** Server-trusted "this user currently has headless admin authority" grant.
+ *  Created/affirmed only when the caller holds the real XSUAA Admin role at
+ *  PAT mint time (see srv/lib/mcp-pat-actions.js). Presence of a non-expired
+ *  row makes an `admin`-scoped PAT resolve roles ['Admin','Tutorial.API'].
+ *  Revoke the row (admin action) to kill all that user's admin PATs live. */
+entity AdminGrants : cuid, managed {
+  user      : Association to ims.Users  @assert.unique;
+  grantedAt : Timestamp;
+  grantedBy : String(255);   // email of the admin who minted/affirmed
+  expiresAt : Timestamp;
+}

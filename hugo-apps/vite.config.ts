@@ -295,6 +295,7 @@ export default defineConfig({
         'cmd-palette': resolve(__dirname, 'src/cmd-palette/main.ts'),
         me: resolve(__dirname, 'src/me/main.ts'),
         tokens: resolve(__dirname, 'src/tokens/main.ts'),
+        'account-merge': resolve(__dirname, 'src/account-merge/main.ts'),
         'tutorial-prefs': resolve(__dirname, 'src/tutorial-prefs/main.ts'),
         'code-check': resolve(__dirname, 'src/code-check/main.ts'),
         browse: resolve(__dirname, 'src/browse/main.ts'),

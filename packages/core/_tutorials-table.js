@@ -5,7 +5,7 @@
  *
  * @param {string} namespace - CDS namespace, e.g. "com.sap.developers.ims"
  * @param {boolean} isHana   - true when the active db is SAP HANA
- * @returns {{ table: string, idCol: string, slugCol: string, stepCountCol: string, statusCol: string, redirectCol: string }}
+ * @returns {{ table: string, idCol: string, slugCol: string, stepCountCol: string, statusCol: string, redirectCol: string, redirectUrlCol: string }}
  */
 export function tutorialsTableInfo(namespace, isHana) {
   if (isHana) {
@@ -16,6 +16,7 @@ export function tutorialsTableInfo(namespace, isHana) {
       stepCountCol: '"STEPCOUNT"',
       statusCol: '"STATUS"',
       redirectCol: '"REDIRECTTO_ID"',
+      redirectUrlCol: '"REDIRECTURL"',
     };
   }
   // SQLite: CDS emits the entity name with dots replaced by underscores,
@@ -27,5 +28,6 @@ export function tutorialsTableInfo(namespace, isHana) {
     stepCountCol: 'stepCount',
     statusCol: 'status',
     redirectCol: 'redirectTo_ID',
+    redirectUrlCol: 'redirectUrl',
   };
 }
