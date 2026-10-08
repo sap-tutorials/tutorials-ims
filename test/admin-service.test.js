@@ -383,6 +383,71 @@ describe('AdminService', () => {
       expect(row.redirectTo_ID).toBe(activeTarget);
     });
 
+    it('accepts redirectUrl with an allowlisted https host on an INACTIVE tutorial', async () => {
+      const { Tutorials } = cds.entities('com.sap.developers.ims');
+      const src = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries({
+        ID: src, slug: 'sd-url-ok', title: 'URL OK', status: 'INACTIVE'
+      });
+
+      const url = 'https://community.sap.com/some/page';
+      const { status } = await patchViaDraft(src, { redirectUrl: url });
+      expect([200, 201, 204]).toContain(status);
+
+      const [row] = await SELECT.from(Tutorials).where({ ID: src }).columns('redirectUrl');
+      expect(row.redirectUrl).toBe(url);
+    });
+
+    it('rejects redirectUrl pointing to a non-allowlisted host', async () => {
+      const { Tutorials } = cds.entities('com.sap.developers.ims');
+      const src = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries({
+        ID: src, slug: 'sd-url-bad-host', title: 'Bad Host', status: 'INACTIVE'
+      });
+
+      const { status, data } = await patchViaDraft(src, { redirectUrl: 'https://evil.example.com/x' });
+      expect(status).toBeGreaterThanOrEqual(400);
+      expect(JSON.stringify(data)).toMatch(/redirect url/i);
+    });
+
+    it('rejects redirectUrl with a non-https protocol', async () => {
+      const { Tutorials } = cds.entities('com.sap.developers.ims');
+      const src = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries({
+        ID: src, slug: 'sd-url-http', title: 'HTTP', status: 'INACTIVE'
+      });
+
+      const { status, data } = await patchViaDraft(src, { redirectUrl: 'http://community.sap.com/x' });
+      expect(status).toBeGreaterThanOrEqual(400);
+      expect(JSON.stringify(data)).toMatch(/redirect url/i);
+    });
+
+    it('rejects redirectUrl on an ACTIVE tutorial', async () => {
+      const { Tutorials } = cds.entities('com.sap.developers.ims');
+      const src = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries({
+        ID: src, slug: 'sd-url-active', title: 'URL Active', status: 'ACTIVE'
+      });
+
+      const { status, data } = await patchViaDraft(src, { redirectUrl: 'https://community.sap.com/x' });
+      expect(status).toBeGreaterThanOrEqual(400);
+      expect(JSON.stringify(data)).toMatch(/INACTIVE/i);
+    });
+
+    it('rejects setting both redirectTo and redirectUrl', async () => {
+      const { Tutorials } = cds.entities('com.sap.developers.ims');
+      const src = cds.utils.uuid();
+      const dst = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries([
+        { ID: src, slug: 'sd-url-both-src', title: 'Both Src', status: 'INACTIVE' },
+        { ID: dst, slug: 'sd-url-both-dst', title: 'Both Dst', status: 'ACTIVE' },
+      ]);
+
+      const { status, data } = await patchViaDraft(src, { redirectTo_ID: dst, redirectUrl: 'https://community.sap.com/x' });
+      expect(status).toBeGreaterThanOrEqual(400);
+      expect(JSON.stringify(data)).toMatch(/both/i);
+    });
+
     it('TutorialPickList exposes only ACTIVE tutorials', async () => {
       const { status, data } = await project.get('/admin/TutorialPickList', adminAuth);
       expect(status).toBe(200);

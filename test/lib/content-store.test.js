@@ -853,6 +853,28 @@ describe('content-store', () => {
       expect(res.headers['cache-control']).toContain('max-age=300');
     });
 
+    it('301-redirects an INACTIVE tutorial with an external redirectUrl', async () => {
+      await publishWith404({ 'ext-slug': '<p>ext</p>' });
+
+      const extId = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries({
+        ID: extId,
+        slug: 'ext-slug',
+        title: 'Ext',
+        status: 'INACTIVE',
+        redirectUrl: 'https://community.sap.com/landing',
+      });
+
+      const res = await project.axios.get('/content/tutorials/ext-slug?step=2', {
+        maxRedirects: 0,
+        validateStatus: () => true,
+      });
+
+      expect(res.status).toBe(301);
+      expect(res.headers['location']).toBe('https://community.sap.com/landing?step=2');
+      expect(res.headers['cache-control']).toContain('max-age=300');
+    });
+
     it('preserves query string on soft-delete redirect', async () => {
       await publishWith404({ 'old-slug': '<p>o</p>', 'new-slug': '<p>n</p>' });
 

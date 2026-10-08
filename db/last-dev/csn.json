@@ -764,6 +764,11 @@
           "@odata.foreignKey4": "redirectTo",
           "@cds.persistence.name": "REDIRECTTO_ID"
         },
+        "redirectUrl": {
+          "type": "cds.String",
+          "length": 1000,
+          "@cds.persistence.name": "REDIRECTURL"
+        },
         "author_ID": {
           "type": "cds.String",
           "length": 36,

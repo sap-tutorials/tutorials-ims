@@ -1273,7 +1273,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
     const tut = tutorialsTableInfo(namespace, isHana);
     const tutHits = await db.run(
-      `SELECT ${tut.statusCol} AS "status", ${tut.redirectCol} AS "redirectTo_ID" FROM ${tut.table} WHERE LOWER(${tut.slugCol}) = ?`,
+      `SELECT ${tut.statusCol} AS "status", ${tut.redirectCol} AS "redirectTo_ID", ${tut.redirectUrlCol} AS "redirectUrl" FROM ${tut.table} WHERE LOWER(${tut.slugCol}) = ?`,
       [slug]
     );
     // Defensive: if multiple rows match (shouldn't happen post-canonicalization
@@ -1283,13 +1283,20 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
                  ?? null;
 
     if (tutMeta?.status === 'INACTIVE') {
+      const qIdx = req.url.indexOf('?');
+      const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+      // External redirect (#2690) takes precedence over tutorial-to-tutorial.
+      // Target was allowlist-validated on save (admin-service.js); redirect as-is.
+      if (tutMeta.redirectUrl) {
+        res.setHeader('Location', `${tutMeta.redirectUrl}${query}`);
+        res.setHeader('Cache-Control', 'public, max-age=300');
+        return res.status(301).end();
+      }
       if (tutMeta.redirectTo_ID) {
         const [target] = await SELECT.from(Tutorials)
           .where({ ID: tutMeta.redirectTo_ID })
           .columns('slug', 'status');
         if (target?.slug && target.status !== 'INACTIVE') {
-          const qIdx = req.url.indexOf('?');
-          const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
           res.setHeader('Location', `/tutorials/${target.slug}${query}`);
           res.setHeader('Cache-Control', 'public, max-age=300');
           return res.status(301).end();
