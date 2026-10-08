@@ -12,7 +12,7 @@
 import cds from '@sap/cds';
 import express from 'express';
 import { resolveUser } from '../lib/resolve-user.js';
-import { resolveUserSapId } from '../lib/resolve-db-user.js';
+import { resolveUserSapId, provisionDbUser } from '../lib/resolve-db-user.js';
 import { getNextLegacyId } from '../lib/legacy-id.js';
 
 const LOG = cds.log('devtoberfest');
@@ -81,9 +81,14 @@ async function joinHandler(req, res) {
       return res.status(412).json({ error: 'TERMS_OUTDATED', current: config.termsVersion });
     }
 
-    const dbUser = await SELECT.one.from(Users).columns('ID').where({ sapId });
-    if (!dbUser) {
-      return res.status(403).json({ error: 'USER_NOT_IN_DB' });
+    // Get-or-create the caller's Users row from their own JWT claims, mirroring
+    // the sibling cat-game endpoint (devtoberfest-cat-game.js) and every other
+    // authenticated write path. A plain SELECT here used to 403 (USER_NOT_IN_DB)
+    // for any signed-in user whose row had never been provisioned — blocking
+    // first-time users from joining (#2649).
+    const dbUser = await provisionDbUser(user, ['ID']);
+    if (!dbUser?.ID) {
+      return res.status(401).json({ error: 'UNAUTHENTICATED' });
     }
 
     const now = new Date().toISOString();
