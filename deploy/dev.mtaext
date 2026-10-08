@@ -93,7 +93,7 @@ modules:
       # --static-oauth-client-info), captured at /authorize and forwarded through sealed
       # state to the IAS leg (preserves env-specific DEV/PROD model). Requires the
       # MCP_CONSENT_STATE_SECRET to be seeded in the Credential Store.
-      MCP_CONSENT_ENABLED: "false"
+      MCP_CONSENT_ENABLED: "true"
       # deploy.yml's $REBUILD_API_KEY. Removed as the third and final rollout
       # step of PR #871 (issue #903): the approuter now reads REBUILD_API_KEY
       # exclusively from the BTP Credential Store via
