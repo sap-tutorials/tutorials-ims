@@ -34,6 +34,7 @@ entity Tutorials : managed {
   title                     : String(500);
   status                    : String(20) default 'ACTIVE';
   redirectTo                : Association to Tutorials;
+  redirectUrl               : String(1000);
 }
 
 // Distributed lock table — mirrors prod entity; required by job-lock.js

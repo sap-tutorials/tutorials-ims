@@ -613,6 +613,10 @@ annotate AdminService.Tutorials with {
                             { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'primaryTag' }
                           ]
                         };
+  redirectUrl           @Common.Label: 'Redirect URL (external)'
+                        @Common.FieldControl: #Optional
+                        @UI.Placeholder: 'https://community.sap.com/...'
+                        @Core.Description: 'External redirect target. Only an https:// URL on an approved SAP host (e.g. community.sap.com, help.sap.com) is accepted. Set on a deleted (INACTIVE) tutorial; mutually exclusive with Redirect To.';
   // #918 — populated by after('READ', 'Tutorials') decorator in
   // admin-service.js from the KgIsolation sidecar.
   isolated              @Common.Label: 'Isolated'    @Common.FieldControl: #ReadOnly;
@@ -694,7 +698,8 @@ annotate AdminService.Tutorials with @UI: {
   FieldGroup#Lifecycle: { Data: [
     { Value: status },
     { Value: deletionReason },
-    { Value: redirectTo_ID, Label: 'Redirect To' }
+    { Value: redirectTo_ID, Label: 'Redirect To' },
+    { Value: redirectUrl, Label: 'Redirect URL (external)' }
   ]},
   Identification: [
     {
@@ -793,6 +798,7 @@ annotate AdminService.Tutorials with @UI: {
     { Value: status },
     { Value: deletionReason },
     { Value: redirectTo_ID, Label: 'Redirect To' },
+    { Value: redirectUrl, Label: 'Redirect URL (external)' },
     { Value: meta.reviewedDate, Label: 'Last Reviewed' },
     { Value: meta.monitoredStatus, Label: 'Monitored Status' },
     { Value: meta.notificationNumber, Label: 'Notifications Sent' },

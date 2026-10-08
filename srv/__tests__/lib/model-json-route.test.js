@@ -107,4 +107,20 @@ describe('GET /content/tutorial-model/:slug', () => {
     await modelJsonHandler(makeReq('../etc/passwd'), res);
     expect(res._status).toBe(404);
   });
+
+  it('301s to the external redirectUrl when the tutorial has one', async () => {
+    const { Tutorials } = cds.entities(NS);
+    await INSERT.into(Tutorials).entries({
+      ID: 'aaaaaaaa-0000-0000-0000-00000000ext1',
+      slug: 'ext-model-slug',
+      title: 'Ext Model',
+      status: 'INACTIVE',
+      redirectUrl: 'https://community.sap.com/landing',
+    });
+
+    const res = makeRes();
+    await modelJsonHandler(makeReq('ext-model-slug'), res);
+    expect(res._status).toBe(301);
+    expect(res._headers.Location).toBe('https://community.sap.com/landing');
+  });
 });
