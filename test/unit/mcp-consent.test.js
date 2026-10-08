@@ -59,14 +59,13 @@ function saveEnv(...names) { for (const n of names) SAVED[n] = process.env[n] }
 function restoreEnv() { for (const [n, v] of Object.entries(SAVED)) { if (v === undefined) delete process.env[n]; else process.env[n] = v } }
 
 beforeEach(() => {
-  saveEnv('MCP_CONSENT_ENABLED', 'MCP_CONSENT_STATE_SECRET', 'MCP_IAS_ISSUER', 'MCP_IAS_CLIENT_ID')
+  saveEnv('MCP_CONSENT_ENABLED', 'MCP_CONSENT_STATE_SECRET', 'XSUAA_MCP_URL')
   credstore._resetForTests()
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   vi.spyOn(console, 'error').mockImplementation(() => {})
   process.env.MCP_CONSENT_ENABLED = 'true'
   process.env.MCP_CONSENT_STATE_SECRET = 'unit-test-consent-state-secret'
-  process.env.MCP_IAS_ISSUER = 'https://tenant.accounts.ondemand.com'
-  process.env.MCP_IAS_CLIENT_ID = 'ias-public-client'
+  process.env.XSUAA_MCP_URL = 'https://tenant.accounts.ondemand.com'
 })
 
 afterEach(() => {
@@ -191,6 +190,7 @@ describe('consent endpoint — Allow', () => {
   async function txnToken() {
     return await consent.sealState({
       purpose: 'txn',
+      client_id: 'joule-work-desktop',
       client_redirect_uri: 'http://localhost:18766/mcp-callback',
       client_state: 'client-state',
       client_code_challenge: CLIENT_CHALLENGE,
@@ -214,7 +214,8 @@ describe('consent endpoint — Allow', () => {
     await vi.waitFor(() => expect(res.statusCode).toBe(302))
     const loc = new URL(res.headers.Location)
     expect(loc.origin + loc.pathname).toBe('https://tenant.accounts.ondemand.com/oauth2/authorize')
-    expect(loc.searchParams.get('client_id')).toBe('ias-public-client')
+    // client_id is the MCP client's own id from the authorize request, NOT server config
+    expect(loc.searchParams.get('client_id')).toBe('joule-work-desktop')
     expect(loc.searchParams.get('response_type')).toBe('code')
     expect(loc.searchParams.get('redirect_uri')).toBe(`${BASE_URL}${consent.CALLBACK_PATH}`)
     // our own (us<->IAS) PKCE challenge, NOT the client's
