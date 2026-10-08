@@ -77,6 +77,18 @@ modules:
       # /SECRET, GITHUB_OIDC_SIGNING_KEY, GITHUB_OIDC_STATE_SECRET, GITHUB_OIDC_IAS_
       # CLIENT_ID/SECRET) live in the PROD BTP Credential Store, never here.
       GITHUB_OIDC_ENABLED: "true"
+      # MCP consent-proxy authorization server (approuter/lib/mcp-consent.js) — the
+      # per-request "Application Access Request" consent screen before brokering the
+      # real IAS public-PKCE flow. When ON, protected-resource + authorization-server
+      # discovery advertise OUR /mcp-oauth/* endpoints instead of IAS directly; the
+      # proxy forwards the MCP client's own client_id (NOT server config) through
+      # sealed A256GCM state to the IAS leg. Reuses XSUAA_MCP_URL as the IAS issuer.
+      # Requires MCP_CONSENT_STATE_SECRET seeded in the PROD Credential Store AND the
+      # PROD IAS public client's redirect URIs to include https://<prod-approuter>/
+      # mcp-oauth/callback. Verified end-to-end on DEV 2026-10-08 (PRs #2691/#2693/
+      # #2696/#2697). Read via process.env at call time; MUST be `properties:` not
+      # `env:` (MTA drops module-level env).
+      MCP_CONSENT_ENABLED: "true"
     parameters:
       app-name: tutorials-prod-approuter
       instances: 2
