@@ -97,14 +97,10 @@ describe('Devtoberfest join — real HANA', () => {
       { termsVersion: 7 },
       { auth, validateStatus: () => true },
     );
-    expect([201, 403]).toContain(first.status);
-    if (first.status === 403) {
-      // Some hybrid setups don't auto-resolve sapId via mock auth on
-      // deployed HANA. That's documented spec behavior (403 USER_NOT_IN_DB).
-      // The smoke test in Task 17 covers the deployed XSUAA path.
-      console.warn('[devtoberfest hybrid] Skipped join verification — got 403 (mock auth did not resolve __TEST__ sapId). Task 17 smoke covers deployed XSUAA path.');
-      return;
-    }
+    // Since #2649 the join handler get-or-creates the Users row via
+    // provisionDbUser, and this test pre-seeds a row for testSapId (above),
+    // so the authenticated caller always resolves to a DB user → 201.
+    expect(first.status).toBe(201);
 
     const { EventRegistrations } = cds.entities('com.sap.developers.ims');
     const reg = await SELECT.one.from(EventRegistrations).where({
