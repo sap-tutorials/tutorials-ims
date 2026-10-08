@@ -4,14 +4,31 @@ This folder is the operational manual for everyone working with the SAP Develope
 
 ## Pick your persona
 
+If you have never published through this platform, start with **New tutorial author** — it comes first because you complete it first. Once you are set up and writing markdown day-to-day, **Tutorial author** is your reference.
+
 | If you are a... | Read | What you do |
 | --- | --- | --- |
-| **Tutorial author** writing markdown | [writing-tutorials.md](writing-tutorials.md) | Write, preview, and publish tutorials |
+| **New tutorial author** learning the ropes | [meta-tutorials.md](meta-tutorials.md) | First time here: follow the platform's own "how to write a tutorial" tutorials (on the QA channel) to get set up end-to-end |
+| **Tutorial author** writing markdown | [writing-tutorials.md](writing-tutorials.md) | Already onboarded: write, preview, and publish tutorials as part of your ongoing work |
 | **Any author** getting a change merged | [branch-protection-and-pull-requests.md](branch-protection-and-pull-requests.md) | Branches, forks, and PRs under the OSPO branch-protection rules (no more direct pushes to `main`) |
-| **New tutorial author** learning the ropes | [meta-tutorials.md](meta-tutorials.md) | Follow the platform's own "how to write a tutorial" tutorials (on the QA channel) |
 | **Repo group owner** in `sap-tutorials` | [repo-group-owners.md](repo-group-owners.md) | Review PRs, plan tutorials, manage your repos |
 | **Center admin** running the platform | [center-admin.md](center-admin.md) | Catalog, taxonomy, pipeline, access, support |
 | **Analytics admin** exploring usage | [analytics-admin.md](analytics-admin.md) | Run queries, monitor events, export data |
+
+## Requesting QA channel access
+
+Previewing your tutorials on the [QA channel](#tools-that-complement-these-docs) (`/tutorials-qa/*`) requires the **`Tutorial.Author`** BTP scope, granted through the **`Tutorials Author`** role collection. New authors do not have it by default — you request it once.
+
+**To request access, do either of the following:**
+
+- Post a request in the **Tutorial Authors** channel in Microsoft Teams, **or**
+- Email **[thomas.jung@sap.com](mailto:thomas.jung@sap.com)**.
+
+Include the **SAP e-mail address** (SAP IDP identity) that you log in to the platform with — that is the identity the role collection is assigned to.
+
+After your access is granted you must **log out and log back in** to the platform so your new scope appears in your session; until then `/tutorials-qa/*` returns a 403 even once the grant is in place.
+
+> **For operators:** the mechanics of assigning the `Tutorials Author` role collection (BTP Cockpit and `btp` CLI) are documented in [XSUAA Role Collection Assignment](../developers/operations/xsuaa-role-collection-assignment.md).
 
 ## Branching paths (issue #172)
 
