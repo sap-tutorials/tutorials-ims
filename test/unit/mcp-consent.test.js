@@ -234,6 +234,7 @@ describe('callback endpoint', () => {
   it('exchanges the IAS code and 302s back to the client with our opaque code', async () => {
     const idpState = await consent.sealState({
       purpose: 'idp',
+      client_id: 'joule-work-desktop',
       client_redirect_uri: 'http://localhost:18766/mcp-callback',
       client_state: 'client-state',
       client_code_challenge: CLIENT_CHALLENGE,
@@ -247,6 +248,8 @@ describe('callback endpoint', () => {
     consent.mcpConsentHandler(getReq(`${consent.CALLBACK_PATH}?${q}`), res, vi.fn())
     await vi.waitFor(() => expect(res.statusCode).toBe(302))
     expect(spy).toHaveBeenCalledOnce()
+    // the client's own id (sealed in the idp state) is forwarded to the IAS exchange
+    expect(spy.mock.calls[0][0]).toMatchObject({ clientId: 'joule-work-desktop', codeVerifier: 'our-idp-verifier' })
     const loc = new URL(res.headers.Location)
     expect(loc.origin + loc.pathname).toBe('http://localhost:18766/mcp-callback')
     expect(loc.searchParams.get('state')).toBe('client-state')
@@ -278,6 +281,38 @@ describe('callback endpoint', () => {
     consent.mcpConsentHandler(getReq(`${consent.CALLBACK_PATH}?${q}`), res, vi.fn())
     await vi.waitFor(() => expect(res.statusCode).toBe(400))
     expect(res.json().error).toBe('invalid_request')
+  })
+})
+
+// Exercise the REAL idpExchange body (not the stubbed boundary) with fetch mocked.
+// This is the test that catches the regression where idpExchange referenced the
+// removed iasClientId() helper ("iasClientId is not defined") — the callback test
+// above stubs idpExchange and so never ran its body.
+describe('idpExchange (real body) — client_id forwarding', () => {
+  it('POSTs the forwarded clientId to the IAS token endpoint (no iasClientId helper)', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'idp-at', token_type: 'Bearer', expires_in: 3600 }),
+    })
+    const out = await consent.idpExchange({
+      code: 'ias-code',
+      redirectUri: 'https://developers.sap.com/mcp-oauth/callback',
+      codeVerifier: 'our-idp-verifier',
+      clientId: 'joule-work-desktop',
+    })
+    expect(out.access_token).toBe('idp-at')
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    const [url, opts] = fetchSpy.mock.calls[0]
+    expect(url).toBe('https://tenant.accounts.ondemand.com/oauth2/token')
+    const body = new URLSearchParams(opts.body)
+    expect(body.get('client_id')).toBe('joule-work-desktop')
+    expect(body.get('code_verifier')).toBe('our-idp-verifier')
+    expect(body.get('grant_type')).toBe('authorization_code')
+  })
+
+  it('throws when clientId is missing', async () => {
+    await expect(consent.idpExchange({ code: 'c', redirectUri: 'r', codeVerifier: 'v' }))
+      .rejects.toThrow(/not configured/)
   })
 })
 
