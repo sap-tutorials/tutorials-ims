@@ -71,14 +71,14 @@ function isEnabled() {
   return String(process.env.MCP_CONSENT_ENABLED || '').toLowerCase() === 'true'
 }
 
-// IAS public client config. Non-secret (public PKCE client has no secret), so
-// supplied as plain env (mtaext), same spirit as XSUAA_MCP_URL in well-known-oauth.js.
+// IAS issuer endpoint. Reuse the approuter's already-configured XSUAA_MCP_URL
+// (set in mtaext, read by well-known-oauth.js). The client_id is NOT server
+// config — it comes from the MCP client's authorize request and is forwarded through
+// the sealed state to the IAS leg. This preserves the env-specific + client-supplied
+// model (DEV 0b1e8b56…, PROD sb-tutorials-prod!t676072, etc.).
 function iasIssuer() {
-  const v = process.env.MCP_IAS_ISSUER
+  const v = process.env.XSUAA_MCP_URL
   return v ? v.replace(/\/+$/, '') : null
-}
-function iasClientId() {
-  return process.env.MCP_IAS_CLIENT_ID || null
 }
 
 // Externally-visible base URL of this approuter, from the inbound request —
@@ -320,12 +320,12 @@ async function handleConsent(req, res, baseUrl) {
     return sendHtml(res, 400, '<!DOCTYPE html><meta charset="utf-8"><p>You must acknowledge all three statements to continue. Please go back and check every box.</p>')
   }
 
-  // Start the real IAS leg with OUR OWN PKCE. Carry the client context forward
-  // (sealed) so /callback can mint the client's code and /token can verify the
-  // client's PKCE.
+  // Start the real IAS leg with OUR OWN PKCE. The client_id is the MCP client's
+  // own id (from its authorize request, sealed in ctx); we forward it to IAS.
+  // Carry the client context forward (sealed) so /callback can mint the client's
+  // code and /token can verify the client's PKCE.
   const issuer = iasIssuer()
-  const clientId = iasClientId()
-  if (!issuer || !clientId) {
+  if (!issuer) {
     return errorRedirect(res, ctx.client_redirect_uri, ctx.client_state, 'server_error', 'IAS not configured')
   }
   const { verifier, challenge } = newPkcePair()
@@ -339,7 +339,7 @@ async function handleConsent(req, res, baseUrl) {
 
   return redirect(res, withQuery(`${issuer}/oauth2/authorize`, {
     response_type: 'code',
-    client_id: clientId,
+    client_id: ctx.client_id,
     redirect_uri: `${baseUrl}${CALLBACK_PATH}`,
     scope: 'openid',
     state: idpState,

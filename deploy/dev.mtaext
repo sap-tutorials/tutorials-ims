@@ -84,7 +84,16 @@ modules:
       # GITHUB_OIDC_IAS_CLIENT_ID/SECRET) live in the BTP Credential Store, read
       # via approuter/lib/credstore-secret.js — never here.
       GITHUB_OIDC_ENABLED: "true"
-      # REBUILD_API_KEY was formerly injected here via envsubst against
+      # MCP consent-proxy authorization server (approuter/lib/mcp-consent.js) — the
+      # per-request consent screen before brokering the real IAS public-PKCE flow.
+      # Feature flag, default OFF (zero behavior change until flipped on). When ON,
+      # discovery advertises /mcp-oauth/authorize + /mcp-oauth/token instead of the
+      # IdP endpoints directly. The consent proxy reuses XSUAA_MCP_URL as the IAS issuer;
+      # client_id is NOT server config — it is the MCP client's own id (e.g. mcp-remote's
+      # --static-oauth-client-info), captured at /authorize and forwarded through sealed
+      # state to the IAS leg (preserves env-specific DEV/PROD model). Requires the
+      # MCP_CONSENT_STATE_SECRET to be seeded in the Credential Store.
+      MCP_CONSENT_ENABLED: "false"
       # deploy.yml's $REBUILD_API_KEY. Removed as the third and final rollout
       # step of PR #871 (issue #903): the approuter now reads REBUILD_API_KEY
       # exclusively from the BTP Credential Store via
