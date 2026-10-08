@@ -369,7 +369,7 @@ The QA channel is a deployed author-preview environment separate from production
 Key points:
 
 - **What it shows** — only content from your `<repo>-Contribution` repo (the private companion that holds quiz rules and draft tutorial content). It is not a copy of the production channel.
-- **Access requirement** — you must hold the `Tutorial.Author` role collection in the BTP subaccount. Ask a Center Admin ([center-admin.md](center-admin.md)) to assign it.
+- **Access requirement** — you must hold the `Tutorial.Author` role collection in the BTP subaccount. To request it, post in the **Tutorial Authors** channel in Microsoft Teams or email **[thomas.jung@sap.com](mailto:thomas.jung@sap.com)** — see [Requesting QA channel access](README.md#requesting-qa-channel-access) for what to include.
 - **Setup** — the one-time infrastructure setup (CI secrets, dispatch-token distribution, HDI binding, role-collection creation) is documented in [../developers/operations/qa-channel-bootstrap.md](../developers/operations/qa-channel-bootstrap.md). You do not need to repeat this; it is done once per environment.
 - **Local dev server** — your local `npm run dev` does **not** use any QA flag. The QA flag (`hugo.qa.toml`) only applies to the deployed QA build. Running locally is always sufficient for layout and step rendering checks.
 - **Triggering a QA rebuild** — push a change to the `*-Contribution` repo. The same repo-dispatch mechanism used for production fires a QA-specific CI workflow that fetches from `-Contribution` repos only, builds with the QA Hugo config, and publishes to the QA HANA instance.
