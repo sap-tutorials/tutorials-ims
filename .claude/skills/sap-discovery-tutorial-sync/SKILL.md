@@ -88,7 +88,7 @@ Run `convert-body.mjs` against the fetched source and parse the JSON output.
 `-I` is not recognised on Node 26 on Windows and is not needed for first-party scripts):
 
 ```bash
-node <tutorials-ims-checkout>/scripts/discovery-sync/convert-body.mjs \
+node <tutorials-ims-checkout>/.claude/skills/sap-discovery-tutorial-sync/scripts/convert-body.mjs \
   /tmp/discovery-sync-${SLUG}-source.md "${SLUG}" \
   > /tmp/discovery-sync-${SLUG}-result.json
 ```
@@ -392,13 +392,13 @@ Two-stage validation in order. Always run Stage 1 first; Stage 2 requires a loca
 
 ### Stage 1 — Built-in precheck (always, no checkout needed)
 
-`convert-body.mjs` is a **first-party repo script** (`scripts/discovery-sync/`
+`convert-body.mjs` is a **self-contained skill script** (`.claude/skills/sap-discovery-tutorial-sync/scripts/`
 in the `tutorials-ims` checkout). Run it with plain `node` — no `-I` flag (the `-I`
 isolation flag is not recognised on Node 26 on Windows and is not needed for
 first-party scripts operating on already-fetched local files):
 
 ```bash
-node <tutorials-ims-checkout>/scripts/discovery-sync/convert-body.mjs \
+node <tutorials-ims-checkout>/.claude/skills/sap-discovery-tutorial-sync/scripts/convert-body.mjs \
   --precheck .sync-draft/${SLUG}/${SLUG}.md \
   "${SLUG}" \
   .sync-draft/${SLUG}/${SLUG}/
