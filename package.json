@@ -35,6 +35,7 @@
     "generate-dark-theme": "tsx scripts/generate-dark-theme.ts",
     "generate-ktt-lessons": "npx tsx scripts/generate-ktt-lessons.ts",
     "validate-tutorials": "tsx scripts/validate-tutorials.ts",
+    "discovery-sync:convert": "node scripts/discovery-sync/convert-body.mjs",
     "lint:tutorial-markdown": "tsx scripts/lint-tutorial-markdown.ts",
     "scan-tutorial-markdown": "tsx scripts/scan-markdown-source.ts",
     "publish-content": "tsx scripts/publish-content.ts",

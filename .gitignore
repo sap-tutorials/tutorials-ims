@@ -177,3 +177,6 @@ srv-qa/lib/_shared/
 
 # BTP→BAIP audit run artifacts (export/report/changeset/applied)
 /btp-audit/
+
+# Discovery sync working drafts — local only, never committed.
+.sync-draft/
