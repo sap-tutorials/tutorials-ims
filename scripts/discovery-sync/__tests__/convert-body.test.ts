@@ -28,3 +28,16 @@ describe('convertBody — details to OPTION', () => {
     expect(flags).toContain('NESTED_DETAILS: nested <details> cannot map to OPTION blocks; convert this section manually')
   })
 })
+
+describe('convertBody — images & fences', () => {
+  it('strips ./ from image paths, drops layout comments, collects image list', () => {
+    const { body, images } = convertBody(fx('03-images-source.md'), 'x')
+    expect(body).toBe(fx('03-images-expected.md'))
+    expect(images).toEqual(['bas-terminal.png', 'domain.png'])
+  })
+
+  it('flags a code fence missing a language tag', () => {
+    const { flags } = convertBody('```\nplain\n```\n', 'x')
+    expect(flags).toContain('FENCE_NO_LANG: a code fence has no language tag; add one (e.g. ```bash)')
+  })
+})

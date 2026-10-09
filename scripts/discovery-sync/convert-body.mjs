@@ -30,6 +30,25 @@ export function convertBody(source, slug) {
     },
   )
 
-  return { body, flags }
+  // Strip Discovery-Center layout comments (whole-line HTML comments like
+  // "<!-- border; size:540px -->"). Preserve the description marker comment.
+  body = body.replace(/^[ \t]*<!--(?!\s*description\b)[^>]*-->[ \t]*\n/gim, '')
+
+  // Normalize image paths: ![alt](./x.png) -> ![alt](x.png); collect filenames.
+  const images = []
+  body = body.replace(/!\[([^\]]*)\]\(\.?\/?([^)]+)\)/g, (_m, alt, path) => {
+    const file = path.trim()
+    // Only collect repo-relative images (skip absolute http(s) URLs).
+    if (!/^https?:\/\//i.test(file)) images.push(file)
+    return `![${alt}](${file})`
+  })
+
+  // Lint: code fence opened with no language tag.
+  if (/^```[ \t]*$/m.test(body)) {
+    flags.push('FENCE_NO_LANG: a code fence has no language tag; add one (e.g. ```bash)')
+  }
+
+  return { body, flags, images: [...new Set(images)] }
 }
+
 
