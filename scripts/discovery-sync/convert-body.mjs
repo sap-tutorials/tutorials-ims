@@ -51,4 +51,32 @@ export function convertBody(source, slug) {
   return { body, flags, images: [...new Set(images)] }
 }
 
+export function precheck(fullMarkdown, slug, imagesOnDisk) {
+  const problems = []
+  const begins = (fullMarkdown.match(/\[OPTION BEGIN \[/g) || []).length
+  const ends = (fullMarkdown.match(/\[OPTION END\]/g) || []).length
+  if (begins !== ends) problems.push(`UNBALANCED_OPTIONS: ${begins} [OPTION BEGIN] vs ${ends} [OPTION END]`)
 
+  const onDisk = new Set(imagesOnDisk)
+  for (const m of fullMarkdown.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)) {
+    const f = m[1].trim()
+    if (!/^https?:\/\//i.test(f) && !onDisk.has(f)) problems.push(`MISSING_IMAGE: ${f} is referenced but not on disk`)
+  }
+
+  const h1s = (fullMarkdown.match(/^#\s+\S/gm) || []).length
+  if (h1s !== 1) problems.push(`NO_H1: exactly one "# " H1 title is required (found ${h1s})`)
+
+  if (!/^parser:\s*v2\s*$/m.test(fullMarkdown)) problems.push('NO_PARSER_V2: frontmatter must set parser: v2')
+
+  if (slug !== slug.toLowerCase()) problems.push(`BAD_SLUG: slug "${slug}" must be lowercase`)
+
+  return problems
+}
+
+// CLI: node convert-body.mjs <source.md> <slug>  -> JSON {body,flags,images} on stdout
+if (import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/')) || import.meta.url === `file://${process.argv[1]}`) {
+  const { readFileSync } = await import('node:fs')
+  const [, , srcPath, slug] = process.argv
+  const src = readFileSync(srcPath, 'utf-8')
+  process.stdout.write(JSON.stringify(convertBody(src, slug)))
+}

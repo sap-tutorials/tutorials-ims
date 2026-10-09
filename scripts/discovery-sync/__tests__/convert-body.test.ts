@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { convertBody } from '../convert-body.mjs'
+import { convertBody, precheck } from '../convert-body.mjs'
 
 const fx = (n: string) => readFileSync(join(__dirname, 'fixtures', n), 'utf-8')
 
@@ -39,5 +39,28 @@ describe('convertBody — images & fences', () => {
   it('flags a code fence missing a language tag', () => {
     const { flags } = convertBody('```\nplain\n```\n', 'x')
     expect(flags).toContain('FENCE_NO_LANG: a code fence has no language tag; add one (e.g. ```bash)')
+  })
+})
+
+describe('precheck', () => {
+  it('passes a well-formed tutorial', () => {
+    const md = `---\nparser: v2\n---\n# T\n<!-- description -->d\n\n### S\n![x](a.png)\n`
+    expect(precheck(md, 'build-cap-app', ['a.png'])).toEqual([])
+  })
+  it('reports unbalanced OPTION blocks', () => {
+    const md = `---\nparser: v2\n---\n# T\n[OPTION BEGIN [Node.js]]\nx\n`
+    expect(precheck(md, 'x', [])).toContain('UNBALANCED_OPTIONS: 1 [OPTION BEGIN] vs 0 [OPTION END]')
+  })
+  it('reports a missing image', () => {
+    const md = `---\nparser: v2\n---\n# T\n![x](missing.png)\n`
+    expect(precheck(md, 'x', [])).toContain('MISSING_IMAGE: missing.png is referenced but not on disk')
+  })
+  it('reports an uppercase slug', () => {
+    const md = `---\nparser: v2\n---\n# T\n`
+    expect(precheck(md, 'Build-CAP', [])).toContain('BAD_SLUG: slug "Build-CAP" must be lowercase')
+  })
+  it('reports a missing H1', () => {
+    const md = `---\nparser: v2\n---\n## not an h1\n`
+    expect(precheck(md, 'x', [])).toContain('NO_H1: exactly one "# " H1 title is required (found 0)')
   })
 })
