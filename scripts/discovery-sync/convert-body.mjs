@@ -73,10 +73,23 @@ export function precheck(fullMarkdown, slug, imagesOnDisk) {
   return problems
 }
 
-// CLI: node convert-body.mjs <source.md> <slug>  -> JSON {body,flags,images} on stdout
+// CLI usage:
+//   node convert-body.mjs <source.md> <slug>
+//     → JSON {body,flags,images} on stdout
+//
+//   node convert-body.mjs --precheck <full.md> <slug> <imagesDir>
+//     → JSON string[] of problem messages on stdout (empty array = clean)
+//     imagesDir is scanned with readdirSync for filenames (non-recursive).
 if (import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/')) || import.meta.url === `file://${process.argv[1]}`) {
-  const { readFileSync } = await import('node:fs')
-  const [, , srcPath, slug] = process.argv
-  const src = readFileSync(srcPath, 'utf-8')
-  process.stdout.write(JSON.stringify(convertBody(src, slug)))
+  const { readFileSync, readdirSync } = await import('node:fs')
+  if (process.argv[2] === '--precheck') {
+    const [, , , fullMdPath, slug, imagesDir] = process.argv
+    const fullMarkdown = readFileSync(fullMdPath, 'utf-8')
+    const imagesOnDisk = readdirSync(imagesDir)
+    process.stdout.write(JSON.stringify(precheck(fullMarkdown, slug, imagesOnDisk)))
+  } else {
+    const [, , srcPath, slug] = process.argv
+    const src = readFileSync(srcPath, 'utf-8')
+    process.stdout.write(JSON.stringify(convertBody(src, slug)))
+  }
 }
