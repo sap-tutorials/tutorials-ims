@@ -14,6 +14,22 @@ export function convertBody(source, slug) {
     body = body.replace(h2[0], `# ${title}\n${descLine}\n`)
   }
 
+  // Detect nested <details> (OPTION blocks don't nest) — flag, don't convert.
+  if (/<details[^>]*>(?:(?!<\/details>)[\s\S])*?<details/i.test(body)) {
+    flags.push('NESTED_DETAILS: nested <details> cannot map to OPTION blocks; convert this section manually')
+  }
+
+  // Convert each top-level <details>…<summary>LABEL</summary>…</details> into an OPTION block.
+  body = body.replace(
+    /<details[^>]*>\s*<summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/gi,
+    (_m, label, content) => {
+      const l = label.trim()
+      // Trim one leading/trailing blank line pair from content for clean spacing.
+      const inner = content.replace(/^\n+/, '\n').replace(/\n+$/, '\n')
+      return `[OPTION BEGIN [${l}]]${inner}[OPTION END]`
+    },
+  )
+
   return { body, flags }
 }
 

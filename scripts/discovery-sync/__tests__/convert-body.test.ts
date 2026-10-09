@@ -16,3 +16,15 @@ describe('convertBody — title & description', () => {
     expect(flags).toContain('NO_TITLE: no leading "## " heading found; set the H1 title manually')
   })
 })
+
+describe('convertBody — details to OPTION', () => {
+  it('converts open and closed <details> into OPTION blocks, dropping the open attr', () => {
+    const { body } = convertBody(fx('02-details-source.md'), 'x')
+    expect(body).toBe(fx('02-details-expected.md'))
+  })
+
+  it('flags nested <details> instead of converting them', () => {
+    const { flags } = convertBody(fx('02-nested-source.md'), 'x')
+    expect(flags).toContain('NESTED_DETAILS: nested <details> cannot map to OPTION blocks; convert this section manually')
+  })
+})
