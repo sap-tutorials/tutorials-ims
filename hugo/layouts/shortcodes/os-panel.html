@@ -1,4 +1,12 @@
+{{/*
+  Single OS panel inside an os-options group. .Inner is rendered through
+  markdownify so code fences, images and blockquote alerts authored inside an
+  [OPTION BEGIN]…[OPTION END] block are parsed as markdown. Angle-bracket
+  shortcodes do NOT re-render their inner content by default, so without this
+  the outer Goldmark pass would treat the (dedented) panel body as plain text
+  and a ```fence``` would surface its backticks literally (#2703).
+*/}}
 {{ $os := .Get "os" }}
 <div class="os-panel" data-os="{{ $os }}">
-  {{ .Inner }}
+{{ .Inner | markdownify }}
 </div>

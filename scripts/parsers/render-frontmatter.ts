@@ -32,6 +32,10 @@ export interface RenderHugoFrontmatterArgs {
   semaphoreMap?: Record<string, string>
   /** [#173] When true, page body contains at least one os-options shortcode. */
   hasOsOptions?: boolean
+  /** [#2703] Canonical OSes actually present in this tutorial's OS groups,
+   *  in Windows/macOS/Linux/BAS order. Drives the picker to show only
+   *  supported platforms. Omitted/empty when hasOsOptions is false. */
+  osList?: string[]
   /**
    * [#655] Verbatim rules.vr source. When set + non-empty, emitted as a top-level
    * frontmatter field so Hugo's baseof.html can render
@@ -88,6 +92,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     contributors,
     registry,
     hasOsOptions,
+    osList,
     rulesVrSource,
     hasAi,
     githubLogin,
@@ -167,6 +172,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
   if (nav.missionAltGroups?.length) fm.missionAltGroups = nav.missionAltGroups
 
   if (hasOsOptions) fm.hasOsOptions = true
+  if (osList && osList.length) fm.osList = osList
 
   // [#655] Preview path: pass through verbatim rules.vr source + precomputed
   // AI-involved flag so Hugo's baseof.html can emit a <script id="rules-vr-source">

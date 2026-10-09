@@ -208,3 +208,80 @@ describe('composeTutorial CRLF regression (#432)', () => {
     ])
   })
 })
+
+describe('composeTutorial osList (#2703)', () => {
+  const base = {
+    repo: 'test-repo',
+    branch: 'main',
+    slug: 'os-list-test',
+    target: 'hugo' as const,
+    rewriteImages: false,
+  }
+  const fm = [
+    '---',
+    'parser: v2',
+    'title: OS Test',
+    'time: 5',
+    'tags: [tutorial>beginner]',
+    'primary_tag: tutorial>beginner',
+    'author_name: Tester',
+    'author_profile: https://example.com',
+    '---',
+    '',
+    '# OS Test',
+    '',
+    '### Install',
+    '',
+  ]
+
+  it('lists only the OSes present, in canonical order (Windows, macOS, Linux, BAS)', () => {
+    const md = [
+      ...fm,
+      '[OPTION BEGIN [Linux]]',
+      'linux body',
+      '[OPTION END]',
+      '',
+      '[OPTION BEGIN [Windows]]',
+      'win body',
+      '[OPTION END]',
+      '',
+    ].join('\n')
+    const result = composeTutorial(md, base)
+    expect(result.hasOsOptions).toBe(true)
+    // Authored Linux-then-Windows, but emitted in canonical order.
+    expect(result.osList).toEqual(['Windows', 'Linux'])
+  })
+
+  it('expands combined labels into every covered OS', () => {
+    const md = [
+      ...fm,
+      '[OPTION BEGIN [Windows]]',
+      'win body',
+      '[OPTION END]',
+      '',
+      '[OPTION BEGIN [Mac and Linux]]',
+      'nix body',
+      '[OPTION END]',
+      '',
+    ].join('\n')
+    const result = composeTutorial(md, base)
+    expect(result.osList).toEqual(['Windows', 'macOS', 'Linux'])
+  })
+
+  it('is empty for a non-OS (legacy tabs) tutorial', () => {
+    const md = [
+      ...fm,
+      '[OPTION BEGIN [JSON]]',
+      'json',
+      '[OPTION END]',
+      '',
+      '[OPTION BEGIN [XML]]',
+      'xml',
+      '[OPTION END]',
+      '',
+    ].join('\n')
+    const result = composeTutorial(md, base)
+    expect(result.hasOsOptions).toBe(false)
+    expect(result.osList).toEqual([])
+  })
+})
