@@ -3,15 +3,15 @@ export function convertBody(source, slug) {
   let body = source.replace(/\r\n/g, '\n')
 
   // Promote the first "## Title" to "# Title" and insert a description marker.
-  // Match "## Title" followed by exactly one newline (so we can preserve blank lines after)
-  const h2Match = body.match(/^##\s+([^\n]+)\n/)
-  if (!h2Match) {
+  const h2 = body.match(/^##\s+(.+?)\s*$/m)
+  if (!h2) {
     flags.push('NO_TITLE: no leading "## " heading found; set the H1 title manually')
   } else {
-    const title = h2Match[1]
+    const title = h2[1]
     const descLine = '<!-- description --> TODO: one-sentence catalog description (REVIEW)'
-    // Replace "## Title\n" with "# Title\n<!-- description -->\n"
-    body = body.replace(h2Match[0], `# ${title}\n${descLine}\n`)
+    // The regex match includes one trailing newline; replace it with H1, description, and two newlines
+    // to preserve any blank line that followed the original heading
+    body = body.replace(h2[0], `# ${title}\n${descLine}\n`)
   }
 
   return { body, flags }
