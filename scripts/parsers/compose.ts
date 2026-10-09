@@ -8,6 +8,7 @@ import { resolveImageURLs } from './images.js'
 import { resolveAttachmentLinks } from './attachment-links.js'
 import { prepPrerequisitesMarkup } from './prerequisites-markup.js'
 import { convertOptionBlocks } from './options.js'
+import { OS_VALUES, type OS } from './os-classifier.js'
 import { parseV1Steps } from './v1.js'
 import { parseV2Steps } from './v2.js'
 import { extractBranchGroups, BranchParseError } from './branches.js'
@@ -61,6 +62,10 @@ export interface ComposeResult {
   steps: TutorialStep[]
   body: string
   hasOsOptions: boolean
+  /** Canonical OSes that actually appear in OS option groups on this tutorial
+   *  (ordered Windows, macOS, Linux, BAS). Drives the OS picker to show only
+   *  supported platforms — #2703. Empty when hasOsOptions is false. */
+  osList: string[]
   intro: string
 }
 
@@ -145,10 +150,12 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   )
 
   const hasOsOptionsFlag = { value: false }
+  const osListSet = new Set<OS>()
   const resolvedStepSlugs = new Set<string>()
   processedBody = convertOptionBlocks(processedBody, opts.target, {
     osOverrides: frontmatter.osOverrides,
     hasOsOptionsOut: hasOsOptionsFlag,
+    osListOut: osListSet,
     resolvedStepSlugsOut: resolvedStepSlugs,
   })
 
@@ -241,6 +248,9 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     steps,
     body: processedBody,
     hasOsOptions: hasOsOptionsFlag.value,
+    // Emit in canonical order so the picker buttons are always Windows, macOS,
+    // Linux, BAS — never author-label order.
+    osList: OS_VALUES.filter((os) => osListSet.has(os)),
     intro,
   }
 }

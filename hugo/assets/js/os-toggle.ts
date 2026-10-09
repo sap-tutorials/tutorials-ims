@@ -103,7 +103,8 @@ function renderStrip(wrapper: Element, requested: OS, used: OS) {
   wrapper.insertBefore(strip, wrapper.firstChild);
 }
 
-function activate(os: OS): void {
+function activate(os: OS): OS {
+  let effectiveOs: OS = os;
   document.querySelectorAll<HTMLElement>('[data-os-options]').forEach((wrapper) => {
     wrapper.setAttribute('data-os-options-hydrated', '');
     wrapper.querySelectorAll<HTMLElement>('.os-panel[data-os]').forEach((p) => {
@@ -113,8 +114,16 @@ function activate(os: OS): void {
     const { panel, usedFallback } = pickPanel(wrapper, os);
     if (!panel) return;
     panel.setAttribute('data-os-active', '');
-    if (usedFallback) renderStrip(wrapper, os, usedFallback);
+    if (usedFallback) {
+      renderStrip(wrapper, os, usedFallback);
+      effectiveOs = usedFallback;
+    }
   });
+  // The OS whose panel is actually showing — equals `os` on an exact match,
+  // or the fallback target when the requested OS has no panel. Callers sync
+  // the picker selection to this so the highlighted button always matches the
+  // visible content, even when the detected OS isn't a rendered button (#2703).
+  return effectiveOs;
 }
 
 function wirePicker(picker: HTMLElement, current: OS): void {
@@ -153,8 +162,14 @@ async function init(): Promise<void> {
   ]);
 
   const current = detectDefaultOs();
-  activate(current);
-  if (picker) wirePicker(picker, current);
+  const effective = activate(current);
+  // Wire the picker to the detected OS, but reflect the EFFECTIVE OS (the one
+  // whose panel is actually visible) in the selection — so a detected OS that
+  // isn't a rendered button doesn't leave the picker with nothing selected.
+  if (picker) {
+    wirePicker(picker, current);
+    if (effective !== current) selectPickerItem(picker, effective);
+  }
 
   // Cross-tab sync.
   window.addEventListener('storage', (e) => {

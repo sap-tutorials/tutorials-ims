@@ -545,6 +545,7 @@ export function writeHugoPage(
   intro: string = '',
   video: import('./parsers/types.js').NormalizedVideo | null = null,
   semaphoreMap: Record<string, string> = {},
+  osList: string[] = [],
 ): void {
   const content = renderHugoFrontmatter({
     slug,
@@ -566,6 +567,7 @@ export function writeHugoPage(
     githubLogin,
     registry,
     hasOsOptions,
+    osList,
     intro,
     video,
     semaphoreMap,
@@ -1385,6 +1387,7 @@ async function main() {
           composed.intro,
           normalizeVideo(frontmatter.video, t.slug),
           semaphoreMap,
+          composed.osList,
         )
         authorRows.push({
           authorProfile: frontmatter.author_profile ?? '',

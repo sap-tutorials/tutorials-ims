@@ -186,7 +186,7 @@ For builds that accept a pre-registered client, bridge through `mcp-remote`:
       "command": "npx",
       "args": [
         "-y", "mcp-remote", "<base>/mcp-auth/api",
-        "--static-oauth-client-info", "{\"client_id\":\"sb-tutorials-prod!t676072\"}",
+        "--static-oauth-client-info", "{\"client_id\":\"0b1e8b56-5f5d-4ebf-a9e9-28aae2964236\"}",
         "--host", "localhost"
       ]
     }
@@ -194,20 +194,23 @@ For builds that accept a pre-registered client, bridge through `mcp-remote`:
 }
 ```
 
-> **The `client_id` is environment-specific — match it to your `<base>`:**
+> **The `client_id` is the same on all environments — the IAS `tutorials-identity` client:**
 >
 > | Environment | `<base>` | `client_id` |
 > | --- | --- | --- |
-> | **Production** | `https://developers.sap.com` | `sb-tutorials-prod!t676072` |
+> | **Production** | `https://developers.sap.com` | `0b1e8b56-5f5d-4ebf-a9e9-28aae2964236` |
 > | **Dev** | your dev route | `0b1e8b56-5f5d-4ebf-a9e9-28aae2964236` |
 >
-> **Dev** now authenticates against **IAS** (a public OIDC client — authorization_code
-> + PKCE S256, no secret), so the dev `client_id` is the IAS `tutorials-identity`
-> client UUID, not an XSUAA `sb-…` id. **Production still uses XSUAA** (`sb-tutorials-prod!…`)
-> until it is migrated. The `client_id` is environment-specific — using the wrong one
-> against a `<base>` fails at the authorize endpoint. If the dev `tutorials-identity`
-> instance is recreated, this UUID changes — read it from
-> `cf service-key tutorials-identity <key>` and update this row.
+> Both environments now authenticate against **IAS** (a public OIDC client —
+> authorization_code + PKCE S256, no secret). DEV and PROD share **one** IAS tenant
+> (`atxgsg7zi`) and **one** `tutorials-identity` app, with both approuter hosts
+> registered as redirect URIs — so there is a **single** client UUID for both. The old
+> XSUAA ids (`sb-tutorials-prod!…`, `sb-tutorials!…`) are **retired**: since
+> `MCP_ISSUER_KIND: ias` landed in both mtaexts (#2593), discovery advertises IAS, and
+> IAS rejects an XSUAA `sb-…` id at the authorize endpoint ("client_id … must match the
+> configuration") before PKCE is even checked. If the `tutorials-identity` instance is
+> recreated, this UUID changes — read it from the IAS admin console (tenant `atxgsg7zi`,
+> app `tutorials-identity` → OpenID Connect Configuration) and update both rows.
 
 On first connection `mcp-remote` opens a browser tab for consent (PKCE, no client secret required). The endpoints are discovered automatically from `<base>/.well-known/oauth-authorization-server`; you supply only the `client_id`. After approval, the token is cached and refreshed silently.
 
@@ -252,7 +255,7 @@ npm install -g mcp-remote
       "command": "npx",
       "args": [
         "-y", "mcp-remote", "<base>/mcp-auth/api",
-        "--static-oauth-client-info", "{\"client_id\":\"sb-tutorials-prod!t676072\"}",
+        "--static-oauth-client-info", "{\"client_id\":\"0b1e8b56-5f5d-4ebf-a9e9-28aae2964236\"}",
         "--host", "localhost"
       ]
     }
@@ -260,12 +263,13 @@ npm install -g mcp-remote
 }
 ```
 
-`sb-tutorials-prod!t676072` is the **XSUAA-generated public client** for the production
-`tutorials-prod` application (XSUAA auto-creates exactly one `sb-<xsappname>!<instance-suffix>`
-client per instance — there is no separately-named MCP client). **This id is
-environment-specific** — dev's client is `sb-tutorials!t676072` (see the table above). To
-confirm the current id for your environment, read the bound credentials:
-`cf env tutorials-prod-srv` (prod) or `cf env tutorials-srv` (dev) → `VCAP_SERVICES.xsuaa[0].credentials.clientid`.
+`0b1e8b56-5f5d-4ebf-a9e9-28aae2964236` is the **IAS public OIDC client** (`tutorials-identity`
+app in the shared IAS tenant `atxgsg7zi`) — a public PKCE client with no secret. The SAME id
+serves both DEV and PROD: they share one subaccount, one IAS tenant, and one `tutorials-identity`
+app, with each approuter host registered as a redirect URI. The retired XSUAA ids
+(`sb-tutorials-prod!…`, `sb-tutorials!…`) no longer work — IAS rejects them at the authorize
+endpoint. To confirm the current id, read it from the IAS admin console (tenant `atxgsg7zi`, app
+`tutorials-identity` → OpenID Connect Configuration name).
 The flow uses PKCE with no client secret. On first run, `mcp-remote` opens your browser for the
 SAP universal-ID consent flow; after approval the token is cached in `~/.mcp-auth/` and refreshed
 silently. The server advertises its endpoints at `<base>/.well-known/oauth-authorization-server`,

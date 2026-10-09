@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-08T19:48:33.396Z",
+  "generatedAt": "2026-10-09T22:42:43.580Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,71 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2705",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2705,
+      "title": "Discovery Center tutorial import tooling",
+      "summary": "Added internal tooling that converts SAP Discovery Center tutorials into the platform's format, making it easier for authors to bring existing content onto the portal.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-09T21:20:49Z",
+      "week": "2026-W41",
+      "weekStart": "2026-10-05",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2705"
+    },
+    {
+      "id": "tutorials-ims#2704",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2704,
+      "title": "Correct rendering of OS options and alerts in nested tutorial steps",
+      "summary": "Tutorials that nest OS-specific option panels inside numbered sub-steps now render correctly — step numbering is preserved, and code blocks, images, and notes inside those panels display properly, with distinct styling for Note and Important callouts.",
+      "category": "Fix",
+      "mergedAt": "2026-10-09T20:30:02Z",
+      "week": "2026-W41",
+      "weekStart": "2026-10-05",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2704"
+    },
+    {
+      "id": "tutorials-ims#2700",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2700,
+      "title": "Correct the MCP quickstart client ID",
+      "summary": "The MCP quickstart documentation now shows the correct production client ID, so new connections use the current identity client instead of a retired one.",
+      "category": "Docs",
+      "mergedAt": "2026-10-08T22:24:21Z",
+      "week": "2026-W41",
+      "weekStart": "2026-10-05",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2700"
+    },
+    {
+      "id": "tutorials-ims#2701",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2701,
+      "title": "Keep MCP sessions connected across token refresh",
+      "summary": "AI clients connecting to the Developers MCP server no longer drop on reconnect — the consent proxy now honors refresh-token requests, so a session stays authenticated after the initial sign-in without a repeated login.",
+      "category": "Fix",
+      "mergedAt": "2026-10-08T22:24:06Z",
+      "week": "2026-W41",
+      "weekStart": "2026-10-05",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2701"
+    },
+    {
+      "id": "tutorials-ims#2699",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2699,
+      "title": "Release 1.37.0",
+      "summary": "Internal release packaging the 1.37.0 train for promotion to production.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-08T19:57:34Z",
+      "week": "2026-W41",
+      "weekStart": "2026-10-05",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2699"
+    },
     {
       "id": "tutorials-ims#2698",
       "repo": "tutorials-ims",

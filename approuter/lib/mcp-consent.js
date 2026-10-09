@@ -188,6 +188,27 @@ async function idpExchange({ code, redirectUri, codeVerifier, clientId }) {
   return await res.json()
 }
 
+// Refresh leg (stubbed in unit tests via the exported boundary). We passed IAS's
+// refresh_token through to the client verbatim at /token, so the client hands it
+// right back here — we relay it to IAS. clientId is the MCP client's own id (public
+// client, no secret). No PKCE on refresh.
+async function idpRefresh({ refreshToken, clientId }) {
+  const issuer = iasIssuer()
+  if (!issuer || !clientId) throw new Error('IAS issuer/client not configured')
+  const res = await fetch(`${issuer}/oauth2/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: clientId,
+    }),
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!res.ok) throw new Error(`IAS token refresh: ${res.status}`)
+  return await res.json()
+}
+
 // ── consent page ─────────────────────────────────────────────────────────────
 // The three acknowledgement statements are BYTE-IDENTICAL to the other SAP MCP
 // tools' screen, substituting only the service name. Styled with SAP Fundamental
@@ -399,6 +420,35 @@ async function handleToken(req, res) {
   const rawBody = await readBody(req)
   const params = parseForm(req, rawBody)
 
+  // Refresh grant: the client holds IAS's refresh_token (we passed it through
+  // verbatim at the authorization_code exchange). Relay it to IAS. The discovery
+  // doc advertises refresh_token in grant_types_supported, so clients WILL use it
+  // once the first access_token expires — not handling it 400s every reconnect.
+  if (params.grant_type === 'refresh_token') {
+    if (!params.refresh_token) {
+      return sendJson(res, 400, { error: 'invalid_request', error_description: 'refresh_token required' })
+    }
+    let t
+    try {
+      // Via the exported reference so unit tests can stub this boundary.
+      t = await module.exports.idpRefresh({
+        refreshToken: params.refresh_token,
+        clientId: params.client_id,
+      })
+    } catch (err) {
+      return sendJson(res, 400, { error: 'invalid_grant', error_description: String(err.message || err) })
+    }
+    return sendJson(res, 200, {
+      access_token: t.access_token,
+      token_type: t.token_type || 'Bearer',
+      expires_in: t.expires_in,
+      id_token: t.id_token,
+      // IAS may rotate the refresh_token; pass the new one through, else keep the old.
+      refresh_token: t.refresh_token || params.refresh_token,
+      scope: t.scope,
+    })
+  }
+
   if (params.grant_type !== 'authorization_code') {
     return sendJson(res, 400, { error: 'unsupported_grant_type' })
   }
@@ -458,6 +508,7 @@ module.exports = {
   mcpConsentHandler,
   // exported for unit tests / stubbing
   idpExchange,
+  idpRefresh,
   resolveBaseUrl,
   verifyPkce,
   sealState,

@@ -199,4 +199,15 @@ describe('activate — fallback chain', () => {
     const strip = document.querySelector('ui5-message-strip');
     expect(strip?.textContent).toBe('No Windows instructions for this step — showing BAS.');
   });
+
+  it('returns the exact OS when a matching panel exists (#2703)', async () => {
+    const { __test__ } = await import('../../hugo/assets/js/os-toggle');
+    expect(__test__.activate('Windows')).toBe('Windows');
+  });
+
+  it('returns the fallback OS when the requested OS has no panel (#2703)', async () => {
+    // Fixture: only Windows + macOS panels exist.
+    const { __test__ } = await import('../../hugo/assets/js/os-toggle');
+    expect(__test__.activate('Linux')).toBe('macOS');
+  });
 });

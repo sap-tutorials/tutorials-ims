@@ -316,6 +316,28 @@ describe('idpExchange (real body) — client_id forwarding', () => {
   })
 })
 
+describe('idpRefresh (real body) — refresh_token forwarding', () => {
+  it('POSTs grant_type=refresh_token + the client refresh_token + clientId to IAS', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'new-at', token_type: 'Bearer', expires_in: 3600 }),
+    })
+    const out = await consent.idpRefresh({ refreshToken: 'ias-rt', clientId: 'joule-work-desktop' })
+    expect(out.access_token).toBe('new-at')
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    const [url, opts] = fetchSpy.mock.calls[0]
+    expect(url).toBe('https://tenant.accounts.ondemand.com/oauth2/token')
+    const body = new URLSearchParams(opts.body)
+    expect(body.get('grant_type')).toBe('refresh_token')
+    expect(body.get('refresh_token')).toBe('ias-rt')
+    expect(body.get('client_id')).toBe('joule-work-desktop')
+  })
+
+  it('throws when clientId is missing', async () => {
+    await expect(consent.idpRefresh({ refreshToken: 'rt' })).rejects.toThrow(/not configured/)
+  })
+})
+
 describe('token endpoint — client PKCE verification + passthrough', () => {
   it('returns the IAS tokens when the client code_verifier matches', async () => {
     const code = await sealedCode()
@@ -354,6 +376,57 @@ describe('token endpoint — client PKCE verification + passthrough', () => {
     consent.mcpConsentHandler(postReq(consent.TOKEN_PATH, body), res, vi.fn())
     await vi.waitFor(() => expect(res.statusCode).toBe(400))
     expect(res.json().error).toBe('unsupported_grant_type')
+  })
+
+  // refresh_token grant: mcp-remote uses it once the first access_token expires.
+  // The discovery doc advertises refresh_token in grant_types_supported, so NOT
+  // handling it 400s "unsupported_grant_type" on every reconnect (observed live
+  // on PROD 2026-10-08 after a successful initial auth).
+  it('proxies a refresh_token grant to IAS and returns the new tokens', async () => {
+    const spy = vi.spyOn(consent, 'idpRefresh').mockResolvedValue({
+      access_token: 'new-at', token_type: 'Bearer', expires_in: 3600, id_token: 'new-id', refresh_token: 'rotated-rt',
+    })
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: 'old-ias-rt',
+      client_id: 'joule-work-desktop',
+    }).toString()
+    const res = mockRes()
+    consent.mcpConsentHandler(postReq(consent.TOKEN_PATH, body), res, vi.fn())
+    await vi.waitFor(() => expect(res.statusCode).toBe(200))
+    expect(spy).toHaveBeenCalledOnce()
+    expect(spy.mock.calls[0][0]).toMatchObject({ refreshToken: 'old-ias-rt', clientId: 'joule-work-desktop' })
+    const tok = res.json()
+    expect(tok.access_token).toBe('new-at')
+    expect(tok.refresh_token).toBe('rotated-rt')
+  })
+
+  it('refresh falls back to the old refresh_token when IAS does not rotate it', async () => {
+    vi.spyOn(consent, 'idpRefresh').mockResolvedValue({
+      access_token: 'new-at', token_type: 'Bearer', expires_in: 3600, // no refresh_token in response
+    })
+    const body = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: 'keep-me', client_id: 'c' }).toString()
+    const res = mockRes()
+    consent.mcpConsentHandler(postReq(consent.TOKEN_PATH, body), res, vi.fn())
+    await vi.waitFor(() => expect(res.statusCode).toBe(200))
+    expect(res.json().refresh_token).toBe('keep-me')
+  })
+
+  it('400 invalid_request when refresh_token grant omits the refresh_token', async () => {
+    const body = new URLSearchParams({ grant_type: 'refresh_token', client_id: 'c' }).toString()
+    const res = mockRes()
+    consent.mcpConsentHandler(postReq(consent.TOKEN_PATH, body), res, vi.fn())
+    await vi.waitFor(() => expect(res.statusCode).toBe(400))
+    expect(res.json().error).toBe('invalid_request')
+  })
+
+  it('400 invalid_grant when the IAS refresh fails', async () => {
+    vi.spyOn(consent, 'idpRefresh').mockRejectedValue(new Error('IAS token refresh: 400'))
+    const body = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: 'bad', client_id: 'c' }).toString()
+    const res = mockRes()
+    consent.mcpConsentHandler(postReq(consent.TOKEN_PATH, body), res, vi.fn())
+    await vi.waitFor(() => expect(res.statusCode).toBe(400))
+    expect(res.json().error).toBe('invalid_grant')
   })
 })
 
