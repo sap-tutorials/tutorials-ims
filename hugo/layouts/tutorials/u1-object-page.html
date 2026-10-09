@@ -347,14 +347,22 @@
           {{ if gt (int .Params.stepCount) 0 }}<h2 class="op-section__heading">Steps</h2>{{ end }}
           {{/* Issue #173: global OS picker — only rendered when the page contains
                OS-flavored option blocks (hasOsOptions=true). os-toggle.ts (Task 6)
-               listens for selection-change and activates panels via data-os-active. */}}
+               listens for selection-change and activates panels via data-os-active.
+               #2703: render ONLY the OSes the tutorial actually supports (.Params.osList,
+               canonical Windows/macOS/Linux/BAS order). Fall back to all four when
+               osList is absent (pages cached before osList existed). A short "Platform:"
+               label precedes the buttons so authors/readers see what the picker selects
+               (the section <h2> stays "Steps"). */}}
           {{ if .Params.hasOsOptions }}
+          {{ $osLabels := dict "Windows" "Windows" "macOS" "macOS" "Linux" "Linux" "BAS" "BAS" }}
+          {{ $picker := .Params.osList }}
+          {{ if not $picker }}{{ $picker = slice "Windows" "macOS" "Linux" "BAS" }}{{ end }}
           <div class="os-picker" data-os-picker>
-            <ui5-segmented-button accessible-name="Operating system">
-              <ui5-segmented-button-item data-os="Windows">Windows</ui5-segmented-button-item>
-              <ui5-segmented-button-item data-os="macOS">macOS</ui5-segmented-button-item>
-              <ui5-segmented-button-item data-os="Linux">Linux</ui5-segmented-button-item>
-              <ui5-segmented-button-item data-os="BAS">BAS</ui5-segmented-button-item>
+            <span class="os-picker__label" id="os-picker-label">Platform:</span>
+            <ui5-segmented-button accessible-name="Platform">
+              {{ range $picker }}
+              <ui5-segmented-button-item data-os="{{ . }}">{{ index $osLabels . | default . }}</ui5-segmented-button-item>
+              {{ end }}
             </ui5-segmented-button>
           </div>
           {{ end }}

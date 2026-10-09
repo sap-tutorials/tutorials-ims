@@ -9,6 +9,13 @@
   gap: 0.5rem;
 }
 
+/* #2703: short label in front of the segmented button so readers know the
+   picker selects the platform (the section heading stays "Steps"). */
+.os-picker__label {
+  font-weight: 600;
+  color: var(--sapContent_LabelColor, #556b82);
+}
+
 .os-options[data-os-options-hydrated] .os-panel[data-os] {
   display: none;
 }

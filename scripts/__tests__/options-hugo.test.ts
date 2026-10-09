@@ -284,3 +284,102 @@ ML2
     expect(out).toMatch(/os-options[\s\S]*W2[\s\S]*ML2/);
   });
 })
+
+describe('convertOptionBlocks (hugo) — indented OPTION blocks inside list items (#2703)', () => {
+  // When an OPTION block lives inside a numbered substep it is authored
+  // indented 4 spaces. The shortcode is emitted FLUSH-LEFT (dedented): the
+  // markdown list closes and Goldmark re-opens it with <ol start="N"> after
+  // the block, preserving substep numbering, while the panel BODY is dedented
+  // to column 0 so os-panel.html's `{{ .Inner | markdownify }}` parses the
+  // code fences / images / notes as markdown instead of literal indented code.
+
+  it('emits the shortcode flush-left and dedents the body for an indented OS group', () => {
+    const input = [
+      '3. Start the installer.',
+      '',
+      '    [OPTION BEGIN [Windows]]',
+      '',
+      '    ```Shell',
+      '    hdbsetup.exe',
+      '    ```',
+      '',
+      '    [OPTION END]',
+      '',
+      '    [OPTION BEGIN [Mac and Linux]]',
+      '',
+      '    ```Shell',
+      '    ./hdbsetup',
+      '    ```',
+      '',
+      '    [OPTION END]',
+      '',
+      '4. Next substep.',
+      '',
+    ].join('\n');
+
+    const out = convertOptionBlocks(input, 'hugo');
+
+    // Shortcode wrappers are flush-left (NOT indented) so Goldmark treats the
+    // block as a sibling of the list; the following `4.` reopens numbering.
+    expect(out).toContain('\n{{< os-options >}}');
+    expect(out).toContain('\n{{< /os-options >}}');
+    expect(out).toContain('{{< os-panel os="Windows" >}}');
+    expect(out).not.toContain('    {{< os-options >}}');
+
+    // The code fence inside the panel is dedented to column 0 so markdownify
+    // parses it as a fenced block (not a 4-space indented-code block).
+    expect(out).toContain('\n```Shell\n');
+    expect(out).not.toContain('    ```Shell');
+
+    // The following substep "4." survives at column 0.
+    expect(out).toContain('\n4. Next substep.');
+    // No residual leading indent left on the first wrapper line.
+    expect(out).not.toMatch(/\n {4}\{\{< os-options/);
+  });
+
+  it('dedents the body of an indented legacy (non-OS) option-tabs group', () => {
+    const input = [
+      '2. Pick a format.',
+      '',
+      '    [OPTION BEGIN [JSON]]',
+      '',
+      '    json body',
+      '',
+      '    [OPTION END]',
+      '',
+      '    [OPTION BEGIN [XML]]',
+      '',
+      '    xml body',
+      '',
+      '    [OPTION END]',
+      '',
+      '3. Done.',
+      '',
+    ].join('\n');
+
+    const out = convertOptionBlocks(input, 'hugo');
+    expect(out).toContain('{{% option-tabs tabs="JSON,XML" %}}');
+    expect(out).not.toContain('    {{% option-tabs');
+    // Body dedented to column 0.
+    expect(out).toContain('\njson body\n');
+    expect(out).toContain('\n3. Done.');
+  });
+
+  it('leaves column-0 OPTION blocks flush-left (unchanged behaviour)', () => {
+    const input = [
+      '[OPTION BEGIN [Windows]]',
+      'W',
+      '[OPTION END]',
+      '',
+      '[OPTION BEGIN [Mac and Linux]]',
+      'ML',
+      '[OPTION END]',
+      '',
+    ].join('\n');
+
+    const out = convertOptionBlocks(input, 'hugo');
+    expect(out).toContain('{{< os-options >}}');
+    // No accidental indentation introduced for the unindented case.
+    expect(out).not.toContain('    {{< os-options >}}');
+  });
+})

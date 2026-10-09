@@ -2376,10 +2376,15 @@ blockquote {
    Color-only: override border + fill, nothing else. Horizon-light hex are
    fallbacks because several --sap*Background/BorderColor tokens are not
    declared in this project's theme-vars. */
-blockquote.alert-note,
-blockquote.alert-important {
+blockquote.alert-note {
   border-left-color: var(--sapInformationBorderColor, #0070f2);
   background-color: var(--sapInformationBackground, #e1f4ff);
+}
+blockquote.alert-important {
+  /* Horizon emphasis / indication (purple) — distinct from NOTE's
+     Information blue so authors can tell the two apart (#2703). */
+  border-left-color: var(--sapIndicationColor_5, #5d36ff);
+  background-color: var(--sapButton_Emphasized_Hover_Background, #f2f0ff);
 }
 blockquote.alert-tip {
   border-left-color: var(--sapSuccessBorderColor, #30914c);

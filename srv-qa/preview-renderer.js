@@ -98,6 +98,9 @@ export async function renderPreview(markdown, rulesVr) {
       createdAt: '',
       contributors: [],
       hasOsOptions: composed.hasOsOptions,
+      // #2703: supported-OS list so the preview picker shows only the platforms
+      // the tutorial actually provides, matching the published QA/prod pages.
+      osList: composed.osList,
       // [#655] Verbatim rules.vr source for baseof.html to emit as
       // <script id="rules-vr-source"> so PreviewAINotice components can read it.
       rulesVrSource: rulesVr && rulesVr.trim() ? rulesVr : '',
