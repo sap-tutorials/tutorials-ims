@@ -353,8 +353,29 @@ describe('token endpoint — client PKCE verification + passthrough', () => {
     await vi.waitFor(() => expect(res.statusCode).toBe(200))
     const tok = res.json()
     expect(tok.id_token).toBe('idp-id-token')
-    expect(tok.access_token).toBe('idp-at')
+    // access_token the client presents as Bearer is the id_token (a validatable JWT),
+    // NOT IAS's opaque access_token ('idp-at') — see tokenResponse() rationale.
+    expect(tok.access_token).toBe('idp-id-token')
     expect(tok.token_type).toBe('Bearer')
+  })
+
+  it('never returns IAS\'s opaque access_token as the client Bearer (regression: PROD 401)', async () => {
+    // IAS's openid auth-code access_token is opaque → @sap/xssec can't validate it →
+    // "server rejected a token it just issued". The client Bearer MUST be the id_token.
+    const code = await sealedCode({ idp_tokens: {
+      access_token: 'OPAQUE-not-a-jwt', token_type: 'Bearer', expires_in: 3600, id_token: 'the.jwt.idtoken',
+    } })
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code', code,
+      redirect_uri: 'http://localhost:18766/mcp-callback',
+      code_verifier: CLIENT_VERIFIER, client_id: 'joule-work-desktop',
+    }).toString()
+    const res = mockRes()
+    consent.mcpConsentHandler(postReq(consent.TOKEN_PATH, body), res, vi.fn())
+    await vi.waitFor(() => expect(res.statusCode).toBe(200))
+    const tok = res.json()
+    expect(tok.access_token).toBe('the.jwt.idtoken')
+    expect(tok.access_token).not.toBe('OPAQUE-not-a-jwt')
   })
 
   it('400 invalid_grant when the client code_verifier does not match', async () => {
@@ -397,7 +418,9 @@ describe('token endpoint — client PKCE verification + passthrough', () => {
     expect(spy).toHaveBeenCalledOnce()
     expect(spy.mock.calls[0][0]).toMatchObject({ refreshToken: 'old-ias-rt', clientId: 'joule-work-desktop' })
     const tok = res.json()
-    expect(tok.access_token).toBe('new-at')
+    // Bearer = id_token (validatable JWT), not IAS's opaque access_token ('new-at')
+    expect(tok.access_token).toBe('new-id')
+    expect(tok.id_token).toBe('new-id')
     expect(tok.refresh_token).toBe('rotated-rt')
   })
 
