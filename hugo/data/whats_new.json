@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-09T22:42:43.580Z",
+  "generatedAt": "2026-10-10T16:25:40.319Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,32 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2707",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2707,
+      "title": "Reliable sign-in for AI assistant (MCP) connections",
+      "summary": "AI clients connecting through the MCP endpoint now sign in reliably — the portal hands back a token the service can actually validate, so connections no longer fail right after a successful login.",
+      "category": "Fix",
+      "mergedAt": "2026-10-10T14:30:30Z",
+      "week": "2026-W41",
+      "weekStart": "2026-10-05",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2707"
+    },
+    {
+      "id": "tutorials-ims#2706",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2706,
+      "title": "Production release 1.37.1",
+      "summary": "Promoted the accumulated fixes and docs updates to production in the 1.37.1 release.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-09T23:10:00Z",
+      "week": "2026-W41",
+      "weekStart": "2026-10-05",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2706"
+    },
     {
       "id": "tutorials-ims#2705",
       "repo": "tutorials-ims",
