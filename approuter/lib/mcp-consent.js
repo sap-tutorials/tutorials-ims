@@ -438,14 +438,11 @@ async function handleToken(req, res) {
     } catch (err) {
       return sendJson(res, 400, { error: 'invalid_grant', error_description: String(err.message || err) })
     }
+    // Same id_token-as-Bearer rule as the code exchange. IAS may rotate the
+    // refresh_token; pass the new one through, else keep the one the client sent.
     return sendJson(res, 200, {
-      access_token: t.access_token,
-      token_type: t.token_type || 'Bearer',
-      expires_in: t.expires_in,
-      id_token: t.id_token,
-      // IAS may rotate the refresh_token; pass the new one through, else keep the old.
+      ...tokenResponse(t),
       refresh_token: t.refresh_token || params.refresh_token,
-      scope: t.scope,
     })
   }
 
@@ -465,16 +462,30 @@ async function handleToken(req, res) {
     return sendJson(res, 400, { error: 'invalid_grant', error_description: 'PKCE verification failed' })
   }
 
-  // Passthrough the IAS tokens to the client.
+  // Passthrough to the client. IMPORTANT: the client presents `access_token` as
+  // its Bearer to the resource (/mcp-auth → CAP `kind:ias` via @sap/xssec). IAS's
+  // own access_token from an `openid` authorization_code flow is OPAQUE (the JWT in
+  // that flow is the id_token), so @sap/xssec cannot validate it → 401 "server
+  // rejected a token it just issued". We therefore hand the client the IAS **id_token**
+  // as its Bearer: a signed JWT whose `aud` is this public client's id (0b1e8b56…),
+  // which equals the clientid of srv-mcp's bound `tutorials-identity` app (same shared
+  // IAS app) — so @sap/xssec validates audience + signature and resolves the user.
   const t = ctx.idp_tokens
-  return sendJson(res, 200, {
-    access_token: t.access_token,
-    token_type: t.token_type || 'Bearer',
+  return sendJson(res, 200, tokenResponse(t))
+}
+
+// Build the OAuth token response for the client. The Bearer the client will send to
+// the resource must be a validatable JWT → use the IAS id_token as `access_token`.
+// `expires_in` is scoped to the id_token (we re-issue via refresh when it lapses).
+function tokenResponse(t) {
+  return {
+    access_token: t.id_token,            // JWT Bearer the resource can validate (NOT the opaque IAS access_token)
+    token_type: 'Bearer',
     expires_in: t.expires_in,
     id_token: t.id_token,
     refresh_token: t.refresh_token,
     scope: t.scope,
-  })
+  }
 }
 
 // ── middleware entrypoint ────────────────────────────────────────────────────
