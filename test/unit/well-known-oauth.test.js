@@ -307,6 +307,7 @@ describe('well-known-oauth: consent-proxy flip (MCP_CONSENT_ENABLED)', () => {
     expect(m.issuer).toBe(SELF);
     expect(m.authorization_endpoint).toBe(`${SELF}/mcp-oauth/authorize`);
     expect(m.token_endpoint).toBe(`${SELF}/mcp-oauth/token`);
+    expect(m.registration_endpoint).toBe(`${SELF}/mcp-oauth/register`);
     expect(m.scopes_supported).toEqual(['openid']);
     expect(m.code_challenge_methods_supported).toContain('S256');
     expect(m.token_endpoint_auth_methods_supported).toContain('none');
@@ -316,6 +317,7 @@ describe('well-known-oauth: consent-proxy flip (MCP_CONSENT_ENABLED)', () => {
     delete process.env.MCP_CONSENT_ENABLED;
     const m = authorizationServerMetadata('https://developers.sap.com',
       'https://t.authentication.eu10-005.hana.ondemand.com', 'tutorials-mcp.Everyone');
+    expect(m.registration_endpoint).toBeUndefined();
     expect(m.authorization_endpoint).not.toContain('/mcp-oauth/');
   });
 

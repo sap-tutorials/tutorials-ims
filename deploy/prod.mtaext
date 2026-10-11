@@ -89,6 +89,10 @@ modules:
       # #2696/#2697). Read via process.env at call time; MUST be `properties:` not
       # `env:` (MTA drops module-level env).
       MCP_CONSENT_ENABLED: "true"
+      # DCR (RFC 7591) must hand native-HTTP OAuth clients srv-mcp's clientid, not
+      # the approuter's own (distinct identity instances — see dev.mtaext). Pin
+      # PROD srv-mcp's clientid; resolveIasClientId() prefers this env over VCAP.
+      MCP_RESOURCE_CLIENT_ID: "5a7cb5fd-a0f0-4678-8f51-f8c471e0ab34"
     parameters:
       app-name: tutorials-prod-approuter
       instances: 2

@@ -59,7 +59,7 @@ function saveEnv(...names) { for (const n of names) SAVED[n] = process.env[n] }
 function restoreEnv() { for (const [n, v] of Object.entries(SAVED)) { if (v === undefined) delete process.env[n]; else process.env[n] = v } }
 
 beforeEach(() => {
-  saveEnv('MCP_CONSENT_ENABLED', 'MCP_CONSENT_STATE_SECRET', 'XSUAA_MCP_URL')
+  saveEnv('MCP_CONSENT_ENABLED', 'MCP_CONSENT_STATE_SECRET', 'XSUAA_MCP_URL', 'VCAP_SERVICES', 'MCP_RESOURCE_CLIENT_ID')
   credstore._resetForTests()
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -486,5 +486,94 @@ describe('unknown /mcp-oauth path', () => {
     const res = mockRes()
     consent.mcpConsentHandler(getReq('/mcp-oauth/nope'), res, vi.fn())
     await vi.waitFor(() => expect(res.statusCode).toBe(404))
+  })
+})
+
+describe('dynamic client registration (RFC 7591) — /register facade', () => {
+  const IDENTITY_VCAP = JSON.stringify({
+    identity: [{ name: 'tutorials-identity', credentials: { clientid: '5a7cb5fd-prod-clientid', url: 'https://tenant.accounts.ondemand.com' } }],
+  })
+
+  // The DCR facade must return srv-mcp's clientid. Default these tests to the
+  // VCAP-only path (no explicit env) unless a test opts into MCP_RESOURCE_CLIENT_ID.
+  beforeEach(() => { delete process.env.MCP_RESOURCE_CLIENT_ID })
+
+  it('returns 201 with this env\'s bound tutorials-identity client_id (no secret)', async () => {
+    process.env.VCAP_SERVICES = IDENTITY_VCAP
+    const body = JSON.stringify({ client_name: 'probe', redirect_uris: ['http://127.0.0.1:0/callback'], token_endpoint_auth_method: 'none' })
+    const res = mockRes()
+    consent.mcpConsentHandler(postReq(consent.REGISTER_PATH, body, 'application/json'), res, vi.fn())
+    await vi.waitFor(() => expect(res.statusCode).toBe(201))
+    const reg = res.json()
+    expect(reg.client_id).toBe('5a7cb5fd-prod-clientid')
+    expect(reg.token_endpoint_auth_method).toBe('none')
+    expect(reg.grant_types).toEqual(['authorization_code', 'refresh_token'])
+    expect(reg.redirect_uris).toEqual(['http://127.0.0.1:0/callback'])
+    expect(reg.client_name).toBe('probe')
+  })
+
+  it('never returns a client_secret or registration_access_token (public client)', async () => {
+    process.env.VCAP_SERVICES = IDENTITY_VCAP
+    const body = JSON.stringify({ redirect_uris: ['http://localhost:0/callback'] })
+    const res = mockRes()
+    consent.mcpConsentHandler(postReq(consent.REGISTER_PATH, body, 'application/json'), res, vi.fn())
+    await vi.waitFor(() => expect(res.statusCode).toBe(201))
+    const reg = res.json()
+    expect(reg.client_secret).toBeUndefined()
+    expect(reg.registration_access_token).toBeUndefined()
+  })
+
+  it('500s server_error when no identity binding is present in VCAP', async () => {
+    delete process.env.VCAP_SERVICES
+    const body = JSON.stringify({ redirect_uris: ['http://127.0.0.1:0/callback'] })
+    const res = mockRes()
+    consent.mcpConsentHandler(postReq(consent.REGISTER_PATH, body, 'application/json'), res, vi.fn())
+    await vi.waitFor(() => expect(res.statusCode).toBe(500))
+    expect(res.json().error).toBe('server_error')
+  })
+
+  it('resolveIasClientId reads VCAP_SERVICES.identity[].credentials.clientid', () => {
+    process.env.VCAP_SERVICES = IDENTITY_VCAP
+    expect(consent.resolveIasClientId()).toBe('5a7cb5fd-prod-clientid')
+    delete process.env.VCAP_SERVICES
+    expect(consent.resolveIasClientId()).toBeNull()
+  })
+
+  it('MCP_RESOURCE_CLIENT_ID takes precedence over the approuter VCAP binding', () => {
+    // Reproduces the DEV 2026-10-11 bug: approuter binds a DIFFERENT identity
+    // instance than srv-mcp. The explicit env must win so /register hands out
+    // srv-mcp's clientid, not the approuter's own.
+    process.env.VCAP_SERVICES = JSON.stringify({
+      identity: [{ name: 'tutorials-approuter-identity', credentials: { clientid: 'cf2ea5eb-approuter-own' } }],
+    })
+    process.env.MCP_RESOURCE_CLIENT_ID = '0b1e8b56-srv-mcp'
+    expect(consent.resolveIasClientId()).toBe('0b1e8b56-srv-mcp')
+  })
+
+  it('/register returns MCP_RESOURCE_CLIENT_ID even when VCAP has a different clientid', async () => {
+    process.env.VCAP_SERVICES = JSON.stringify({
+      identity: [{ name: 'tutorials-approuter-identity', credentials: { clientid: 'cf2ea5eb-approuter-own' } }],
+    })
+    process.env.MCP_RESOURCE_CLIENT_ID = '0b1e8b56-srv-mcp'
+    const body = JSON.stringify({ redirect_uris: ['http://127.0.0.1:0/callback'] })
+    const res = mockRes()
+    consent.mcpConsentHandler(postReq(consent.REGISTER_PATH, body, 'application/json'), res, vi.fn())
+    await vi.waitFor(() => expect(res.statusCode).toBe(201))
+    expect(res.json().client_id).toBe('0b1e8b56-srv-mcp')
+  })
+
+  it('falls back to VCAP when MCP_RESOURCE_CLIENT_ID is empty/whitespace', () => {
+    process.env.VCAP_SERVICES = IDENTITY_VCAP
+    process.env.MCP_RESOURCE_CLIENT_ID = '   '
+    expect(consent.resolveIasClientId()).toBe('5a7cb5fd-prod-clientid')
+  })
+
+  it('is a no-op (next) at /register when the feature flag is off', () => {
+    process.env.MCP_CONSENT_ENABLED = 'false'
+    const res = mockRes()
+    const next = vi.fn()
+    consent.mcpConsentHandler(postReq(consent.REGISTER_PATH, '{}', 'application/json'), res, next)
+    expect(next).toHaveBeenCalledOnce()
+    expect(res.statusCode).toBeNull()
   })
 })

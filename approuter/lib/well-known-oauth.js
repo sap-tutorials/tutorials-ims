@@ -167,6 +167,10 @@ function authorizationServerMetadata(issuer, endpointBase, scope) {
       issuer,
       authorization_endpoint: `${issuer}/mcp-oauth/authorize`,
       token_endpoint: `${issuer}/mcp-oauth/token`,
+      // RFC 7591 DCR: native-HTTP OAuth clients register here to obtain this env's
+      // client_id with zero config (facade — returns the bound tutorials-identity
+      // clientid). Only advertised under the consent-proxy flip.
+      registration_endpoint: `${issuer}/mcp-oauth/register`,
       response_types_supported: ['code'],
       grant_types_supported: ['authorization_code', 'refresh_token'],
       code_challenge_methods_supported: ['S256'],
