@@ -83,15 +83,30 @@ function iasIssuer() {
   return v ? v.replace(/\/+$/, '') : null
 }
 
-// Resolve this environment's IAS public PKCE client_id from the bound
-// `tutorials-identity` service (VCAP_SERVICES.identity[].credentials.clientid).
-// The approuter binds tutorials-identity (#2593, .deploy/mta.yaml), so this is the
-// SAME clientid tutorials-srv-mcp validates token `aud` against — returning it from
-// DCR makes the native-HTTP OAuth path correct-by-construction per env (no user
-// config, no wrong-env `aud` mismatch). Mirrors the raw-VCAP parsing in
-// credstore-secret.js / well-known-oauth.js (the approuter deliberately avoids
-// @sap/xsenv). Returns null when no identity binding is present.
+// Resolve the IAS public PKCE client_id that tutorials-srv-mcp validates token
+// `aud` against. This MUST be srv-mcp's clientid, not the approuter's own.
+//
+// The approuter and the MCP server bind DIFFERENT tutorials-identity instances
+// (verified DEV 2026-10-11: approuter instance `tutorials-approuter-identity`
+// clientid cf2ea5eb…, srv-mcp instance `tutorials-identity` clientid 0b1e8b56…;
+// same tenant app_tid but distinct clients). @sap/xssec `kind:ias` checks
+// `aud === credentials.clientid` exactly, so handing a DCR client the approuter's
+// own clientid produces WrongAudience 401 after a successful login — the exact
+// bug DCR was meant to eliminate. The approuter's VCAP identity binding therefore
+// CANNOT be trusted as the source.
+//
+// Source of truth, in order:
+//   1. MCP_RESOURCE_CLIENT_ID — explicit, set per-env in the mtaext to srv-mcp's
+//      clientid (DEV 0b1e8b56…, PROD 5a7cb5fd…). Deterministic; no shared-binding
+//      assumption.
+//   2. VCAP_SERVICES.identity[].credentials.clientid — fallback only (correct ONLY
+//      if the approuter happens to bind the same instance as srv-mcp). Mirrors the
+//      raw-VCAP parsing in credstore-secret.js / well-known-oauth.js (the approuter
+//      deliberately avoids @sap/xsenv).
+// Returns null when neither is available.
 function resolveIasClientId() {
+  const explicit = (process.env.MCP_RESOURCE_CLIENT_ID || '').trim()
+  if (explicit) return explicit
   let services
   try { services = JSON.parse(process.env.VCAP_SERVICES || '{}') } catch { return null }
   const arr = Array.isArray(services.identity) ? services.identity : []

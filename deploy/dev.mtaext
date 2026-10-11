@@ -94,6 +94,13 @@ modules:
       # state to the IAS leg (preserves env-specific DEV/PROD model). Requires the
       # MCP_CONSENT_STATE_SECRET to be seeded in the Credential Store.
       MCP_CONSENT_ENABLED: "true"
+      # Dynamic Client Registration (RFC 7591) must hand native-HTTP OAuth clients
+      # the clientid that tutorials-srv-mcp validates token `aud` against. The
+      # approuter binds its OWN identity instance (tutorials-approuter-identity,
+      # a DIFFERENT clientid than srv-mcp's tutorials-identity), so its VCAP binding
+      # is the wrong source — using it yields WrongAudience 401 after login. Pin
+      # srv-mcp's DEV clientid explicitly; resolveIasClientId() prefers this env.
+      MCP_RESOURCE_CLIENT_ID: "0b1e8b56-5f5d-4ebf-a9e9-28aae2964236"
       # deploy.yml's $REBUILD_API_KEY. Removed as the third and final rollout
       # step of PR #871 (issue #903): the approuter now reads REBUILD_API_KEY
       # exclusively from the BTP Credential Store via
