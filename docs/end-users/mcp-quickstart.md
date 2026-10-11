@@ -105,13 +105,12 @@ Joule Work Desktop connects to an MCP server by registering the server's URL. Fo
 
 The curated tools then appear to Joule.
 
-> **Authenticated tools (`/mcp-auth/*`) are not reachable from Joule Work Desktop's native flow.**
+> **Authenticated tools (`/mcp-auth/*`) work from Joule Work Desktop's native flow.**
 > Pasting an authenticated URL triggers Joule Work Desktop's OAuth 2.0 handshake, which uses
-> **Dynamic Client Registration (RFC 7591)** — it `POST`s to a `/register` endpoint to
-> self-register a client. XSUAA does **not** support DCR; OAuth clients must be **pre-registered**
-> (the same limitation described for native Claude clients above). So the personalized tools
-> (`get_my_tutorials`, `complete_step`, …) can't be used through Joule Work Desktop today —
-> stick to the anonymous `/mcp/*` URLs.
+> **Dynamic Client Registration (RFC 7591)** — it `POST`s to the `registration_endpoint` to
+> self-register. The server implements DCR (facade over the environment's IAS public client),
+> so Joule Work Desktop self-registers, shows the Application Access Request consent, and the
+> personalized tools (`get_my_tutorials`, `complete_step`, …) become available after sign-in.
 
 ## Joule Studio (classic edition)
 
@@ -170,14 +169,16 @@ The server speaks Streamable HTTP. Clients may send `Accept: application/json` o
 
 Phase 2 adds authenticated tools under `/mcp-auth/*` — your tutorial progress, events, and personalized recommendations. To use them, sign in with your SAP universal ID via OAuth.
 
-> **If your Claude Desktop build uses native OAuth, it may fail with
-> `does not support dynamic client registration`** — the same XSUAA/DCR limitation described
-> in the Claude Code section below. XSUAA requires a **pre-registered** client, so clients
-> that insist on RFC 7591 self-registration cannot connect directly. If you hit this, bridge
-> through **`mcp-remote`** with the pre-registered `client_id` (see the Claude Code section),
-> or use a **[PAT](#headless--ci-with-a-personal-access-token)**.
+> **Native-HTTP OAuth clients (incl. Claude Desktop) connect with NO client_id.**
+> The server supports **RFC 7591 Dynamic Client Registration**: a client that does its own
+> OAuth discovers the `registration_endpoint` from
+> `<base>/.well-known/oauth-authorization-server`, self-registers, and is handed the correct
+> client_id for that environment automatically — just point it at `<base>/mcp-auth/api` and
+> approve the browser sign-in. No `--static-oauth-client-info`, no per-environment id to
+> look up. Use the `mcp-remote` bridge below **only** for clients that cannot do native HTTP
+> OAuth; it needs the explicit, environment-specific `client_id` from the table.
 
-For builds that accept a pre-registered client, bridge through `mcp-remote`:
+For clients that need the `mcp-remote` bridge (no native OAuth), supply the environment's `client_id`:
 
 ```json
 {
@@ -237,17 +238,17 @@ On first connection `mcp-remote` opens a browser tab for consent (PKCE, no clien
 
 ## Sign in with Claude Code (OAuth via mcp-remote)
 
-> **Claude Code's *native* `type: http` OAuth does NOT work against this server.** Its
-> built-in OAuth client requires **Dynamic Client Registration** (RFC 7591) — it tries to
-> `POST` to a `registration_endpoint` to self-register. XSUAA does not support DCR; OAuth
-> clients must be **pre-registered**. Pointing Claude Code's native HTTP client at
-> `/mcp-auth/api` fails with `SDK auth failed: Incompatible auth server: does not support
-> dynamic client registration`. Use **`mcp-remote`** (below), which accepts a pre-registered
-> `client_id`, or use a **[PAT](#headless--ci-with-a-personal-access-token)** (simplest for
-> Claude Code — no browser flow).
+> **Claude Code's *native* `type: http` OAuth now works against this server.** Its built-in
+> OAuth client uses **Dynamic Client Registration** (RFC 7591) — it `POST`s to the
+> `registration_endpoint` to self-register. The server implements DCR, so native HTTP OAuth
+> succeeds with **no** `client_id`: `"sap-developers-auth": { "type": "http", "url":
+> "<base>/mcp-auth/api" }`, then approve the browser sign-in. The `mcp-remote` bridge below
+> remains available for older clients or headless use; a **[PAT](#headless--ci-with-a-personal-access-token)**
+> is still simplest for CI (no browser flow).
 
-Bridge through `mcp-remote`, which performs the OAuth 2.1 authorization-code + PKCE handshake
-against the pre-registered public client and forwards the bearer to `/mcp-auth/api`:
+For older clients without native OAuth, bridge through `mcp-remote`, which performs the OAuth
+2.1 authorization-code + PKCE handshake and forwards the bearer to `/mcp-auth/api` (supply the
+environment's `client_id` from the table above):
 
 ```bash
 npm install -g mcp-remote

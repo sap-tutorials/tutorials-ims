@@ -57,6 +57,7 @@ const AUTHORIZE_PATH = `${BASE}/authorize`
 const CONSENT_PATH = `${BASE}/consent`
 const CALLBACK_PATH = `${BASE}/callback`
 const TOKEN_PATH = `${BASE}/token`
+const REGISTER_PATH = `${BASE}/register`
 
 // The service name shown in the consent copy. Substituted into the SAME verbatim
 // text the other SAP MCP tools use (Tom, 2026-10-06).
@@ -72,13 +73,30 @@ function isEnabled() {
 }
 
 // IAS issuer endpoint. Reuse the approuter's already-configured XSUAA_MCP_URL
-// (set in mtaext, read by well-known-oauth.js). The client_id is NOT server
-// config — it comes from the MCP client's authorize request and is forwarded through
-// the sealed state to the IAS leg. This preserves the env-specific + client-supplied
-// model (DEV 0b1e8b56…, PROD sb-tutorials-prod!t676072, etc.).
+// (set in mtaext, read by well-known-oauth.js). For the mcp-remote bridge path the
+// client_id comes from the client's authorize request (forwarded through sealed
+// state); DEV and PROD have DISTINCT tutorials-identity clients (DEV 0b1e8b56…,
+// PROD 5a7cb5fd…), so it is env-specific. The native-HTTP (DCR) path instead reads
+// that env's clientid server-side via resolveIasClientId() below.
 function iasIssuer() {
   const v = process.env.XSUAA_MCP_URL
   return v ? v.replace(/\/+$/, '') : null
+}
+
+// Resolve this environment's IAS public PKCE client_id from the bound
+// `tutorials-identity` service (VCAP_SERVICES.identity[].credentials.clientid).
+// The approuter binds tutorials-identity (#2593, .deploy/mta.yaml), so this is the
+// SAME clientid tutorials-srv-mcp validates token `aud` against — returning it from
+// DCR makes the native-HTTP OAuth path correct-by-construction per env (no user
+// config, no wrong-env `aud` mismatch). Mirrors the raw-VCAP parsing in
+// credstore-secret.js / well-known-oauth.js (the approuter deliberately avoids
+// @sap/xsenv). Returns null when no identity binding is present.
+function resolveIasClientId() {
+  let services
+  try { services = JSON.parse(process.env.VCAP_SERVICES || '{}') } catch { return null }
+  const arr = Array.isArray(services.identity) ? services.identity : []
+  const binding = arr.find(b => b && b.credentials && b.credentials.clientid) || arr[0]
+  return (binding && binding.credentials && binding.credentials.clientid) || null
 }
 
 // Externally-visible base URL of this approuter, from the inbound request —
@@ -416,6 +434,38 @@ async function handleCallback(req, res, baseUrl) {
   return redirect(res, withQuery(ctx.client_redirect_uri, { code, state: ctx.client_state }))
 }
 
+// RFC 7591 Dynamic Client Registration — facade. A native-HTTP OAuth MCP client with
+// no pre-configured client_id POSTs here to bootstrap. We do NOT create a new IAS
+// client; we return THIS environment's existing tutorials-identity public PKCE
+// client_id (resolveIasClientId). That id is public (no secret) and is exactly the
+// value tutorials-srv-mcp validates token `aud` against, so the client ends up with
+// the correct per-env id automatically — eliminating the wrong-env client_id class
+// of failure. The request's redirect_uris are echoed back for the client↔proxy leg
+// only (validated at /authorize); the proxy↔IAS leg always uses our fixed CALLBACK_PATH,
+// so registration input cannot influence it.
+async function handleRegister(req, res) {
+  const rawBody = await readBody(req)
+  const params = parseForm(req, rawBody)
+
+  const clientId = resolveIasClientId()
+  if (!clientId) {
+    console.error('[mcp-consent] /register: no identity binding in VCAP_SERVICES — cannot issue client_id')
+    return sendJson(res, 500, { error: 'server_error', error_description: 'identity binding unavailable' })
+  }
+
+  const redirectUris = Array.isArray(params.redirect_uris) ? params.redirect_uris : []
+  // Public PKCE client: no client_secret, no registration_access_token minted.
+  return sendJson(res, 201, {
+    client_id: clientId,
+    client_id_issued_at: Math.floor(Date.now() / 1000),
+    token_endpoint_auth_method: 'none',
+    grant_types: ['authorization_code', 'refresh_token'],
+    response_types: ['code'],
+    redirect_uris: redirectUris,
+    ...(params.client_name ? { client_name: String(params.client_name) } : {}),
+  })
+}
+
 async function handleToken(req, res) {
   const rawBody = await readBody(req)
   const params = parseForm(req, rawBody)
@@ -509,6 +559,7 @@ function mcpConsentHandler(req, res, next) {
   if (req.method === 'POST') {
     if (pathOnly === CONSENT_PATH) return run(handleConsent(req, res, baseUrl))
     if (pathOnly === TOKEN_PATH) return run(handleToken(req, res))
+    if (pathOnly === REGISTER_PATH) return run(handleRegister(req, res))
   }
 
   // A /mcp-oauth/* path we don't serve — do not leak to the SPA proxy.
@@ -521,6 +572,8 @@ module.exports = {
   idpExchange,
   idpRefresh,
   resolveBaseUrl,
+  resolveIasClientId,
+  handleRegister,
   verifyPkce,
   sealState,
   openState,
@@ -530,5 +583,6 @@ module.exports = {
   CONSENT_PATH,
   CALLBACK_PATH,
   TOKEN_PATH,
+  REGISTER_PATH,
   SERVICE_NAME,
 }
