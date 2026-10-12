@@ -113,8 +113,12 @@ export default class DeveloperService extends cds.ApplicationService {
     const doCompleteStep = async (sapId, slug, stepNumber, req, tokenSource) => {
       const slugLower = String(slug || '').toLowerCase();
 
-      // slug-canonical: pre-canonicalized
-      const tutorial = await SELECT.one.from(dbTutorials).where({ slug: slugLower });
+      // Case-insensitive lookup (issue #2714): legacy Tutorials rows can carry a
+      // mixed-case slug (source filename ships uppercase, e.g. "...-RAP-App").
+      // The URL + this request are lowercase, so an exact where({ slug }) misses
+      // the stored mixed-case row on HANA (and SQLite's binary '='). LOWER() on
+      // the column matches the publish/serveHandler read path (PR #130).
+      const tutorial = await SELECT.one.from(dbTutorials).where`LOWER(slug) = ${slugLower}`;
       if (!tutorial) return req.reject(404, `Tutorial not found: ${slugLower}`);
 
       let step = await SELECT.one.from(dbSteps).where({
@@ -229,8 +233,8 @@ export default class DeveloperService extends cds.ApplicationService {
         return req.reject(429, 'You have reset too many tutorials recently — please wait a few minutes.');
       }
 
-      // 1. Resolve slug → tutorial
-      const tutorial = await SELECT.one.from(dbTutorials).where({ slug: slug.toLowerCase() });
+      // 1. Resolve slug → tutorial (case-insensitive, issue #2714 — see completeStep)
+      const tutorial = await SELECT.one.from(dbTutorials).where`LOWER(slug) = ${slug.toLowerCase()}`;
       if (!tutorial) return req.reject(404, `Tutorial not found: ${slug}`);
 
       // 2. Resolve user (sapId → dbUser)
@@ -324,8 +328,8 @@ export default class DeveloperService extends cds.ApplicationService {
       const slug = String(req.data.slug || '').toLowerCase();
       const user = req.user;
 
-      // slug-canonical: pre-canonicalized
-      const tutorial = await SELECT.one.from(dbTutorials).where({ slug });
+      // Case-insensitive lookup (issue #2714 — see completeStep)
+      const tutorial = await SELECT.one.from(dbTutorials).where`LOWER(slug) = ${slug}`;
       if (!tutorial) return req.reject(404, `Tutorial not found: ${slug}`);
 
       const steps = await SELECT.from(dbSteps).where({ tutorial_ID: tutorial.ID });
