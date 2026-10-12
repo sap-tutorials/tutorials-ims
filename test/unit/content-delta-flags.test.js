@@ -15,6 +15,7 @@ import cds from '@sap/cds';
 import {
   isDeltaWrite, isDeltaRead, isDeltaSkipCarryForward,
   refreshContentDeltaFlags, bustContentDeltaFlagsCache, ensureContentDeltaDefaults,
+  setContentDeltaNamespace,
   DELTA_WRITE_KEY, DELTA_READ_KEY, DELTA_SKIP_CARRYFORWARD_KEY,
 } from '../../srv/lib/content-delta-flags.js';
 
@@ -153,5 +154,64 @@ describe('content-delta-flags (ImsConfig-backed)', () => {
     expect(second).toEqual([]); // nothing left to seed
     const rows = await SELECT.from(ImsConfig).where({ key: { in: ALL } });
     expect(rows.length).toBe(3);
+  });
+});
+
+// #2727 — the flag reader must be namespace-aware. Before the fix it hardcoded
+// the prod namespace, so the QA app (which loads only com.sap.developers.ims.qa)
+// could never read/seed the flags and was stuck fail-safe-OFF.
+//
+// The unit `serve` model does NOT load db-qa/ (QA is a separate HDI deployer /
+// model build — see mta.yaml `tutorials-db-qa-deployer`), so these tests cover
+// the mechanism against the served (prod) model plus a direct compile of the
+// db-qa source to prove ImsConfig is now defined there.
+describe('content-delta-flags — namespace awareness (#2727)', () => {
+  beforeEach(() => {
+    setContentDeltaNamespace(NS);
+    bustContentDeltaFlagsCache();
+  });
+
+  afterAll(() => {
+    // Restore the module default so later test files sharing the singleton
+    // read the prod namespace.
+    setContentDeltaNamespace(NS);
+    bustContentDeltaFlagsCache();
+  });
+
+  it('db-qa/schema.cds defines an ImsConfig entity (QA delta-flag prerequisite)', async () => {
+    // Compile the QA model in isolation — it is NOT part of the served model.
+    const csn = await cds.load(['db-qa', '@sap/cds/common']);
+    expect(csn.definitions['com.sap.developers.ims.qa.ImsConfig'],
+      'db-qa must define ImsConfig so QA can read the content-delta flags').toBeTruthy();
+  });
+
+  it('setContentDeltaNamespace to a namespace without ImsConfig degrades safe (no throw, all false)', async () => {
+    setContentDeltaNamespace('com.sap.developers.ims.nonexistent');
+    const snapshot = await refreshContentDeltaFlags();
+    expect(snapshot).toEqual({ write: false, read: false, skipCarryForward: false });
+    expect(isDeltaRead()).toBe(false);
+    expect(isDeltaWrite()).toBe(false);
+    expect(isDeltaSkipCarryForward()).toBe(false);
+  });
+
+  it('ensureContentDeltaDefaults() seeds nothing when the namespace has no ImsConfig', async () => {
+    setContentDeltaNamespace('com.sap.developers.ims.nonexistent');
+    const seeded = await ensureContentDeltaDefaults();
+    expect(seeded).toEqual([]); // no entity to seed into — must not throw
+  });
+
+  it('switching back to the prod namespace restores normal reads', async () => {
+    setContentDeltaNamespace('com.sap.developers.ims.nonexistent');
+    await refreshContentDeltaFlags();
+    expect(isDeltaRead()).toBe(false);
+
+    // Back to prod; seed a known value and confirm it reads through.
+    setContentDeltaNamespace(NS);
+    const { ImsConfig: ProdImsConfig } = cds.entities(NS);
+    await DELETE.from(ProdImsConfig).where({ key: { in: ALL } });
+    await INSERT.into(ProdImsConfig).entries({ key: DELTA_READ_KEY, value: 'true' });
+    await refreshContentDeltaFlags();
+    expect(isDeltaRead()).toBe(true);
+    await DELETE.from(ProdImsConfig).where({ key: { in: ALL } });
   });
 });

@@ -12,6 +12,19 @@ entity ContentCurrent : shared.ContentCurrentAspect {}
 
 entity ContentHistory : shared.ContentHistoryAspect {}
 
+// #2727 — key/value config table mirroring prod `com.sap.developers.ims.ImsConfig`
+// (db/schema.cds), minus the prod-only `legacyId`. QA needs it so the Option-B
+// content-delta feature flags (content.delta.read/write/skipCarryForward) can be
+// read/seeded under the QA namespace. Without it, isDeltaRead()/isDeltaWrite()
+// are permanently fail-safe-false on QA (the entity doesn't resolve), so QA can
+// never use the mutable ContentCurrent path. Shape kept to the two columns the
+// flag module (content-delta-flags.js) reads.
+@cds.autoexpose: false
+entity ImsConfig : cuid {
+  ![key]                    : String(255);
+  value                     : String(2000);
+}
+
 // Plain-text projection of published Hugo HTML, indexed for full-text search.
 // Replaced (not versioned) on every publish so search reflects current content.
 @cds.autoexpose: false

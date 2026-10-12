@@ -64,6 +64,12 @@ aspect ContentManifestAspect : managed {
   // so a load-balanced append batch on instance A survives a commit on instance B.
   appendMsTotal             : Integer default 0;
   firstAppendAt             : Timestamp;
+  // #2727 — render-pipeline token: SHA-256 over the inputs that determine how
+  // every slug renders (scripts/parsers/**, hugo/layouts/**, hugo/assets/css/**).
+  // Recorded at commit so the next publish can detect a parser/template/CSS
+  // change and force-republish all slugs even when per-slug source+HTML hashes
+  // are unchanged. NULL on rows published before this field landed.
+  pipelineToken             : String(64);
 }
 
 // Option B (slug-targeted-delta-rebuild): the MUTABLE current-content table —
