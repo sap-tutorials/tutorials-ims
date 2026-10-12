@@ -1327,6 +1327,30 @@ ui5-li .step-badge-row {
   padding-left: 1.25rem;
 }
 
+/*
+ * #2703 — restore list-child indentation for OPTION blocks nested in substeps.
+ *
+ * An OPTION block ([OPTION BEGIN]…[OPTION END]) authored inside a numbered
+ * substep is emitted FLUSH-LEFT by options.ts (it has to close the surrounding
+ * <ol> so Goldmark parses the panel body as markdown — see options.ts #2703).
+ * The os-options / option-tabs block and any content that TRAILS the OPTION
+ * group within the same substep (prose, images, > [!TIP] alerts) therefore
+ * land as direct children of .step-content at column 0, visually detached from
+ * the "N." item they belong to. Indent them to match the list-item content
+ * column (<ol> padding-left 1.5rem) so the hierarchy reads consistently —
+ * purely cosmetic, no change to the DOM structure the parser produces.
+ *
+ * Scoped to the direct-child combinator so only the step-root-level blocks
+ * (the ones the list-close detached) are indented; panels/alerts genuinely
+ * nested inside a surviving <li> are untouched.
+ */
+.step-content > .os-options,
+.step-content > .option-tabs,
+.step-content > blockquote.alert {
+  margin-left: 1.5rem;
+}
+
+
 /* Empty paragraphs between figures and adjacent prose are an artefact of the
  * markdown -> HTML pipeline (an empty line between `<!-- border -->` and the
  * next image becomes `<p></p>`). They render as an extra blank line. */
