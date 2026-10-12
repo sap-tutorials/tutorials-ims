@@ -154,7 +154,8 @@ async function main() {
       status: 'COMPLETED',
       progress: 100,
       completionDate: u.COMPLETIONDATE,
-      completionTime: u.COMPLETIONDATE,
+      // completionTime is BIGINT (a duration, e.g. 1082), NOT a timestamp — leave
+      // null for a backfilled historical record; we only have the completion date.
       contentLanguage: u.CONTENTLANGUAGE || null,
       siteLanguage: u.SITELANGUAGE || null,
       titleSnapshot: newTitle,
