@@ -98,7 +98,13 @@ export function discoverTutorials(hugoDir: string): Map<string, string> {
     try {
       const stat = statSync(indexPath);
       if (stat.isFile()) {
-        result.set(entry, indexPath);
+        // Normalize the slug KEY to lowercase (issue #2714): some source folders
+        // ship mixed-case (e.g. "...-RAP-App"), but Hugo serves lowercase URLs and
+        // the server stores/serves lowercase slugs. Lowercasing here — the single
+        // upstream chokepoint feeding every downstream payload — prevents a
+        // mixed-case Tutorials.slug row from ever being minted again. The PATH
+        // keeps the real on-disk (mixed-case) directory so the file read works.
+        result.set(entry.toLowerCase(), indexPath);
       }
     } catch {
       // not a tutorial directory
@@ -181,6 +187,16 @@ export function buildPayload(
 ): Record<string, string> {
   const payload: Record<string, string> = {};
   for (const slug of slugs) {
+    // Tripwire (issue #2714): slugs are lowercased at discoverTutorials, the
+    // upstream chokepoint. If a mixed-case slug reaches here, some code path
+    // reintroduced case — fail loud rather than silently publish a mixed-case
+    // key that mints a non-canonical Tutorials.slug row. Belt-and-suspenders
+    // behind the discovery-time normalization.
+    if (slug !== slug.toLowerCase()) {
+      throw new Error(
+        `buildPayload: non-canonical (mixed-case) slug "${slug}" — slugs must be lowercase before publish (issue #2714)`
+      );
+    }
     const filePath = tutorials.get(slug);
     if (!filePath) continue;
     const content = readFileSync(filePath);
