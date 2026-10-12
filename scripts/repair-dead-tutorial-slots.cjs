@@ -150,10 +150,10 @@ async function main() {
     // ── GRANDFATHER snapshot: every COMPLETED Group/Mission TaskRecord for affected
     //    PUBLISHED parents (skip retired parents — no point reconciling a dead mission). ──
     const groupLegacyRows = affectedGroupUuids.size
-      ? await db.run(`SELECT "ID","LEGACYID" FROM "COM_SAP_DEVELOPERS_IMS_GROUPS" WHERE "PUBLISHED"=1 AND "ID" IN (${[...affectedGroupUuids].map(() => '?').join(',')})`, [...affectedGroupUuids])
+      ? await db.run(`SELECT "ID","LEGACYID" FROM "COM_SAP_DEVELOPERS_IMS_GROUPS" WHERE "PUBLISHED"=TRUE AND "ID" IN (${[...affectedGroupUuids].map(() => '?').join(',')})`, [...affectedGroupUuids])
       : [];
     const missionLegacyRows = affectedMissionUuids.size
-      ? await db.run(`SELECT "ID","LEGACYID" FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS" WHERE "PUBLISHED"=1 AND "ID" IN (${[...affectedMissionUuids].map(() => '?').join(',')})`, [...affectedMissionUuids])
+      ? await db.run(`SELECT "ID","LEGACYID" FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS" WHERE "PUBLISHED"=TRUE AND "ID" IN (${[...affectedMissionUuids].map(() => '?').join(',')})`, [...affectedMissionUuids])
       : [];
     const skippedUnpub = (affectedGroupUuids.size - groupLegacyRows.length) + (affectedMissionUuids.size - missionLegacyRows.length);
     if (skippedUnpub > 0) console.log(`(skipped ${skippedUnpub} unpublished parent(s) — slots still stripped, no reconcile needed)`);
