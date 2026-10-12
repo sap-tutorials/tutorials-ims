@@ -57,6 +57,17 @@ const argv = process.argv.slice(2);
 const COMMIT = argv.includes('--commit');
 const VERIFY_ONLY = argv.includes('--verify-only');
 if (COMMIT && VERIFY_ONLY) { console.error('--commit and --verify-only are mutually exclusive'); process.exit(1); }
+// Scope filters (prove-on-subset then sweep):
+//   --mission=<legacyId>   only touch dead slots whose parent mission has this legacyId (repeatable via comma list)
+//   --group=<legacyId>     only touch dead slots in this group legacyId (comma list)
+//   --limit=<n>            cap reconcile to the first n users per parent (resumable: re-run to continue)
+const parseList = (flag) => {
+  const a = argv.find((x) => x.startsWith(`${flag}=`));
+  return a ? a.split('=')[1].split(',').map((v) => Number(v.trim())).filter(Number.isFinite) : null;
+};
+const ONLY_MISSIONS = parseList('--mission'); // null = all
+const ONLY_GROUPS = parseList('--group');     // null = all
+const LIMIT = (() => { const a = argv.find((x) => x.startsWith('--limit=')); return a ? parseInt(a.split('=')[1], 10) : Infinity; })();
 
 function acquireLock() {
   fs.mkdirSync(MIG_DIR, { recursive: true });
@@ -86,27 +97,48 @@ async function main() {
       WHERE t."STATUS" IN ${DEAD}`
   );
 
+  // Apply scope filters (--mission / --group legacyIds) so we can prove on a
+  // subset before the full fleet sweep. Resolve parent legacyIds for the filter.
+  let cpiScoped = cpiDead, gpiScoped = gpiDead;
+  if (ONLY_MISSIONS) {
+    const want = await db.run(`SELECT "ID" FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS" WHERE "LEGACYID" IN (${ONLY_MISSIONS.map(() => '?').join(',')})`, ONLY_MISSIONS);
+    const wantUuids = new Set(want.map((r) => r.ID));
+    cpiScoped = cpiDead.filter((r) => wantUuids.has(r.MISSION_ID));
+    // group slots feeding only those missions:
+    const pathsOfMissions = await db.run(`SELECT "ID" FROM "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS" WHERE "MISSION_ID" IN (${[...wantUuids].map(() => '?').join(',')})`, [...wantUuids]);
+    const groupUuidsInMissions = pathsOfMissions.length
+      ? new Set((await db.run(`SELECT DISTINCT "GROUP_ID" FROM ${CPI} WHERE "TASKTYPE"='GROUP' AND "PATH_ID" IN (${pathsOfMissions.map(() => '?').join(',')})`, pathsOfMissions.map((p) => p.ID))).map((r) => r.GROUP_ID))
+      : new Set();
+    gpiScoped = gpiDead.filter((r) => groupUuidsInMissions.has(r.GROUP_ID));
+  }
+  if (ONLY_GROUPS) {
+    const want = await db.run(`SELECT "ID" FROM "COM_SAP_DEVELOPERS_IMS_GROUPS" WHERE "LEGACYID" IN (${ONLY_GROUPS.map(() => '?').join(',')})`, ONLY_GROUPS);
+    const wantUuids = new Set(want.map((r) => r.ID));
+    gpiScoped = gpiScoped.filter((r) => wantUuids.has(r.GROUP_ID));
+    if (!ONLY_MISSIONS) cpiScoped = [];
+  }
+
   console.log(`── SCAN ──`);
-  console.log(`  dead mission-path slots (CompletionPathItems): ${cpiDead.length}`);
-  for (const r of cpiDead) console.log(`    ${r.SLUG} (${r.TASKLEGACYID}, ${r.STATUS}) in path ${r.PATH_ID} → mission ${r.MISSION_ID}`);
-  console.log(`  dead group slots (GroupPathItems): ${gpiDead.length}`);
-  for (const r of gpiDead) console.log(`    ${r.SLUG} (${r.LEGACYID}, ${r.STATUS}) in group ${r.GROUP_ID}`);
+  console.log(`  dead mission-path slots (CompletionPathItems): ${cpiScoped.length}${cpiScoped.length !== cpiDead.length ? ` (of ${cpiDead.length} fleet-wide, scoped)` : ''}`);
+  for (const r of cpiScoped) console.log(`    ${r.SLUG} (${r.TASKLEGACYID}, ${r.STATUS}) in path ${r.PATH_ID} → mission ${r.MISSION_ID}`);
+  console.log(`  dead group slots (GroupPathItems): ${gpiScoped.length}${gpiScoped.length !== gpiDead.length ? ` (of ${gpiDead.length} fleet-wide, scoped)` : ''}`);
+  for (const r of gpiScoped) console.log(`    ${r.SLUG} (${r.LEGACYID}, ${r.STATUS}) in group ${r.GROUP_ID}`);
 
   if (VERIFY_ONLY) {
-    const clean = cpiDead.length === 0 && gpiDead.length === 0;
-    console.log(`\nVERIFY: ${clean ? 'CLEAN — no dead slots' : 'WORK REMAINS'}`);
+    const clean = cpiScoped.length === 0 && gpiScoped.length === 0;
+    console.log(`\nVERIFY: ${clean ? 'CLEAN — no dead slots in scope' : 'WORK REMAINS'}`);
     process.exit(clean ? 0 : 2);
   }
 
   // Affected parents: missions (from CPI) + groups (from GPI). Resolve a SURVIVING
   // child tutorial per affected group/mission to drive the real rollup.
-  const affectedMissionUuids = new Set(cpiDead.map(r => r.MISSION_ID).filter(Boolean));
-  const affectedGroupUuids = new Set(gpiDead.map(r => r.GROUP_ID).filter(Boolean));
+  const affectedMissionUuids = new Set(cpiScoped.map(r => r.MISSION_ID).filter(Boolean));
+  const affectedGroupUuids = new Set(gpiScoped.map(r => r.GROUP_ID).filter(Boolean));
 
   if (!COMMIT) {
     console.log(`\n── DRY RUN ── plan:`);
-    console.log(`  STRIP ${cpiDead.length} mission-path slots + ${gpiDead.length} group slots`);
-    console.log(`  RECONCILE ${affectedMissionUuids.size} missions + ${affectedGroupUuids.size} groups (grandfather: never demote)`);
+    console.log(`  STRIP ${cpiScoped.length} mission-path slots + ${gpiScoped.length} group slots`);
+    console.log(`  RECONCILE ${affectedMissionUuids.size} missions + ${affectedGroupUuids.size} groups (PUBLISHED only; grandfather: never demote)`);
     console.log(`\nRe-run with --commit to apply.`);
     process.exit(0);
   }
@@ -115,13 +147,16 @@ async function main() {
   try {
     console.log(`\nSnapshot: ${SNAP}`);
 
-    // ── GRANDFATHER snapshot: every COMPLETED Group/Mission TaskRecord for affected parents ──
+    // ── GRANDFATHER snapshot: every COMPLETED Group/Mission TaskRecord for affected
+    //    PUBLISHED parents (skip retired parents — no point reconciling a dead mission). ──
     const groupLegacyRows = affectedGroupUuids.size
-      ? await db.run(`SELECT "ID","LEGACYID" FROM "COM_SAP_DEVELOPERS_IMS_GROUPS" WHERE "ID" IN (${[...affectedGroupUuids].map(() => '?').join(',')})`, [...affectedGroupUuids])
+      ? await db.run(`SELECT "ID","LEGACYID" FROM "COM_SAP_DEVELOPERS_IMS_GROUPS" WHERE "PUBLISHED"=1 AND "ID" IN (${[...affectedGroupUuids].map(() => '?').join(',')})`, [...affectedGroupUuids])
       : [];
     const missionLegacyRows = affectedMissionUuids.size
-      ? await db.run(`SELECT "ID","LEGACYID" FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS" WHERE "ID" IN (${[...affectedMissionUuids].map(() => '?').join(',')})`, [...affectedMissionUuids])
+      ? await db.run(`SELECT "ID","LEGACYID" FROM "COM_SAP_DEVELOPERS_IMS_MISSIONS" WHERE "PUBLISHED"=1 AND "ID" IN (${[...affectedMissionUuids].map(() => '?').join(',')})`, [...affectedMissionUuids])
       : [];
+    const skippedUnpub = (affectedGroupUuids.size - groupLegacyRows.length) + (affectedMissionUuids.size - missionLegacyRows.length);
+    if (skippedUnpub > 0) console.log(`(skipped ${skippedUnpub} unpublished parent(s) — slots still stripped, no reconcile needed)`);
     const parentLegacy = [
       ...groupLegacyRows.map(g => ({ legacyId: g.LEGACYID, type: 'GROUP' })),
       ...missionLegacyRows.map(m => ({ legacyId: m.LEGACYID, type: 'MISSION' })),
@@ -133,10 +168,10 @@ async function main() {
     }
     console.log(`Grandfather baseline: ${priorCompleted.size} COMPLETED parent records snapshotted.`);
 
-    // ── STRIP ──
-    for (const r of cpiDead) { snap({ kind: 'cpi-delete', row: r }); await db.run(`DELETE FROM ${CPI} WHERE "ID"=?`, [r.ID]); }
-    for (const r of gpiDead) { snap({ kind: 'gpi-delete', row: r }); await db.run(`DELETE FROM ${GPI} WHERE "ID"=?`, [r.ID]); }
-    console.log(`STRIP: removed ${cpiDead.length} mission-path + ${gpiDead.length} group slots.`);
+    // ── STRIP (all scoped dead slots, regardless of parent published state) ──
+    for (const r of cpiScoped) { snap({ kind: 'cpi-delete', row: r }); await db.run(`DELETE FROM ${CPI} WHERE "ID"=?`, [r.ID]); }
+    for (const r of gpiScoped) { snap({ kind: 'gpi-delete', row: r }); await db.run(`DELETE FROM ${GPI} WHERE "ID"=?`, [r.ID]); }
+    console.log(`STRIP: removed ${cpiScoped.length} mission-path + ${gpiScoped.length} group slots.`);
 
     // ── RECONCILE: per affected group, replay rollup for every user who has ANY
     //    completed tutorial in that group (they are the only ones whose parent
@@ -150,16 +185,18 @@ async function main() {
       const [surv] = await db.run(`SELECT i."TUTORIAL_ID", t."LEGACYID" FROM ${GPI} i JOIN ${TUT} t ON t."ID"=i."TUTORIAL_ID" WHERE i."GROUP_ID"=? AND t."STATUS" NOT IN ${DEAD} ORDER BY i."ITEMORDER"`, [g.ID]);
       if (!surv) { console.log(`  group ${g.LEGACYID}: no surviving tutorial — skipping reconcile (empty group)`); continue; }
       const users = await db.run(`SELECT DISTINCT tr."USER_ID" FROM ${TR} tr JOIN ${GPI} i ON i."TUTORIAL_ID"=(SELECT "ID" FROM ${TUT} WHERE "LEGACYID"=tr."TASKLEGACYID") WHERE i."GROUP_ID"=? AND tr."STATUS"='COMPLETED'`, [g.ID]);
-      for (const u of users) { await reconcileUser(u.USER_ID, surv.TUTORIAL_ID, surv.LEGACYID); affectedUserCount.groups++; }
-      console.log(`  group ${g.LEGACYID}: reconciled ${users.length} users`);
+      const batch = users.slice(0, LIMIT);
+      for (const u of batch) { await reconcileUser(u.USER_ID, surv.TUTORIAL_ID, surv.LEGACYID); affectedUserCount.groups++; }
+      console.log(`  group ${g.LEGACYID}: reconciled ${batch.length}${batch.length < users.length ? `/${users.length} (LIMIT; re-run to continue)` : ''} users`);
     }
     // Missions whose dead slot was a DIRECT tutorial (not via group) — reconcile via a surviving direct tutorial.
     for (const m of missionLegacyRows) {
       const [surv] = await db.run(`SELECT i."TASKLEGACYID", i."TUTORIAL_ID" FROM ${CPI} i JOIN "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS" p ON p."ID"=i."PATH_ID" JOIN ${TUT} t ON t."LEGACYID"=i."TASKLEGACYID" WHERE p."MISSION_ID"=? AND i."TASKTYPE"='TUTORIAL' AND t."STATUS" NOT IN ${DEAD} ORDER BY i."ITEMORDER"`, [m.ID]);
       if (!surv) { console.log(`  mission ${m.LEGACYID}: no surviving direct tutorial (group-only mission handled above)`); continue; }
       const users = await db.run(`SELECT DISTINCT "USER_ID" FROM ${TR} WHERE "TASKLEGACYID"=? AND "STATUS"='COMPLETED'`, [surv.TASKLEGACYID]);
-      for (const u of users) { await reconcileUser(u.USER_ID, surv.TUTORIAL_ID, surv.TASKLEGACYID); affectedUserCount.missions++; }
-      console.log(`  mission ${m.LEGACYID}: reconciled ${users.length} users`);
+      const batch = users.slice(0, LIMIT);
+      for (const u of batch) { await reconcileUser(u.USER_ID, surv.TUTORIAL_ID, surv.TASKLEGACYID); affectedUserCount.missions++; }
+      console.log(`  mission ${m.LEGACYID}: reconciled ${batch.length}${batch.length < users.length ? `/${users.length} (LIMIT; re-run to continue)` : ''} users`);
     }
     console.log(`RECONCILE: ${affectedUserCount.groups} group-user + ${affectedUserCount.missions} mission-user rollups.`);
 
