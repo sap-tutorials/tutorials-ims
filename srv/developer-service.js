@@ -4,7 +4,7 @@ import { getNextLegacyId } from './lib/legacy-id.js';
 import { hashIp } from './lib/feedback-salt.js';
 import { getMyCompletedTutorials, getMyInProgressTutorials } from './lib/user-progress.js';
 import { PROFILE_VOCAB } from './lib/branch/profile-fields.js';
-import { resolveUserSapId, provisionDbUser } from './lib/resolve-db-user.js';
+import { resolveUserSapId, provisionDbUser, resolveUser } from './lib/resolve-db-user.js';
 import { resolveUser as khorosResolveUser } from './lib/khoros-client.js';
 import * as khorosCache from './lib/khoros-cache.js';
 import { checkRateLimit } from './lib/per-user-rate-limit.js';
@@ -529,8 +529,12 @@ export default class DeveloperService extends cds.ApplicationService {
 
     this.on('getMyFavorites', async (req) => {
       const { SessionFavorites } = cds.entities('com.sap.developers.ims');
-      const sapId = resolveUserSapId(req.user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).columns('ID').where({ sapId }) : null;
+      // #2730: resolve via the tiered resolver (pin → (iss,sub) identity link →
+      // sapId), matching the WRITE path (toggleSessionFavorite → provisionDbUser).
+      // The old resolveUserSapId + sapId-only lookup returned [] for null-sapId
+      // social/IAS/GitHub users, so their favorites "vanished" after re-login.
+      // Read-only (no minting): resolveUser, not provisionDbUser.
+      const dbUser = await resolveUser(req.user, cds.tx(req));
       if (!dbUser) return [];
       const rows = await SELECT.from(SessionFavorites)
         .columns('sourceType', 'sessionRef')
