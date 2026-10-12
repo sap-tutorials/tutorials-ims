@@ -17,3 +17,5 @@ export const pinResolvedUser = mod.pinResolvedUser;
 // but the workspace symlink may point to a version that predates Task 2.
 // Export it here as the canonical re-export point for srv/jobs consumers.
 export const pickCanonicalRow = mod.pickCanonicalRow;
+export const resolveDbUserScoped = mod.resolveDbUserScoped;
+export const getOrProvisionDbUser = mod.getOrProvisionDbUser;
