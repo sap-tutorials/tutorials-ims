@@ -66,7 +66,15 @@ function priorStepSlug(content: string, index: number): string | undefined {
  *  the body is handed to the shortcode, otherwise Goldmark treats an indented
  *  ```fence``` as a literal indented-code block (showing the backticks) and
  *  mis-nests images/notes. Dedenting to column 0 lets os-panel.html's
- *  `{{ .Inner | markdownify }}` parse the body as normal markdown (#2703). */
+ *  `{{ .Inner | markdownify }}` parse the body as normal markdown (#2703).
+ *
+ *  IMPORTANT: callers must NOT pre-`.trim()` the text. A whole-string trim
+ *  de-indents only the FIRST line (it strips leading whitespace of the string,
+ *  not of each line), which makes the min-indent scan below see 0 and turn the
+ *  whole dedent into a no-op — the exact regression behind the
+ *  hana-clients-install#step-2 report, where every body line except the first
+ *  stayed 4-space indented. Pass the raw captured body; this function trims the
+ *  surrounding blank lines itself, after dedenting. */
 function dedentBlock(text: string): string {
   const lines = text.split('\n');
   let min = Infinity;
@@ -75,8 +83,14 @@ function dedentBlock(text: string): string {
     const m = line.match(/^[ \t]*/);
     min = Math.min(min, m ? m[0].length : 0);
   }
-  if (!isFinite(min) || min === 0) return text;
-  return lines.map(line => (line.trim() === '' ? line : line.slice(min))).join('\n');
+  const dedented = (!isFinite(min) || min === 0)
+    ? lines
+    : lines.map(line => (line.trim() === '' ? line : line.slice(min)));
+  // Drop leading/trailing all-blank lines so the shortcode body is tight,
+  // without disturbing the now-uniform internal indentation.
+  while (dedented.length && dedented[0].trim() === '') dedented.shift();
+  while (dedented.length && dedented[dedented.length - 1].trim() === '') dedented.pop();
+  return dedented.join('\n');
 }
 
 export function convertOptionBlocks(
@@ -96,7 +110,10 @@ export function convertOptionBlocks(
     const entry: OptionEntry = {
       matchIndex: i,
       tabName: matches[i][1],
-      content: matches[i][2].trim(),
+      // Keep the RAW captured body (no .trim()); dedentBlock needs every line's
+      // real indentation to compute the common prefix. Pre-trimming de-indents
+      // only line 1 and defeats the dedent (#2703 follow-up).
+      content: matches[i][2].replace(/\s+$/, ''),
     }
     if (currentGroup.length > 0) {
       const prevMatch = matches[i - 1]
@@ -183,6 +200,33 @@ export function convertOptionBlocks(
     }
 
     result = result.slice(0, lineStart) + replacement + result.slice(end)
+
+    // Bug B (#2703 follow-up): content that trails the OPTION group but still
+    // belongs to the same numbered substep (e.g. "Set the install directory…",
+    // an image, a > [!TIP]) was authored indented 4 spaces. Once the group is
+    // emitted flush-left the surrounding list closes, so that still-indented
+    // tail is parsed by Goldmark as a literal indented-code block — detaching
+    // it and the following substep. Dedent the tail (up to the next list
+    // marker, shortcode, or a de-indented line) back to column 0 so it stays
+    // list-item prose and the next substep reopens.
+    const tailStart = lineStart + replacement.length;
+    const after = result.slice(tailStart);
+    const tailLines = after.split('\n');
+    const dedentedTail: string[] = [];
+    let stopped = false;
+    for (const line of tailLines) {
+      if (stopped) { dedentedTail.push(line); continue; }
+      if (line.trim() === '') { dedentedTail.push(line); continue; }
+      // A line indented >= 4 spaces is trailing substep content → dedent it.
+      if (/^ {4}/.test(line)) { dedentedTail.push(line.slice(4)); continue; }
+      // A tab-indented line → strip one leading tab.
+      if (/^\t/.test(line)) { dedentedTail.push(line.replace(/^\t/, '')); continue; }
+      // First line at column 0 (next list marker, shortcode, heading, or the
+      // list's end) — stop; everything from here is outside this substep's tail.
+      stopped = true;
+      dedentedTail.push(line);
+    }
+    result = result.slice(0, tailStart) + dedentedTail.join('\n');
   }
 
   return result

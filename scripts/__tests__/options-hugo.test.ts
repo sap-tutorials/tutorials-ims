@@ -383,3 +383,82 @@ describe('convertOptionBlocks (hugo) — indented OPTION blocks inside list item
     expect(out).not.toContain('    {{< os-options >}}');
   });
 })
+
+describe('convertOptionBlocks (hugo) — real QA substep patterns (#2703 follow-up)', () => {
+  // Regression for the hana-clients-install#step-2 report: the first #2703 fix
+  // dedented only the FIRST body line (because entry.content was `.trim()`ed
+  // before dedentBlock saw it, so dedentBlock measured min-indent = 0 and
+  // became a no-op), and never dedented substep content that trails the
+  // OPTION group. Both left 4-space indentation that Goldmark renders as a
+  // literal indented-code block, detaching later substeps.
+
+  it('dedents EVERY line of a multi-line fence body inside an indented substep', () => {
+    const input = [
+      '2. Access the install.',
+      '',
+      '    [OPTION BEGIN [Mac]]',
+      '',
+      '    ```Shell',
+      '    hdiutil attach hanaclient-*.dmg',
+      '    cd "/Volumes/SAP HANA Client"',
+      '    ```',
+      '',
+      '    [OPTION END]',
+      '',
+      '3. Next.',
+      '',
+    ].join('\n');
+
+    const out = convertOptionBlocks(input, 'hugo');
+
+    // The opening fence, the closing fence, AND every command line must sit at
+    // column 0 — otherwise markdownify sees a 4-space indented-code block and
+    // shows literal backticks.
+    expect(out).toContain('\n```Shell\n');
+    expect(out).not.toMatch(/\n {4}```Shell/);
+    expect(out).not.toMatch(/\n {4}hdiutil attach/);
+    expect(out).not.toMatch(/\n {4}cd "/);
+    expect(out).not.toMatch(/\n {4}```\n/);
+  });
+
+  it('dedents substep content that trails the OPTION group within the same list item', () => {
+    const input = [
+      '3. Start the installer.',
+      '',
+      '    [OPTION BEGIN [Windows]]',
+      '',
+      '    ```Shell',
+      '    hdbsetup.exe',
+      '    ```',
+      '',
+      '    [OPTION END]',
+      '',
+      '    [OPTION BEGIN [Mac and Linux]]',
+      '',
+      '    ```Shell',
+      '    ./hdbsetup',
+      '    ```',
+      '',
+      '    [OPTION END]',
+      '',
+      '    Set the install directory and complete the installation.',
+      '',
+      '    ![Client install](download-client.png)',
+      '',
+      '    > [!TIP]',
+      '    > If the install fails, run as administrator.',
+      '',
+      '4. After installation, verify the environment variables.',
+      '',
+    ].join('\n');
+
+    const out = convertOptionBlocks(input, 'hugo');
+
+    // Trailing substep-3 content must be dedented to column 0 so Goldmark keeps
+    // it as list-item prose (not an indented-code block) and substep 4 reopens.
+    expect(out).not.toMatch(/\n {4}Set the install directory/);
+    expect(out).not.toMatch(/\n {4}!\[Client install\]/);
+    expect(out).not.toMatch(/\n {4}> \[!TIP\]/);
+    expect(out).toContain('\n4. After installation');
+  });
+})
