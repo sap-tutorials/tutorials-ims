@@ -26,6 +26,10 @@
 // Hard-deleting safe orphans avoids leaving INACTIVE landmines that exact-match
 // `where({ slug })` read paths might find.
 //
+// LONE mixed-case rows (no lowercase sibling — issue #2714): the slug is simply
+// renamed to lowercase in place. This is the shape behind the completeStep 404
+// in #2714 when there is no duplicate pair, only a single mixed-case row.
+//
 // The script is IDEMPOTENT: running twice is a no-op. It is DRY-RUN by default
 // (logs the proposed mutations to stdout). Pass --apply to actually write.
 //
@@ -71,29 +75,55 @@ async function main() {
 
   const bySlug = new Map(all.map(r => [r.slug, r]));
   const pairs = [];
+  const singles = [];   // mixed-case rows with NO lowercase sibling (issue #2714)
 
   for (const row of all) {
     if (!row.slug) continue;
     const lower = row.slug.toLowerCase();
     if (lower === row.slug) continue;       // already canonical, no orphan possible from this row's perspective
     const orphan = bySlug.get(lower);
-    if (!orphan) continue;                  // no duplicate — nothing to repair
+    if (!orphan) {
+      // No lowercase companion row exists — this is a LONE mixed-case row.
+      // Nothing to merge/delete; just canonicalize its slug in place so
+      // case-sensitive read paths resolve it from the lowercase URL. This is
+      // the issue #2714 shape (completeStep 404) when there is no dup pair.
+      singles.push(row);
+      continue;
+    }
     if (orphan.ID === row.ID) continue;     // safety: same physical row
     pairs.push({ canonical: row, orphan });
   }
 
-  if (pairs.length === 0) {
-    console.log('no mixed-case duplicate Tutorials rows found — nothing to repair');
+  if (pairs.length === 0 && singles.length === 0) {
+    console.log('no mixed-case Tutorials rows found — nothing to repair');
     return;
   }
 
-  console.log(`found ${pairs.length} duplicate pair(s):`);
-  for (const { canonical, orphan } of pairs) {
-    console.log(`  ${canonical.slug} (canonical ID=${canonical.ID.slice(0,8)} stepCount=${canonical.stepCount ?? 'null'})`);
-    console.log(`    └─ orphan ${orphan.slug} (ID=${orphan.ID.slice(0,8)} stepCount=${orphan.stepCount ?? 'null'} status=${orphan.status})`);
+  if (singles.length > 0) {
+    console.log(`found ${singles.length} lone mixed-case row(s) to canonicalize in place:`);
+    for (const row of singles) {
+      console.log(`  ${row.slug} → ${row.slug.toLowerCase()} (ID=${row.ID.slice(0, 8)})`);
+    }
   }
 
-  let copied = 0, reparented = 0, deactivated = 0, deleted = 0;
+  if (pairs.length > 0) {
+    console.log(`found ${pairs.length} duplicate pair(s):`);
+    for (const { canonical, orphan } of pairs) {
+      console.log(`  ${canonical.slug} (canonical ID=${canonical.ID.slice(0,8)} stepCount=${canonical.stepCount ?? 'null'})`);
+      console.log(`    └─ orphan ${orphan.slug} (ID=${orphan.ID.slice(0,8)} stepCount=${orphan.stepCount ?? 'null'} status=${orphan.status})`);
+    }
+  }
+
+  let copied = 0, reparented = 0, deactivated = 0, deleted = 0, canonicalized = 0;
+
+  // Lone mixed-case rows: rename slug to lowercase in place. No merge/delete —
+  // there is no sibling. @assert.unique.slug can't collide (we only reach here
+  // when bySlug has no lowercase entry). Issue #2714.
+  for (const row of singles) {
+    console.log(`  canonicalize ${row.slug} → ${row.slug.toLowerCase()}`);
+    if (APPLY) await UPDATE(Tutorials).where({ ID: row.ID }).set({ slug: row.slug.toLowerCase() });
+    canonicalized++;
+  }
 
   for (const { canonical, orphan } of pairs) {
     // 1. Field copy
@@ -167,7 +197,7 @@ async function main() {
     }
   }
 
-  console.log(`\nsummary: copied=${copied} reparented=${reparented} deleted=${deleted} deactivated=${deactivated}  ${APPLY ? '(applied)' : '(dry-run)'}`);
+  console.log(`\nsummary: canonicalized=${canonicalized} copied=${copied} reparented=${reparented} deleted=${deleted} deactivated=${deactivated}  ${APPLY ? '(applied)' : '(dry-run)'}`);
 }
 
 main().then(() => process.exit(0)).catch(err => {
