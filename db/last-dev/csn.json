@@ -4364,6 +4364,11 @@
         "firstAppendAt": {
           "type": "cds.Timestamp",
           "@cds.persistence.name": "FIRSTAPPENDAT"
+        },
+        "pipelineToken": {
+          "type": "cds.String",
+          "length": 64,
+          "@cds.persistence.name": "PIPELINETOKEN"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CONTENTMANIFEST"
