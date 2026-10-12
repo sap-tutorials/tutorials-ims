@@ -143,9 +143,17 @@ async function main() {
     console.log('A. Slot already repointed — skipped.');
   }
 
-  // B. Insert the backfill records.
-  let inserted = 0;
+  // B. Insert the backfill records — idempotent: skip users who already hold the
+  //    migration-tagged 11954 record (safe to re-run after an interrupted pass).
+  const alreadyTagged = new Set(
+    (await db.run(
+      `SELECT "USER_ID" FROM ${TR_TBL} WHERE "TASKLEGACYID" = ${NEW_TUT_LEGACY} ` +
+      `AND "STATUS" = 'COMPLETED' AND "PROGRESSNOTE" LIKE 'migration:#2718%'`
+    )).map((r) => r.USER_ID)
+  );
+  let inserted = 0, skipped = 0;
   for (const u of toCredit) {
+    if (alreadyTagged.has(u.USER_ID)) { skipped++; continue; }
     const legacyId = await getNextLegacyId('TaskRecords', db);
     const entry = stampSubmissionId({
       user_ID: u.USER_ID,
@@ -167,9 +175,11 @@ async function main() {
     await db.run(INSERT.into('com.sap.developers.ims.TaskRecords').entries(entry));
     inserted++;
   }
-  console.log(`B. Inserted ${inserted} COMPLETED TaskRecords on taskLegacyId=${NEW_TUT_LEGACY}`);
+  console.log(`B. Inserted ${inserted} COMPLETED TaskRecords on taskLegacyId=${NEW_TUT_LEGACY} (${skipped} already present, skipped)`);
 
   // C. Re-run the real rollup per user (send:false — historical, no NGDS).
+  //    Always runs for every user in the credit set, so an interrupted phase C
+  //    is completed on re-run (upsertRollupRecord is itself idempotent).
   let rolled = 0;
   for (const u of toCredit) {
     await rollUpParentsForCompletion({
