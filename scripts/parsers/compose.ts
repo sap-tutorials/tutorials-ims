@@ -1,6 +1,7 @@
 import { extractFrontmatter } from './frontmatter.js'
 import { normalizeBlockquotedFences } from './blockquote-fence.js'
 import { normalizeListContinuationFences } from './list-continuation-fence.js'
+import { normalizeListFenceColumnZero } from './list-fence-column-zero.js'
 import { dedentListContinuationProse } from './list-continuation-prose.js'
 import { mergeBlockquoteNoteDividers } from './blockquote-notes.js'
 import { extractIntro } from './intro.js'
@@ -96,6 +97,19 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   // space indent). Run after blockquote-fence healing so both can see clean
   // input.
   const listFenceHealedBody = normalizeListContinuationFences(healedBody)
+  // [#2720] Sibling to the pass above, handling the inverse slip: a list-item
+  // fence opened at 1–3 spaces whose body has a line shallower than the 4-space
+  // continuation column (typically a column-0 `#if`/`#else`/`#endif`). Goldmark
+  // treats that shallow line as breaking out of the list item, so the closing
+  // fence never pairs and a <pre><code> swallows the rest of the step (eating
+  // the injected "Done" button). Shift the whole block up to a 4-space minimum.
+  // Runs AFTER normalizeListContinuationFences: that pass leaves ≤3-space fences
+  // untouched, whereas running this first would be undone by its 4→3 strip.
+  // SHARP EDGE: this pass's output fence sits at exactly 4 spaces, which is
+  // inside #1931's own {4,7} match range — so col-0 must NEVER be followed by
+  // another normalizeListContinuationFences call, or it would strip the fence
+  // back to 3 and re-break #2720. Keep this pass last among the fence healers.
+  const colZeroHealedBody = normalizeListFenceColumnZero(listFenceHealedBody)
   // [#1931 follow-up] The fence normalizer above only de-indents the fence
   // delimiters. The non-fence continuation of the same `  N. ` list items —
   // the "Your source code should look like this:" prose and the screenshot
@@ -104,7 +118,7 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   // <pre><code>). De-indent those orphaned continuation runs so they render as
   // paragraphs/images. Runs after the fence normalizer so the fences are already
   // valid ≤ 3-space fenced code blocks and the fence tracker recognises them.
-  const listProseHealedBody = dedentListContinuationProse(listFenceHealedBody)
+  const listProseHealedBody = dedentListContinuationProse(colZeroHealedBody)
   // [#1741] Collapse the AEM-legacy "additional details" note pattern where a
   // multi-paragraph blockquote is split by blockquoted thematic breaks (`>---`).
   // CommonMark otherwise renders each `>` block as its own info box with a
