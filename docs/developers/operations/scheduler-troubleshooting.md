@@ -2,7 +2,10 @@
 
 When a CAP 10 scheduled job stops firing without any error surfacing, it's almost always an outbox wedge: a `cds.outbox.Messages` row stuck at `status='processing'` blocks the framework from firing subsequent ticks for that jobName.
 
-> **Two distinct "stuck job" failure modes.** This runbook covers the **outbox wedge** (blocks future ticks). A different symptom — a job that shows **RUNNING forever** on the health board while still rescheduling normally — is an **orphaned `PipelineLog` row** left by a process death mid-run (deploy/crash). See [Orphaned RUNNING PipelineLog rows](#orphaned-running-pipelinelog-rows-1293) below. They live in different tables and have different fixes; diagnose which before acting.
+> **Three distinct "stuck job" failure modes.** Diagnose which before acting — they live in different tables and have different fixes.
+> 1. **Outbox wedge** (blocks future ticks for ONE job) — a `cds.outbox.Messages` row stuck at `status='processing'`. Fix: Force-unwedge (deletes the one row).
+> 2. **Orphaned `PipelineLog` row** — a job shows **RUNNING forever** on the health board while still rescheduling normally; left by a process death mid-run (deploy/crash). See [Orphaned RUNNING PipelineLog rows](#orphaned-running-pipelinelog-rows-1293). Fix: boot reconciler / Force-close.
+> 3. **Queue-processor stall** (**ALL** jobs overdue at once) — the shared CronService queue stops draining and high-frequency job rows drop out of the outbox entirely. A plain unwedge/delete does **NOT** fix this. See [All jobs overdue — queue-processor stall](#all-jobs-overdue--queue-processor-stall). Fix: **rolling `cf restart` of `tutorials-srv`**.
 
 ## When to use this
 
@@ -119,8 +122,65 @@ UPDATE COM_SAP_DEVELOPERS_IMS_PIPELINELOG
   WHERE STATUS='RUNNING' AND PIPELINETYPE='SCHEDULED_JOB' AND ID='<rowId>';
 ```
 
+## All jobs overdue — queue-processor stall
+
+The most severe mode: **every** scheduled job shows stale/overdue on `/admin-ui/#board` at once, none dispatch, yet **manual Run-now still works**. First observed in PROD on 2026-10-12.
+
+### How to recognise it
+
+- The board shows **all** (not one) jobs overdue — `Last success` stale across the board, next-fire times in the past.
+- Manual **Run now** works for every job (manual triggers use `setImmediate` and bypass the outbox entirely — `srv/jobs/scheduler.js`).
+- `SELECT COUNT(*) FROM CDS_OUTBOX_MESSAGES WHERE STATUS='processing'` may be **0 or 1** — this mode is **not** diagnosed by the processing count alone.
+- The tell is **missing rows**: high-frequency jobs (`metrics-rollup` `*/5`, `kg-ondemand-drain` `*/2`, `community-blogs-classify`, `publish-stuck-manifest-watchdog`) have **no `cds.outbox.Messages` row at all** — not `processing`, not `NULL`, absent. Compare the live outbox against `registerJobs()` in `srv/jobs/scheduler.js`.
+
+> **Reminder on normal outbox state.** CAP keeps **one future-fire row per job** at `target='queue'`. `STATUS=NULL` is a healthy pending tick; on success the row is DELETE'd and the next future row inserted. A full healthy fleet shows ~1 NULL row per registered job (~54 at time of writing) and **0** processing. A job with **no row** is the anomaly.
+
+### How it happens
+
+CAP 10's `CronService` drives all scheduled jobs through **one shared outbox queue**. If the queue **processor** stalls (e.g. after a batch operator **Force-close** of several jobs, which closes the `PipelineLog` row but does not reconcile the outbox control state — see [follow-up](#open-follow-up)), two things go wrong together:
+
+1. A singleton row can be left at `status='processing'`, and
+2. jobs that were mid-cycle get their row **consumed but never re-inserted** — so they silently drop out of the schedule.
+
+Deleting the stuck `processing` row (Force-unwedge / the HANA escape hatch above) clears the lock but **cannot resurrect the dropped rows** — per `srv/lib/scheduler-wedge.js`, a deleted schedule row is only re-created "until the next scheduler boot re-inserts it". And the stalled processor may still be running on an un-restarted CF instance.
+
+### Recovery — rolling restart
+
+A **rolling restart of `tutorials-srv`** is the fix. On boot, `CronService.init()` re-runs `schedule().every().as()` for every registered job, re-seeding all outbox rows; `reconcileOrphanedRunningJobs()` cleans up orphans.
+
+```bash
+cf target                              # MUST confirm space=prod before touching PROD
+cf app tutorials-srv                   # note instance count (PROD runs 2)
+
+# Rolling, one instance at a time — keeps one instance serving throughout:
+cf restart-app-instance tutorials-srv 0
+# wait until #0 is 'running' and healthy, then:
+cf restart-app-instance tutorials-srv 1
+```
+
+**Restart ALL instances.** The 2026-10-12 incident showed that restarting only instance #0 re-seeded the outbox rows but ticks still did not drain — the stalled processor was on the un-restarted instance #1. The schedule did not fully recover until **both** instances had been restarted. If in doubt, `cf restart tutorials-srv` (rolling across all instances).
+
+### Verify recovery (do not skip)
+
+Confirm jobs actually **execute**, not just that rows reappear:
+
+```sql
+-- new SCHEDULED_JOB runs since the restart timestamp — expect SUCCESS rows for */2 and */5 jobs within a few minutes
+SELECT TO_VARCHAR(STARTEDAT), STATUS, METADATA
+  FROM COM_SAP_DEVELOPERS_IMS_PIPELINELOG
+  WHERE PIPELINETYPE='SCHEDULED_JOB' AND STARTEDAT >= '<restart-time-UTC>'
+  ORDER BY STARTEDAT DESC;
+```
+
+`kg-ondemand-drain` (every 2 min) and `metrics-rollup` (every 5 min) are the fastest signals — a couple of SUCCESS rows for those within ~5 minutes confirms the queue is draining.
+
+### Open follow-up
+
+Batch **Force-close** (`#1293`) closes `PipelineLog` rows but does not reconcile the shared outbox, which is what stranded the `processing` row AND dropped the high-frequency rows in the 2026-10-12 incident. Candidate hardening (track via DEV PR): have `forceClose` also clear/re-arm the affected outbox rows, or codify "force-close N jobs → restart srv" so operators don't hit this. The existing `forceUnwedge` single-row delete is **insufficient** for this mode by design.
+
 ## References
 
+- Incident: PROD scheduler stall 2026-10-12 — all jobs overdue after a batch Force-close; recovered by clearing one `processing` row + rolling `cf restart tutorials-srv`.
 - Issue: [#1021](https://github.com/sap-tutorials/tutorials-ims/issues/1021) — this fix
 - Issue: [#1022](https://github.com/sap-tutorials/tutorials-ims/issues/1022) — upstream CAP hook (in progress)
 - Issue: [#1293](https://github.com/sap-tutorials/tutorials-ims/issues/1293) — orphaned RUNNING PipelineLog reconciler + Force close
