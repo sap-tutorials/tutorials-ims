@@ -4,7 +4,7 @@ import { getNextLegacyId } from './lib/legacy-id.js';
 import { hashIp } from './lib/feedback-salt.js';
 import { getMyCompletedTutorials, getMyInProgressTutorials } from './lib/user-progress.js';
 import { PROFILE_VOCAB } from './lib/branch/profile-fields.js';
-import { resolveUserSapId, provisionDbUser, resolveUser } from './lib/resolve-db-user.js';
+import { resolveUserSapId, provisionDbUser, resolveUser, resolveDbUserScoped, getOrProvisionDbUser } from './lib/resolve-db-user.js';
 import { resolveUser as khorosResolveUser } from './lib/khoros-client.js';
 import * as khorosCache from './lib/khoros-cache.js';
 import { checkRateLimit } from './lib/per-user-rate-limit.js';
@@ -326,7 +326,6 @@ export default class DeveloperService extends cds.ApplicationService {
 
     this.on('getProgress', async (req) => {
       const slug = String(req.data.slug || '').toLowerCase();
-      const user = req.user;
 
       // Case-insensitive lookup (issue #2714 — see completeStep)
       const tutorial = await SELECT.one.from(dbTutorials).where`LOWER(slug) = ${slug}`;
@@ -334,10 +333,10 @@ export default class DeveloperService extends cds.ApplicationService {
 
       const steps = await SELECT.from(dbSteps).where({ tutorial_ID: tutorial.ID });
 
-      // Find user's task records for this tutorial's steps. Issue #343:
-      // lookup by sapId (the JWT user_uuid claim), not uuid (= email).
-      const sapId = resolveUserSapId(user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
+      // Find user's task records for this tutorial's steps. #2730: use the
+      // tiered resolver (pin → (iss,sub) identity link → sapId) so null-sapId
+      // social/IAS/GitHub logins also resolve. Issue #343 context preserved.
+      const dbUser = await resolveDbUserScoped(req);
       if (!dbUser) return { completedSteps: [], points: 0, badges: [] };
 
       // Scope step records to the user's current (non-SUPERSEDED) attempt so a
@@ -467,8 +466,8 @@ export default class DeveloperService extends cds.ApplicationService {
       // `userLegacyId` (which is ignored for identity — see .cds note). Prevents
       // any authenticated caller from reading another user's TaskRecords by
       // enumerating the sequential legacyId. Mirrors getProgress / getMyCompletions.
-      const sapId = resolveUserSapId(req.user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
+      // #2730: use the tiered resolver so null-sapId identity-link users are found.
+      const dbUser = await resolveDbUserScoped(req);
       if (!dbUser) return [];
 
       return SELECT.from(dbTaskRecords).where({
@@ -479,8 +478,8 @@ export default class DeveloperService extends cds.ApplicationService {
 
     this.on('countCompletedMissionsTotal', async (req) => {
       // #1231: self-scoped by JWT; client `userLegacyId` ignored for identity.
-      const sapId = resolveUserSapId(req.user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
+      // #2730: use the tiered resolver so null-sapId identity-link users are found.
+      const dbUser = await resolveDbUserScoped(req);
       if (!dbUser) return 0;
 
       const records = await SELECT.from(dbTaskRecords).where({
@@ -494,8 +493,8 @@ export default class DeveloperService extends cds.ApplicationService {
 
     this.on('countCompletedMissionsPercent', async (req) => {
       // #1231: self-scoped by JWT; client `userLegacyId` ignored for identity.
-      const sapId = resolveUserSapId(req.user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
+      // #2730: use the tiered resolver so null-sapId identity-link users are found.
+      const dbUser = await resolveDbUserScoped(req);
       if (!dbUser) return 0;
 
       const completedMissions = await SELECT.from(dbTaskRecords).where({
@@ -568,7 +567,6 @@ export default class DeveloperService extends cds.ApplicationService {
 
     this.on('getEventProgress', async (req) => {
       const { missionLegacyId } = req.data;
-      const user = req.user;
 
       const mission = await SELECT.one.from(dbMissions).where({ legacyId: missionLegacyId });
       if (!mission) return req.reject(404, `Mission not found: ${missionLegacyId}`);
@@ -595,8 +593,8 @@ export default class DeveloperService extends cds.ApplicationService {
       const recordLegacyIds = [...new Set([...effLegacyByItem.values()].filter(v => v != null))];
 
       let userRecords = [];
-      const sapId = resolveUserSapId(user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
+      // #2730: use the tiered resolver so null-sapId identity-link users are found.
+      const dbUser = await resolveDbUserScoped(req, ['ID']);
       if (dbUser && recordLegacyIds.length > 0) {
         userRecords = await SELECT.from(dbTaskRecords).where({
           user_ID: dbUser.ID,
@@ -657,7 +655,6 @@ export default class DeveloperService extends cds.ApplicationService {
 
     this.on('getAppSpaceProgress', async (req) => {
       const { eventLegacyId } = req.data;
-      const user = req.user;
 
       let event;
       if (eventLegacyId) {
@@ -708,8 +705,8 @@ export default class DeveloperService extends cds.ApplicationService {
       const recordLegacyIds = [...new Set([...effLegacyByItem.values()].filter(v => v != null))];
 
       let userRecords = [];
-      const sapId = resolveUserSapId(user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
+      // #2730: use the tiered resolver so null-sapId identity-link users are found.
+      const dbUser = await resolveDbUserScoped(req, ['ID']);
       if (dbUser && recordLegacyIds.length > 0) {
         userRecords = await SELECT.from(dbTaskRecords).where({
           user_ID: dbUser.ID,
@@ -725,7 +722,7 @@ export default class DeveloperService extends cds.ApplicationService {
         eventDescription: renderMarkdown(event.description),   // #2296: admin-authored Markdown → safe HTML for the app-space hero
         eventType: event.eventType ?? 'OTHER',
         hasLogo: Boolean(event.hasLogo),
-        authenticated: Boolean(sapId),   // #2314: false only for anonymous callers → client skips the logged-in-only realtime/confetti path. Truthy even if no Users row exists yet (identity resolved from JWT).
+        authenticated: Boolean(dbUser),   // #2314/#2730: false only for anonymous callers → client skips the logged-in-only realtime/confetti path. Truthy when user resolves via any tier (sapId, identity link, or pin).
         type: 'COMPLEX',
         paths: paths.map(p => {
           const items = allItems
@@ -908,8 +905,8 @@ export default class DeveloperService extends cds.ApplicationService {
     // any caller-supplied $filter, so a partner can filter WITHIN their own rows
     // but cannot widen past them.
     this.before('READ', 'TaskRecords', async (req) => {
-      const sapId = resolveUserSapId(req.user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).columns('ID').where({ sapId }) : null;
+      // #2730: use the tiered resolver so null-sapId identity-link users are found.
+      const dbUser = await resolveDbUserScoped(req, ['ID']);
       // Always constrain at the QUERY level. Assigning req.results = [] in a
       // before('READ') is NOT a reliable short-circuit in CAP 10 (the READ still
       // runs), so scope via req.query.where in BOTH branches: the caller's own
@@ -929,8 +926,8 @@ export default class DeveloperService extends cds.ApplicationService {
     // get AND-precedence wrong on existing where clauses and are a security
     // boundary; do NOT revert.
     this.before('READ', 'LearningPreferences', async (req) => {
-      const sapId = resolveUserSapId(req.user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).columns('ID').where({ sapId }) : null;
+      // #2730: use the tiered resolver so null-sapId identity-link users are found.
+      const dbUser = await resolveDbUserScoped(req, ['ID']);
       // #1232: constrain at the QUERY level in BOTH branches. The prior
       // `if (!dbUser) { req.results = []; return; }` did NOT reliably
       // short-circuit in CAP 10 — the READ still ran and returned EVERY user's
@@ -1122,12 +1119,9 @@ export default class DeveloperService extends cds.ApplicationService {
     });
 
     this.on('getKhorosProfile', async (req) => {
-      const sapId = resolveUserSapId(req.user);
-      if (!sapId) return req.reject(401, 'Unauthenticated');
-      const dbUser = await SELECT.one
-        .from(dbUsers)
-        .columns('ID', 'khorosId', 'khorosLogin', 'khorosAvatarUrl')
-        .where({ sapId });
+      // #2730: use the tiered resolver so null-sapId identity-link users are found.
+      const dbUser = await resolveDbUserScoped(req, ['ID', 'khorosId', 'khorosLogin', 'khorosAvatarUrl']);
+      if (!dbUser) return req.reject(401, 'Unauthenticated');
       if (!dbUser?.khorosId) return { linked: false };
       const persisted = {
         linked: true,
@@ -1145,11 +1139,11 @@ export default class DeveloperService extends cds.ApplicationService {
       try {
         upstream = await khorosResolveUser(dbUser.khorosId);
       } catch (err) {
-        cds.log('khoros').warn('getKhorosProfile upstream error', { sapId, khorosId: dbUser.khorosId, err: err.message });
+        cds.log('khoros').warn('getKhorosProfile upstream error', { userId: dbUser.ID, khorosId: dbUser.khorosId, err: err.message });
       }
       if (!upstream) {
         // Last-known-good: render the chip with persisted data, blank rank.
-        cds.log('khoros').warn('getKhorosProfile upstream null', { sapId, khorosId: dbUser.khorosId });
+        cds.log('khoros').warn('getKhorosProfile upstream null', { userId: dbUser.ID, khorosId: dbUser.khorosId });
         return { ...persisted, name: dbUser.khorosLogin || '', rank: '' };
       }
       // Refresh cache + write back avatar if it drifted.

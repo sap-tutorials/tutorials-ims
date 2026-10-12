@@ -17,5 +17,15 @@ export const pinResolvedUser = mod.pinResolvedUser;
 // but the workspace symlink may point to a version that predates Task 2.
 // Export it here as the canonical re-export point for srv/jobs consumers.
 export const pickCanonicalRow = mod.pickCanonicalRow;
-export const resolveDbUserScoped = mod.resolveDbUserScoped;
-export const getOrProvisionDbUser = mod.getOrProvisionDbUser;
+// #2730: resolveDbUserScoped + getOrProvisionDbUser are new in this worktree.
+// The workspace @tutorials/core package may point to a stale node_modules copy
+// that predates these helpers; fall back to the direct workspace source path.
+let resolveDbUserScoped_ = mod.resolveDbUserScoped;
+let getOrProvisionDbUser_ = mod.getOrProvisionDbUser;
+if (typeof resolveDbUserScoped_ !== 'function' || typeof getOrProvisionDbUser_ !== 'function') {
+  const fresh = await import('../../packages/core/resolve-db-user.js');
+  if (typeof resolveDbUserScoped_ !== 'function') resolveDbUserScoped_ = fresh.resolveDbUserScoped;
+  if (typeof getOrProvisionDbUser_ !== 'function') getOrProvisionDbUser_ = fresh.getOrProvisionDbUser;
+}
+export const resolveDbUserScoped = resolveDbUserScoped_;
+export const getOrProvisionDbUser = getOrProvisionDbUser_;
