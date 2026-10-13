@@ -313,6 +313,11 @@ export async function rollUpParentsForCompletion({ dbUser, task, db, send = true
       const slots = resolveGroup(legacyId);
       if (slots.length === 0) continue;
       const { satisfied, total } = evaluateSlots(slots, tokenSet, resolveGroup);
+      if (total === 0) {
+        cds.log('rollup').warn('empty slots after INACTIVE filter', { kind: 'GROUP', legacyId });
+        metrics.counter('rollup.empty_slots');
+        continue;
+      }
       const { progress, status } = calculateMissionProgress(satisfied, total);
       await upsertRollupRecord({
         dbUser, taskType: 'GROUP', legacyId, title: g.title,
@@ -323,6 +328,11 @@ export async function rollUpParentsForCompletion({ dbUser, task, db, send = true
       const slots = missionSlots.get(m.ID);
       if (!slots || slots.length === 0) continue;
       const { satisfied, total } = evaluateSlots(slots, tokenSet, resolveGroup);
+      if (total === 0) {
+        cds.log('rollup').warn('empty slots after INACTIVE filter', { kind: 'MISSION', legacyId: m.legacyId });
+        metrics.counter('rollup.empty_slots');
+        continue;
+      }
       const { progress, status } = calculateMissionProgress(satisfied, total);
       await upsertRollupRecord({
         dbUser, taskType: 'MISSION', legacyId: m.legacyId, title: m.title,
