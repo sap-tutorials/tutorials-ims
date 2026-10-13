@@ -97,6 +97,26 @@ describe('normalizeListFenceColumnZero', () => {
     expect(normalizeListFenceColumnZero(input)).toBe(input)
   })
 
+  // [#2720 regression / #1931 interaction] A 3-space fence that is NOT inside a
+  // list item — e.g. produced by #1931's 4→3 de-indent of a fence under a
+  // heading — must be left untouched. Earlier this pass fired on any 1–3-space
+  // fence whose body min was < 4, which re-indented #1931's output back to 4 and
+  // broke the chained scan golden-render gate. The fence here follows plain
+  // prose under a heading (no `N.`/`-` marker), so there is no list continuation
+  // column to satisfy and nothing to heal.
+  it('leaves a non-list (heading-context) 3-space fence unchanged', () => {
+    const input = [
+      '## Step 1',
+      'Enter the code:',
+      '',
+      '   ```ABAP',
+      '   START-OF-SELECTION.',
+      '   ```',
+      '',
+    ].join('\n')
+    expect(normalizeListFenceColumnZero(input)).toBe(input)
+  })
+
   it('leaves an unterminated fence verbatim', () => {
     const input = [
       '6. Open the file:',
