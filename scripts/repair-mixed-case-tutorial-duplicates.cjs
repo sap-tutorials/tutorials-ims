@@ -30,6 +30,13 @@
 // renamed to lowercase in place. This is the shape behind the completeStep 404
 // in #2714 when there is no duplicate pair, only a single mixed-case row.
 //
+//   4. After any slug mutation (canonicalize / hard-delete / INACTIVE-flag) under
+//      --apply, rebuild CoCompletions (via runMaterializeCoCompletions) so the KG
+//      edge view's coCompletedWith arm can't carry a stale slug into the graph
+//      workspace before the 04:33 UTC nightly cron. Prevents the HANA GraphScript
+//      [4907] "invalid vertex key" crash seen on PROD 2026-10-13. Fail-soft:
+//      backstopped by PR #2740's view guard and the nightly job. See step 4 below.
+//
 // The script is IDEMPOTENT: running twice is a no-op. It is DRY-RUN by default
 // (logs the proposed mutations to stdout). Pass --apply to actually write.
 //
@@ -195,6 +202,56 @@ async function main() {
         deactivated++;
       }
     }
+  }
+
+  // 4. Refresh CoCompletions so no stale slug survives until the nightly cron.
+  //
+  // Why this is here: a slug mutation above (canonicalize-in-place, hard-delete,
+  // or INACTIVE-flag) changes Tutorials.slug / Tutorials.status, but
+  // CoCompletions stores slugs as PLAIN STRINGS (sourceSlug/targetSlug), not FK
+  // joins. CoCompletions is only rebuilt nightly by materialize-co-completions
+  // (04:33 UTC) — and the KG graph jobs that consume it run EARLIER
+  // (kg-pagerank 03:53, kg-communities 03:57, kg-wcc 04:07). So on the morning
+  // after this repair runs, CoCompletions still carries the OLD slug while
+  // KG_PG_VERTICES_V (keyed off the live Tutorials.slug) emits only the new one.
+  // The coCompletedWith edge arm then produces a vertex-less endpoint and the
+  // whole KG workspace crashes with HANA GraphScript [4907] range 3
+  // ("invalid vertex key 'tutorial:<old-slug>'"). This happened on PROD
+  // 2026-10-13 for slug 'abap-environment-sbpa-workflow-extend-RAP-App'.
+  //
+  // PR #2740 added a defensive INNER JOIN to KG_PG_EDGES_V so a dangling slug is
+  // dropped (fail-open) rather than crashing — that is the backstop. This block
+  // closes the window at the source: rebuild CoCompletions from the now-current
+  // Tutorials immediately, so pagerank/communities/wcc see consistent data on
+  // their very next run instead of waiting for 04:33. materialize's own filter
+  // (status = 'ACTIVE' or status is null) means a hard-deleted orphan simply
+  // vanishes and an INACTIVE-flagged orphan is excluded — correct for all paths.
+  //
+  // Fail-soft: the slug repair above has already committed; a refresh failure
+  // must not fail the script. The 04:33 cron + the PR #2740 view guard both
+  // remain as backstops. Only runs under --apply and only when something changed.
+  const mutated = canonicalized + deleted + deactivated;
+  if (APPLY && mutated > 0) {
+    try {
+      console.log(`\nrefreshing CoCompletions after ${mutated} slug mutation(s)…`);
+      // materialize-co-completions.js is ESM; this script is CJS → dynamic import.
+      const { runMaterializeCoCompletions } = await import(
+        '../srv/jobs/materialize-co-completions.js'
+      );
+      const summary = await runMaterializeCoCompletions();
+      console.log(`  CoCompletions rebuilt: ${summary.rowsWritten} rows in ${summary.totalMs}ms`);
+    } catch (err) {
+      console.log(
+        `  WARN: CoCompletions refresh failed (${err.message}) — slug repair already ` +
+        `committed. Backstops: PR #2740 view guard (fail-open) + nightly ` +
+        `materialize-co-completions (04:33 UTC). Re-run that job manually to be safe.`,
+      );
+    }
+  } else if (!APPLY && mutated > 0) {
+    console.log(
+      `\n(dry-run) would refresh CoCompletions after slug mutations ` +
+      `(canonicalize/delete/INACTIVE) to avoid a stale KG vertex key — see PR #2740.`,
+    );
   }
 
   console.log(`\nsummary: canonicalized=${canonicalized} copied=${copied} reparented=${reparented} deleted=${deleted} deactivated=${deactivated}  ${APPLY ? '(applied)' : '(dry-run)'}`);
