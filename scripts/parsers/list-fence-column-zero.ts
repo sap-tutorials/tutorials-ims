@@ -77,6 +77,10 @@ const FENCE_OPEN = /^( {1,3})(`{3,}|~{3,})(.*)$/
 // Closing fence: any indent, fence chars (same-or-greater run), optional trailing ws.
 const FENCE_CLOSE = /^(\s*)(`{3,}|~{3,})\s*$/
 
+// An ordered (`N.` / `N)`) or unordered (`-` / `*` / `+`) list marker at the
+// start of a line, allowing it to be nested under some indentation.
+const LIST_MARKER = /^\s*(?:\d+[.)]|[-*+])\s/
+
 // Minimum column for ordered-list continuation content.
 const CONTINUATION_COL = 4
 
@@ -100,6 +104,19 @@ export function normalizeListFenceColumnZero(md: string): string {
     const fenceIndent = open[1].length
     const fenceChar = open[2][0] as '`' | '~'
     const fenceLen = open[2].length
+
+    // Only heal fences that are actually inside a list item. A 1–3-space fence
+    // under a heading or plain prose has no list-continuation column to satisfy,
+    // and shifting it would corrupt well-formed input — notably the 3-space
+    // fence that the #1931 pass (normalizeListContinuationFences) produces when
+    // it de-indents a 4-space heading-context fence down to 3. Scan upward past
+    // blank lines: the nearest non-blank predecessor must be a list marker, or
+    // an indented line (a continuation of a list item), for a list context to
+    // exist. (#2720's own fixtures all sit under a `N.` marker.)
+    if (!inListContext(lines, i)) {
+      out.push(lines[i])
+      continue
+    }
 
     // Scan forward for the matching close fence.
     let closeIdx = -1
@@ -150,4 +167,20 @@ function leadingSpaces(line: string): number {
   let n = 0
   while (line[n] === ' ') n++
   return n
+}
+
+/**
+ * True when the fence opened at `fenceIdx` is a continuation of a list item.
+ * Walks upward past blank lines to the nearest non-blank predecessor; a list
+ * context exists when that line is a list marker (ordered or unordered) or is
+ * itself indented (already a continuation line of some list item). A column-0
+ * plain line (heading, prose) means there is no enclosing list — leave the
+ * fence alone.
+ */
+function inListContext(lines: string[], fenceIdx: number): boolean {
+  for (let k = fenceIdx - 1; k >= 0; k--) {
+    if (lines[k].trim() === '') continue
+    return LIST_MARKER.test(lines[k]) || leadingSpaces(lines[k]) > 0
+  }
+  return false
 }
