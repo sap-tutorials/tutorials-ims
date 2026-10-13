@@ -43,11 +43,13 @@ const REPO_ROOT = process.env.BUILD_ISLAND_MANIFEST_ROOT
 
 const VITE_MANIFEST = join(REPO_ROOT, 'hugo', 'static', 'js', '.vite', 'manifest.json');
 const OUT = join(REPO_ROOT, 'hugo', 'data', 'island_manifest.json');
-// Second copy: consumed by srv/lib/catalog-renderer.js and
-// srv/lib/concept-list-page.js at CAP runtime to resolve the hashed
-// paths for nav-dropdown and concepts-filter (instead of hardcoding bare
-// paths). Fail-open: these renderers fall back to /js/<name>.js when the
-// file is absent (e.g. local `cds watch` without running build:apps).
+// Second copy: consumed at CAP runtime by srv/lib/concept-list-page.js,
+// puzzle-page.js and topic-list-page.js directly, and — via
+// scripts/lib/copy-island-manifest.cjs (run by bundle-shared.cjs) — seeded
+// beside the shipped content.bundle.mjs so packages/content/catalog-renderer.js
+// resolves hashed island paths for the live-SSR group/mission pages (#2733).
+// Fail-open: these renderers fall back to /js/<name>.js when the file is absent
+// (e.g. local `cds watch` without running build:apps).
 // Gitignored (see srv/lib/explore-bundle-manifest.json precedent).
 const SRV_OUT = join(REPO_ROOT, 'srv', 'lib', 'island-manifest.json');
 

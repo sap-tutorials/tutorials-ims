@@ -18,6 +18,7 @@
 const esbuild = require('esbuild');
 const path = require('node:path');
 const fs = require('node:fs');
+const { copyIslandManifestBeside } = require('./lib/copy-island-manifest.cjs');
 
 const outDir = 'srv/lib/_shared';
 fs.mkdirSync(outDir, { recursive: true });
@@ -165,6 +166,17 @@ for (const cjsFile of CONTENT_CJS) {
   fs.copyFileSync(src, dst);
   console.log('copied', dst);
 }
+
+// #2733 — the content bundle's catalog/concept/puzzle/topic SSR renderers call
+// islandSrc(), which reads `island-manifest.json` relative to the bundle's own
+// dir. Seed it beside EACH content bundle (srv/lib/_shared, srv-qa/lib/_shared)
+// AND into packages/content/ so local `cds watch` + unit tests resolve the same
+// hashed paths. Source = srv/lib/island-manifest.json, written by
+// scripts/build-island-manifest.cjs (build:all). Fail-open when absent (the CI
+// deploy.yml path builds islands out of band — nothing to copy there); fail
+// LOUD when present-but-empty. srv-mcp has no content bundle, so it is excluded.
+const ISLAND_MANIFEST_SRC = path.resolve(__dirname, '..', 'srv', 'lib', 'island-manifest.json');
+copyIslandManifestBeside([outDir, outDirQa, contentPkgDir], ISLAND_MANIFEST_SRC);
 
 // srv-mcp/lib/_shared/ — core + mcp only (7 MCP tools don't need content/kg/channels).
 const mcpTargets = [
