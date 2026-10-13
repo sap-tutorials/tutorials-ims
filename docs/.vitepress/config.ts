@@ -149,6 +149,7 @@ export default defineConfig({
           { text: 'Joule aurora background',          link: '/developers/architecture/joule-aurora' },
           { text: '@PersonalData cascade',            link: '/developers/architecture/anonymization-cascade' },
           { text: 'Runtime',                          link: '/developers/architecture/runtime' },
+          { text: 'Tutorial PiP step window',         link: '/developers/architecture/tutorial-pip' },
           { text: 'Validation widget',                link: '/developers/architecture/validation-widget' },
           { text: 'Free-text grader',                 link: '/developers/architecture/free-text-grader' },
           { text: 'AI-authored quizzes',              link: '/developers/architecture/ai-authored-quizzes' },
