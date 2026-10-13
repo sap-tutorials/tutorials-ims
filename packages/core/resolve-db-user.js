@@ -712,6 +712,18 @@ export async function resolveDbUserScoped(req, columns) {
   // handlers that already hold the request tx). Falls back to ambient when
   // req.tx is absent (e.g. unit-test synthetic req, MCP path).
   const db = req?.tx ? cds.tx(req) : undefined;
+  // #2738: honor the before('*') pin FIRST. A PAT req.user (mcp-pat-middleware.js)
+  // pins the exact attr.dbUserId but carries NO iss/sub and, for a migrated user,
+  // a NULL sapId — so the tiered resolver below would miss. Resolving by the
+  // pinned PK mirrors resolveDbUser's fast-path (above).
+  if (user.attr?.dbUserId) {
+    const { Users } = cds.entities('com.sap.developers.ims');
+    let sel = SELECT.one.from(Users).where({ ID: user.attr.dbUserId });
+    if (columns && columns.length) sel = sel.columns(...columns);
+    const pinned = db ? await db.run(sel) : await sel;
+    if (pinned) return pinned;
+    // Pin set but row gone (deleted mid-request): fall through to the tiered path.
+  }
   const row = await resolveUser(user, db);
   if (!row) return null;
   if (columns && columns.length) {
@@ -734,6 +746,23 @@ export async function resolveDbUserScoped(req, columns) {
  */
 export async function getOrProvisionDbUser(req, { sapId } = {}, columns) {
   const user = req?.user;
+  // #2738: honor the before('*') pin FIRST. A PAT req.user (mcp-pat-middleware.js)
+  // pins the exact attr.dbUserId but has NO iss/sub and, for a migrated user, a
+  // NULL sapId → hasToken is false and the sapId fallback below would mint a
+  // spurious sapId=<email-shaped user.id> Users row instead of resolving the
+  // pinned one. Resolve by the pinned PK first (mirrors resolveDbUser's fast-path).
+  if (user?.attr?.dbUserId) {
+    const { Users } = cds.entities('com.sap.developers.ims');
+    // Thread the request tx when present; fall back to ambient when req.tx is
+    // absent (unit-test synthetic req / MCP path) — mirrors resolveDbUserScoped
+    // and avoids the single-connection SQLite deadlock cds.tx(req) would cause.
+    const db = req?.tx ? cds.tx(req) : undefined;
+    let sel = SELECT.one.from(Users).where({ ID: user.attr.dbUserId });
+    if (columns && columns.length) sel = sel.columns(...columns);
+    const pinned = db ? await db.run(sel) : await sel;
+    if (pinned) return pinned;
+    // Pin set but row gone (deleted mid-request): fall through to tiered/sapId.
+  }
   // Browser/IAS token present → tiered provision (handles null-sapId correctly).
   // Use iss+sub (OIDC), attr.email (XS token attribute), or name attrs as the
   // signal. Do NOT use emailFromUser's user.id fallback — basic-auth test users
