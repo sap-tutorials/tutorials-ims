@@ -7,6 +7,7 @@ import { mergeBlockquoteNoteDividers } from './blockquote-notes.js'
 import { extractIntro } from './intro.js'
 import { resolveImageURLs } from './images.js'
 import { resolveAttachmentLinks } from './attachment-links.js'
+import { resolveTutorialSlugLinks } from './tutorial-slug-links.js'
 import { prepPrerequisitesMarkup } from './prerequisites-markup.js'
 import { convertOptionBlocks } from './options.js'
 import { OS_VALUES, type OS } from './os-classifier.js'
@@ -137,6 +138,17 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     repo: opts.repo, branch: opts.branch, slug: opts.slug,
     rewrite: opts.rewriteImages,
   })
+
+  // [#2752] Rewrite legacy AEM bare-slug tutorial links `[text](some-slug)` to
+  // the canonical site-relative `/tutorials/some-slug`. Without this a
+  // scheme-less, slash-less href is resolved by the browser against the current
+  // tutorial's directory-style URL (so it points at the current page), and the
+  // #2680 render-link XSS guard now collapses it to `#` — either way the target
+  // tutorial is lost. Runs AFTER resolveAttachmentLinks so attachment-extension
+  // targets (.html/.md/...) are already rewritten and only true extension-less
+  // bare slugs remain. Not gated by rewriteImages: slug links are site-relative,
+  // not repo-relative, so the rewrite is correct regardless of that switch.
+  processedBody = resolveTutorialSlugLinks(processedBody)
 
   // [#1637] Prerequisites bypassed the body's image-URL rewriter and, because
   // its content is markdownified as-is, markdown images/links inside a raw
