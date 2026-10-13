@@ -49,17 +49,27 @@ const fs = require('node:fs');
 const path = require('node:path');
 const yauzl = require('yauzl');
 
-// Components built via `ui5 build` (preload prototype) ship MINIFIED/reformatted
-// files that intentionally differ byte-for-byte from unminified webapp/ source,
-// so a raw byte-compare would always report false drift for them. Shared with
+// Components built via `ui5 build` ship MINIFIED/reformatted files that
+// intentionally differ byte-for-byte from unminified webapp/ source, so a raw
+// byte-compare would always report false drift for them. Shared with
 // copy-components.js (single source of truth) so the two can't disagree. If the
 // shared module is ever absent (older checkout), fall back to an empty set so
 // the guard degrades to the original strict byte-compare rather than crashing.
+//
+// Test seam: CHECK_SHIPPED_ADMIN_PRELOAD (comma-separated folder names) pins the
+// preload set so byte-compare tests stay deterministic regardless of which real
+// tiles are enrolled. Mirrors CHECK_SHIPPED_ADMIN_ROOT. Real deploys never set it.
 let PRELOAD_COMPONENTS;
-try {
-  ({ PRELOAD_COMPONENTS } = require('../app/admin-shell/scripts/preload-components.cjs'));
-} catch {
-  PRELOAD_COMPONENTS = new Set();
+if (process.env.CHECK_SHIPPED_ADMIN_PRELOAD !== undefined) {
+  PRELOAD_COMPONENTS = new Set(
+    process.env.CHECK_SHIPPED_ADMIN_PRELOAD.split(',').map(s => s.trim()).filter(Boolean)
+  );
+} else {
+  try {
+    ({ PRELOAD_COMPONENTS } = require('../app/admin-shell/scripts/preload-components.cjs'));
+  } catch {
+    PRELOAD_COMPONENTS = new Set();
+  }
 }
 
 const ROOT = path.resolve(__dirname, '..');

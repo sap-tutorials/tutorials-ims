@@ -1,7 +1,8 @@
-const { cpSync, mkdirSync, existsSync } = require('node:fs')
+const { mkdirSync, existsSync } = require('node:fs')
 const { join } = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { discoverComponents } = require('./discover-admin-components')
+const { buildComponent } = require('./build-component.cjs')
 
 // Copy the `webapp/` of each auto-discovered Fiori app under `app/admin/`
 // into `dist/components/<name>/` for the deployed admin-shell.
@@ -56,23 +57,34 @@ mkdirSync(COMPONENTS_DIR, { recursive: true })
 
 const { components, skipped } = discoverComponents()
 
+// The injected `ui5 build` runner. Writes a self-contained dist tree (preload +
+// minified sources + raw worker file + manifest) straight into
+// dist/components/<folder>. Kept here (not in build-component.cjs) so the seam
+// stays free of child_process and is cheap to unit-test with a fake runner.
+function runUi5Build({ folder, dest, ui5Cli }) {
+  execFileSync(process.execPath, [ui5Cli, 'build', '--clean-dest', '--dest', dest], {
+    cwd: join(ADMIN_DIR, folder),
+    stdio: 'inherit',
+  })
+}
+
 let preloadCount = 0
+let fallbackCount = 0
+const fellBack = []
 for (const { folder } of components) {
   const src = join(ADMIN_DIR, folder, 'webapp')
   const dest = join(COMPONENTS_DIR, folder)
+  const isPreload =
+    PRELOAD_COMPONENTS.has(folder) && !!UI5_CLI && existsSync(join(ADMIN_DIR, folder, 'ui5.yaml'))
 
-  if (PRELOAD_COMPONENTS.has(folder) && UI5_CLI && existsSync(join(ADMIN_DIR, folder, 'ui5.yaml'))) {
-    // `ui5 build` writes a self-contained dist tree (preload + minified sources
-    // + raw worker file + manifest) straight into dist/components/<folder>.
-    execFileSync(process.execPath, [UI5_CLI, 'build', '--clean-dest', '--dest', dest], {
-      cwd: join(ADMIN_DIR, folder),
-      stdio: 'inherit',
-    })
+  const res = buildComponent({ folder, src, dest, isPreload, ui5Cli: UI5_CLI, runBuild: runUi5Build })
+
+  if (res.mode === 'preload') {
     preloadCount++
     console.log(`  Built (preload) ${folder}`)
   } else {
-    cpSync(src, dest, { recursive: true })
-    console.log(`  Copied ${folder}`)
+    if (res.fellBack) { fallbackCount++; fellBack.push(folder) }
+    console.log(`  Copied ${folder}${res.fellBack ? ' (preload build failed → raw copy)' : ''}`)
   }
 }
 
@@ -81,4 +93,11 @@ if (skipped.length > 0) {
   for (const name of skipped) console.log(`  - ${name}`)
 }
 
-console.log(`\nAll ${components.length} components written to dist/components/ (${preloadCount} via preload build, ${components.length - preloadCount} raw-copied)`)
+console.log(
+  `\nAll ${components.length} components written to dist/components/ ` +
+  `(${preloadCount} via preload build, ${components.length - preloadCount} raw-copied` +
+  `${fallbackCount ? `, of which ${fallbackCount} were preload FALLBACKS: ${fellBack.join(', ')}` : ''}).`
+)
+if (fallbackCount) {
+  console.warn(`\n⚠ ${fallbackCount} component(s) ship UNMINIFIED because their ui5 build failed — see warnings above. Deploy proceeds (fault-isolated).`)
+}

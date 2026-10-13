@@ -1,6 +1,6 @@
 specVersion: "4.0"
 metadata:
-  name: sap.tutorials.admin.featuredTopics
+  name: sap.tutorials.admin.featured-topics
 type: application
 framework:
   name: SAPUI5
