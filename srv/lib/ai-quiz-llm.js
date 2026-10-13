@@ -21,6 +21,7 @@
 import cds from '@sap/cds';
 import { OrchestrationClient } from '@sap-ai-sdk/orchestration';
 import { resolveChatLlmSettings } from './chat-settings-resolver.js';
+import { callWithBackoff } from './llm-backoff.js';
 
 const LOG = cds.log('ai-quiz-llm');
 
@@ -103,10 +104,18 @@ export async function callQuizModel({ messages, tools, toolChoice, schema }) {
     { deploymentId }
   );
 
-  // 4. Single non-streaming round-trip
-  const response = await client.chatCompletion({
-    messagesHistory: otherMessages.map(m => ({ role: m.role, content: m.content })),
-  });
+  // 4. Single non-streaming round-trip, wrapped in bounded exponential
+  //    backoff. The build path fires up to CONCURRENCY (=5) tutorials in
+  //    parallel against the orchestration endpoint; a transient 429/5xx under
+  //    that load would otherwise drop a quiz step silently. Non-retryable
+  //    errors (4xx, schema failures) still throw on the first attempt. See
+  //    srv/lib/llm-backoff.js.
+  const response = await callWithBackoff(
+    () => client.chatCompletion({
+      messagesHistory: otherMessages.map(m => ({ role: m.role, content: m.content })),
+    }),
+    { onRetry: (msg) => LOG.warn(`ai-quiz LLM ${msg}`) },
+  );
 
   // 5. Extract forced tool call
   const rawToolCalls = response.getToolCalls?.();

@@ -18,6 +18,7 @@ import {
 import { parseRulesVrEnriched, collectAiGradedSpecs, collectAllRules } from './parsers/rules.js'
 import { expandAiAuthoredQuestions, populateAiAuthoredSiblingMaps, isStepSubstantive, type ExpandStats } from './lib/expand-ai-authored.js'
 import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
+import { seedAiQuizCache, autoDetectPrimaryCacheDir } from './lib/ai-quiz-cache-seed.js'
 import { callQuizModel } from '../srv/lib/ai-quiz-llm.js'
 import { generateChallengeSpec } from '../srv/lib/ai-challenge-spec.js'
 import { PROMPT_VERSION as CHALLENGE_PROMPT_VERSION } from '../srv/lib/ai-challenge-spec.js'
@@ -743,6 +744,24 @@ async function main() {
   writeFileSync(join(CACHE_DIR, '.channel'), channel, 'utf-8')
 
   console.log(`[channel] ${channel} (cache: ${CACHE_DIR}, content: ${OUTPUT_DIR})\n`)
+
+  // [ai-quiz cold-cache guard] The AI-quiz cache (.tutorial-cache/<slug>.ai-quiz-cache.json)
+  // is git-ignored and worktree-local. In CI it's restored by actions/cache@v4, but a
+  // LOCAL deploy from a FRESH worktree starts cold, forcing every [AUTOAUTHOR_*] tutorial
+  // to regenerate from the LLM (~30 min on a full rebuild) — the "deploy is just slow"
+  // trap. Seed from a warm primary-tree cache when AI_QUIZ_CACHE_SEED_DIR points at one,
+  // and ALWAYS warn loudly when the cache is still cold so it's never a silent surprise.
+  {
+    // Resolve the primary-tree cache to seed from. Explicit env var wins; else
+    // auto-detect when running inside a .claude/worktrees/<name>/ checkout by
+    // walking up to the main repo root and using its matching cache dir. This
+    // makes the common "deploy from a fresh worktree" path warm with zero config.
+    const seedDir = process.env.AI_QUIZ_CACHE_SEED_DIR ?? autoDetectPrimaryCacheDir(CACHE_DIR)
+    const seedResult = seedAiQuizCache(CACHE_DIR, seedDir)
+    if (seedResult.cold) console.warn(seedResult.message)
+    else console.log(seedResult.message)
+    console.log()
+  }
 
   // QA channel: the QA site has NO rich homepage — the tutorial navigator IS
   // the QA root. Without an explicit `content-qa/_index.md`, the QA home falls
