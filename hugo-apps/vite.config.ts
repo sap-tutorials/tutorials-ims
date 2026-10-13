@@ -13,6 +13,7 @@ const MAX_PUZZLE_GZIP = 30 * 1024;
 const MAX_ADVOCATE_PROFILE_GZIP = 25 * 1024;
 const MAX_RELATED_GRAPH_GZIP = 12 * 1024;
 const MAX_LEARNING_PATH_GZIP = 12 * 1024;
+const MAX_GOAL_COMPLETION_GZIP = 8 * 1024;
 const MAX_ALERTS_GZIP = 12 * 1024;
 const MAX_HOMEPAGE_EXPLAINERS_GZIP = 12 * 1024;
 const MAX_HOMEPAGE_PERSONALIZER_GZIP = 12 * 1024;
@@ -234,6 +235,24 @@ function learningPathBudget() {
   };
 }
 
+function goalCompletionBudget() {
+  return {
+    name: 'goal-completion-budget',
+    generateBundle(_opts: unknown, bundle: Record<string, any>) {
+      const chunk = Object.values(bundle).find((c: any) => c.type === 'chunk' && c.name === 'goal-completion');
+      if (!chunk) return;
+      const gz = gzipSync(chunk.code).length;
+      if (gz > MAX_GOAL_COMPLETION_GZIP) {
+        // @ts-ignore — Rollup plugin context
+        this.error(`goal-completion.js is ${gz} bytes gzipped (> ${MAX_GOAL_COMPLETION_GZIP}). Move code to a lazy chunk.`);
+      } else {
+        // @ts-ignore
+        this.warn(`goal-completion.js: ${gz} bytes gzipped (budget ${MAX_GOAL_COMPLETION_GZIP}).`);
+      }
+    }
+  };
+}
+
 function petoberfestBudget() {
   return {
     name: 'petoberfest-budget',
@@ -253,7 +272,7 @@ function petoberfestBudget() {
 }
 
 export default defineConfig({
-  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), puzzleBudget(), relatedGraphBudget(), learningPathBudget(), alertsBudget(), homepageExplainersBudget(), advocateProfileBudget(), homepagePersonalizerBudget(), petoberfestBudget()],
+  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), puzzleBudget(), relatedGraphBudget(), learningPathBudget(), alertsBudget(), homepageExplainersBudget(), advocateProfileBudget(), homepagePersonalizerBudget(), petoberfestBudget(), goalCompletionBudget()],
   // Approuter serves these bundles at /js/. Without `base`, Vite emits
   // dynamic-import paths as `./chunks/x.js` which the browser resolves
   // against the *document URL* (e.g. `/` → `/chunks/x.js` → 404). Setting
@@ -312,6 +331,7 @@ export default defineConfig({
         alerts: resolve(__dirname, 'src/alerts/main.ts'),
         'related-graph': resolve(__dirname, 'src/related-graph/main.ts'),
         'learning-path': resolve(__dirname, 'src/learning-path/main.ts'),
+        'goal-completion': resolve(__dirname, 'src/goal-completion/main.ts'),
         'tutorial-reset': resolve(__dirname, 'src/tutorial-reset/main.ts'),
         'preview-banner': resolve(__dirname, 'src/validation/preview-banner.ts'),
         'homepage-bands': resolve(__dirname, 'src/homepage-bands/index.ts'),
