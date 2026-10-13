@@ -311,9 +311,12 @@ export async function rollUpParentsForCompletion({ dbUser, task, db, send = true
       const g = groupByLegacy.get(legacyId);
       if (!g) continue;
       const slots = resolveGroup(legacyId);
-      if (slots.length === 0) continue;
       const { satisfied, total } = evaluateSlots(slots, tokenSet, resolveGroup);
       if (total === 0) {
+        // Defensive + observability: evaluateSlots returns total===slots.length, so this covers
+        // both the truly-empty-path case and the all-INACTIVE-filtered case; emits the
+        // rollup.empty_slots signal that the Task 7 health endpoint surfaces, and future-proofs
+        // if that invariant ever changes.
         cds.log('rollup').warn('empty slots after INACTIVE filter', { kind: 'GROUP', legacyId });
         metrics.counter('rollup.empty_slots');
         continue;
@@ -326,9 +329,10 @@ export async function rollUpParentsForCompletion({ dbUser, task, db, send = true
     }
     for (const m of missionRows) {
       const slots = missionSlots.get(m.ID);
-      if (!slots || slots.length === 0) continue;
+      if (!slots) continue;
       const { satisfied, total } = evaluateSlots(slots, tokenSet, resolveGroup);
       if (total === 0) {
+        // Same: covers empty path AND all-INACTIVE-filtered; emits rollup.empty_slots.
         cds.log('rollup').warn('empty slots after INACTIVE filter', { kind: 'MISSION', legacyId: m.legacyId });
         metrics.counter('rollup.empty_slots');
         continue;

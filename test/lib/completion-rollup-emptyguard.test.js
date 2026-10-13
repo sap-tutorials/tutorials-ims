@@ -1,6 +1,7 @@
 // test/lib/completion-rollup-emptyguard.test.js
 import cds from '@sap/cds';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as metrics from '../../srv/lib/metrics.js';
 import { rollUpParentsForCompletion } from '../../srv/lib/completion-rollup.js';
 
 const NS = 'com.sap.developers.ims';
@@ -8,8 +9,10 @@ cds.test(cds.root);
 
 describe('empty-slot guard', () => {
   let db;
+  let spy;
   beforeEach(async () => {
     db = await cds.connect.to('db');
+    spy = vi.spyOn(metrics, 'counter');
     const { Users, Tutorials, Missions, CompletionPaths, CompletionPathItems } = cds.entities(NS);
     await db.run(INSERT.into(Users).entries({ ID: 'u-eg', sapId: 'EG1' }));
     // Mission whose only slot is an INACTIVE tutorial → filters to total 0.
@@ -19,6 +22,7 @@ describe('empty-slot guard', () => {
     await db.run(INSERT.into(CompletionPathItems).entries({ ID: 'cpi-eg', path_ID: 'cp-eg', taskType: 'TUTORIAL', taskLegacyId: 6001, itemOrder: 10 }));
   });
   afterEach(async () => {
+    spy.mockRestore();
     const E = cds.entities(NS);
     await db.run(DELETE.from(E.TaskRecords).where({ user_ID: 'u-eg' }));
     await db.run(DELETE.from(E.CompletionPathItems).where({ path_ID: 'cp-eg' }));
@@ -34,5 +38,6 @@ describe('empty-slot guard', () => {
     const { TaskRecords } = cds.entities(NS);
     const rows = await db.run(SELECT.from(TaskRecords).where({ user_ID: 'u-eg', taskType: 'MISSION' }));
     expect(rows).toHaveLength(0); // NOT auto-completed
+    expect(spy).toHaveBeenCalledWith('rollup.empty_slots'); // guard emitted observability signal
   });
 });
