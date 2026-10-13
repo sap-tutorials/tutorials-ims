@@ -862,11 +862,11 @@ pre code {
 
 /* Inline code */
 :not(pre) > code {
-  background-color: var(--sapField_Background, #f5f6f7);
+  background-color: #e5e9ee;
   color: var(--sapTextColor, #32363a);
   padding: 0.125rem 0.375rem;
   border-radius: 0.25rem;
-  font-size: 0.85em;
+  font-size: 0.90em;
 }
 
 /* Blockquotes */
