@@ -59,4 +59,18 @@ describe('completion-reconcile', () => {
     expect(m).toBeDefined();
     expect(m.badSlots.some(s => s.taskLegacyId === 5002 && s.reason === 'inactive')).toBe(true);
   });
+
+  it('findUnhealthyEntities emits empty marker when ALL slots are INACTIVE', async () => {
+    const { Tutorials } = cds.entities(NS);
+    // Mark BOTH tutorials INACTIVE → zero active slots → whole-entity 'empty' marker
+    await db.run(UPDATE(Tutorials, 't-a').set({ status: 'INACTIVE' }));
+    await db.run(UPDATE(Tutorials, 't-b').set({ status: 'INACTIVE' }));
+    const bad = await findUnhealthyEntities(db);
+    const m = bad.find(e => e.legacyId === 5500);
+    expect(m).toBeDefined();
+    // Per-slot inactive entries still present for each dead tutorial
+    expect(m.badSlots.filter(s => s.reason === 'inactive')).toHaveLength(2);
+    // Whole-entity 'empty' marker also present (independent of per-slot entries)
+    expect(m.badSlots.some(s => s.reason === 'empty' && s.taskLegacyId === null)).toBe(true);
+  });
 });

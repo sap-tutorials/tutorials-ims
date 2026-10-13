@@ -58,7 +58,7 @@ export async function reconcileEntityForUsers({ kind, legacyId, db, userIds, sen
       slots = await loadMissionSlots(e.ID, db);
       for (const s of slots) if (s.groupId != null) await ensureGroup(s.groupId);
     }
-    if (slots.length === 0) return result;
+    if (slots.length === 0) { result.flagged = 1; return result; }
 
     // total===0 → all slots filtered (e.g. all INACTIVE); guard before writing.
     const probe = evaluateSlots(slots, new Set(), resolveGroup);
@@ -114,71 +114,79 @@ export async function reconcileEntityForUsers({ kind, legacyId, db, userIds, sen
  * @returns {Promise<Array<{ kind: string, legacyId: number, title: string, slug: string|null, badSlots: Array<{ taskLegacyId: number|null, reason: string }> }>>}
  */
 export async function findUnhealthyEntities(db) {
-  const out = [];
-  const { Missions, Groups, Tutorials, GroupPathItems, CompletionPaths, CompletionPathItems } = cds.entities(NS);
-  const isActive = (s) => s == null || s === 'ACTIVE';
+  try {
+    const out = [];
+    const { Missions, Groups, Tutorials, GroupPathItems, CompletionPaths, CompletionPathItems } = cds.entities(NS);
+    const isActive = (s) => s == null || s === 'ACTIVE';
 
-  // --- Groups ---
-  const groups = await db.run(SELECT.from(Groups).columns('ID', 'legacyId', 'title', 'slug').where({ published: true }));
-  for (const g of groups) {
-    const items = await db.run(SELECT.from(GroupPathItems).where({ group_ID: g.ID }));
-    if (!items.length) continue;
-    const tutIds = items.map(i => i.tutorial_ID).filter(Boolean);
-    const tuts = tutIds.length
-      ? await db.run(SELECT.from(Tutorials).columns('ID', 'legacyId', 'status').where({ ID: { in: tutIds } }))
-      : [];
-    const byId = new Map(tuts.map(t => [t.ID, t]));
-    const badSlots = [];
-    let activeCount = 0;
-    for (const i of items) {
-      const t = byId.get(i.tutorial_ID);
-      if (!t) {
-        badSlots.push({ taskLegacyId: null, reason: 'unresolved' });
-      } else if (!isActive(t.status)) {
-        badSlots.push({ taskLegacyId: t.legacyId, reason: 'inactive' });
-      } else {
-        activeCount++;
+    // --- Groups ---
+    const groups = await db.run(SELECT.from(Groups).columns('ID', 'legacyId', 'title', 'slug').where({ published: true }));
+    for (const g of groups) {
+      const items = await db.run(SELECT.from(GroupPathItems).where({ group_ID: g.ID }));
+      if (!items.length) continue;
+      const tutIds = items.map(i => i.tutorial_ID).filter(Boolean);
+      const tuts = tutIds.length
+        ? await db.run(SELECT.from(Tutorials).columns('ID', 'legacyId', 'status').where({ ID: { in: tutIds } }))
+        : [];
+      const byId = new Map(tuts.map(t => [t.ID, t]));
+      const badSlots = [];
+      let activeCount = 0;
+      for (const i of items) {
+        const t = byId.get(i.tutorial_ID);
+        if (!t) {
+          badSlots.push({ taskLegacyId: null, reason: 'unresolved' });
+        } else if (!isActive(t.status)) {
+          badSlots.push({ taskLegacyId: t.legacyId, reason: 'inactive' });
+        } else {
+          activeCount++;
+        }
       }
+      // 'empty' marks the whole entity as zero-active — independent of per-slot badSlots.
+      // A fully-dead entity gets BOTH its per-slot inactive/unresolved entries AND this marker.
+      if (activeCount === 0 && items.length > 0) {
+        badSlots.push({ taskLegacyId: null, reason: 'empty' });
+      }
+      if (badSlots.length) out.push({ kind: 'GROUP', legacyId: g.legacyId, title: g.title, slug: g.slug, badSlots });
     }
-    if (activeCount === 0 && items.length > 0 && badSlots.length === 0) {
-      // all items filtered — shouldn't happen (badSlots captures each), but guard
-      badSlots.push({ taskLegacyId: null, reason: 'empty' });
-    }
-    if (badSlots.length) out.push({ kind: 'GROUP', legacyId: g.legacyId, title: g.title, slug: g.slug, badSlots });
-  }
 
-  // --- Missions (direct TUTORIAL items only; nested GROUP health is reported per group above) ---
-  const missions = await db.run(SELECT.from(Missions).columns('ID', 'legacyId', 'title', 'slug').where({ published: true }));
-  for (const m of missions) {
-    const paths = await db.run(SELECT.from(CompletionPaths).columns('ID').where({ mission_ID: m.ID }));
-    if (!paths.length) continue;
-    const pathIds = paths.map(p => p.ID);
-    const items = await db.run(SELECT.from(CompletionPathItems).where({
-      path_ID: { in: pathIds },
-      taskType: 'TUTORIAL',
-    }));
-    if (!items.length) continue;
-    const legacyIds = items.map(i => i.taskLegacyId).filter(v => v != null);
-    const tuts = legacyIds.length
-      ? await db.run(SELECT.from(Tutorials).columns('legacyId', 'status').where({ legacyId: { in: legacyIds } }))
-      : [];
-    const byLegacy = new Map(tuts.map(t => [t.legacyId, t]));
-    const badSlots = [];
-    let activeCount = 0;
-    for (const i of items) {
-      const t = byLegacy.get(i.taskLegacyId);
-      if (!t) {
-        badSlots.push({ taskLegacyId: i.taskLegacyId, reason: 'unresolved' });
-      } else if (!isActive(t.status)) {
-        badSlots.push({ taskLegacyId: t.legacyId, reason: 'inactive' });
-      } else {
-        activeCount++;
+    // --- Missions (direct TUTORIAL items only; nested GROUP health is reported per group above) ---
+    const missions = await db.run(SELECT.from(Missions).columns('ID', 'legacyId', 'title', 'slug').where({ published: true }));
+    for (const m of missions) {
+      const paths = await db.run(SELECT.from(CompletionPaths).columns('ID').where({ mission_ID: m.ID }));
+      if (!paths.length) continue;
+      const pathIds = paths.map(p => p.ID);
+      const items = await db.run(SELECT.from(CompletionPathItems).where({
+        path_ID: { in: pathIds },
+        taskType: 'TUTORIAL',
+      }));
+      if (!items.length) continue;
+      const legacyIds = items.map(i => i.taskLegacyId).filter(v => v != null);
+      const tuts = legacyIds.length
+        ? await db.run(SELECT.from(Tutorials).columns('legacyId', 'status').where({ legacyId: { in: legacyIds } }))
+        : [];
+      const byLegacy = new Map(tuts.map(t => [t.legacyId, t]));
+      const badSlots = [];
+      let activeCount = 0;
+      for (const i of items) {
+        const t = byLegacy.get(i.taskLegacyId);
+        if (!t) {
+          badSlots.push({ taskLegacyId: i.taskLegacyId, reason: 'unresolved' });
+        } else if (!isActive(t.status)) {
+          badSlots.push({ taskLegacyId: t.legacyId, reason: 'inactive' });
+        } else {
+          activeCount++;
+        }
       }
+      // 'empty' marks the whole entity as zero-active — independent of per-slot badSlots.
+      if (activeCount === 0 && items.length > 0) {
+        badSlots.push({ taskLegacyId: null, reason: 'empty' });
+      }
+      if (badSlots.length) out.push({ kind: 'MISSION', legacyId: m.legacyId, title: m.title, slug: m.slug, badSlots });
     }
-    if (activeCount === 0 && items.length > 0 && badSlots.length === 0) {
-      badSlots.push({ taskLegacyId: null, reason: 'empty' });
-    }
-    if (badSlots.length) out.push({ kind: 'MISSION', legacyId: m.legacyId, title: m.title, slug: m.slug, badSlots });
+    return out;
+  } catch (err) {
+    LOG.error('findUnhealthyEntities failed (non-fatal):', err.message);
+    metrics.counter('rollup.failures');
+    return [];
   }
-  return out;
 }
