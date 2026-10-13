@@ -4,7 +4,7 @@ import { getNextLegacyId } from './lib/legacy-id.js';
 import { hashIp } from './lib/feedback-salt.js';
 import { getMyCompletedTutorials, getMyInProgressTutorials } from './lib/user-progress.js';
 import { PROFILE_VOCAB } from './lib/branch/profile-fields.js';
-import { resolveUserSapId, provisionDbUser, resolveUser } from './lib/resolve-db-user.js';
+import { resolveUserSapId, provisionDbUser, resolveUser, resolveDbUserScoped, getOrProvisionDbUser } from './lib/resolve-db-user.js';
 import { resolveUser as khorosResolveUser } from './lib/khoros-client.js';
 import * as khorosCache from './lib/khoros-cache.js';
 import { checkRateLimit } from './lib/per-user-rate-limit.js';
@@ -146,31 +146,11 @@ export default class DeveloperService extends cds.ApplicationService {
       }
 
       if (!sapId) return req.reject(401, 'Unauthenticated');
-      let dbUser = await SELECT.one.from(dbUsers).where({ sapId });
-      if (!dbUser) {
-        // Get or create user. For the browser path req.user carries attr (email etc.);
-        // for the MCP *For path we have only the sapId — create a minimal row.
-        const user = req.user;
-        const newUser = {
-          // Explicit UUID key: these writes go straight to cds.db (bare
-          // INSERT.into(dbUsers) on the db-model entity), which does NOT run
-          // the ApplicationService key-generation handler. SQLite fills the
-          // UUID at its db layer so unit tests pass, but HANA leaves ID NULL →
-          // "cannot insert NULL ... ID" (code 287) for any never-migrated user
-          // (issue #1614). cds.utils.uuid() makes the INSERT layer-independent.
-          // uuid is also String(36) — req.user.id is the user's email under
-          // XSUAA tokens and overflows that column for long addresses (#1614).
-          ID: cds.utils.uuid(),
-          uuid: cds.utils.uuid(),
-          sapId,
-          legacyId: await getNextLegacyId('Users', db),
-          email: user?.attr?.email || '',
-          firstName: user?.attr?.given_name || '',
-          lastName: user?.attr?.family_name || ''
-        };
-        await INSERT.into(dbUsers).entries(newUser);
-        dbUser = await SELECT.one.from(dbUsers).where({ sapId });
-      }
+      // #2730: resolve via tiered resolver (provisionDbUser for token users,
+      // sapId-only mint for token-less MCP *For path). Replaces the direct
+      // sapId SELECT + hand-rolled mint that broke null-sapId IAS/social/GitHub logins.
+      const dbUser = await getOrProvisionDbUser(req, { sapId }, ['ID']);
+      if (!dbUser) return req.reject(401, 'Unauthenticated');
 
       // Check if step already completed (ignore SUPERSEDED rows from prior attempts)
       const existing = await SELECT.one.from(dbTaskRecords).where({
@@ -237,8 +217,11 @@ export default class DeveloperService extends cds.ApplicationService {
       const tutorial = await SELECT.one.from(dbTutorials).where`LOWER(slug) = ${slug.toLowerCase()}`;
       if (!tutorial) return req.reject(404, `Tutorial not found: ${slug}`);
 
-      // 2. Resolve user (sapId → dbUser)
-      const dbUser = await SELECT.one.from(dbUsers).where({ sapId });
+      // 2. Resolve user (sapId → dbUser). #2730: tiered resolver so null-sapId
+      // IAS/social/GitHub logins are found via (iss,sub) identity link.
+      // Preserves no-op-on-miss: if the user has no record at all, return the
+      // "fresh start" shape rather than 401 (consistent with pre-fix behavior).
+      const dbUser = await getOrProvisionDbUser(req, { sapId }, ['ID']);
       if (!dbUser) {
         return { newAttemptNumber: 1, previousAttemptCompletedAt: null, supersededRecordCount: 0 };
       }
@@ -326,7 +309,6 @@ export default class DeveloperService extends cds.ApplicationService {
 
     this.on('getProgress', async (req) => {
       const slug = String(req.data.slug || '').toLowerCase();
-      const user = req.user;
 
       // Case-insensitive lookup (issue #2714 — see completeStep)
       const tutorial = await SELECT.one.from(dbTutorials).where`LOWER(slug) = ${slug}`;
@@ -334,10 +316,10 @@ export default class DeveloperService extends cds.ApplicationService {
 
       const steps = await SELECT.from(dbSteps).where({ tutorial_ID: tutorial.ID });
 
-      // Find user's task records for this tutorial's steps. Issue #343:
-      // lookup by sapId (the JWT user_uuid claim), not uuid (= email).
-      const sapId = resolveUserSapId(user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
+      // Find user's task records for this tutorial's steps. #2730: use the
+      // tiered resolver (pin → (iss,sub) identity link → sapId) so null-sapId
+      // social/IAS/GitHub logins also resolve. Issue #343 context preserved.
+      const dbUser = await resolveDbUserScoped(req);
       if (!dbUser) return { completedSteps: [], points: 0, badges: [] };
 
       // Scope step records to the user's current (non-SUPERSEDED) attempt so a
@@ -405,8 +387,10 @@ export default class DeveloperService extends cds.ApplicationService {
       const { taskLegacyId, taskType, eventLegacyId } = req.data;
       const user = req.user;
 
-      const sapId = resolveUserSapId(user);
-      let dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
+      // #2730: resolve via tiered resolver so null-sapId IAS/social/GitHub logins
+      // are found via (iss,sub) identity link. Legacy endpoint: no provision,
+      // return 404 when the user has no record.
+      const dbUser = await resolveDbUserScoped(req, ['ID']);
       if (!dbUser) return req.reject(404, 'User not found');
 
       let event_ID = null;
@@ -467,8 +451,8 @@ export default class DeveloperService extends cds.ApplicationService {
       // `userLegacyId` (which is ignored for identity — see .cds note). Prevents
       // any authenticated caller from reading another user's TaskRecords by
       // enumerating the sequential legacyId. Mirrors getProgress / getMyCompletions.
-      const sapId = resolveUserSapId(req.user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
+      // #2730: use the tiered resolver so null-sapId identity-link users are found.
+      const dbUser = await resolveDbUserScoped(req);
       if (!dbUser) return [];
 
       return SELECT.from(dbTaskRecords).where({
@@ -479,8 +463,8 @@ export default class DeveloperService extends cds.ApplicationService {
 
     this.on('countCompletedMissionsTotal', async (req) => {
       // #1231: self-scoped by JWT; client `userLegacyId` ignored for identity.
-      const sapId = resolveUserSapId(req.user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
+      // #2730: use the tiered resolver so null-sapId identity-link users are found.
+      const dbUser = await resolveDbUserScoped(req);
       if (!dbUser) return 0;
 
       const records = await SELECT.from(dbTaskRecords).where({
@@ -494,8 +478,8 @@ export default class DeveloperService extends cds.ApplicationService {
 
     this.on('countCompletedMissionsPercent', async (req) => {
       // #1231: self-scoped by JWT; client `userLegacyId` ignored for identity.
-      const sapId = resolveUserSapId(req.user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
+      // #2730: use the tiered resolver so null-sapId identity-link users are found.
+      const dbUser = await resolveDbUserScoped(req);
       if (!dbUser) return 0;
 
       const completedMissions = await SELECT.from(dbTaskRecords).where({
@@ -568,7 +552,6 @@ export default class DeveloperService extends cds.ApplicationService {
 
     this.on('getEventProgress', async (req) => {
       const { missionLegacyId } = req.data;
-      const user = req.user;
 
       const mission = await SELECT.one.from(dbMissions).where({ legacyId: missionLegacyId });
       if (!mission) return req.reject(404, `Mission not found: ${missionLegacyId}`);
@@ -595,8 +578,8 @@ export default class DeveloperService extends cds.ApplicationService {
       const recordLegacyIds = [...new Set([...effLegacyByItem.values()].filter(v => v != null))];
 
       let userRecords = [];
-      const sapId = resolveUserSapId(user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
+      // #2730: use the tiered resolver so null-sapId identity-link users are found.
+      const dbUser = await resolveDbUserScoped(req, ['ID']);
       if (dbUser && recordLegacyIds.length > 0) {
         userRecords = await SELECT.from(dbTaskRecords).where({
           user_ID: dbUser.ID,
@@ -657,7 +640,6 @@ export default class DeveloperService extends cds.ApplicationService {
 
     this.on('getAppSpaceProgress', async (req) => {
       const { eventLegacyId } = req.data;
-      const user = req.user;
 
       let event;
       if (eventLegacyId) {
@@ -708,8 +690,8 @@ export default class DeveloperService extends cds.ApplicationService {
       const recordLegacyIds = [...new Set([...effLegacyByItem.values()].filter(v => v != null))];
 
       let userRecords = [];
-      const sapId = resolveUserSapId(user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
+      // #2730: use the tiered resolver so null-sapId identity-link users are found.
+      const dbUser = await resolveDbUserScoped(req, ['ID']);
       if (dbUser && recordLegacyIds.length > 0) {
         userRecords = await SELECT.from(dbTaskRecords).where({
           user_ID: dbUser.ID,
@@ -725,7 +707,7 @@ export default class DeveloperService extends cds.ApplicationService {
         eventDescription: renderMarkdown(event.description),   // #2296: admin-authored Markdown → safe HTML for the app-space hero
         eventType: event.eventType ?? 'OTHER',
         hasLogo: Boolean(event.hasLogo),
-        authenticated: Boolean(sapId),   // #2314: false only for anonymous callers → client skips the logged-in-only realtime/confetti path. Truthy even if no Users row exists yet (identity resolved from JWT).
+        authenticated: Boolean(dbUser),   // #2314/#2730: false only for anonymous callers → client skips the logged-in-only realtime/confetti path. Truthy when user resolves via any tier (sapId, identity link, or pin).
         type: 'COMPLEX',
         paths: paths.map(p => {
           const items = allItems
@@ -908,8 +890,8 @@ export default class DeveloperService extends cds.ApplicationService {
     // any caller-supplied $filter, so a partner can filter WITHIN their own rows
     // but cannot widen past them.
     this.before('READ', 'TaskRecords', async (req) => {
-      const sapId = resolveUserSapId(req.user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).columns('ID').where({ sapId }) : null;
+      // #2730: use the tiered resolver so null-sapId identity-link users are found.
+      const dbUser = await resolveDbUserScoped(req, ['ID']);
       // Always constrain at the QUERY level. Assigning req.results = [] in a
       // before('READ') is NOT a reliable short-circuit in CAP 10 (the READ still
       // runs), so scope via req.query.where in BOTH branches: the caller's own
@@ -929,8 +911,8 @@ export default class DeveloperService extends cds.ApplicationService {
     // get AND-precedence wrong on existing where clauses and are a security
     // boundary; do NOT revert.
     this.before('READ', 'LearningPreferences', async (req) => {
-      const sapId = resolveUserSapId(req.user);
-      const dbUser = sapId ? await SELECT.one.from(dbUsers).columns('ID').where({ sapId }) : null;
+      // #2730: use the tiered resolver so null-sapId identity-link users are found.
+      const dbUser = await resolveDbUserScoped(req, ['ID']);
       // #1232: constrain at the QUERY level in BOTH branches. The prior
       // `if (!dbUser) { req.results = []; return; }` did NOT reliably
       // short-circuit in CAP 10 — the READ still ran and returned EVERY user's
@@ -960,26 +942,12 @@ export default class DeveloperService extends cds.ApplicationService {
       }
 
       // Auto-provision the Users row for first-time savers (mirrors completeStep
-      // pattern at developer-service.js:122-135). A learner who lands on /me/
-      // before completing any tutorial otherwise hits a hard 404 here.
-      // Issue #343: lookup + auto-provision keyed on sapId (the JWT user_uuid
-      // claim) so migrated IMS users are matched to their existing row.
-      const sapId = resolveUserSapId(req.user);
-      if (!sapId) return req.reject(401, 'Unauthenticated');
-      let dbUser = await SELECT.one.from(dbUsers).where({ sapId });
-      if (!dbUser) {
-        const newUser = {
-          ID: cds.utils.uuid(),  // explicit UUID key — direct cds.db INSERT, see #1614 note above
-          uuid: cds.utils.uuid(),  // String(36): req.user.id is email under XSUAA → overflows on long addresses (#1614)
-          sapId,
-          legacyId: await getNextLegacyId('Users', db),
-          email: req.user.attr?.email || '',
-          firstName: req.user.attr?.given_name || '',
-          lastName: req.user.attr?.family_name || '',
-        };
-        await INSERT.into(dbUsers).entries(newUser);
-        dbUser = await SELECT.one.from(dbUsers).where({ sapId });
-      }
+      // pattern). #2730: use getOrProvisionDbUser (tiered: provisionDbUser for
+      // token users handles null-sapId IAS/social/GitHub logins via identity link;
+      // sapId-only mint for token-less MCP paths). Replaces the direct
+      // resolveUserSapId + sapId SELECT + hand-rolled mint that 401'd null-sapId users.
+      const dbUser = await getOrProvisionDbUser(req, { sapId: resolveUserSapId(req.user) }, ['ID']);
+      if (!dbUser) return req.reject(401, 'Unauthenticated');
 
       // PUT-style write — SELECT-then-INSERT-or-UPDATE (codebase-wide idiom).
       const existing = await SELECT.one.from(UserLearningPreferences)
@@ -1007,23 +975,10 @@ export default class DeveloperService extends cds.ApplicationService {
         return req.error(400, `region: must be one of [${PROFILE_VOCAB.preferredEventRegion.join(', ')}] or null`);
       }
 
-      // Auto-provision Users row (mirrors setLearningPreferences).
-      const sapId = resolveUserSapId(req.user);
-      if (!sapId) return req.reject(401, 'Unauthenticated');
-      let dbUser = await SELECT.one.from(dbUsers).where({ sapId });
-      if (!dbUser) {
-        const newUser = {
-          ID: cds.utils.uuid(),  // explicit UUID key — direct cds.db INSERT, see #1614 note above
-          uuid: cds.utils.uuid(),  // String(36): req.user.id is email under XSUAA → overflows on long addresses (#1614)
-          sapId,
-          legacyId: await getNextLegacyId('Users', db),
-          email: req.user.attr?.email || '',
-          firstName: req.user.attr?.given_name || '',
-          lastName: req.user.attr?.family_name || '',
-        };
-        await INSERT.into(dbUsers).entries(newUser);
-        dbUser = await SELECT.one.from(dbUsers).where({ sapId });
-      }
+      // Auto-provision Users row. #2730: use getOrProvisionDbUser (tiered resolver)
+      // so null-sapId IAS/social/GitHub logins are found via identity link.
+      const dbUser = await getOrProvisionDbUser(req, { sapId: resolveUserSapId(req.user) }, ['ID']);
+      if (!dbUser) return req.reject(401, 'Unauthenticated');
 
       // SELECT-then-INSERT-or-UPDATE (codebase-wide idiom, zero direct UPSERTs).
       const existing = await SELECT.one.from(UserLearningPreferences)
@@ -1048,7 +1003,6 @@ export default class DeveloperService extends cds.ApplicationService {
 
     this.on('setKhorosLink', async (req) => {
       const sapId = resolveUserSapId(req.user);
-      if (!sapId) return req.reject(401, 'Unauthenticated');
       const input = String(req.data?.input ?? '').trim();
       if (!input || input.length > 64) return { status: 'invalid-input' };
       let profile;
@@ -1060,26 +1014,11 @@ export default class DeveloperService extends cds.ApplicationService {
       }
       if (!profile) return { status: 'not-found' };
       try {
-        // Auto-provision the Users row if missing — a learner can land on
-        // /me/#learning-preferences and link their community profile before
-        // completing any tutorial (same SELECT-then-INSERT idiom as
-        // setLearningPreferences above; issue #343 / #1614). Previously this
-        // hard-rejected 404 "User row missing", which the frontend surfaced as
-        // silence (an OData error envelope has no `.status` field).
-        let dbUser = await SELECT.one.from(dbUsers).where({ sapId });
-        if (!dbUser) {
-          const newUser = {
-            ID: cds.utils.uuid(),  // explicit UUID key — direct cds.db INSERT, see #1614 note above
-            uuid: cds.utils.uuid(),  // String(36): req.user.id is email under XSUAA → overflows on long addresses (#1614)
-            sapId,
-            legacyId: await getNextLegacyId('Users', db),
-            email: req.user.attr?.email || '',
-            firstName: req.user.attr?.given_name || '',
-            lastName: req.user.attr?.family_name || '',
-          };
-          await INSERT.into(dbUsers).entries(newUser);
-          dbUser = await SELECT.one.from(dbUsers).where({ sapId });
-        }
+        // Auto-provision the Users row if missing. #2730: use getOrProvisionDbUser
+        // (tiered resolver) so null-sapId IAS/social/GitHub logins are found via
+        // identity link. Replaces direct sapId guard + sapId SELECT + hand-rolled mint.
+        const dbUser = await getOrProvisionDbUser(req, { sapId }, ['ID']);
+        if (!dbUser) return req.reject(401, 'Unauthenticated');
         await UPDATE(dbUsers)
           .set({
             khorosId: profile.id,
@@ -1108,11 +1047,12 @@ export default class DeveloperService extends cds.ApplicationService {
     });
 
     this.on('clearKhorosLink', async (req) => {
-      const sapId = resolveUserSapId(req.user);
-      if (!sapId) return req.reject(401, 'Unauthenticated');
-      const dbUser = await SELECT.one.from(dbUsers).where({ sapId });
-      if (!dbUser) return { status: 'ok' };  // already unlinked
+      // #2730: use tiered resolver so null-sapId identity-link users are found.
+      // No provision needed (clear-only): resolveDbUserScoped, no-op on miss.
+      const dbUser = await resolveDbUserScoped(req, ['ID', 'khorosId']);
+      if (!dbUser) return { status: 'ok' };  // already unlinked (no row)
       const prevKhorosId = dbUser.khorosId;
+      const sapId = resolveUserSapId(req.user); // for log only
       await UPDATE(dbUsers)
         .set({ khorosId: null, khorosLogin: null, khorosAvatarUrl: null, khorosLinkedAt: null })
         .where({ ID: dbUser.ID });
@@ -1122,12 +1062,9 @@ export default class DeveloperService extends cds.ApplicationService {
     });
 
     this.on('getKhorosProfile', async (req) => {
-      const sapId = resolveUserSapId(req.user);
-      if (!sapId) return req.reject(401, 'Unauthenticated');
-      const dbUser = await SELECT.one
-        .from(dbUsers)
-        .columns('ID', 'khorosId', 'khorosLogin', 'khorosAvatarUrl')
-        .where({ sapId });
+      // #2730: use the tiered resolver so null-sapId identity-link users are found.
+      const dbUser = await resolveDbUserScoped(req, ['ID', 'khorosId', 'khorosLogin', 'khorosAvatarUrl']);
+      if (!dbUser) return req.reject(401, 'Unauthenticated');
       if (!dbUser?.khorosId) return { linked: false };
       const persisted = {
         linked: true,
@@ -1145,11 +1082,11 @@ export default class DeveloperService extends cds.ApplicationService {
       try {
         upstream = await khorosResolveUser(dbUser.khorosId);
       } catch (err) {
-        cds.log('khoros').warn('getKhorosProfile upstream error', { sapId, khorosId: dbUser.khorosId, err: err.message });
+        cds.log('khoros').warn('getKhorosProfile upstream error', { userId: dbUser.ID, khorosId: dbUser.khorosId, err: err.message });
       }
       if (!upstream) {
         // Last-known-good: render the chip with persisted data, blank rank.
-        cds.log('khoros').warn('getKhorosProfile upstream null', { sapId, khorosId: dbUser.khorosId });
+        cds.log('khoros').warn('getKhorosProfile upstream null', { userId: dbUser.ID, khorosId: dbUser.khorosId });
         return { ...persisted, name: dbUser.khorosLogin || '', rank: '' };
       }
       // Refresh cache + write back avatar if it drifted.
