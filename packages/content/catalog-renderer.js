@@ -72,6 +72,23 @@ function titleCase(s) {
   return String(s ?? '').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+// Build the goal-completion island mount + entry script for a detail page.
+// The goal's (de-duplicated, order-preserving) tutorial slugs are stamped onto
+// the mount node as an HTML-escaped JSON array; the island reads them, fetches
+// per-user progress client-side, and renders a bar / "X of Y complete" /
+// Completed badge. Server render stays per-slug cacheable — no per-user data.
+function goalCompletionIsland(tutorialSlugs) {
+  const seen = new Set();
+  const slugs = [];
+  for (const s of tutorialSlugs) {
+    const slug = String(s ?? '');
+    if (slug && !seen.has(slug)) { seen.add(slug); slugs.push(slug); }
+  }
+  const attr = escapeHtml(JSON.stringify(slugs));
+  return `<div data-vue-island="goal-completion" data-tutorial-slugs="${attr}"></div>
+<script type="module" src="${islandSrc('goal-completion')}"></script>`;
+}
+
 export function renderGroupBody(ctx, opts = {}) {
   const { group, tutorials, tutorialCount, totalTime, level } = ctx;
   const now = opts.now ?? new Date();
@@ -141,6 +158,7 @@ ${cards}
   </div>
 </div>
 <script type="module" src="${islandSrc('nav-dropdown')}"></script>
+${goalCompletionIsland(tutorials.map(t => t.slug))}
 <div data-vue-island="learning-path" data-goal-type="group"></div>
 <script type="module" src="${islandSrc('learning-path')}"></script>`;
 }
@@ -239,6 +257,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 <script type="module" src="${islandSrc('nav-dropdown')}"></script>
+${goalCompletionIsland(groups.flatMap(g => g.tutorials.map(t => t.slug)))}
 <div data-vue-island="learning-path" data-goal-type="mission"></div>
 <script type="module" src="${islandSrc('learning-path')}"></script>`;
 }

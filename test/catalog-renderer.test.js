@@ -274,3 +274,22 @@ describe('renderMissionBody — synthetic groups (#382 phase F1)', () => {
     expect(html).toContain('href="/tutorials/group-g-nested"');
   });
 });
+
+describe('goal-completion island (issue #2733)', () => {
+  it('group body mounts the goal-completion island with the group tutorial slugs', () => {
+    const html = renderGroupBody(fxGroup, { now: TODAY });
+    expect(html).toContain('data-vue-island="goal-completion"');
+    // slugs stamped as a JSON array the island parses client-side
+    expect(html).toContain('data-tutorial-slugs="[&quot;t1&quot;,&quot;t2&quot;]"');
+    // island entry script wired via islandSrc
+    expect(html).toMatch(/<script type="module" src="[^"]*goal-completion[^"]*">/);
+  });
+
+  it('mission body mounts the goal-completion island with the flattened tutorial slugs', () => {
+    const html = renderMissionBody(fxMission);
+    expect(html).toContain('data-vue-island="goal-completion"');
+    // mission flattens every group's tutorials: t1 (from first group) + t2 (second)
+    expect(html).toContain('data-tutorial-slugs="[&quot;t1&quot;,&quot;t2&quot;]"');
+    expect(html).toMatch(/<script type="module" src="[^"]*goal-completion[^"]*">/);
+  });
+});
