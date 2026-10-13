@@ -8,7 +8,7 @@
 // Spec: docs/superpowers/specs/2026-10-13-group-mission-cascade-selfheal-design.md
 import cds from '@sap/cds';
 import {
-  loadGroupSlots, loadMissionSlots, evaluateSlots, getUserCompletedMap, upsertRollupRecord, tokenFor,
+  loadGroupSlots, loadMissionSlots, evaluateSlots, getUserCompletedMap, upsertRollupRecord,
 } from './completion-rollup.js';
 import * as metrics from './metrics.js';
 
