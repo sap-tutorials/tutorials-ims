@@ -54,6 +54,22 @@ export default defineConfig({
           // live here.
           testTimeout: 30_000,
           hookTimeout: 60000,
+          // Pin the fork pool + a single retry. ~400 unit files each boot a
+          // `cds.test('serve')` CAP server; vitest's default fan-out (one
+          // worker per CPU — 24 locally, up to 4 on a GH runner) occasionally
+          // starves one file's cold boot past the 30s testTimeout. Observed as
+          // intermittent 30s timeouts on `/admin/$metadata` in
+          // admin-schema-ext.test.js — not an assertion bug (the file passes
+          // 3/3 in isolation). Same unbounded-fan-out failure the smoke/e2e/
+          // hybrid-qa tiers already pin against; mirror their fix here.
+          // `maxWorkers` caps CI concurrency so boots don't pile up (left
+          // unbounded locally, where the box has headroom). `retry: 1` on CI
+          // absorbs a lone transient boot-starvation blip — the single lever
+          // that would have turned every recent intermittent red green —
+          // without masking a deterministic failure (which fails both tries).
+          pool: 'forks',
+          maxWorkers: process.env.CI ? 4 : undefined,
+          retry: process.env.CI ? 1 : 0,
           // Stamp a stable in-memory cds-caching config for every unit worker
           // via env vars (cds reads `cds_requires_*` natively). This closes
           // the fork-pool boot race (issue #1179 / #1177): several unit files
