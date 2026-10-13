@@ -1562,6 +1562,56 @@ a.author-line-name:hover {
   white-space: nowrap;
 }
 
+/* #2745: updated-date carries a hover/focus tooltip with the full timestamp
+   converted to the viewer's local timezone. */
+.author-line-date--updated {
+  position: relative;
+  cursor: help;
+  outline: none;
+}
+
+.author-line-date-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  z-index: 20;
+  width: max-content;
+  max-width: 16rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--sapGroup_ContentBackground, #fff);
+  color: var(--sapTextColor, #32363a);
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  box-shadow: var(--sapContent_Shadow1, 0 2px 8px 0 rgba(0, 0, 0, 0.15));
+  font-size: 0.75rem;
+  line-height: 1.4;
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0s linear 0.12s;
+}
+
+.author-line-date-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--sapGroup_ContentBackground, #fff);
+  filter: drop-shadow(0 1px 0 var(--sapGroup_ContentBorderColor, #d9d9d9));
+}
+
+.author-line-date--updated:hover .author-line-date-tooltip,
+.author-line-date--updated:focus-visible .author-line-date-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
 .author-line-label {
   font-size: 0.75rem;
   color: var(--sapNeutralTextColor, #6a6d70);
