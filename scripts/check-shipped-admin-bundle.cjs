@@ -49,6 +49,19 @@ const fs = require('node:fs');
 const path = require('node:path');
 const yauzl = require('yauzl');
 
+// Components built via `ui5 build` (preload prototype) ship MINIFIED/reformatted
+// files that intentionally differ byte-for-byte from unminified webapp/ source,
+// so a raw byte-compare would always report false drift for them. Shared with
+// copy-components.js (single source of truth) so the two can't disagree. If the
+// shared module is ever absent (older checkout), fall back to an empty set so
+// the guard degrades to the original strict byte-compare rather than crashing.
+let PRELOAD_COMPONENTS;
+try {
+  ({ PRELOAD_COMPONENTS } = require('../app/admin-shell/scripts/preload-components.cjs'));
+} catch {
+  PRELOAD_COMPONENTS = new Set();
+}
+
 const ROOT = path.resolve(__dirname, '..');
 // Test seam: point ADMIN_SRC at a synthetic tree (mirrors CHECK_ICON_IMPORTS_ROOT
 // in check-icon-imports). Only affects the source side; the mtar is always the
@@ -171,10 +184,22 @@ async function main() {
 
   const drift = [];
   const missing = [];
+  const skippedPreload = [];
   let compared = 0;
   const norm = b => b.toString('utf8').replace(/\r\n/g, '\n');
 
   for (const comp of components) {
+    // Preload-built components are minified/reformatted by `ui5 build`, so their
+    // shipped files legitimately differ from unminified source — a byte-compare
+    // is meaningless and always false-positives. We still assert the component
+    // was shipped at all (its Component.js is present in the bundle), which keeps
+    // the original #639 "component silently missing from the mtar" protection.
+    if (PRELOAD_COMPONENTS.has(comp)) {
+      const member = `${SHIPPED_PREFIX}/${comp}/Component.js`;
+      if (shipped.get(member) === undefined) missing.push(member);
+      skippedPreload.push(comp);
+      continue;
+    }
     for (const srcPath of sourceFilesFor(comp)) {
       const rel = path.relative(path.join(ADMIN_SRC, comp, 'webapp'), srcPath).replace(/\\/g, '/');
       const member = `${SHIPPED_PREFIX}/${comp}/${rel}`;
@@ -206,7 +231,10 @@ async function main() {
   }
 
   console.log(C.grn(`  ✓ shipped admin bundle matches source `) +
-              C.dim(`(${compared} files across ${components.length} components verified)`));
+              C.dim(`(${compared} files across ${components.length} components verified`) +
+              C.dim(skippedPreload.length
+                ? `; ${skippedPreload.length} preload-built presence-only: ${skippedPreload.join(', ')})`
+                : `)`));
   process.exit(0);
 }
 

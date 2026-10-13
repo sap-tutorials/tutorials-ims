@@ -147,4 +147,39 @@ describe('scripts/check-shipped-admin-bundle.cjs', () => {
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/does not contain tutorials-approuter\/data\.zip/);
   });
+
+  // Preload-built components (puzzles — see app/admin-shell/scripts/preload-components.cjs)
+  // are minified/reformatted by `ui5 build`, so their shipped files intentionally
+  // differ byte-for-byte from unminified webapp/ source. The guard must NOT treat
+  // that as drift — but must still assert the component was shipped at all.
+  const PRELOAD_COMP = 'puzzles';
+  it('passes a preload-built component even when its shipped files differ from source (minified)', async () => {
+    // Shipped = minified; source = unminified. Byte-different on purpose.
+    const shipped = {
+      'Component.js': 'sap.ui.define([],function(){return{}});\n',
+      'manifest.json': '{"sap.app":{"id":"x"}}',
+    };
+    const source = {
+      'Component.js': 'sap.ui.define([], function () {\n  return {};\n});\n',
+      'manifest.json': '{\n  "sap.app": {\n    "id": "x"\n  }\n}\n',
+    };
+    // Include a non-preload component too so the byte-compare path still runs.
+    const mtar = await buildMtar(dir, { [PRELOAD_COMP]: shipped, [COMP]: goodComponent });
+    writeSource(srcRoot, PRELOAD_COMP, source);
+    writeSource(srcRoot, COMP, goodComponent);
+    const r = run(mtar, srcRoot);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/preload-built presence-only: .*puzzles/);
+  });
+
+  it('still fails when a preload-built component is entirely missing from the mtar', async () => {
+    // Only the non-preload component is shipped; puzzles Component.js is absent.
+    const mtar = await buildMtar(dir, { [COMP]: goodComponent });
+    writeSource(srcRoot, PRELOAD_COMP, { 'Component.js': 'x', 'manifest.json': '{}' });
+    writeSource(srcRoot, COMP, goodComponent);
+    const r = run(mtar, srcRoot);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/MISSING from mtar/);
+    expect(r.stderr).toMatch(/puzzles\/Component\.js/);
+  });
 });
