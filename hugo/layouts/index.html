@@ -6,6 +6,7 @@
 
 <article class="developer-homepage">
   {{ partial "homepage/devtoberfest-banner.html" . }}
+  {{ partial "homepage/teched-banner.html" . }}
   {{ partial "homepage/hero.html" . }}
   <div class="personalized-badge-slot" data-testid="personalized-badge-slot" hidden></div>
   {{ partial "homepage/verb-spine.html" (dict "shelves" $shelves) }}
@@ -22,6 +23,7 @@
 <link rel="stylesheet" href="{{ $css.RelPermalink }}">
 <script type="module" src="{{ partial "island-src.html" "homepage-bands" }}"></script>
 <script type="module" src="{{ partial "island-src.html" "devtoberfest-banner" }}"></script>
+<script type="module" src="{{ partial "island-src.html" "teched-banner" }}"></script>
 <script type="module" src="{{ partial "island-src.html" "featured-topics-carousel" }}"></script>
 <script type="module" src="{{ partial "island-src.html" "homepage-events-band" }}"></script>
 <script type="module" src="{{ partial "island-src.html" "topic-clusters-band" }}"></script>

@@ -355,6 +355,7 @@ export default defineConfig({
         'devtoberfest-rules': resolve(__dirname, 'src/devtoberfest-rules/main.ts'),
         'devtoberfest-faq': resolve(__dirname, 'src/devtoberfest-faq/main.ts'),
         'devtoberfest-banner': resolve(__dirname, 'src/devtoberfest-banner/main.ts'),
+        'teched-banner': resolve(__dirname, 'src/teched-banner/main.ts'),
         'ui5-core': resolve(__dirname, 'src/ui5/ui5-core.ts'),
         'ui5-tutorial': resolve(__dirname, 'src/ui5/ui5-tutorial.ts'),
         'ui5-me': resolve(__dirname, 'src/ui5/ui5-me.ts'),

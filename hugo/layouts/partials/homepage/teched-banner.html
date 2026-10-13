@@ -1,0 +1,22 @@
+{{- /* SAP TechEd homepage banner — issue #2751.
+       Prominent top-of-page strip that links to the TechEd page. It takes over
+       automatically from the Devtoberfest banner once that event ends (the two
+       events do not overlap). SSR emits a hidden shell; the teched-banner island
+       fetches the public event window from /api/teched/event-status and reveals
+       it with a live countdown before the event, a "live now" message during it,
+       and — unlike Devtoberfest — a persistent "watch the replays" strip after
+       it ends. Hidden only when no event is configured / dates are unparseable /
+       on error, so there is no layout shift in that case. */ -}}
+<aside class="hp-te-banner"
+       data-app="teched-banner"
+       data-api="/api/teched/event-status"
+       data-href="/teched/"
+       hidden
+       aria-hidden="true">
+  <a class="hp-te-banner__link" href="/teched/" aria-label="SAP TechEd — learn more">
+    <span class="hp-te-banner__brand">SAP TechEd</span>
+    <span class="hp-te-banner__msg" data-role="msg" aria-hidden="true"></span>
+    <span class="hp-te-banner__window" data-role="window"></span>
+    <span class="hp-te-banner__cta" aria-hidden="true">Free &amp; open to everyone&nbsp;&rarr;</span>
+  </a>
+</aside>
