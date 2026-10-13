@@ -1346,7 +1346,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   // --- GET /content/hashes ---
 
   async function hashesHandler(req, res) {
-    const { ContentFiles, ContentCurrent } = cds.entities(namespace);
+    const { ContentFiles, ContentCurrent, ContentManifest } = cds.entities(namespace);
 
     try {
       // Option B: enumerate ContentCurrent (no version) when the read flag is on
@@ -1370,6 +1370,19 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         if (row.slug === '__nav__' || row.slug === '__404__' || row.slug === '__shell__') continue;
         map[row.slug] = row.contentHash;
       }
+
+      // #2727 — piggyback the ACTIVE manifest's render-pipeline token as a
+      // response header (the JSON body shape is unchanged for existing callers).
+      // The publish client reads it to decide whether a parser/template/CSS
+      // change requires a full re-publish. Absent header (no ACTIVE manifest, or
+      // a pre-#2727 row with NULL pipelineToken) → client treats as unknown and
+      // force-republishes once, which heals the token.
+      try {
+        const active = await SELECT.one.from(ContentManifest)
+          .where({ status: 'ACTIVE' })
+          .columns('pipelineToken');
+        if (active?.pipelineToken) res.setHeader('X-Pipeline-Token', active.pipelineToken);
+      } catch { /* header is best-effort; never fail the hashes read over it */ }
 
       res.setHeader('Cache-Control', 'no-cache');
       res.json(map);
@@ -2048,9 +2061,9 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
   async function commitHandler(req, res) {
     try {
-      const { sessionId, allowRevertSlugs } = req.body || {};
+      const { sessionId, allowRevertSlugs, pipelineToken } = req.body || {};
       if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
-      const result = await sessionHelpers.commitSession({ sessionId, allowRevertSlugs });
+      const result = await sessionHelpers.commitSession({ sessionId, allowRevertSlugs, pipelineToken });
       cache.invalidate();
       await bumpCacheGeneration();  // #1592/#1621: propagate wipe to peer instances
       // Fire-and-forget edge Fast-Purge of the freshly published slugs — void,

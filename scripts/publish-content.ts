@@ -5,7 +5,8 @@ import { gzipSync } from 'node:zlib';
 import { userInfo, hostname } from 'node:os';
 import { parse as parseYaml } from 'yaml';
 import { parseChannel, type Channel } from './fetch-tutorials.js';
-import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes, fetchRemoteSourceHashes, renderConceptsPhase, renderTopicsPhase, renderChannelsPhase } from './lib/publish-client.js';
+import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes, fetchRemoteSourceHashes, fetchRemotePipelineToken, renderConceptsPhase, renderTopicsPhase, renderChannelsPhase } from './lib/publish-client.js';
+import { computePipelineToken } from './lib/pipeline-token.js';
 import { withRetry, formatErrorChain } from './lib/publish-retry.js';
 import { chunk, runConcurrent } from './lib/publish-batcher.js';
 import { collectCodeCheckSpecs, publishCodeCheckSpecs } from './lib/publish-codecheck.js';
@@ -98,7 +99,13 @@ export function discoverTutorials(hugoDir: string): Map<string, string> {
     try {
       const stat = statSync(indexPath);
       if (stat.isFile()) {
-        result.set(entry, indexPath);
+        // Normalize the slug KEY to lowercase (issue #2714): some source folders
+        // ship mixed-case (e.g. "...-RAP-App"), but Hugo serves lowercase URLs and
+        // the server stores/serves lowercase slugs. Lowercasing here — the single
+        // upstream chokepoint feeding every downstream payload — prevents a
+        // mixed-case Tutorials.slug row from ever being minted again. The PATH
+        // keeps the real on-disk (mixed-case) directory so the file read works.
+        result.set(entry.toLowerCase(), indexPath);
       }
     } catch {
       // not a tutorial directory
@@ -181,6 +188,16 @@ export function buildPayload(
 ): Record<string, string> {
   const payload: Record<string, string> = {};
   for (const slug of slugs) {
+    // Tripwire (issue #2714): slugs are lowercased at discoverTutorials, the
+    // upstream chokepoint. If a mixed-case slug reaches here, some code path
+    // reintroduced case — fail loud rather than silently publish a mixed-case
+    // key that mints a non-canonical Tutorials.slug row. Belt-and-suspenders
+    // behind the discovery-time normalization.
+    if (slug !== slug.toLowerCase()) {
+      throw new Error(
+        `buildPayload: non-canonical (mixed-case) slug "${slug}" — slugs must be lowercase before publish (issue #2714)`
+      );
+    }
     const filePath = tutorials.get(slug);
     if (!filePath) continue;
     const content = readFileSync(filePath);
@@ -567,9 +584,29 @@ export function computePublishPlan(opts: {
   local: Map<string, string>;
   remote: Record<string, string>;
   mode: PublishMode;
-}): { targetSlugs: string[] } {
+  /**
+   * #2727 render-pipeline token. When provided and the local token differs from
+   * the server's active token (or the server has none yet), the render pipeline
+   * (parsers / Hugo templates / CSS) changed since the active publish, so a
+   * delta plan treats EVERY local slug as changed — a parser/template/CSS-only
+   * fix produces identical source markdown and (until `hugo/public` is rebuilt)
+   * cannot be distinguished per-slug, so the pipeline token forces the republish.
+   * Omit both to preserve pre-#2727 HTML-diff behavior. Ignored in force/heal
+   * mode, which already select every slug.
+   */
+  localToken?: string;
+  serverToken?: string;
+}): { targetSlugs: string[]; pipelineChanged?: boolean } {
   if (opts.mode === 'force') return { targetSlugs: [...opts.local.keys()] };
-  return { targetSlugs: computeDiff(opts.local, opts.remote) };
+
+  // Pipeline-token override: a changed render pipeline invalidates all renders.
+  const pipelineChanged =
+    opts.localToken !== undefined && opts.localToken !== opts.serverToken;
+  if (pipelineChanged) {
+    return { targetSlugs: [...opts.local.keys()], pipelineChanged: true };
+  }
+
+  return { targetSlugs: computeDiff(opts.local, opts.remote), pipelineChanged: false };
 }
 
 /**
@@ -1304,8 +1341,29 @@ async function main() {
     }
   }
 
-  const planResult = computePublishPlan({ local: localHashes, remote: remoteHashes, mode });
+  // #2727 — render-pipeline token. Hash the inputs that determine how every
+  // slug renders (parsers, Hugo templates, CSS). If it differs from the server's
+  // active token, the pipeline changed and every slug must re-publish even when
+  // per-slug source+HTML hashes match. Computed once; sent on commit so the next
+  // publish can compare. Server token lives on the X-Pipeline-Token header of
+  // /content/hashes; undefined (legacy server / no ACTIVE manifest) → full publish.
+  const localPipelineToken = computePipelineToken();
+  let serverPipelineToken: string | undefined;
+  if (mode === 'delta') {
+    serverPipelineToken = await fetchRemotePipelineToken({ baseUrl: opts.baseUrl, apiKey: opts.apiKey });
+  }
+
+  const planResult = computePublishPlan({
+    local: localHashes,
+    remote: remoteHashes,
+    mode,
+    localToken: mode === 'delta' ? localPipelineToken : undefined,
+    serverToken: mode === 'delta' ? serverPipelineToken : undefined,
+  });
   let targetSlugs = planResult.targetSlugs;
+  if (planResult.pipelineChanged) {
+    log(`#2727 render-pipeline token changed (local=${localPipelineToken.slice(0, 9)} server=${serverPipelineToken ? serverPipelineToken.slice(0, 9) : 'none'}) — forcing re-publish of all ${targetSlugs.length} slugs`);
+  }
 
   // #672 — client-side short-circuit. In delta mode only, drop slugs whose
   // upstream state is already in sync with the server's stored state.
@@ -1315,7 +1373,12 @@ async function main() {
   // --force and --heal explicitly skip this layer:
   //   --force: "upload everything regardless of server state"
   //   --heal : "fix slugs the client thinks are in sync"
-  if (mode === 'delta' && targetSlugs.length > 0) {
+  //
+  // #2727 — ALSO skipped when the pipeline token changed. A parser/template/CSS
+  // fix leaves source markdown AND (pre-rebuild) rendered HTML matching the
+  // server, so the short-circuit would re-drop exactly the slugs the token just
+  // forced in, re-opening the bug. The token mismatch IS the signal to publish.
+  if (mode === 'delta' && !planResult.pipelineChanged && targetSlugs.length > 0) {
     // `channel` is defined earlier in main() as `const channel = parseChannel(process.argv)`
     // (around line 478) — same value used by the existing verify-only path.
     const cacheDirForHashes = channel === 'qa'
@@ -1532,7 +1595,7 @@ async function main() {
   let commit;
   try {
     commit = await withRetry(
-      () => commitSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, allowRevertSlugs }),
+      () => commitSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, allowRevertSlugs, pipelineToken: localPipelineToken }),
       {
         // Widened from [1000,3000,9000]/3 attempts: the old schedule only ever
         // waited 1s then 3s (~4s total window) — too short to ride out a transient

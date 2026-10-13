@@ -1,6 +1,6 @@
 specVersion: "4.0"
 metadata:
-  name: sap.tutorials.admin.privacyAudit
+  name: sap.tutorials.admin.privacy-audit
 type: application
 framework:
   name: SAPUI5

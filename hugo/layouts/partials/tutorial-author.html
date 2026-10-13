@@ -68,7 +68,13 @@
     <span class="author-line-name">{{ $displayName }}</span>
     {{ end }}
     {{ with $lastUpdated }}
-    <span class="author-line-date">{{ dateFormat "January 2, 2006" . }}</span>
+    {{/* #2745: expose the full ISO timestamp so the client can render a hover
+         tooltip with the exact update time converted to the viewer's timezone.
+         The server-rendered text stays date-only as the no-JS fallback. */}}
+    <span class="author-line-date author-line-date--updated" data-iso="{{ dateFormat "2006-01-02T15:04:05Z07:00" . }}" tabindex="0" aria-describedby="author-line-updated-tt">
+      <span class="author-line-date-text">{{ dateFormat "January 2, 2006" . }}</span>
+      <span class="author-line-date-tooltip" id="author-line-updated-tt" role="tooltip"></span>
+    </span>
     {{ end }}
   </div>
 
@@ -135,6 +141,27 @@
     document.querySelectorAll('.author-line-expand-wrapper.is-open').forEach(function(w){
       if(!w.contains(e.target)){w.classList.remove('is-open');w.querySelector('button').setAttribute('aria-expanded','false')}
     });
+  });
+
+  /* #2745: fill the updated-date tooltip with the full timestamp converted to
+     the viewer's local timezone. Lets authors tell same-day updates apart. */
+  document.querySelectorAll('.author-line-date--updated').forEach(function(span){
+    var tt = span.querySelector('.author-line-date-tooltip');
+    var iso = span.getAttribute('data-iso');
+    if(!tt || !iso) return;
+    var d = new Date(iso);
+    if(isNaN(d.getTime())) return;
+    var text;
+    try {
+      var fmt = new Intl.DateTimeFormat(undefined, {
+        year:'numeric', month:'long', day:'numeric',
+        hour:'2-digit', minute:'2-digit', timeZoneName:'short'
+      });
+      text = fmt.format(d);
+    } catch(e) {
+      text = d.toLocaleString();
+    }
+    tt.textContent = 'Updated ' + text + ' (your time)';
   });
 })();
 </script>

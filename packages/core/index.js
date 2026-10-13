@@ -33,7 +33,7 @@ export { DEFAULT_CONFIG, resolveLoadShedConfig } from './runtime-config/load-she
 // _tutorials-table.js
 export { tutorialsTableInfo } from './_tutorials-table.js';
 // content-delta-flags.js (FLAG_TTL_MS conflict: skip FLAG_TTL_MS from here)
-export { DELTA_WRITE_KEY, DELTA_READ_KEY, DELTA_SKIP_CARRYFORWARD_KEY, refreshContentDeltaFlags, bustContentDeltaFlagsCache, ensureContentDeltaDefaults, isDeltaWrite, isDeltaRead, isDeltaSkipCarryForward } from './content-delta-flags.js';
+export { DELTA_WRITE_KEY, DELTA_READ_KEY, DELTA_SKIP_CARRYFORWARD_KEY, refreshContentDeltaFlags, bustContentDeltaFlagsCache, ensureContentDeltaDefaults, isDeltaWrite, isDeltaRead, isDeltaSkipCarryForward, setContentDeltaNamespace } from './content-delta-flags.js';
 // task-record-submission-id.js
 export { stampSubmissionId } from './task-record-submission-id.js';
 // page-key-map.js
@@ -73,7 +73,7 @@ export { toBuffer } from './buffers.js';
 // recompute-tutorial-progress.js
 export { recomputeTutorialProgress } from './recompute-tutorial-progress.js';
 // resolve-db-user.js (moved T8)
-export { resolveUserSapId, resolveDbUser, emailFromUser, backfillUserProfile, provisionDbUser, resolveUser, issuerSubjectFromUser, tokenEmail, writeIdentityLink, pinResolvedUser, pickCanonicalRow } from './resolve-db-user.js';
+export { resolveUserSapId, resolveDbUser, emailFromUser, backfillUserProfile, provisionDbUser, resolveUser, issuerSubjectFromUser, tokenEmail, writeIdentityLink, pinResolvedUser, pickCanonicalRow, resolveDbUserScoped, getOrProvisionDbUser } from './resolve-db-user.js';
 // user-progress.js (moved T8)
 export { getUserProgress, getMyCompletedTutorials, getMyCompletedTutorialsForPoints, getMyInProgressTutorials, getProgressLookup } from './user-progress.js';
 // tutorial-markdown.js (moved T8) — re-export all 4 named exports

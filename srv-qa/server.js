@@ -26,6 +26,28 @@ cds.on('bootstrap', (app) => {
   const { serveHandler, navHandler, hashesHandler, sourceHashesHandler, excludedSlugsHandler, publishHandler, rollbackHandler, beginHandler, appendHandler, commitHandler, abortHandler, contentAuthMiddleware, pipelineLogFailureHandler, quarantineIngestHandler, pageServeHandler } =
     createContentHandlers({ namespace: 'com.sap.developers.ims.qa', apiKeyEnv: 'CONTENT_API_KEY_QA', skipMetadataUpsert: true });
 
+  // #2727 — point the Option-B content-delta flags at the QA namespace's
+  // ImsConfig and warm them, mirroring the prod srv boot (srv/server.js). Before
+  // this, the flag module hardcoded the prod namespace, which the QA CDS model
+  // does not load, so isDeltaRead()/isDeltaWrite() were permanently fail-safe-OFF
+  // and QA could never use the mutable ContentCurrent path. Fail-open: a read
+  // fault leaves the safe defaults and MUST NOT crash QA boot. Skip the seed
+  // under VITEST for the same reason as prod (tests set flag state explicitly).
+  cds.once('served', async () => {
+    try {
+      // Workspace-first (local dev), bundle fallback at CF deploy — mirrors the
+      // srv-qa/lib/content-store.js shim pattern.
+      let flags;
+      try { flags = await import('@tutorials/core/content-delta-flags.js'); }
+      catch { flags = await import('./lib/_shared/core.bundle.mjs'); }
+      flags.setContentDeltaNamespace('com.sap.developers.ims.qa');
+      if (!process.env.VITEST) await flags.ensureContentDeltaDefaults();
+      await flags.refreshContentDeltaFlags();
+    } catch (err) {
+      cds.log('content-delta-flags').warn('[qa] boot warm-up failed (non-fatal):', err.message);
+    }
+  });
+
   // GET handlers serve in-flight author content from -Contribution repos. The
   // approuter route /tutorials-qa/* enforces Tutorial.Author, but the public CF
   // URL of this srv must independently reject anonymous JWTs to prevent scope

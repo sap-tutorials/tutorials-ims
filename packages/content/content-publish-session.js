@@ -479,7 +479,7 @@ export function createSessionHelpers({ namespace }) {
     return rejected;
   }
 
-  async function commitSession({ sessionId, allowRevertSlugs = [] }) {
+  async function commitSession({ sessionId, allowRevertSlugs = [], pipelineToken = null }) {
     const { ContentManifest } = cds.entities(namespace);
 
     const existing = await SELECT.one.from(ContentManifest).where({ sessionId });
@@ -605,7 +605,13 @@ export function createSessionHelpers({ namespace }) {
         status: 'ACTIVE',
         fileCount: freshCount + carriedForward,
         totalSizeBytes: freshSize + carriedSize,
-        publishDurationMs: durationMs
+        publishDurationMs: durationMs,
+        // #2727 — record the render-pipeline token this publish was rendered
+        // with so the next publish can detect a parser/template/CSS change.
+        // null (older client that omits it) leaves the column NULL → the next
+        // delta publish sees serverToken=undefined and force-republishes once,
+        // which is the safe degrade.
+        pipelineToken: pipelineToken ?? null
       });
 
     await releaseLock(LOCK_NAME, sessionId, namespace).catch(() => {});

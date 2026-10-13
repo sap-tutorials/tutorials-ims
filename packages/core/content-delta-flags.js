@@ -20,7 +20,40 @@
 
 import cds from '@sap/cds';
 
-const NS = 'com.sap.developers.ims';
+// The content namespace whose ImsConfig backs these flags. Each app process
+// serves exactly ONE content namespace — prod srv uses the default below; the
+// QA app (srv-qa) calls setContentDeltaNamespace('com.sap.developers.ims.qa')
+// at boot. Before #2727 this was hardcoded to the prod namespace, so on QA the
+// entity never resolved and the flags were permanently fail-safe-false — QA
+// could never use the mutable ContentCurrent path (issue #2727 secondary).
+let _namespace = 'com.sap.developers.ims';
+
+/**
+ * Point the delta-flag reader at a specific content namespace's ImsConfig.
+ * Call once at app boot BEFORE the first refresh. Idempotent; busts the cache
+ * so a late switch re-reads from the new namespace.
+ */
+export function setContentDeltaNamespace(ns) {
+  if (ns && ns !== _namespace) {
+    _namespace = ns;
+    bustContentDeltaFlagsCache();
+  }
+}
+
+/**
+ * Resolve the ImsConfig entity for the configured namespace, or null when the
+ * loaded CDS model has no ImsConfig there (fail-safe: callers treat null as
+ * "flags unavailable" → keep the safe-OFF defaults rather than throwing on a
+ * hot path).
+ */
+function resolveImsConfig() {
+  try {
+    const { ImsConfig } = cds.entities(_namespace);
+    return ImsConfig ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // ImsConfig keys (string values, 'true'/'false').
 export const DELTA_WRITE_KEY = 'content.delta.write';
@@ -72,8 +105,15 @@ function scheduleRefresh() {
  */
 export async function refreshContentDeltaFlags() {
   try {
+    const ImsConfig = resolveImsConfig();
+    if (!ImsConfig) {
+      // Namespace has no ImsConfig in the loaded model — keep last-known values
+      // (cold cache stays safe-OFF). Bump the timestamp so hot-path getters don't
+      // schedule a refresh storm against a model that will never have the entity.
+      _cache = { ..._cache, at: Date.now() };
+      return { write: _cache.write, read: _cache.read, skipCarryForward: _cache.skipCarryForward };
+    }
     const db = await cds.connect.to('db');
-    const { ImsConfig } = cds.entities(NS);
     const rows = await db.run(
       SELECT.from(ImsConfig).columns('key', 'value').where({ key: { in: ALL_KEYS } })
     );
@@ -125,8 +165,14 @@ export function bustContentDeltaFlagsCache() {
  */
 export async function ensureContentDeltaDefaults() {
   try {
+    const ImsConfig = resolveImsConfig();
+    if (!ImsConfig) {
+      cds.log('content-delta-flags').info(
+        `default-ON seed skipped — no ImsConfig in namespace ${_namespace}`
+      );
+      return [];
+    }
     const db = await cds.connect.to('db');
-    const { ImsConfig } = cds.entities(NS);
     const rows = await db.run(
       SELECT.from(ImsConfig).columns('key').where({ key: { in: ALL_KEYS } })
     );

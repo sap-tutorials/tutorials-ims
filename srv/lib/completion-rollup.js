@@ -101,10 +101,11 @@ export async function loadGroupSlots(groupUuid, db) {
     SELECT.from(GroupPathItems).where({ group_ID: groupUuid }).orderBy('itemOrder')
   );
   if (gpItems.length === 0) return [];
-  const tuts = await chunkedIn(Tutorials, 'ID', gpItems.map(i => i.tutorial_ID), db, ['ID', 'legacyId']);
+  const tuts = await chunkedIn(Tutorials, 'ID', gpItems.map(i => i.tutorial_ID), db, ['ID', 'legacyId', 'status']);
   const legacyById = new Map(tuts.map(t => [t.ID, t.legacyId]));
+  const inactiveIds = new Set(tuts.filter(t => t.status === 'INACTIVE').map(t => t.ID));
   const items = gpItems
-    .filter(i => legacyById.get(i.tutorial_ID) != null)
+    .filter(i => legacyById.get(i.tutorial_ID) != null && !inactiveIds.has(i.tutorial_ID))
     .map(i => ({
       taskType: 'TUTORIAL',
       taskLegacyId: legacyById.get(i.tutorial_ID),
@@ -134,7 +135,15 @@ export async function loadMissionSlots(missionUuid, db) {
     altGroupKey: i.altGroupKey,
     groupId: i.taskType === 'GROUP' ? (groupLegacyByUuid.get(i.group_ID) ?? null) : null,
   })).filter(i => i.groupId != null || i.taskLegacyId != null);
-  return collapseSlots(norm);
+  const tutorialLegacyIds = norm.filter(i => i.taskType === 'TUTORIAL' && i.taskLegacyId != null).map(i => i.taskLegacyId);
+  let inactiveLegacy = new Set();
+  if (tutorialLegacyIds.length) {
+    const { Tutorials } = cds.entities(NS);
+    const tuts = await chunkedIn(Tutorials, 'legacyId', tutorialLegacyIds, db, ['legacyId', 'status']);
+    inactiveLegacy = new Set(tuts.filter(t => t.status === 'INACTIVE').map(t => t.legacyId));
+  }
+  const filtered = norm.filter(i => !(i.taskType === 'TUTORIAL' && inactiveLegacy.has(i.taskLegacyId)));
+  return collapseSlots(filtered);
 }
 
 /**
@@ -200,12 +209,21 @@ export async function getUserCompletedMap(dbUser, taskLegacyIds, db) {
 }
 
 /** SELECT-then-UPDATE-or-INSERT a GROUP/MISSION record; fire NGDS on the → COMPLETED edge. */
-export async function upsertRollupRecord({ dbUser, taskType, legacyId, title, progress, status, completionDate, db, send }) {
+export async function upsertRollupRecord({ dbUser, taskType, legacyId, title, progress, status, completionDate, db, send, allowDowngrade = false }) {
   const { TaskRecords } = cds.entities(NS);
   const existing = await db.run(SELECT.one.from(TaskRecords).where({
     user_ID: dbUser.ID, taskLegacyId: legacyId, taskType, status: { '!=': 'SUPERSEDED' },
   }));
   if (existing) {
+    // Legacy short-circuit (#2732): never downgrade a COMPLETED parent on a
+    // recompute/reconcile. Progress may still ratchet UP; status holds.
+    const wouldDowngrade = existing.status === 'COMPLETED' && status !== 'COMPLETED';
+    if (wouldDowngrade && !allowDowngrade) {
+      const heldProgress = Math.max(existing.progress ?? 0, progress ?? 0);
+      if (heldProgress === existing.progress) return; // no change
+      await db.run(UPDATE(TaskRecords, existing.ID).set({ progress: heldProgress }));
+      return;
+    }
     if (existing.progress === progress && existing.status === status) return; // no-op, avoids churn
     const priorStatus = existing.status;
     await db.run(UPDATE(TaskRecords, existing.ID).set(stampSubmissionId({
@@ -239,7 +257,7 @@ export async function upsertRollupRecord({ dbUser, taskType, legacyId, title, pr
  * Never throws into the caller's transaction (wrapped; logs + metrics on fault).
  * @param {{dbUser:{ID:string}, task:{taskType,taskLegacyId,tutorialId?}, db, send?:boolean}} opts
  */
-export async function rollUpParentsForCompletion({ dbUser, task, db, send = true }) {
+export async function rollUpParentsForCompletion({ dbUser, task, db, send = true, allowDowngrade = false }) {
   try {
     const { Groups, Missions } = cds.entities(NS);
     const { groupLegacyIds, missionIds } = await findParents(task, db);
@@ -293,22 +311,36 @@ export async function rollUpParentsForCompletion({ dbUser, task, db, send = true
       const g = groupByLegacy.get(legacyId);
       if (!g) continue;
       const slots = resolveGroup(legacyId);
-      if (slots.length === 0) continue;
       const { satisfied, total } = evaluateSlots(slots, tokenSet, resolveGroup);
+      if (total === 0) {
+        // Defensive + observability: evaluateSlots returns total===slots.length, so this covers
+        // both the truly-empty-path case and the all-INACTIVE-filtered case; emits the
+        // rollup.empty_slots signal that the Task 7 health endpoint surfaces, and future-proofs
+        // if that invariant ever changes.
+        cds.log('rollup').warn('empty slots after INACTIVE filter', { kind: 'GROUP', legacyId });
+        metrics.counter('rollup.empty_slots');
+        continue;
+      }
       const { progress, status } = calculateMissionProgress(satisfied, total);
       await upsertRollupRecord({
         dbUser, taskType: 'GROUP', legacyId, title: g.title,
-        progress, status, completionDate: latestDate(slots), db, send,
+        progress, status, completionDate: latestDate(slots), db, send, allowDowngrade,
       });
     }
     for (const m of missionRows) {
       const slots = missionSlots.get(m.ID);
-      if (!slots || slots.length === 0) continue;
+      if (!slots) continue;
       const { satisfied, total } = evaluateSlots(slots, tokenSet, resolveGroup);
+      if (total === 0) {
+        // Same: covers empty path AND all-INACTIVE-filtered; emits rollup.empty_slots.
+        cds.log('rollup').warn('empty slots after INACTIVE filter', { kind: 'MISSION', legacyId: m.legacyId });
+        metrics.counter('rollup.empty_slots');
+        continue;
+      }
       const { progress, status } = calculateMissionProgress(satisfied, total);
       await upsertRollupRecord({
         dbUser, taskType: 'MISSION', legacyId: m.legacyId, title: m.title,
-        progress, status, completionDate: latestDate(slots), db, send,
+        progress, status, completionDate: latestDate(slots), db, send, allowDowngrade,
       });
     }
   } catch (err) {

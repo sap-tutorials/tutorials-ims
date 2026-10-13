@@ -24,10 +24,13 @@ const SCRIPT = join(__dirname, '..', '..', 'scripts', 'check-shipped-admin-bundl
 
 interface RunResult { stdout: string; stderr: string; status: number; }
 
-function run(mtar: string, srcRoot: string): RunResult {
+// `preload` pins CHECK_SHIPPED_ADMIN_PRELOAD so these tests don't depend on
+// which real tiles are enrolled in the derived allowlist. Default '' = nothing
+// preload = the byte-compare path is exercised for the fixture component.
+function run(mtar: string, srcRoot: string, preload = ''): RunResult {
   try {
     const stdout = execFileSync('node', [SCRIPT, mtar], {
-      env: { ...process.env, CHECK_SHIPPED_ADMIN_ROOT: srcRoot },
+      env: { ...process.env, CHECK_SHIPPED_ADMIN_ROOT: srcRoot, CHECK_SHIPPED_ADMIN_PRELOAD: preload },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -132,6 +135,32 @@ describe('scripts/check-shipped-admin-bundle.cjs', () => {
     expect(r.stderr).toMatch(/TaskColumn\.fragment\.xml/);
   });
 
+  it('skips byte-compare for a preload component but still requires its Component.js', async () => {
+    // Preload-built: shipped files are minified, so a byte-diff from source is
+    // expected and must NOT fail. The fragment differs on purpose here.
+    const shipped = { ...goodComponent, 'ext/TaskColumn.fragment.xml': '<core:FragmentDefinition data-min="1"/>\n' };
+    const mtar = await buildMtar(dir, { [COMP]: shipped });
+    writeSource(srcRoot, COMP, goodComponent);
+    const r = run(mtar, srcRoot, COMP); // COMP pinned as preload
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/preload-built presence-only/);
+  });
+
+  it('fails a preload component when its Component.js is absent from the bundle', async () => {
+    // Presence-only still has teeth: a silently-missing component (the #639
+    // failure mode) must fail even on the preload path. A second component IS
+    // shipped so the global "bundle has no Component.js at all" guard doesn't
+    // fire first — we want the per-component MISSING path.
+    const shipped = { 'manifest.json': goodComponent['manifest.json'] }; // no Component.js
+    const mtar = await buildMtar(dir, { [COMP]: shipped, other: goodComponent });
+    writeSource(srcRoot, COMP, goodComponent);
+    writeSource(srcRoot, 'other', goodComponent);
+    const r = run(mtar, srcRoot, COMP); // COMP pinned as preload
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/MISSING from mtar/);
+    expect(r.stderr).toMatch(new RegExp(`${COMP}/Component\\.js`));
+  });
+
   it('treats CRLF vs LF as equivalent (not real drift)', async () => {
     const shipped = { ...goodComponent, 'Component.js': 'sap.ui.define([], function(){ return {}; });\r\n' };
     const mtar = await buildMtar(dir, { [COMP]: shipped });
@@ -146,5 +175,40 @@ describe('scripts/check-shipped-admin-bundle.cjs', () => {
     const r = run(mtar, srcRoot);
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/does not contain tutorials-approuter\/data\.zip/);
+  });
+
+  // Preload-built components (puzzles — see app/admin-shell/scripts/preload-components.cjs)
+  // are minified/reformatted by `ui5 build`, so their shipped files intentionally
+  // differ byte-for-byte from unminified webapp/ source. The guard must NOT treat
+  // that as drift — but must still assert the component was shipped at all.
+  const PRELOAD_COMP = 'puzzles';
+  it('passes a preload-built component even when its shipped files differ from source (minified)', async () => {
+    // Shipped = minified; source = unminified. Byte-different on purpose.
+    const shipped = {
+      'Component.js': 'sap.ui.define([],function(){return{}});\n',
+      'manifest.json': '{"sap.app":{"id":"x"}}',
+    };
+    const source = {
+      'Component.js': 'sap.ui.define([], function () {\n  return {};\n});\n',
+      'manifest.json': '{\n  "sap.app": {\n    "id": "x"\n  }\n}\n',
+    };
+    // Include a non-preload component too so the byte-compare path still runs.
+    const mtar = await buildMtar(dir, { [PRELOAD_COMP]: shipped, [COMP]: goodComponent });
+    writeSource(srcRoot, PRELOAD_COMP, source);
+    writeSource(srcRoot, COMP, goodComponent);
+    const r = run(mtar, srcRoot, PRELOAD_COMP); // only puzzles pinned preload; COMP byte-compared
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/preload-built presence-only: .*puzzles/);
+  });
+
+  it('still fails when a preload-built component is entirely missing from the mtar', async () => {
+    // Only the non-preload component is shipped; puzzles Component.js is absent.
+    const mtar = await buildMtar(dir, { [COMP]: goodComponent });
+    writeSource(srcRoot, PRELOAD_COMP, { 'Component.js': 'x', 'manifest.json': '{}' });
+    writeSource(srcRoot, COMP, goodComponent);
+    const r = run(mtar, srcRoot, PRELOAD_COMP); // puzzles pinned preload
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/MISSING from mtar/);
+    expect(r.stderr).toMatch(/puzzles\/Component\.js/);
   });
 });

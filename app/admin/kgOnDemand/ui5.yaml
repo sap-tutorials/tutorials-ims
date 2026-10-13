@@ -1,6 +1,6 @@
 specVersion: "4.0"
 metadata:
-  name: sap.tutorials.admin.kgOnDemand
+  name: sap.tutorials.admin.kg-on-demand
 type: application
 framework:
   name: SAPUI5

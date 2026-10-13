@@ -26,6 +26,17 @@
 // Hard-deleting safe orphans avoids leaving INACTIVE landmines that exact-match
 // `where({ slug })` read paths might find.
 //
+// LONE mixed-case rows (no lowercase sibling — issue #2714): the slug is simply
+// renamed to lowercase in place. This is the shape behind the completeStep 404
+// in #2714 when there is no duplicate pair, only a single mixed-case row.
+//
+//   4. After any slug mutation (canonicalize / hard-delete / INACTIVE-flag) under
+//      --apply, rebuild CoCompletions (via runMaterializeCoCompletions) so the KG
+//      edge view's coCompletedWith arm can't carry a stale slug into the graph
+//      workspace before the 04:33 UTC nightly cron. Prevents the HANA GraphScript
+//      [4907] "invalid vertex key" crash seen on PROD 2026-10-13. Fail-soft:
+//      backstopped by PR #2740's view guard and the nightly job. See step 4 below.
+//
 // The script is IDEMPOTENT: running twice is a no-op. It is DRY-RUN by default
 // (logs the proposed mutations to stdout). Pass --apply to actually write.
 //
@@ -71,29 +82,55 @@ async function main() {
 
   const bySlug = new Map(all.map(r => [r.slug, r]));
   const pairs = [];
+  const singles = [];   // mixed-case rows with NO lowercase sibling (issue #2714)
 
   for (const row of all) {
     if (!row.slug) continue;
     const lower = row.slug.toLowerCase();
     if (lower === row.slug) continue;       // already canonical, no orphan possible from this row's perspective
     const orphan = bySlug.get(lower);
-    if (!orphan) continue;                  // no duplicate — nothing to repair
+    if (!orphan) {
+      // No lowercase companion row exists — this is a LONE mixed-case row.
+      // Nothing to merge/delete; just canonicalize its slug in place so
+      // case-sensitive read paths resolve it from the lowercase URL. This is
+      // the issue #2714 shape (completeStep 404) when there is no dup pair.
+      singles.push(row);
+      continue;
+    }
     if (orphan.ID === row.ID) continue;     // safety: same physical row
     pairs.push({ canonical: row, orphan });
   }
 
-  if (pairs.length === 0) {
-    console.log('no mixed-case duplicate Tutorials rows found — nothing to repair');
+  if (pairs.length === 0 && singles.length === 0) {
+    console.log('no mixed-case Tutorials rows found — nothing to repair');
     return;
   }
 
-  console.log(`found ${pairs.length} duplicate pair(s):`);
-  for (const { canonical, orphan } of pairs) {
-    console.log(`  ${canonical.slug} (canonical ID=${canonical.ID.slice(0,8)} stepCount=${canonical.stepCount ?? 'null'})`);
-    console.log(`    └─ orphan ${orphan.slug} (ID=${orphan.ID.slice(0,8)} stepCount=${orphan.stepCount ?? 'null'} status=${orphan.status})`);
+  if (singles.length > 0) {
+    console.log(`found ${singles.length} lone mixed-case row(s) to canonicalize in place:`);
+    for (const row of singles) {
+      console.log(`  ${row.slug} → ${row.slug.toLowerCase()} (ID=${row.ID.slice(0, 8)})`);
+    }
   }
 
-  let copied = 0, reparented = 0, deactivated = 0, deleted = 0;
+  if (pairs.length > 0) {
+    console.log(`found ${pairs.length} duplicate pair(s):`);
+    for (const { canonical, orphan } of pairs) {
+      console.log(`  ${canonical.slug} (canonical ID=${canonical.ID.slice(0,8)} stepCount=${canonical.stepCount ?? 'null'})`);
+      console.log(`    └─ orphan ${orphan.slug} (ID=${orphan.ID.slice(0,8)} stepCount=${orphan.stepCount ?? 'null'} status=${orphan.status})`);
+    }
+  }
+
+  let copied = 0, reparented = 0, deactivated = 0, deleted = 0, canonicalized = 0;
+
+  // Lone mixed-case rows: rename slug to lowercase in place. No merge/delete —
+  // there is no sibling. @assert.unique.slug can't collide (we only reach here
+  // when bySlug has no lowercase entry). Issue #2714.
+  for (const row of singles) {
+    console.log(`  canonicalize ${row.slug} → ${row.slug.toLowerCase()}`);
+    if (APPLY) await UPDATE(Tutorials).where({ ID: row.ID }).set({ slug: row.slug.toLowerCase() });
+    canonicalized++;
+  }
 
   for (const { canonical, orphan } of pairs) {
     // 1. Field copy
@@ -167,7 +204,57 @@ async function main() {
     }
   }
 
-  console.log(`\nsummary: copied=${copied} reparented=${reparented} deleted=${deleted} deactivated=${deactivated}  ${APPLY ? '(applied)' : '(dry-run)'}`);
+  // 4. Refresh CoCompletions so no stale slug survives until the nightly cron.
+  //
+  // Why this is here: a slug mutation above (canonicalize-in-place, hard-delete,
+  // or INACTIVE-flag) changes Tutorials.slug / Tutorials.status, but
+  // CoCompletions stores slugs as PLAIN STRINGS (sourceSlug/targetSlug), not FK
+  // joins. CoCompletions is only rebuilt nightly by materialize-co-completions
+  // (04:33 UTC) — and the KG graph jobs that consume it run EARLIER
+  // (kg-pagerank 03:53, kg-communities 03:57, kg-wcc 04:07). So on the morning
+  // after this repair runs, CoCompletions still carries the OLD slug while
+  // KG_PG_VERTICES_V (keyed off the live Tutorials.slug) emits only the new one.
+  // The coCompletedWith edge arm then produces a vertex-less endpoint and the
+  // whole KG workspace crashes with HANA GraphScript [4907] range 3
+  // ("invalid vertex key 'tutorial:<old-slug>'"). This happened on PROD
+  // 2026-10-13 for slug 'abap-environment-sbpa-workflow-extend-RAP-App'.
+  //
+  // PR #2740 added a defensive INNER JOIN to KG_PG_EDGES_V so a dangling slug is
+  // dropped (fail-open) rather than crashing — that is the backstop. This block
+  // closes the window at the source: rebuild CoCompletions from the now-current
+  // Tutorials immediately, so pagerank/communities/wcc see consistent data on
+  // their very next run instead of waiting for 04:33. materialize's own filter
+  // (status = 'ACTIVE' or status is null) means a hard-deleted orphan simply
+  // vanishes and an INACTIVE-flagged orphan is excluded — correct for all paths.
+  //
+  // Fail-soft: the slug repair above has already committed; a refresh failure
+  // must not fail the script. The 04:33 cron + the PR #2740 view guard both
+  // remain as backstops. Only runs under --apply and only when something changed.
+  const mutated = canonicalized + deleted + deactivated;
+  if (APPLY && mutated > 0) {
+    try {
+      console.log(`\nrefreshing CoCompletions after ${mutated} slug mutation(s)…`);
+      // materialize-co-completions.js is ESM; this script is CJS → dynamic import.
+      const { runMaterializeCoCompletions } = await import(
+        '../srv/jobs/materialize-co-completions.js'
+      );
+      const summary = await runMaterializeCoCompletions();
+      console.log(`  CoCompletions rebuilt: ${summary.rowsWritten} rows in ${summary.totalMs}ms`);
+    } catch (err) {
+      console.log(
+        `  WARN: CoCompletions refresh failed (${err.message}) — slug repair already ` +
+        `committed. Backstops: PR #2740 view guard (fail-open) + nightly ` +
+        `materialize-co-completions (04:33 UTC). Re-run that job manually to be safe.`,
+      );
+    }
+  } else if (!APPLY && mutated > 0) {
+    console.log(
+      `\n(dry-run) would refresh CoCompletions after slug mutations ` +
+      `(canonicalize/delete/INACTIVE) to avoid a stale KG vertex key — see PR #2740.`,
+    );
+  }
+
+  console.log(`\nsummary: canonicalized=${canonicalized} copied=${copied} reparented=${reparented} deleted=${deleted} deactivated=${deactivated}  ${APPLY ? '(applied)' : '(dry-run)'}`);
 }
 
 main().then(() => process.exit(0)).catch(err => {

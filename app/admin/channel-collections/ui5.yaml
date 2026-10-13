@@ -1,6 +1,6 @@
 specVersion: "4.0"
 metadata:
-  name: sap.tutorials.admin.channelCollections
+  name: sap.tutorials.admin.channel-collections
 type: application
 framework:
   name: SAPUI5

@@ -695,3 +695,101 @@ export async function provisionDbUser(user, columns) {
   const q = SELECT.one.from(Users).where({ ID: finalId });
   return (columns && columns.length) ? await q.columns(...columns) : await q;
 }
+
+/**
+ * Read-only tiered resolve for a user-scoped READ handler. Resolves the Users
+ * row via the full tiered resolver (pin → (iss,sub) link → sapId) on the
+ * request transaction. Never mints. Returns null for anonymous / miss.
+ * #2730: replaces the resolveUserSapId + where({sapId}) pattern that returned
+ * nothing for null-sapId social/IAS/GitHub logins.
+ * @param {object} req — CAP request (uses req.user; threads req.tx when present via cds.tx(req), falls back to ambient when req.tx is absent).
+ * @param {string[]} [columns]
+ */
+export async function resolveDbUserScoped(req, columns) {
+  const user = req?.user;
+  if (!user || !user.id || user.id === 'anonymous') return null;
+  // Thread the request's active tx when present (prevents SQLite deadlock in
+  // handlers that already hold the request tx). Falls back to ambient when
+  // req.tx is absent (e.g. unit-test synthetic req, MCP path).
+  const db = req?.tx ? cds.tx(req) : undefined;
+  // #2738: honor the before('*') pin FIRST. A PAT req.user (mcp-pat-middleware.js)
+  // pins the exact attr.dbUserId but carries NO iss/sub and, for a migrated user,
+  // a NULL sapId — so the tiered resolver below would miss. Resolving by the
+  // pinned PK mirrors resolveDbUser's fast-path (above).
+  if (user.attr?.dbUserId) {
+    const { Users } = cds.entities('com.sap.developers.ims');
+    let sel = SELECT.one.from(Users).where({ ID: user.attr.dbUserId });
+    if (columns && columns.length) sel = sel.columns(...columns);
+    const pinned = db ? await db.run(sel) : await sel;
+    if (pinned) return pinned;
+    // Pin set but row gone (deleted mid-request): fall through to the tiered path.
+  }
+  const row = await resolveUser(user, db);
+  if (!row) return null;
+  if (columns && columns.length) {
+    const { Users } = cds.entities('com.sap.developers.ims');
+    const sel = SELECT.one.from(Users).where({ ID: row.ID }).columns(...columns);
+    return db ? await db.run(sel) : await sel;
+  }
+  return row;
+}
+
+/**
+ * Get-or-create for a user-scoped WRITE handler. Prefers the tiered
+ * provisionDbUser (identity-link aware, #2651 dedup) when the request carries a
+ * real browser/IAS token. Falls back to a sapId lookup+mint ONLY for the
+ * token-less MCP path (doCompleteStep/doResetTutorialProgress *For events),
+ * preserving legacy MCP behavior.
+ * @param {object} req
+ * @param {{sapId?: string|null}} opts
+ * @param {string[]} [columns]
+ */
+export async function getOrProvisionDbUser(req, { sapId } = {}, columns) {
+  const user = req?.user;
+  // #2738: honor the before('*') pin FIRST. A PAT req.user (mcp-pat-middleware.js)
+  // pins the exact attr.dbUserId but has NO iss/sub and, for a migrated user, a
+  // NULL sapId → hasToken is false and the sapId fallback below would mint a
+  // spurious sapId=<email-shaped user.id> Users row instead of resolving the
+  // pinned one. Resolve by the pinned PK first (mirrors resolveDbUser's fast-path).
+  if (user?.attr?.dbUserId) {
+    const { Users } = cds.entities('com.sap.developers.ims');
+    // Thread the request tx when present; fall back to ambient when req.tx is
+    // absent (unit-test synthetic req / MCP path) — mirrors resolveDbUserScoped
+    // and avoids the single-connection SQLite deadlock cds.tx(req) would cause.
+    const db = req?.tx ? cds.tx(req) : undefined;
+    let sel = SELECT.one.from(Users).where({ ID: user.attr.dbUserId });
+    if (columns && columns.length) sel = sel.columns(...columns);
+    const pinned = db ? await db.run(sel) : await sel;
+    if (pinned) return pinned;
+    // Pin set but row gone (deleted mid-request): fall through to tiered/sapId.
+  }
+  // Browser/IAS token present → tiered provision (handles null-sapId correctly).
+  // Use iss+sub (OIDC), attr.email (XS token attribute), or name attrs as the
+  // signal. Do NOT use emailFromUser's user.id fallback — basic-auth test users
+  // also have email-shaped user.id values, which would falsely trigger this path
+  // for legacy sapId-keyed test rows (e.g. the #1614 overflow regression test).
+  const hasToken = !!issuerSubjectFromUser(user)
+    || (user?.attr && (user.attr.email || user.attr.given_name || user.attr.family_name));
+  if (hasToken) {
+    const row = await provisionDbUser(user, columns);
+    if (row) return row;
+  }
+  // Token-less MCP path: resolve/mint by sapId (unchanged legacy behavior).
+  if (!sapId) return null;
+  const { Users } = cds.entities('com.sap.developers.ims');
+  const db = cds.tx(req);
+  let row = await db.run(SELECT.one.from(Users).where({ sapId }));
+  if (!row) {
+    const newId = cds.utils.uuid();
+    await db.run(INSERT.into(Users).entries({
+      ID: newId, uuid: cds.utils.uuid(), sapId,
+      legacyId: await getNextLegacyId('Users', db),
+      email: user?.attr?.email || '', firstName: user?.attr?.given_name || '', lastName: user?.attr?.family_name || '',
+    }));
+    row = await db.run(SELECT.one.from(Users).where({ sapId }));
+  }
+  if (columns && columns.length && row) {
+    return await db.run(SELECT.one.from(Users).where({ ID: row.ID }).columns(...columns));
+  }
+  return row;
+}

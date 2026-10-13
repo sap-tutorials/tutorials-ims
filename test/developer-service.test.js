@@ -95,6 +95,49 @@ describe('DeveloperService', () => {
     });
   });
 
+  // Issue #2714: some tutorial source files ship with uppercase in the filename
+  // (e.g. "abap-environment-sbpa-workflow-extend-RAP-App"), so a legacy Tutorials
+  // row can carry a mixed-case slug. Hugo emits a lowercase URL and the progress
+  // API lowercases the incoming slug, so the lookup is WHERE slug = '...-rap-app'.
+  // completeStep/resetTutorialProgress did an exact-match where({ slug }) which is
+  // case-sensitive (HANA, and SQLite's binary '=' on TEXT), so it missed the
+  // mixed-case row and 404'd. The publish write path and serveHandler read path
+  // were already made case-insensitive (PR #130); these progress lookups were not.
+  describe('mixed-case slug (issue #2714)', () => {
+    beforeAll(async () => {
+      const { Tutorials, Steps } = cds.entities('com.sap.developers.ims');
+      await INSERT.into(Tutorials).entries({
+        ID: 'aaaaaaaa-0000-0000-0000-0000000002714',
+        slug: 'issue-2714-extend-RAP-App',   // stored MIXED case (legacy row)
+        title: 'Mixed Case Slug', legacyId: 12714, status: 'ACTIVE',
+      });
+      await INSERT.into(Steps).entries({
+        ID: 'bbbbbbbb-0000-0000-0000-0000000002714',
+        tutorial_ID: 'aaaaaaaa-0000-0000-0000-0000000002714',
+        stepOrder: 1, title: 'Step 1', legacyId: 22714,
+      });
+    });
+
+    it('completeStep resolves a mixed-case stored slug via lowercase request', async () => {
+      const { status, data } = await project.post('/api/completeStep',
+        { slug: 'issue-2714-extend-rap-app', stepNumber: 1 },   // request is lowercase (as from the URL)
+        { auth: { username: 'developer', password: 'developer' }, validateStatus: () => true });
+
+      expect(status).toBe(200);
+      expect(data.completedSteps).toContain(1);
+    });
+
+    it('resetTutorialProgress resolves a mixed-case stored slug via lowercase request', async () => {
+      const { status } = await project.post('/api/resetTutorialProgress',
+        { slug: 'issue-2714-extend-rap-app' },
+        { auth: { username: 'developer', password: 'developer' }, validateStatus: () => true });
+
+      // The tutorial IS resolved (not 404). It is fully completed by the test
+      // above, so reset succeeds (200). The key assertion is "not 404".
+      expect(status).not.toBe(404);
+    });
+  });
+
   describe('createTaskRecord (legacy)', () => {
     beforeAll(async () => {
       const { Users } = cds.entities('com.sap.developers.ims');

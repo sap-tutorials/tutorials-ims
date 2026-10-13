@@ -34,10 +34,18 @@ export function cardProgress(item: CardItem, p: ProgressPayload): CardProgress |
   }
   if (item.type === 'mission') {
     const slug = item.href.replace(/^\/tutorials\/mission-/, '');
+    // Binary only: an in-progress percent would need the mission's tutorial
+    // slug list to intersect with completedSlugs, which CardItem does not carry
+    // (cards come from the search index). Surfacing partial progress here would
+    // require either bloating the navigator feed with per-card slug lists or a
+    // backend change — out of scope for the presentation-only fix (#2733). The
+    // partial/complete indicator lives on the mission DETAIL page, where the
+    // tutorial slugs are available (see src/goal-completion/).
     return p.missionSlugs.has(slug) ? { percent: 100, complete: true } : null;
   }
   if (item.type === 'group') {
     const slug = item.href.replace(/^\/tutorials\/group-/, '');
+    // Binary only — same rationale as the mission branch above (#2733).
     return p.groupSlugs.has(slug) ? { percent: 100, complete: true } : null;
   }
   return null;

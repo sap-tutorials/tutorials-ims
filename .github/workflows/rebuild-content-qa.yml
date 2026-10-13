@@ -24,6 +24,11 @@ on:
         required: false
         type: boolean
         default: false
+      allow-revert:
+        description: 'Per-slug #672 no-revert override: pass --allow-revert so the publish accepts a target slug whose source-markdown hash matches abandoned history (the guard would otherwise keep prior content). REQUIRES a non-empty `slug` input (per-slug only). Use when a corrected tutorial is being wrongly rejected as a revert. Default false.'
+        required: false
+        type: boolean
+        default: false
 
 env:
   NODE_VERSION: '22'
@@ -378,7 +383,14 @@ jobs:
         # the "--slug not found" exit 2 and fail the whole job. A full rebuild
         # (empty bad_slug) and a healthy slug-targeted run both publish normally.
         if: ${{ steps.source_errors.outputs.bad_slug == '' }}
-        run: npx tsx scripts/publish-content.ts --channel qa ${{ inputs.force-publish && '--force' || '' }} --initiator "ci/${{ github.run_id }}"
+        # allow-revert path (per-slug #672 override): the server-side guard is only
+        # reached at COMMIT, but publish-content.ts's client-side #672 short-circuit
+        # (source+html hash match) drops the slug BEFORE commit — and --allow-revert
+        # does NOT skip that layer, only --force/--heal do. So an allow-revert run
+        # emits `--force --allow-revert` and keeps PUBLISH_SLUG set: --slug scopes
+        # the force to the one tutorial (filterToSlug runs before hashing), --force
+        # skips the short-circuit, --allow-revert clears the server guard at commit.
+        run: npx tsx scripts/publish-content.ts --channel qa ${{ (inputs.force-publish || (inputs.allow-revert && (github.event.client_payload.slug || inputs.slug))) && '--force' || '' }}${{ (inputs.allow-revert && (github.event.client_payload.slug || inputs.slug)) && ' --allow-revert' || '' }} --initiator "ci/${{ github.run_id }}"
         env:
           CAP_QA_BASE_URL: ${{ secrets.CAP_SRV_URL_QA }}
           CONTENT_API_KEY_QA: ${{ secrets.CONTENT_API_KEY_QA }}
@@ -387,8 +399,9 @@ jobs:
           # --slug fallback. Empty on a full rebuild → whole-catalog delta. Mirrors
           # rebuild-content.yml. Without force-publish, this makes the commit O(changed)
           # (sub-second) instead of a ~35s full-catalog write. force-publish=true ignores
-          # the slug and re-seeds the whole catalog (--force).
-          PUBLISH_SLUG: ${{ (! inputs.force-publish) && (github.event.client_payload.slug || inputs.slug) || '' }}
+          # the slug and re-seeds the whole catalog (--force). EXCEPTION: an allow-revert
+          # run keeps the slug set so its `--force` stays scoped to the one tutorial.
+          PUBLISH_SLUG: ${{ ((! inputs.force-publish) || inputs.allow-revert) && (github.event.client_payload.slug || inputs.slug) || '' }}
 
       # #1373 — synthetic watchdog. The publish step reporting success is not
       # proof rows landed: the render-concepts 404 that hid for days (#1372)

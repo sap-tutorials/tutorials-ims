@@ -859,3 +859,68 @@
   .hp-dtf-banner__link:hover,
   .hp-dtf-banner__link:focus-visible { transform: none; }
 }
+
+/* SAP TechEd homepage banner (#2751). Takes over from the Devtoberfest banner
+   once that event ends (the two never overlap). Reuses the same Joule
+   purple→pink brand gradient — that is TechEd's branding too — so the two
+   banners read as one system. Hex fallbacks cover QA, where joule.css is not
+   loaded. Structure mirrors .hp-dtf-banner so the two strips are visually
+   identical apart from the brand/CTA text. */
+.hp-te-banner { margin: 0; }
+.hp-te-banner[hidden] { display: none; }
+
+.hp-te-banner__link {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0.9rem 1.5rem;
+  border-radius: 10px;
+  text-decoration: none;
+  color: #fff;
+  background: linear-gradient(90deg, var(--joule-purple-1, #5D36FF) 0%, var(--joule-purple-3, #A100C2) 60%, #D1188A 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.hp-te-banner__link:hover,
+.hp-te-banner__link:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+.hp-te-banner__link:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.hp-te-banner__brand {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.hp-te-banner__msg {
+  font-size: 1.1rem;
+  font-weight: 600;
+  /* Tabular figures keep the ticking countdown from jittering in width. */
+  font-variant-numeric: tabular-nums;
+}
+.hp-te-banner__window {
+  font-size: 1rem;
+  opacity: 0.95;
+}
+.hp-te-banner__cta {
+  margin-left: auto;
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .hp-te-banner__link { flex-direction: column; align-items: flex-start; }
+  .hp-te-banner__cta { margin-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hp-te-banner__link { transition: none; }
+  .hp-te-banner__link:hover,
+  .hp-te-banner__link:focus-visible { transform: none; }
+}

@@ -49,6 +49,7 @@ import { normalizeLineEndings, composeTutorial } from './parsers/compose.ts'
 import type { ComposeResult } from './parsers/compose.ts'
 import { normalizeBlockquotedFences } from './parsers/blockquote-fence.ts'
 import { normalizeListContinuationFences } from './parsers/list-continuation-fence.ts'
+import { normalizeListFenceColumnZero } from './parsers/list-fence-column-zero.ts'
 import { dedentListContinuationProse } from './parsers/list-continuation-prose.ts'
 import { mergeBlockquoteNoteDividers } from './parsers/blockquote-notes.ts'
 import { stripImageDirectiveComments } from './parsers/images.ts'
@@ -80,6 +81,7 @@ interface Fixer {
 const SOURCE_FIXABLE: Fixer[] = [
   { id: 'blockquote-fence', issue: '', classification: 'source-fixable', transform: normalizeBlockquotedFences },
   { id: 'list-continuation-fence', issue: '#1931', classification: 'source-fixable', transform: normalizeListContinuationFences },
+  { id: 'list-fence-column-zero', issue: '#2720', classification: 'source-fixable', transform: normalizeListFenceColumnZero },
   { id: 'list-continuation-prose', issue: '#1931', classification: 'source-fixable', transform: dedentListContinuationProse },
   { id: 'blockquote-notes', issue: '#1741', classification: 'source-fixable', transform: mergeBlockquoteNoteDividers },
   { id: 'image-directive-comment', issue: '#1137', classification: 'source-fixable', transform: stripImageDirectiveComments },
@@ -220,12 +222,14 @@ export function scanSource(raw: string, meta: DiscoveredTutorial): FileScan {
 
   const bqFenced = normalizeBlockquotedFences(body)               // count-preserving
   const fenceHealed = normalizeListContinuationFences(bqFenced)   // count-preserving
-  const proseHealed = dedentListContinuationProse(fenceHealed)    // count-preserving
-  detect(SOURCE_FIXABLE[0], body)         // blockquote-fence  ← source body
-  detect(SOURCE_FIXABLE[1], bqFenced)     // list-fence        ← after bq-fence
-  detect(SOURCE_FIXABLE[2], fenceHealed)  // list-prose        ← after fence heal (required order)
-  detect(SOURCE_FIXABLE[3], proseHealed)  // blockquote-notes  ← healed input compose feeds it (raw body crashes it)
-  detect(SOURCE_FIXABLE[4], body)         // image-directive   ← source body (comments untouched by prior steps)
+  const colZeroHealed = normalizeListFenceColumnZero(fenceHealed) // count-preserving
+  const proseHealed = dedentListContinuationProse(colZeroHealed)  // count-preserving
+  detect(SOURCE_FIXABLE[0], body)          // blockquote-fence   ← source body
+  detect(SOURCE_FIXABLE[1], bqFenced)      // list-fence         ← after bq-fence
+  detect(SOURCE_FIXABLE[2], fenceHealed)   // list-fence-col-0   ← after fence heal (sees ≤3-space fences)
+  detect(SOURCE_FIXABLE[3], colZeroHealed) // list-prose         ← after col-0 heal (required order)
+  detect(SOURCE_FIXABLE[4], proseHealed)   // blockquote-notes   ← healed input compose feeds it (raw body crashes it)
+  detect(SOURCE_FIXABLE[5], body)          // image-directive    ← source body (comments untouched by prior steps)
   for (const fixer of RENDER_TIME) detect(fixer, body)
 
   // ── Fix (chained in compose order — matches in-flight behavior) ──

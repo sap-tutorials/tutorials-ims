@@ -25,7 +25,12 @@ export interface AppendInput {
 }
 export interface AppendResult { slugsAccepted: number; batchHash: string; totalSizeBytes: number }
 
-export interface CommitInput { baseUrl: string; apiKey: string; sessionId: string; allowRevertSlugs?: string[] }
+export interface CommitInput { baseUrl: string; apiKey: string; sessionId: string; allowRevertSlugs?: string[];
+  /** #2727 — render-pipeline token for the inputs this publish was rendered
+   * with. The server records it on the committed ContentManifest so the next
+   * publish can detect a pipeline change. Optional (older servers ignore it). */
+  pipelineToken?: string;
+}
 export interface CommitResult {
   version: number; fileCount: number; totalSizeBytes: number;
   durationMs: number; alreadyActive: boolean;
@@ -98,7 +103,7 @@ export async function appendBatch(i: AppendInput): Promise<AppendResult> {
 }
 
 export async function commitSession(i: CommitInput): Promise<CommitResult> {
-  return postJson(`${i.baseUrl}/content/publish/commit`, i.apiKey, { sessionId: i.sessionId, allowRevertSlugs: i.allowRevertSlugs ?? [] });
+  return postJson(`${i.baseUrl}/content/publish/commit`, i.apiKey, { sessionId: i.sessionId, allowRevertSlugs: i.allowRevertSlugs ?? [], pipelineToken: i.pipelineToken });
 }
 
 export interface RenderConceptsInput { baseUrl: string; apiKey: string; sessionId: string }
@@ -186,6 +191,27 @@ export async function fetchRemoteHashes({ baseUrl, apiKey }: { baseUrl: string; 
     throw err;
   }
   return res.json() as Promise<Record<string, string>>;
+}
+
+/**
+ * #2727 — the server's active render-pipeline token, piggybacked on
+ * `/content/hashes` as the `X-Pipeline-Token` response header (the JSON body
+ * is left untouched). Returns `undefined` when the header is absent — a legacy
+ * server that predates this change, or a server with no ACTIVE manifest. The
+ * caller treats `undefined` as "pipeline token unknown" → forces a full
+ * republish, which is the safe default (never silently skip a changed render).
+ *
+ * A dedicated HEAD-like GET so the publish flow can read the token without
+ * reshaping `fetchRemoteHashes`'s return contract (used by several callers).
+ */
+export async function fetchRemotePipelineToken({ baseUrl, apiKey }: { baseUrl: string; apiKey?: string }): Promise<string | undefined> {
+  try {
+    const res = await fetch(`${baseUrl}/content/hashes`, apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : undefined);
+    if (!res.ok) return undefined;
+    return res.headers.get('x-pipeline-token') ?? undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

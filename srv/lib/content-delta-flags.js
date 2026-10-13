@@ -12,3 +12,4 @@ export const ensureContentDeltaDefaults = mod.ensureContentDeltaDefaults;
 export const isDeltaWrite = mod.isDeltaWrite;
 export const isDeltaRead = mod.isDeltaRead;
 export const isDeltaSkipCarryForward = mod.isDeltaSkipCarryForward;
+export const setContentDeltaNamespace = mod.setContentDeltaNamespace;

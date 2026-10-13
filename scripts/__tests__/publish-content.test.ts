@@ -57,6 +57,35 @@ describe('discoverTutorials', () => {
     const tutorials = discoverTutorials(HUGO_DIR);
     expect(tutorials.has('stray-file.txt')).toBe(false);
   });
+
+  // Issue #2714: some source tutorial folders ship with uppercase in the name
+  // (e.g. "abap-environment-sbpa-workflow-extend-RAP-App"). Hugo emits lowercase
+  // URLs and the server stores/serves lowercase slugs, so the publish payload
+  // key MUST be lowercase — otherwise a mixed-case Tutorials.slug row is minted
+  // and completeStep/getProgress 404 against the lowercase URL. Normalize the
+  // slug (map KEY) to lowercase at discovery, the single upstream chokepoint,
+  // while keeping the file PATH pointing at the real mixed-case directory.
+  describe('mixed-case source folder (issue #2714)', () => {
+    const MIXED = 'abap-environment-sbpa-workflow-extend-RAP-App';
+    beforeAll(() => {
+      mkdirSync(join(TUTORIALS_DIR, MIXED), { recursive: true });
+      writeFileSync(join(TUTORIALS_DIR, MIXED, 'index.html'), '<h1>Mixed</h1>');
+    });
+    afterAll(() => {
+      rmSync(join(TUTORIALS_DIR, MIXED), { recursive: true, force: true });
+    });
+
+    it('lowercases the slug key but reads from the real (mixed-case) path', () => {
+      const tutorials = discoverTutorials(HUGO_DIR);
+      // key is canonical lowercase
+      expect(tutorials.has(MIXED.toLowerCase())).toBe(true);
+      expect(tutorials.has(MIXED)).toBe(false);
+      // path still points at the on-disk mixed-case folder so the read works
+      const filePath = tutorials.get(MIXED.toLowerCase());
+      expect(filePath).toContain(MIXED);
+      expect(filePath).toMatch(/index\.html$/);
+    });
+  });
 });
 
 describe('computeLocalHashes', () => {
@@ -150,6 +179,14 @@ describe('buildPayload', () => {
     const tutorials = discoverTutorials(HUGO_DIR);
     const payload = buildPayload(['non-existent'], tutorials);
     expect(Object.keys(payload)).toHaveLength(0);
+  });
+
+  // Issue #2714 tripwire: slugs are lowercased at discovery, so a mixed-case
+  // slug reaching buildPayload means a code path reintroduced case — throw
+  // loudly rather than publish a non-canonical key.
+  it('throws on a non-canonical (mixed-case) slug', () => {
+    const tutorials = discoverTutorials(HUGO_DIR);
+    expect(() => buildPayload(['Tutorial-Alpha'], tutorials)).toThrow(/mixed-case|lowercase|2714/i);
   });
 });
 

@@ -10,6 +10,7 @@ One happy-path smoke assertion per surface. Intentionally narrow — load-proves
 |---|---|---|
 | `tutorial-serve.test.js` | `/tutorials/:slug` → CAP content-serve → HANA BLOB | anonymous |
 | `admin-shell.test.js` | `/admin-ui/#missions` (XSUAA) → sap.tnt.ToolPage shell → CAP `/admin` OData | Basic |
+| `admin-preload.test.js` | `/admin-ui/#puzzles` (XSUAA) → asserts `components/puzzles/Component-preload.js` is fetched (200) + no module error (#2749) | Basic |
 | `scanner.test.js` | `/scanner-ui/` (XSUAA scope `MobileApp`) | Basic |
 | `analytics-explorer.test.js` | `/analytics-ui/` (XSUAA) → Vue 3 SPA → CAP `/admin/analytics` | Basic |
 | `display-app.test.js` | `/display-app/` (XSUAA scope `DisplayApp`) → Socket.IO `/ws/display` | Basic |

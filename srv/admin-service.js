@@ -65,6 +65,7 @@ import { FEATURE_FLAGS } from './lib/feature-flags/registry.js'; // #2060 bound 
 import { SEMAPHORE_CONFIG_KEYS, SEMAPHORE_CONFIG_KEY_SET } from './lib/semaphore-sync/config-keys.js';
 import { resetFeaturedCache } from './lib/featured-resolve.js';
 import { revokeAdminGrant as revokeAdminGrantRow } from './lib/admin-grant.js';
+import { reconcileEntityForUsers, findUnhealthyEntities } from './lib/completion-reconcile.js';
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
 // column width verified in db/schema.cds:412.
@@ -1145,6 +1146,134 @@ export default class AdminService extends cds.ApplicationService {
     this.before('UPDATE', 'CompletionPathItems', makeAltGroupHandler('CompletionPathItems', 'path_ID', 'UPDATE'));
     this.before('CREATE', 'GroupPathItems',      makeAltGroupHandler('GroupPathItems',      'group_ID', 'CREATE'));
     this.before('UPDATE', 'GroupPathItems',      makeAltGroupHandler('GroupPathItems',      'group_ID', 'UPDATE'));
+
+    // #2732 — self-heal: when a completion path mapping changes, reconcile the
+    // affected mission/group's stored GROUP/MISSION records for all touched
+    // users. Fire-and-forget in a detached tx; a reconcile fault must never
+    // fail the author's SAVE.
+    //
+    // DELETE resolution: in CAP the row is already deleted before the
+    // after('DELETE') handler fires. We capture the parent FK in before('DELETE')
+    // onto req._cpiPathId / req._gpiGroupId so the after-hook can still resolve
+    // the parent entity even after the row is gone.
+    const fireReconcile = (kind, legacyId) => {
+      if (legacyId == null) return;
+      setImmediate(() => {
+        cds.tx(async (tx) => { await reconcileEntityForUsers({ kind, legacyId, db: tx }); })
+          .catch(err => cds.log('rollup').error('SAVE-triggered reconcile failed (non-fatal):', err.message));
+      });
+    };
+
+    const resolveMissionLegacyForPath = async (pathId) => {
+      if (!pathId) return null;
+      const { CompletionPaths, Missions } = cds.entities('com.sap.developers.ims');
+      const [p] = await SELECT.from(CompletionPaths).columns('mission_ID').where({ ID: pathId });
+      if (!p?.mission_ID) return null;
+      const [m] = await SELECT.from(Missions).columns('legacyId').where({ ID: p.mission_ID });
+      return m?.legacyId ?? null;
+    };
+    const resolveGroupLegacy = async (groupId) => {
+      if (!groupId) return null;
+      const { Groups } = cds.entities('com.sap.developers.ims');
+      const [g] = await SELECT.from(Groups).columns('legacyId').where({ ID: groupId });
+      return g?.legacyId ?? null;
+    };
+    const resolveMissionsNestingGroup = async (groupId) => {
+      if (!groupId) return [];
+      const { CompletionPathItems: CPI, CompletionPaths, Missions } = cds.entities('com.sap.developers.ims');
+      const items = await SELECT.from(CPI).columns('path_ID').where({ taskType: 'GROUP', group_ID: groupId });
+      if (!items.length) return [];
+      const paths = await SELECT.from(CompletionPaths).columns('mission_ID')
+        .where({ ID: { in: items.map(i => i.path_ID) } });
+      const missionIds = [...new Set(paths.map(p => p.mission_ID).filter(Boolean))];
+      if (!missionIds.length) return [];
+      const missions = await SELECT.from(Missions).columns('legacyId')
+        .where({ ID: { in: missionIds } });
+      return missions.map(m => m.legacyId).filter(v => v != null);
+    };
+
+    // before('DELETE') — capture parent FK before the row is physically removed
+    // so the after('DELETE') hook can still resolve the parent.
+    this.before('DELETE', 'CompletionPathItems', async (req) => {
+      try {
+        // CAP surfaces the key in different places depending on the delete form:
+        //   keyed-navigation (OData): req.data.ID or req.params[0].ID
+        //   WHERE-clause (service.tx()): req.query.DELETE.where[2].val
+        const id = req.data?.ID
+          ?? req.params?.[0]?.ID
+          ?? req.params?.[0]
+          ?? req.query?.DELETE?.where?.[2]?.val;
+        if (!id) return;
+        const { CompletionPathItems: CPI } = cds.entities('com.sap.developers.ims');
+        const [row] = await SELECT.from(CPI).columns('path_ID').where({ ID: id });
+        if (row?.path_ID) req._cpiPathId = row.path_ID;
+      } catch (_) { /* fail-open — if we can't capture, after-hook is a no-op */ }
+    });
+    this.before('DELETE', 'GroupPathItems', async (req) => {
+      try {
+        const id = req.data?.ID
+          ?? req.params?.[0]?.ID
+          ?? req.params?.[0]
+          ?? req.query?.DELETE?.where?.[2]?.val;
+        if (!id) return;
+        const { GroupPathItems: GPI } = cds.entities('com.sap.developers.ims');
+        const [row] = await SELECT.from(GPI).columns('group_ID').where({ ID: id });
+        if (row?.group_ID) req._gpiGroupId = row.group_ID;
+      } catch (_) { /* fail-open */ }
+    });
+
+    const onCompletionPathItemChange = async (_data, req) => {
+      // path_ID is present on CREATE/UPDATE; for DELETE we use the before-hook capture.
+      const pathId = req.data?.path_ID ?? req._cpiPathId
+        ?? (Array.isArray(req.params) && req.params[0]?.path_ID);
+      const legacyId = await resolveMissionLegacyForPath(pathId).catch(() => null);
+      fireReconcile('MISSION', legacyId);
+    };
+    const onGroupPathItemChange = async (_data, req) => {
+      const groupId = req.data?.group_ID ?? req._gpiGroupId
+        ?? (Array.isArray(req.params) && req.params[0]?.group_ID);
+      const groupLegacy = await resolveGroupLegacy(groupId).catch(() => null);
+      fireReconcile('GROUP', groupLegacy);
+      const missionLegacyIds = await resolveMissionsNestingGroup(groupId).catch(() => []);
+      for (const mLegacy of missionLegacyIds) fireReconcile('MISSION', mLegacy);
+    };
+
+    this.after(['CREATE', 'UPDATE', 'DELETE'], 'CompletionPathItems', onCompletionPathItemChange);
+    this.after(['CREATE', 'UPDATE', 'DELETE'], 'GroupPathItems', onGroupPathItemChange);
+
+    // #2732 — root-level after-hooks for the normal Fiori draft-activation path.
+    // CAP only fires CREATE/UPDATE on the ROOT active entity (Missions/Groups) on
+    // draftActivate — "events aren't automatically triggered on composition entities"
+    // (CAP docs: Deeply Structured Documents). The child-entity hooks above cover
+    // direct programmatic writes and DELETEs; these root hooks cover the admin
+    // edit-and-save (draft activation) flow.
+    // SAVE is used here: on draft-enabled entities SAVE fires specifically on
+    // draftActivate (not the same as CREATE/UPDATE); on non-draft active entities
+    // it is a shorthand for CREATE+UPDATE. Both production paths are covered.
+    const onMissionSave = async (_data, req) => {
+      try {
+        const legacyId = req.data?.legacyId
+          ?? (req.data?.ID ? (await SELECT.one.from(cds.entities('com.sap.developers.ims').Missions)
+            .columns('legacyId').where({ ID: req.data.ID }))?.legacyId : null);
+        fireReconcile('MISSION', legacyId);
+      } catch (_) { /* fail-open */ }
+    };
+    const onGroupSave = async (_data, req) => {
+      try {
+        const { Groups } = cds.entities('com.sap.developers.ims');
+        const groupId = req.data?.ID ?? req.params?.[0]?.ID;
+        const legacyId = req.data?.legacyId
+          ?? (groupId ? (await SELECT.one.from(Groups).columns('legacyId').where({ ID: groupId }))?.legacyId : null);
+        fireReconcile('GROUP', legacyId);
+        // Also reconcile missions that nest this group.
+        if (groupId) {
+          const missionLegacyIds = await resolveMissionsNestingGroup(groupId).catch(() => []);
+          for (const mLegacy of missionLegacyIds) fireReconcile('MISSION', mLegacy);
+        }
+      } catch (_) { /* fail-open */ }
+    };
+    this.after('SAVE', 'Missions', onMissionSave);
+    this.after('SAVE', 'Groups', onGroupSave);
 
     // Advocates: auto-derive slug from firstName + lastName on CREATE.
     advocateHandlers.register(this);
@@ -3623,6 +3752,14 @@ export default class AdminService extends cds.ApplicationService {
           : 'No orphaned RUNNING PipelineLog row found (already closed, or job not currently logged as running)',
       };
     });
+
+    // #2732: on-demand audit of missions/groups with INACTIVE or unresolvable
+    // completion path slots. Authors use this to find and fix bad mappings.
+    this.on('completionHealth', async () => {
+      const db = await cds.connect.to('db');
+      return findUnhealthyEntities(db);
+    });
+
     // Bound action on Tutorials. Resolves slug, audit-logs intent, dispatches
     // a slug-targeted rebuild via scheduleRebuild's 60s debounce. Shared body
     // lives in srv/lib/rebuild-action-handler.js so AuthorService can reuse it
