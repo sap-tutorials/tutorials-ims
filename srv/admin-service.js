@@ -1241,6 +1241,40 @@ export default class AdminService extends cds.ApplicationService {
     this.after(['CREATE', 'UPDATE', 'DELETE'], 'CompletionPathItems', onCompletionPathItemChange);
     this.after(['CREATE', 'UPDATE', 'DELETE'], 'GroupPathItems', onGroupPathItemChange);
 
+    // #2732 — root-level after-hooks for the normal Fiori draft-activation path.
+    // CAP only fires CREATE/UPDATE on the ROOT active entity (Missions/Groups) on
+    // draftActivate — "events aren't automatically triggered on composition entities"
+    // (CAP docs: Deeply Structured Documents). The child-entity hooks above cover
+    // direct programmatic writes and DELETEs; these root hooks cover the admin
+    // edit-and-save (draft activation) flow.
+    // SAVE is used here: on draft-enabled entities SAVE fires specifically on
+    // draftActivate (not the same as CREATE/UPDATE); on non-draft active entities
+    // it is a shorthand for CREATE+UPDATE. Both production paths are covered.
+    const onMissionSave = async (_data, req) => {
+      try {
+        const legacyId = req.data?.legacyId
+          ?? (req.data?.ID ? (await SELECT.one.from(cds.entities('com.sap.developers.ims').Missions)
+            .columns('legacyId').where({ ID: req.data.ID }))?.legacyId : null);
+        fireReconcile('MISSION', legacyId);
+      } catch (_) { /* fail-open */ }
+    };
+    const onGroupSave = async (_data, req) => {
+      try {
+        const { Groups } = cds.entities('com.sap.developers.ims');
+        const groupId = req.data?.ID ?? req.params?.[0]?.ID;
+        const legacyId = req.data?.legacyId
+          ?? (groupId ? (await SELECT.one.from(Groups).columns('legacyId').where({ ID: groupId }))?.legacyId : null);
+        fireReconcile('GROUP', legacyId);
+        // Also reconcile missions that nest this group.
+        if (groupId) {
+          const missionLegacyIds = await resolveMissionsNestingGroup(groupId).catch(() => []);
+          for (const mLegacy of missionLegacyIds) fireReconcile('MISSION', mLegacy);
+        }
+      } catch (_) { /* fail-open */ }
+    };
+    this.after('SAVE', 'Missions', onMissionSave);
+    this.after('SAVE', 'Groups', onGroupSave);
+
     // Advocates: auto-derive slug from firstName + lastName on CREATE.
     advocateHandlers.register(this);
     devtoberfestBannerHandlers.register(this);
