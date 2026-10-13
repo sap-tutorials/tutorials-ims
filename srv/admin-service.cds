@@ -658,16 +658,6 @@ service AdminService {
       closed    : Integer;
       reason    : String;
     };
-
-    // #2732 — on-demand list of missions/groups whose completion paths contain
-    // an INACTIVE or unresolvable tutorial (so authors can fix the mapping).
-    function completionHealth() returns array of {
-      kind      : String;
-      legacyId  : Integer;
-      title     : String;
-      slug      : String;
-      badSlots  : array of { taskLegacyId : Integer; reason : String; };
-    };
   };
 
   @odata.draft.enabled
@@ -1317,6 +1307,16 @@ service AdminService {
 
   /** Revoke a user's headless-admin grant (kills their admin PATs within ~60s). */
   action revokeAdminGrant(user_ID : String) returns { revoked : Integer };
+
+  // #2732 — on-demand list of missions/groups whose completion paths contain
+  // an INACTIVE or unresolvable tutorial (so authors can fix the mapping).
+  function completionHealth() returns array of {
+    kind      : String;
+    legacyId  : Integer;
+    title     : String;
+    slug      : String;
+    badSlots  : array of { taskLegacyId : Integer; reason : String; };
+  };
 }
 
 // ── Rebuild-button action (issue: rebuild-button, spec: 2026-06-24-admin-tutorial-rebuild-button) ──
