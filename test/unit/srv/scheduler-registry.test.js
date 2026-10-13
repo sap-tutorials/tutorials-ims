@@ -67,7 +67,8 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     // #2312 adds fetch-teched-sessions           (51 -> 52)
     // #2312 adds refresh-teched-sessions         (52 -> 53)
     // #2426 adds generate-concept-definitions      (53 -> 54)
-    expect(_getJobRegistry().size).toBe(54);
+    // #2732 adds reconcile-completions               (54 -> 55)
+    expect(_getJobRegistry().size).toBe(55);
     const names = [..._getJobRegistry().keys()];
     expect(names).toContain('fetch-help-docs');
     expect(names).toContain('fetch-community-events');
@@ -92,6 +93,7 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     expect(names).toContain('freshness-scan');
     expect(names).toContain('feedback-owner-digest');
     expect(names).toContain('semaphore-tag-sync');
+    expect(names).toContain('reconcile-completions');
   });
 
   it('runJobByName(unknownName) throws', async () => {

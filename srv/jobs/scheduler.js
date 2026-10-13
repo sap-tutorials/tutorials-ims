@@ -47,6 +47,7 @@ import { runFetchLearningJourneys } from './fetch-learning-journeys-job.js';
 import { runFetchBlogPosts } from './fetch-blog-posts-job.js';
 import { runFetchNews } from './fetch-news-job.js';
 import { runMaterializeCoCompletions } from './materialize-co-completions.js';
+import { reconcileAll } from '../lib/completion-reconcile.js';
 import { runKgPageRank } from './kg-pagerank-job.js';
 import { runKgCommunities } from './kg-communities-job.js';
 import { runKgCommunityLabels } from './kg-community-label-job.js';
@@ -638,6 +639,18 @@ export function registerJobs() {
     ttlMs: 900000,
     description: 'Rebuild CoCompletions table for fast neighborhood lookups',
     fn: () => runMaterializeCoCompletions(),
+  });
+
+  // #2732 — nightly self-heal of GROUP/MISSION completion records. Repairs
+  // drift from mapping edits + the ~50 pre-existing dead-slot entities, and
+  // keeps them healed. Off-minute :17 avoids the 04:00/:33 cluster. Fail-open:
+  // reconcileAll never throws. Manually runnable via AdminService.runJob.
+  registerJob({
+    jobName: 'reconcile-completions',
+    schedule: '17 4 * * *',
+    ttlMs: 1_800_000,
+    description: 'Self-heal GROUP/MISSION completion records (drift + INACTIVE)',
+    fn: () => reconcileAll({ db: cds.db }),
   });
 
   // Daily 03:53 UTC — recompute PageRank over the KG property graph

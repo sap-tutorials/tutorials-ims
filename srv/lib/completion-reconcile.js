@@ -107,6 +107,37 @@ export async function reconcileEntityForUsers({ kind, legacyId, db, userIds, sen
 }
 
 /**
+ * Sweep all PUBLISHED Groups + Missions and reconcile their completion records.
+ * Designed as a nightly backstop to repair ~50 pre-existing dead-slot entities
+ * and keep them healed after mapping edits. Fail-open: catches all errors and
+ * logs them without re-throwing. `batch` is reserved for future per-user
+ * chunking; reconcileEntityForUsers already chunks its own .in() queries.
+ *
+ * @param {{ db: object, batch?: number, send?: boolean }} opts
+ * @returns {Promise<{ entities: number, created: number, updated: number, completed: number, flagged: number }>}
+ */
+export async function reconcileAll({ db, batch = 500, send = false } = {}) {
+  const totals = { entities: 0, created: 0, updated: 0, completed: 0, flagged: 0 };
+  try {
+    const { Missions, Groups } = cds.entities(NS);
+    const groups = await db.run(SELECT.from(Groups).columns('legacyId').where({ published: true }));
+    const missions = await db.run(SELECT.from(Missions).columns('legacyId').where({ published: true }));
+    for (const g of groups) {
+      const r = await reconcileEntityForUsers({ kind: 'GROUP', legacyId: g.legacyId, db, send });
+      totals.entities++; totals.created += r.created; totals.updated += r.updated; totals.completed += r.completed; totals.flagged += r.flagged;
+    }
+    for (const m of missions) {
+      const r = await reconcileEntityForUsers({ kind: 'MISSION', legacyId: m.legacyId, db, send });
+      totals.entities++; totals.created += r.created; totals.updated += r.updated; totals.completed += r.completed; totals.flagged += r.flagged;
+    }
+  } catch (err) {
+    LOG.error('reconcileAll failed (non-fatal):', err.message);
+    metrics.counter('rollup.failures');
+  }
+  return totals;
+}
+
+/**
  * Scan PUBLISHED missions + groups for path items that reference INACTIVE or
  * unresolvable tutorials, or that filter to an empty slot set.
  *
