@@ -1,6 +1,6 @@
 specVersion: "4.0"
 metadata:
-  name: sap.tutorials.admin.devtoberfestSignups
+  name: sap.tutorials.admin.devtoberfest-signups
 type: application
 framework:
   name: SAPUI5

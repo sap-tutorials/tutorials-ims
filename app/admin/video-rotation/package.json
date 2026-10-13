@@ -1,0 +1,12 @@
+{
+  "name": "sap.tutorials.admin.video-rotation",
+  "version": "0.0.1",
+  "private": true,
+  "description": "video-rotation - Admin freestyle UI5",
+  "scripts": {
+    "build": "ui5 build --clean-dest"
+  },
+  "devDependencies": {
+    "@ui5/cli": "^4.0.0"
+  }
+}

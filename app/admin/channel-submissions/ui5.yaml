@@ -1,6 +1,6 @@
 specVersion: "4.0"
 metadata:
-  name: sap.tutorials.admin.channelSubmissions
+  name: sap.tutorials.admin.channel-submissions
 type: application
 framework:
   name: SAPUI5

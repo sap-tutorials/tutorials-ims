@@ -1,6 +1,6 @@
 specVersion: "4.0"
 metadata:
-  name: sap.tutorials.admin.contentModeration
+  name: sap.tutorials.admin.content-moderation
 type: application
 framework:
   name: SAPUI5

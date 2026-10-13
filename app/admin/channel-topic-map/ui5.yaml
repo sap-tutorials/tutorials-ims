@@ -1,6 +1,6 @@
 specVersion: "4.0"
 metadata:
-  name: sap.tutorials.admin.channelTopicMap
+  name: sap.tutorials.admin.channel-topic-map
 type: application
 framework:
   name: SAPUI5
