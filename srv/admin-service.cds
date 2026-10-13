@@ -658,6 +658,16 @@ service AdminService {
       closed    : Integer;
       reason    : String;
     };
+
+    // #2732 — on-demand list of missions/groups whose completion paths contain
+    // an INACTIVE or unresolvable tutorial (so authors can fix the mapping).
+    function completionHealth() returns array of {
+      kind      : String;
+      legacyId  : Integer;
+      title     : String;
+      slug      : String;
+      badSlots  : array of { taskLegacyId : Integer; reason : String; };
+    };
   };
 
   @odata.draft.enabled

@@ -65,7 +65,7 @@ import { FEATURE_FLAGS } from './lib/feature-flags/registry.js'; // #2060 bound 
 import { SEMAPHORE_CONFIG_KEYS, SEMAPHORE_CONFIG_KEY_SET } from './lib/semaphore-sync/config-keys.js';
 import { resetFeaturedCache } from './lib/featured-resolve.js';
 import { revokeAdminGrant as revokeAdminGrantRow } from './lib/admin-grant.js';
-import { reconcileEntityForUsers } from './lib/completion-reconcile.js';
+import { reconcileEntityForUsers, findUnhealthyEntities } from './lib/completion-reconcile.js';
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
 // column width verified in db/schema.cds:412.
@@ -3752,6 +3752,14 @@ export default class AdminService extends cds.ApplicationService {
           : 'No orphaned RUNNING PipelineLog row found (already closed, or job not currently logged as running)',
       };
     });
+
+    // #2732: on-demand audit of missions/groups with INACTIVE or unresolvable
+    // completion path slots. Authors use this to find and fix bad mappings.
+    this.on('completionHealth', async () => {
+      const db = await cds.connect.to('db');
+      return findUnhealthyEntities(db);
+    });
+
     // Bound action on Tutorials. Resolves slug, audit-logs intent, dispatches
     // a slug-targeted rebuild via scheduleRebuild's 60s debounce. Shared body
     // lives in srv/lib/rebuild-action-handler.js so AuthorService can reuse it
