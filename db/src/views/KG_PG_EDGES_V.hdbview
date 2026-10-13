@@ -186,14 +186,38 @@ VIEW "KG_PG_EDGES_V" AS
   -- gate WHERE SCORE >= 10 MIRRORS the RDF projection's k=10 threshold at
   -- srv/lib/kg-projection.js:466-479. Raw pair counts below the threshold
   -- must never reach the property graph.
+  --
+  -- VERTEX-SAFETY INNER JOINs to Tutorials (src/tgt): unlike every other
+  -- tutorial arm, this arm's endpoints are STORED SLUG STRINGS
+  -- (CoCompletions.SOURCESLUG/TARGETSLUG), not FK joins to the live
+  -- Tutorials row. CoCompletions is rebuilt nightly by
+  -- materialize-co-completions (04:33 UTC) but the three graph-consuming
+  -- jobs run EARLIER (kg-pagerank 03:53, kg-communities 03:57, kg-wcc
+  -- 04:07). So on the morning after a slug rename (e.g. the #2714
+  -- repair-mixed-case-tutorial-duplicates in-place `.toLowerCase()`),
+  -- CoCompletions still carries the OLD slug while KG_PG_VERTICES_V (keyed
+  -- off the live Tutorials.SLUG) already emits only the NEW one. The arm
+  -- would then emit a 'tutorial:<old-slug>' endpoint with no matching
+  -- vertex → KG_LOUVAIN_GRAPH / PageRank / WCC crash with
+  --   [4907] range 3 "Source or target column contains an invalid vertex
+  --    key 'tutorial:<slug>'".
+  -- Observed on PROD 2026-10-13 04:00 UTC (kg-communities ScheduledJobFailed
+  -- for slug 'abap-environment-sbpa-workflow-extend-RAP-App'). Joining both
+  -- endpoints to the live Tutorials.SLUG makes a vertex-less slug drop out
+  -- of the edge set (fail-open) instead of crashing the whole workspace —
+  -- matching how KG_PG_VERTICES_V derives tutorial keys, so SOURCE/TARGET
+  -- are guaranteed to resolve to a vertex. For valid rows SOURCESLUG = t.SLUG,
+  -- so EDGE_KEY/SOURCE/TARGET are byte-identical to the pre-guard output.
   SELECT
-    CAST('cc|' || SOURCESLUG || '|' || TARGETSLUG AS NVARCHAR(600)) AS "EDGE_KEY",
-    CAST('tutorial:' || SOURCESLUG AS NVARCHAR(280))                AS "SOURCE",
-    CAST('tutorial:' || TARGETSLUG AS NVARCHAR(280))                AS "TARGET",
-    'coCompletedWith'                                               AS "EDGE_TYPE"
-  FROM "COM_SAP_DEVELOPERS_IMS_COCOMPLETIONS"
-  WHERE SCORE >= 10
-    AND SOURCESLUG IS NOT NULL AND TARGETSLUG IS NOT NULL
+    CAST('cc|' || cc.SOURCESLUG || '|' || cc.TARGETSLUG AS NVARCHAR(600)) AS "EDGE_KEY",
+    CAST('tutorial:' || src.SLUG AS NVARCHAR(280))                        AS "SOURCE",
+    CAST('tutorial:' || tgt.SLUG AS NVARCHAR(280))                        AS "TARGET",
+    'coCompletedWith'                                                     AS "EDGE_TYPE"
+  FROM "COM_SAP_DEVELOPERS_IMS_COCOMPLETIONS" cc
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" src ON src.SLUG = cc.SOURCESLUG
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" tgt ON tgt.SLUG = cc.TARGETSLUG
+  WHERE cc.SCORE >= 10
+    AND cc.SOURCESLUG IS NOT NULL AND cc.TARGETSLUG IS NOT NULL
   UNION ALL
   -- kg:covers edges: teched_session → concept (#2312)
   -- Source: TechEdSessionConceptLinks (session ↔ concept junction, populated
