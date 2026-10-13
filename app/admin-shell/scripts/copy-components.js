@@ -35,9 +35,7 @@ const { discoverComponents } = require('./discover-admin-components')
 //     its Web Worker via `new Worker(sap.ui.require.toUrl("...fill-worker.js"))`,
 //     which needs the physical lib/fill-worker.js on disk. Plain `ui5 build`
 //     KEEPS that file alongside the preload, so the worker still resolves.
-const PRELOAD_COMPONENTS = new Set([
-  'puzzles',
-])
+const PRELOAD_COMPONENTS = require('./preload-components.cjs').PRELOAD_COMPONENTS
 
 const DIST = join(__dirname, '..', 'dist')
 const COMPONENTS_DIR = join(DIST, 'components')
