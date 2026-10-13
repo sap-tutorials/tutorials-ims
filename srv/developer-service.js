@@ -296,6 +296,7 @@ export default class DeveloperService extends cds.ApplicationService {
         dbUser,
         task: { taskType: 'TUTORIAL', taskLegacyId: tutorial.legacyId, tutorialId: tutorial.ID },
         db,
+        allowDowngrade: true,
       });
 
       return {

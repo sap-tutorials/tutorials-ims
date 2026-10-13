@@ -200,12 +200,21 @@ export async function getUserCompletedMap(dbUser, taskLegacyIds, db) {
 }
 
 /** SELECT-then-UPDATE-or-INSERT a GROUP/MISSION record; fire NGDS on the → COMPLETED edge. */
-export async function upsertRollupRecord({ dbUser, taskType, legacyId, title, progress, status, completionDate, db, send }) {
+export async function upsertRollupRecord({ dbUser, taskType, legacyId, title, progress, status, completionDate, db, send, allowDowngrade = false }) {
   const { TaskRecords } = cds.entities(NS);
   const existing = await db.run(SELECT.one.from(TaskRecords).where({
     user_ID: dbUser.ID, taskLegacyId: legacyId, taskType, status: { '!=': 'SUPERSEDED' },
   }));
   if (existing) {
+    // Legacy short-circuit (#2732): never downgrade a COMPLETED parent on a
+    // recompute/reconcile. Progress may still ratchet UP; status holds.
+    const wouldDowngrade = existing.status === 'COMPLETED' && status !== 'COMPLETED';
+    if (wouldDowngrade && !allowDowngrade) {
+      const heldProgress = Math.max(existing.progress ?? 0, progress ?? 0);
+      if (heldProgress === existing.progress) return; // no change
+      await db.run(UPDATE(TaskRecords, existing.ID).set({ progress: heldProgress }));
+      return;
+    }
     if (existing.progress === progress && existing.status === status) return; // no-op, avoids churn
     const priorStatus = existing.status;
     await db.run(UPDATE(TaskRecords, existing.ID).set(stampSubmissionId({
@@ -239,7 +248,7 @@ export async function upsertRollupRecord({ dbUser, taskType, legacyId, title, pr
  * Never throws into the caller's transaction (wrapped; logs + metrics on fault).
  * @param {{dbUser:{ID:string}, task:{taskType,taskLegacyId,tutorialId?}, db, send?:boolean}} opts
  */
-export async function rollUpParentsForCompletion({ dbUser, task, db, send = true }) {
+export async function rollUpParentsForCompletion({ dbUser, task, db, send = true, allowDowngrade = false }) {
   try {
     const { Groups, Missions } = cds.entities(NS);
     const { groupLegacyIds, missionIds } = await findParents(task, db);
@@ -298,7 +307,7 @@ export async function rollUpParentsForCompletion({ dbUser, task, db, send = true
       const { progress, status } = calculateMissionProgress(satisfied, total);
       await upsertRollupRecord({
         dbUser, taskType: 'GROUP', legacyId, title: g.title,
-        progress, status, completionDate: latestDate(slots), db, send,
+        progress, status, completionDate: latestDate(slots), db, send, allowDowngrade,
       });
     }
     for (const m of missionRows) {
@@ -308,7 +317,7 @@ export async function rollUpParentsForCompletion({ dbUser, task, db, send = true
       const { progress, status } = calculateMissionProgress(satisfied, total);
       await upsertRollupRecord({
         dbUser, taskType: 'MISSION', legacyId: m.legacyId, title: m.title,
-        progress, status, completionDate: latestDate(slots), db, send,
+        progress, status, completionDate: latestDate(slots), db, send, allowDowngrade,
       });
     }
   } catch (err) {
