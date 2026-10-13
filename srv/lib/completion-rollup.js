@@ -101,10 +101,11 @@ export async function loadGroupSlots(groupUuid, db) {
     SELECT.from(GroupPathItems).where({ group_ID: groupUuid }).orderBy('itemOrder')
   );
   if (gpItems.length === 0) return [];
-  const tuts = await chunkedIn(Tutorials, 'ID', gpItems.map(i => i.tutorial_ID), db, ['ID', 'legacyId']);
+  const tuts = await chunkedIn(Tutorials, 'ID', gpItems.map(i => i.tutorial_ID), db, ['ID', 'legacyId', 'status']);
   const legacyById = new Map(tuts.map(t => [t.ID, t.legacyId]));
+  const inactiveIds = new Set(tuts.filter(t => t.status === 'INACTIVE').map(t => t.ID));
   const items = gpItems
-    .filter(i => legacyById.get(i.tutorial_ID) != null)
+    .filter(i => legacyById.get(i.tutorial_ID) != null && !inactiveIds.has(i.tutorial_ID))
     .map(i => ({
       taskType: 'TUTORIAL',
       taskLegacyId: legacyById.get(i.tutorial_ID),
@@ -134,7 +135,15 @@ export async function loadMissionSlots(missionUuid, db) {
     altGroupKey: i.altGroupKey,
     groupId: i.taskType === 'GROUP' ? (groupLegacyByUuid.get(i.group_ID) ?? null) : null,
   })).filter(i => i.groupId != null || i.taskLegacyId != null);
-  return collapseSlots(norm);
+  const tutorialLegacyIds = norm.filter(i => i.taskType === 'TUTORIAL' && i.taskLegacyId != null).map(i => i.taskLegacyId);
+  let inactiveLegacy = new Set();
+  if (tutorialLegacyIds.length) {
+    const { Tutorials } = cds.entities(NS);
+    const tuts = await chunkedIn(Tutorials, 'legacyId', tutorialLegacyIds, db, ['legacyId', 'status']);
+    inactiveLegacy = new Set(tuts.filter(t => t.status === 'INACTIVE').map(t => t.legacyId));
+  }
+  const filtered = norm.filter(i => !(i.taskType === 'TUTORIAL' && inactiveLegacy.has(i.taskLegacyId)));
+  return collapseSlots(filtered);
 }
 
 /**
