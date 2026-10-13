@@ -702,7 +702,7 @@ export async function provisionDbUser(user, columns) {
  * request transaction. Never mints. Returns null for anonymous / miss.
  * #2730: replaces the resolveUserSapId + where({sapId}) pattern that returned
  * nothing for null-sapId social/IAS/GitHub logins.
- * @param {object} req — CAP request (uses req.user + cds.tx(req)).
+ * @param {object} req — CAP request (uses req.user; threads req.tx when present via cds.tx(req), falls back to ambient when req.tx is absent).
  * @param {string[]} [columns]
  */
 export async function resolveDbUserScoped(req, columns) {
@@ -735,8 +735,12 @@ export async function resolveDbUserScoped(req, columns) {
 export async function getOrProvisionDbUser(req, { sapId } = {}, columns) {
   const user = req?.user;
   // Browser/IAS token present → tiered provision (handles null-sapId correctly).
-  const hasToken = !!issuerSubjectFromUser(user) || !!emailFromUser(user)
-    || (user?.attr && (user.attr.given_name || user.attr.family_name));
+  // Use iss+sub (OIDC), attr.email (XS token attribute), or name attrs as the
+  // signal. Do NOT use emailFromUser's user.id fallback — basic-auth test users
+  // also have email-shaped user.id values, which would falsely trigger this path
+  // for legacy sapId-keyed test rows (e.g. the #1614 overflow regression test).
+  const hasToken = !!issuerSubjectFromUser(user)
+    || (user?.attr && (user.attr.email || user.attr.given_name || user.attr.family_name));
   if (hasToken) {
     const row = await provisionDbUser(user, columns);
     if (row) return row;
