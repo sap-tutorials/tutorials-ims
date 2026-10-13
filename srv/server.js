@@ -56,6 +56,7 @@ import * as devtoberfestPublic from './routes/devtoberfest-public.js';
 import * as eventLogoPublic from './routes/event-logo-public.js';
 import * as devtoberfestSchedule from './routes/devtoberfest-schedule.js';
 import * as techedIcal from './routes/teched-ical.js';
+import * as techedPublic from './routes/teched-public.js';
 import * as devtoberfestScheduleCheck from './routes/devtoberfest-schedule-check.js';
 import * as devtoberfestAuth from './routes/devtoberfest-auth.js';
 import * as devtoberfestCatGame from './routes/devtoberfest-cat-game.js';
@@ -765,6 +766,7 @@ cds.on('bootstrap', (app) => {
   eventLogoPublic.register(app);
   devtoberfestSchedule.register(app);
   techedIcal.register(app);
+  techedPublic.register(app);
   devtoberfestScheduleCheck.register(app);
   devtoberfestAuth.register(app);
   devtoberfestCatGame.register(app);
