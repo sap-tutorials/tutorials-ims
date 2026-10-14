@@ -46,6 +46,7 @@
 //     and never affects line-level block boundaries, so it needs no masking.
 
 import MarkdownIt from 'markdown-it'
+import { normalizeFenceIndent } from './fence-indent-normalize.js'
 
 /** Per-line block classification derived from the CommonMark token stream. */
 export type LineKind = 'code' | 'heading' | 'html' | 'other'
@@ -186,28 +187,83 @@ export interface FenceHealth {
 
 /**
  * Structural health signal for the corpus regression gate and the author-time
- * lint. A well-formed tutorial has every raw ATX heading classify AS a heading;
- * when a drifted/unterminated fence runs past a heading, that heading classifies
- * as 'code' instead and is "swallowed" (steps collapse). `swallowedHeadings > 0`
- * is the direct, source-level red flag — independent of step-count baselines.
+ * lint. When a drifted / unterminated / CRLF-broken fence runs past a `### `
+ * step heading, that heading classifies as 'code' instead of 'heading' and is
+ * "swallowed" (the step silently collapses). `swallowedHeadings > 0` is the
+ * direct source-level red flag.
+ *
+ * PRECISION — a swallowed heading is counted ONLY when BOTH hold:
+ *   1. it is a step-shaped `### ` (exactly H3) line classified as code/html, AND
+ *   2. the document has a MALFORMED fence — `normalizeFenceIndent` would change
+ *      it (indent drift), OR a fence is unterminated, OR there are stray/lone CR
+ *      (mixed line endings, which break CommonMark fence recognition).
+ *
+ * Both conditions are required to avoid the ~54-false-positive bug (#2772
+ * follow-up): a `#`/`##`/`###` line inside a WELL-FORMED fenced code block —
+ * a shell/Python/Dockerfile comment, a `.http` `### ` request separator, a
+ * `.properties` comment — is legitimate content that renders fine, NOT a
+ * swallowed step. Validated against the full 1323-tutorial corpus: 13/13 genuine
+ * drift-swallows flagged, 0 of 54 false positives. `rawAtxHeadings` /
+ * `classifiedHeadings` remain whole-document ATX counts for context.
  */
 export function fenceHealth(md: string): FenceHealth {
   const rawLines = md.split('\n')
   const classes = classifyLines(md)
   const atx = /^ {0,3}#{1,6}\s/
+  const h3 = /^ {0,3}### /
   // Ignore ATX-looking lines inside the frontmatter block (blankFrontmatter
   // handles classification; here we just avoid counting YAML as a heading).
   const deFm = blankFrontmatter(rawLines)
+  const malformed = hasMalformedFence(md)
   let rawAtxHeadings = 0
   let swallowedHeadings = 0
   for (let i = 0; i < deFm.length; i++) {
-    if (!atx.test(deFm[i])) continue
+    const line = deFm[i].replace(/\r$/, '')
+    if (!atx.test(line)) continue
     rawAtxHeadings++
-    if (classes[i]?.kind === 'code' || classes[i]?.kind === 'html') swallowedHeadings++
+    const c = classes[i]?.kind
+    // A swallowed step = a step-shaped H3 in a code/html region, but ONLY when
+    // the document actually has a malformed fence. Without that, an H3 in code
+    // is legitimate fenced content (e.g. a .http `### ` separator), not a swallow.
+    if ((c === 'code' || c === 'html') && h3.test(line) && malformed) swallowedHeadings++
   }
   return {
     rawAtxHeadings,
     classifiedHeadings: rawAtxHeadings - swallowedHeadings,
     swallowedHeadings,
   }
+}
+
+// Fence delimiters per CommonMark: open indented 0–3 spaces, 3+ backticks/tildes,
+// optional info string. Close: same char, run length >= opener, no info string.
+const FENCE_OPEN_RE = /^ {0,3}(`{3,}|~{3,})(.*)$/
+const FENCE_CLOSE_RE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/
+
+/**
+ * True when the document has a fence defect that can swallow a heading:
+ *   - `normalizeFenceIndent` would change it (indent drift — the #2720 class), OR
+ *   - a fenced block is unterminated (no matching close before EOF), OR
+ *   - stray/lone CR / mixed line endings (break CommonMark fence recognition —
+ *     the xsa-node-modules class).
+ * A well-formed document returns false, so legitimate `#`-comments inside valid
+ * fences are never treated as swallowed headings.
+ */
+function hasMalformedFence(md: string): boolean {
+  if (normalizeFenceIndent(md) !== md) return true
+  // Mixed line endings: lone CR, or a mix of CRLF and bare-LF lines.
+  if (/\r(?!\n)/.test(md) || (/\r\n/.test(md) && /(?<!\r)\n/.test(md))) return true
+  const lines = md.split('\n').map(l => l.replace(/\r$/, ''))
+  let i = 0
+  while (i < lines.length) {
+    const o = lines[i].match(FENCE_OPEN_RE)
+    if (!o) { i++; continue }
+    let close = -1
+    for (let j = i + 1; j < lines.length; j++) {
+      const m = lines[j].match(FENCE_CLOSE_RE)
+      if (m && m[1][0] === o[1][0] && m[1].length >= o[1].length) { close = j; break }
+    }
+    if (close === -1) return true
+    i = close + 1
+  }
+  return false
 }
