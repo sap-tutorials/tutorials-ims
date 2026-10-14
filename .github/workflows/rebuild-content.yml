@@ -624,6 +624,20 @@ jobs:
         run: npm run lint:tutorial-markdown
         continue-on-error: true
 
+      # Blocking gate: fail the rebuild on ERROR-severity lint findings only
+      # (currently fence-indent-discipline — a code fence swallowing a `### `
+      # step heading, which collapses the tutorial when Goldmark renders it —
+      # and unparseable branch markers). Warnings/notices stay advisory via the
+      # non-blocking step above. This is the authoring-time guard that replaced
+      # the removed build-time fence healers: malformed fences must be fixed at
+      # source, not silently reshaped at build.
+      - name: Enforce tutorial-markdown errors
+        if: ${{ steps.mode.outputs.effective_mode != 'catalog-only' }}
+        env:
+          TUTORIAL_AUTHOR_TOKEN: ${{ secrets.TUTORIAL_AUTHOR_TOKEN }}
+          ANALYTICS_BASE_URL: ${{ vars.ANALYTICS_BASE_URL || 'https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/author' }}
+        run: npm run lint:tutorial-markdown -- --errors-only
+
       - name: Upload tutorial-markdown lint report
         if: ${{ always() && steps.mode.outputs.effective_mode != 'catalog-only' }}
         uses: actions/upload-artifact@v4

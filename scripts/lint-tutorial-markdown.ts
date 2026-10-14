@@ -258,6 +258,7 @@ export function lintTutorial(slug: string, source: string): LintFinding[] {
 async function main() {
   const args = process.argv.slice(2)
   const strict = args.includes('--strict')
+  const errorsOnly = args.includes('--errors-only')
   const channel = args.includes('--channel') ? args[args.indexOf('--channel') + 1] : 'prod'
   const cacheDir = channel === 'qa'
     ? join(ROOT, '.tutorial-cache-qa')
@@ -359,9 +360,19 @@ async function main() {
   }, null, 2), 'utf-8')
   console.log(`\nReport written to ${reportPath}`)
 
-  // Strict-mode exit (round-3 I9 fix): notices are non-blocking by design; only
-  // count error/warning toward strict-mode failure.
+  // Exit policy:
+  //  --strict      → non-zero on any error OR warning (notices excluded).
+  //  --errors-only → non-zero ONLY on 'error'-severity findings. This is the CI
+  //                  gate: it blocks a rebuild on structural defects that break
+  //                  rendering (e.g. fence-indent-discipline swallowing a step,
+  //                  or an unparseable branch marker) WITHOUT breaking on the
+  //                  pre-existing advisory warnings/notices.
+  const errorCount = allFindings.filter(f => f.severity === 'error').length
   const blockingCount = allFindings.filter(f => f.severity !== 'notice').length
+  if (errorsOnly && errorCount > 0) {
+    console.error(`\n--errors-only: exiting non-zero because ${errorCount} error-severity finding(s) detected`)
+    process.exit(1)
+  }
   if (strict && blockingCount > 0) {
     console.error(`\n--strict: exiting non-zero because ${blockingCount} blocking finding(s) detected (notices excluded)`)
     process.exit(1)
