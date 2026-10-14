@@ -116,7 +116,7 @@ export function renderGroupBody(ctx, opts = {}) {
     return `
       <div class="timeline-item">
         <div class="timeline-connector">
-          <span class="timeline-circle">${i + 1}</span>
+          <span class="timeline-circle" data-slug="${escapeHtml(t.slug)}">${i + 1}</span>
           ${connectorLine}
         </div>
         <div class="timeline-card${newClass}">
@@ -153,6 +153,7 @@ export function renderGroupBody(ctx, opts = {}) {
         <span class="meta-sep">&middot;</span>
         <span class="meta-item">${tutorialCount | 0} Tutorials</span>
       </div>
+      <div class="group-completion" data-group-slugs="${escapeHtml(JSON.stringify(tutorials.map(t => t.slug)))}"></div>
     </div>
   </section>
   <div class="group-body">
@@ -186,7 +187,7 @@ export function renderMissionBody(ctx) {
       : `?from=${escapeHtml(g.slug)}`;
     const tuts = g.tutorials.map((t, i) => `
             <li class="tutorial-item">
-              <span class="tutorial-number">${i + 1}</span>
+              <span class="tutorial-number" data-slug="${escapeHtml(t.slug)}">${i + 1}</span>
               <div class="tutorial-info">
                 <a href="/tutorials/${escapeHtml(t.slug)}${fromParam}" class="tutorial-link">${escapeHtml(t.title)}</a>
                 <div class="tutorial-meta-row">
@@ -216,6 +217,7 @@ export function renderMissionBody(ctx) {
             <span class="type-badge type-badge--group">GROUP</span>
             ${titleHtml}
             <span class="group-meta">${g.tutorials.length} Tutorials</span>
+            <span class="group-completion" data-group-slugs="${escapeHtml(JSON.stringify(g.tutorials.map(t => t.slug)))}"></span>
           </div>
           <span class="group-chevron">&#9662;</span>
         </div>
