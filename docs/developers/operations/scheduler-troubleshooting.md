@@ -144,7 +144,21 @@ CAP 10's `CronService` drives all scheduled jobs through **one shared outbox que
 
 Deleting the stuck `processing` row (Force-unwedge / the HANA escape hatch above) clears the lock but **cannot resurrect the dropped rows** — per `srv/lib/scheduler-wedge.js`, a deleted schedule row is only re-created "until the next scheduler boot re-inserts it". And the stalled processor may still be running on an un-restarted CF instance.
 
-### Recovery — rolling restart
+### Automatic recovery — post-boot self-check (#2762)
+
+Since #2762, every srv boot arms a **one-shot scheduler-stall self-check** (`srv/lib/scheduler-boot-healthcheck.js`, armed from `CronService.init()`). It targets exactly this failure mode — the one a deploy-time step can't catch because the stall surfaces ~26 min **after** the operator resumes the blue-green swap, long after the deploy script has exited.
+
+~6 minutes after boot it reads `JobLastRun.lastSuccessAt` for the two high-frequency canaries (`metrics-rollup` `*/5`, `kg-ondemand-drain` `*/2`). If **both** are stale past the grace window, the instance raises a `SchedulerStallDetected` **ALERT** and `process.exit(1)`s, so CF reschedules it and `CronService.init()` re-seeds the outbox.
+
+- **Both instances get restarted, staggered.** Instance N delays its exit by `N × 45 s`, so instance 0 restarts and is back re-seeding the outbox before instance 1 drops — the rolling-restart-of-both this runbook requires, with no joint outage.
+- **One-shot, fail-open.** Fires once per boot (no crash-loop: a healthy reboot sees fresh canaries and stays up); any DB/read fault is treated as healthy and never self-exits.
+- **Crash-loop backstop.** A persisted self-restart marker (a sentinel `JobLastRun` row) gates the exit: if the fleet already self-restarted within a cooldown (default 30 min) and the stall *persists*, the instance raises a louder `SchedulerStallPersistent` alert but does **not** exit again — a structural (non-transient) stall degrades to alert-only instead of an endless restart loop. **If you see `SchedulerStallPersistent` fire, the auto-restart did not clear it:** disable the check with `SCHEDULER_HEALTHCHECK_ENABLED=false` if it's noisy, then do the manual rolling restart below and investigate the root cause.
+- **Requires both canaries stale.** A single legitimately-erroring job can't trigger a false restart.
+- **Knobs** (default-safe): `SCHEDULER_HEALTHCHECK_ENABLED` (on in CF, off locally), `SCHEDULER_HEALTHCHECK_GRACE_MS` (default 6 min), `SCHEDULER_HEALTHCHECK_STAGGER_MS` (default 90 s), `SCHEDULER_HEALTHCHECK_COOLDOWN_MS` (default 30 min).
+
+If the `SchedulerStallDetected` alert fires but the board **still** shows all jobs overdue after the auto-restart (e.g. the stall recurs or the self-check was disabled), fall back to the manual rolling restart below.
+
+### Recovery — rolling restart (manual)
 
 A **rolling restart of `tutorials-srv`** is the fix. On boot, `CronService.init()` re-runs `schedule().every().as()` for every registered job, re-seeding all outbox rows; `reconcileOrphanedRunningJobs()` cleans up orphans.
 
@@ -184,7 +198,9 @@ Batch **Force-close** (`#1293`) closes `PipelineLog` rows but does not reconcile
 - Issue: [#1021](https://github.com/sap-tutorials/tutorials-ims/issues/1021) — this fix
 - Issue: [#1022](https://github.com/sap-tutorials/tutorials-ims/issues/1022) — upstream CAP hook (in progress)
 - Issue: [#1293](https://github.com/sap-tutorials/tutorials-ims/issues/1293) — orphaned RUNNING PipelineLog reconciler + Force close
+- Issue: [#2762](https://github.com/sap-tutorials/tutorials-ims/issues/2762) — post-boot scheduler-stall self-check + auto rolling-restart (blue-green stall)
 - Code: `srv/jobs/scheduler.js:runWithLock` — belt-and-suspenders
 - Code: `srv/lib/scheduler-wedge.js` — helpers (`deleteStuckOutboxRow`, `loadStuckOutboxTargets`)
 - Code: `srv/lib/pipeline-log-reconciler.js` — orphaned-row reconciler (`reconcileOrphanedRunningJobs`, `forceCloseRunningPipelineLog`)
+- Code: `srv/lib/scheduler-boot-healthcheck.js` — #2762 post-boot stall self-check (`scheduleBootHealthCheck`, `evaluateCanaries`)
 - Design: `docs/superpowers/specs/2026-07-06-1021-outbox-wedge-design.md`
