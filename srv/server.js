@@ -759,32 +759,6 @@ cds.on('bootstrap', (app) => {
     }
   });
 
-  // Devtoberfest endpoints are plain Express routes, so the ApplicationService
-  // before('*') identity pin (registered on CDS services) never fires for them.
-  // Mount one pin middleware on the /api/devtoberfest prefix so every handler
-  // sees an already-pinned req.user: a human with multiple logins/sapIds under
-  // one universal SAP ID (P-user + S-user) then resolves to their single
-  // canonical Users row for join-state, points, and the cat-game bonus — instead
-  // of a raw sapId lookup that can land on a stale merged husk and zero their
-  // points (#2651 follow-up). Fail-open: a pin error is swallowed and the
-  // request proceeds unpinned (each handler keeps its own fail-closed guard).
-  const _dtfContextMw = cds.middlewares?.context?.() || ((req, _res, next) => next());
-  const _dtfAuthMw = cds.middlewares?.auth?.() || ((req, _res, next) => next());
-  app.use('/api/devtoberfest', _dtfContextMw, _dtfAuthMw, async (req, _res, next) => {
-    try {
-      const u = resolveUser(req, cds);
-      // Pin on the AMBIENT connection (no cds.tx(req)): these are plain Express
-      // routes with no CAP service transaction lifecycle, so opening cds.tx(req)
-      // here holds the single in-memory-SQLite connection open with no commit,
-      // deadlocking the handler's own queries. The ambient autocommit path is
-      // what every other /api/devtoberfest handler already uses.
-      if (u) await pinResolvedUser(u);
-    } catch (err) {
-      cds.log('devtoberfest').warn('[devtoberfest pin] failed:', err?.message ?? err);
-    }
-    next();
-  });
-
   // Public read for the developer-advocates page (Task 4.4 of advocates impl).
   // Spec: docs/superpowers/specs/2026-06-17-developer-advocates-design.md
   advocatesPublic.register(app);

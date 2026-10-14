@@ -1,5 +1,5 @@
 import cds from '@sap/cds';
-import { resolveUserSapId } from './resolve-db-user.js';
+import { resolveUserSapId, resolveUser } from './resolve-db-user.js';
 
 const LOG = cds.log('chat');
 const DEFAULT_LIMIT = 10;
@@ -18,12 +18,22 @@ async function resolveDbUserId(user) {
     user.__dbUserId = user.attr.dbUserId;
     return user.__dbUserId;
   }
-  const sapId = resolveUserSapId(user);
-  if (!sapId) return null;
   try {
     const { Users } = cds.entities('com.sap.developers.ims');
-    const dbUser = await SELECT.one.from(Users).columns('ID').where({ sapId });
-    user.__dbUserId = dbUser?.ID || null;
+    // Tier A: the token's sapId claim == a stored Users.sapId. Fast and common
+    // for SAP-ID logins whose user_uuid matches the migrated row.
+    const sapId = resolveUserSapId(user);
+    if (sapId) {
+      const bySapId = await SELECT.one.from(Users).columns('ID').where({ sapId });
+      if (bySapId) { user.__dbUserId = bySapId.ID; return user.__dbUserId; }
+    }
+    // Tier B: no sapId match. The token user_uuid often is NOT the stored
+    // Users.sapId for a universal SAP ID — fall back to the full tiered resolver
+    // (issuer,subject link → email), the SAME path the join write uses. Without
+    // this, unpinned callers (Devtoberfest Express routes) silently returned
+    // null → "not joined" / 0 points even though the row exists.
+    const row = await resolveUser(user);
+    user.__dbUserId = row?.ID || null;
     return user.__dbUserId;
   } catch (err) {
     LOG.warn('resolveDbUserId failed', err.message);
