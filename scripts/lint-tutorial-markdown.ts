@@ -26,6 +26,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { extractBranchGroups, BranchParseError } from './parsers/branches.ts'
+import { fenceHealth, classifyLines } from './parsers/md-grammar.ts'
 import { prefetchBranchStaleness, branchStalenessRule } from './lint-rules/branch-staleness'
 import { iframeNonAllowlistedHostRule } from './lint-rules/iframe-non-allowlisted-host'
 import { authorNameWithoutProfileRule } from './lint-rules/author-name-without-profile'
@@ -165,7 +166,45 @@ const indentedNumberedListItem: Rule = {
   },
 }
 
-const RULES: Rule[] = [indentedNumberedListItem, iframeNonAllowlistedHostRule, authorNameWithoutProfileRule]
+/**
+ * Fence-indent discipline: an ATX `### ` step heading must not be swallowed by
+ * a drifted/unterminated code fence. This is the authoring-time guard that
+ * replaces the removed build-time fence healers (#1931/#2287/#2720) — rather
+ * than silently reshaping malformed fences at build (which caused the recurring
+ * step-collapse whack-a-mole), we flag them so the author fixes the SOURCE to
+ * valid CommonMark. `scripts/scan-markdown-source.ts` can auto-apply the fix
+ * (fence-indent-normalize.ts). Error severity: a swallowed heading means the
+ * tutorial renders with collapsed/missing steps on the live page.
+ */
+const fenceIndentDiscipline: Rule = {
+  id: 'fence-indent-discipline',
+  describe: 'A code fence with drifted/mismatched indentation swallows a `### ` step heading — the tutorial collapses to fewer steps when Goldmark renders it. Align the opening and closing ``` to the same column (and the body no shallower).',
+  scan(slug, _lines, rawLines) {
+    const body = rawLines.join('\n')
+    const health = fenceHealth(body)
+    if (health.swallowedHeadings === 0) return []
+    // Point each finding at the raw ATX-heading lines that classified as code.
+    const classes = classifyLines(body)
+    const atx = /^ {0,3}#{1,6}\s/
+    const findings: LintFinding[] = []
+    for (let i = 0; i < rawLines.length; i++) {
+      if (!atx.test(rawLines[i])) continue
+      if (classes[i]?.kind !== 'code' && classes[i]?.kind !== 'html') continue
+      findings.push({
+        rule: 'fence-indent-discipline',
+        slug,
+        file: `${slug}.md`,
+        line: i + 1,
+        message: `Heading swallowed by an unterminated/drifted code fence — it will not render as a step. Fix the enclosing \`\`\` fence indentation (align opener/closer, body no shallower).`,
+        excerpt: rawLines[i].trim().slice(0, 100),
+        severity: 'error',
+      })
+    }
+    return findings
+  },
+}
+
+const RULES: Rule[] = [indentedNumberedListItem, fenceIndentDiscipline, iframeNonAllowlistedHostRule, authorNameWithoutProfileRule]
 
 /**
  * Rule: branch-syntax (issue #172 PR 3).
