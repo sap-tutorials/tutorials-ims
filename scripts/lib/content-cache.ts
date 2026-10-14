@@ -35,6 +35,11 @@ export interface ContentCacheSidecar {
   version: number
   // sha256 of the global feed payloads at the time the cache was written.
   feedFingerprint: string
+  // #2766 — render-pipeline token (parser/template/CSS hash, see pipeline-token.ts)
+  // captured at write time. A change here means a parser/compose CODE change on
+  // unchanged source, which the feed fingerprint cannot detect. Optional so a
+  // sidecar written before #2766 (no token) fails open to the pre-#2766 behavior.
+  pipelineToken?: string
   // Per-slug nav entries (the same objects written to _nav.json) so non-target
   // slugs can contribute to nav / browse.json without being recomposed.
   navEntries: Record<string, unknown>[]
@@ -114,16 +119,33 @@ export interface FastPathDecision {
 // pages (corrected on the next full QA rebuild) for a ~90s targeted preview.
 // The target slug is always regenerated regardless (its cache is busted
 // upstream). Prod never sets this — prod keeps strict feed-freshness.
+//
+// `currentPipelineToken` / `sidecarPipelineToken` (#2766): the render-pipeline
+// token (parser/template/CSS hash). It gates build-time reuse the way the
+// feed fingerprint gates feed drift — but it detects CODE changes the feed
+// fingerprint cannot. Crucially it is NOT waived by `allowFeedDrift`: on QA a
+// parser-code fix on unchanged source must still bust reuse (the bug #2766),
+// whereas stale nav/tags from feed drift are tolerable. Checked only when BOTH
+// tokens are known; a legacy sidecar (no token) or a caller that omits the
+// current token falls through (fail-open — the Actions cache key still bites
+// on the first run at a new parser hash).
 export function decideFastPath(args: {
   flagEnabled: boolean
   isSlugTargeted: boolean
   sidecar: ContentCacheSidecar | null
   currentFingerprint: string
   allowFeedDrift?: boolean
+  currentPipelineToken?: string
+  sidecarPipelineToken?: string
 }): FastPathDecision {
   if (!args.flagEnabled) return { eligible: false, reason: 'flag off (CONTENT_CACHE_FAST_PATH)' }
   if (!args.isSlugTargeted) return { eligible: false, reason: 'not a slug-targeted run' }
   if (!args.sidecar) return { eligible: false, reason: 'no valid sidecar restored (cache miss / first run)' }
+  // Pipeline-token gate (#2766): a parser/template/CSS code change busts reuse
+  // regardless of allowFeedDrift. Only enforced when both tokens are present.
+  if (args.currentPipelineToken && args.sidecarPipelineToken && args.currentPipelineToken !== args.sidecarPipelineToken) {
+    return { eligible: false, reason: 'pipeline token changed (parser/template/CSS code) — full regen' }
+  }
   if (args.sidecar.feedFingerprint !== args.currentFingerprint) {
     if (args.allowFeedDrift) {
       return { eligible: true, reason: 'QA slug-targeted — reusing cached non-target content despite feed drift (nav/tags may lag until next full QA rebuild)' }
