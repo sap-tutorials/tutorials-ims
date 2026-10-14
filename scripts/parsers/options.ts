@@ -1,6 +1,6 @@
 import { classifyGroup, forceClassify, type OS, type ClassifyResult } from './os-classifier';
 import { slugify } from '../../srv/lib/slug-utils.js';
-import { createFenceTracker } from './fence-tracker.js';
+import { classifyLines } from './md-grammar.js';
 
 interface OptionEntry {
   matchIndex: number
@@ -50,12 +50,13 @@ export interface ConvertOptions {
  *  fence-awareness in v2.ts and branches.ts via fence-tracker.ts.) */
 function priorStepSlug(content: string, index: number): string | undefined {
   const before = content.slice(0, index);
-  const fence = createFenceTracker();
+  const classes = classifyLines(before);
+  const lines = before.split('\n');
   let last: string | undefined;
-  for (const line of before.split('\n')) {
-    if (fence(line)) continue;
-    const m = line.match(/^###\s+(.+?)\s*$/);
-    if (m) last = m[1];
+  for (let i = 0; i < lines.length; i++) {
+    if (classes[i]?.kind === 'heading' && classes[i].level === 3) {
+      last = lines[i].replace(/^###\s+/, '').replace(/\s*$/, '');
+    }
   }
   return last ? slugify(last) : undefined;
 }
