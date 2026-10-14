@@ -33,9 +33,10 @@ async function meHandler(req, res) {
       return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
     }
 
-    // resolveDbUser honours the before('*') identity pin (attr.dbUserId) so a
-    // user with multiple logins/sapIds under one SAP ID resolves to their single
-    // canonical row, not a stale merged husk a bare where({ sapId }) would hit.
+    // resolveDbUser honours the identity pin applied by the /api/devtoberfest
+    // router middleware (attr.dbUserId) so a P-user/S-user (multiple sapIds under
+    // one universal SAP ID) resolves to their single canonical row, not a stale
+    // merged husk a bare where({ sapId }) would hit.
     const dbUser = await resolveDbUser(user, ['ID']);
     if (!dbUser) {
       return res.status(200).json({ joined: false });

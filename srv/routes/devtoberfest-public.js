@@ -40,9 +40,10 @@ async function statusHandler(req, res) {
     const user = resolveUser(req, cds);
     let joined = false;
     if (user) {
-      // resolveDbUser honours the before('*') identity pin (attr.dbUserId), so a
-      // user with multiple logins/sapIds under one SAP ID resolves to the single
-      // canonical row — not a stale merged husk a bare where({ sapId }) would hit.
+      // resolveDbUser honours the identity pin applied by the /api/devtoberfest
+      // router middleware (attr.dbUserId), so a P-user/S-user (multiple sapIds
+      // under one universal SAP ID) resolves to the single canonical row — not a
+      // stale merged husk a bare where({ sapId }) would hit.
       const dbUser = await resolveDbUser(user, ['ID']);
       if (dbUser) {
         const { EventRegistrations } = cds.entities('com.sap.developers.ims');
