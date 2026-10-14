@@ -20,6 +20,11 @@ describe('GET /api/devtoberfest/me', () => {
 
   beforeEach(async () => {
     await DELETE.from(EventRegistrations);
+    // The /api/devtoberfest pin middleware self-heals a UserIdentities link on
+    // each authenticated request; clear it between tests so a link minted by one
+    // test can't redirect a later test's mock user to a deleted Users row.
+    const { UserIdentities } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(UserIdentities);
     await DELETE.from(Users);
     await DELETE.from(DevtoberfestConfig);
     await DELETE.from(Events);
@@ -91,10 +96,18 @@ describe('GET /api/devtoberfest/me', () => {
     expect(res.data.joined).toBe(false);
   });
 
+  // NOTE on usernames: each authenticated case that depends on resolving a
+  // SPECIFIC Users row uses a DISTINCT mock user (alice/bob/…). cds.test
+  // mock-auth reuses one req.user object per username across requests, and the
+  // /api/devtoberfest pin middleware caches the resolved row on user.attr.dbUserId
+  // (pinResolvedUser is idempotent per object). A shared username would carry a
+  // stale pin from a prior test whose Users row this beforeEach deleted, so the
+  // next test would resolve the deleted row. Real HTTP requests get a fresh user
+  // object per request, so this is a test-isolation concern only.
   it('returns joined:true + joinedAt + termsVersion when registered', async () => {
     const userId = cds.utils.uuid();
     await INSERT.into(Users).entries({
-      ID: userId, sapId: 'admin', email: 'a@b', legacyId: 2,
+      ID: userId, sapId: 'alice', email: 'alice@b', legacyId: 2,
     });
     await INSERT.into(EventRegistrations).entries({
       ID: cds.utils.uuid(),
@@ -105,7 +118,7 @@ describe('GET /api/devtoberfest/me', () => {
       legacyId: 1,
     });
     const res = await project.axios.get('/api/devtoberfest/me', {
-      auth: { username: 'admin', password: 'admin' },
+      auth: { username: 'alice', password: 'alice' },
     });
     expect(res.status).toBe(200);
     expect(res.data.joined).toBe(true);
@@ -125,7 +138,7 @@ describe('GET /api/devtoberfest/me', () => {
       legacyId: 9000,
     });
     await INSERT.into(Users).entries({
-      ID: userId, sapId: 'admin', email: 'a@b', legacyId: 2,
+      ID: userId, sapId: 'bob', email: 'bob@b', legacyId: 2,
     });
     await INSERT.into(EventRegistrations).entries({
       ID: cds.utils.uuid(),
@@ -136,7 +149,7 @@ describe('GET /api/devtoberfest/me', () => {
       legacyId: 2,
     });
     const res = await project.axios.get('/api/devtoberfest/me', {
-      auth: { username: 'admin', password: 'admin' },
+      auth: { username: 'bob', password: 'bob' },
     });
     expect(res.status).toBe(200);
     expect(res.data.joined).toBe(false);

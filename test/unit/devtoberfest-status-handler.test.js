@@ -112,9 +112,13 @@ describe('GET /api/devtoberfest/status', () => {
     });
 
     it('authenticated registered → joined: true, termsRequired: false', async () => {
+      // Distinct mock user (carol): cds.test reuses one req.user per username and
+      // the /api/devtoberfest pin caches the resolved row on attr.dbUserId, so a
+      // shared username would carry a stale pin from a prior test. (Test-only;
+      // real HTTP requests get a fresh user object per request.)
       const userId = cds.utils.uuid();
       const { EventRegistrations } = cds.entities('com.sap.developers.ims');
-      await INSERT.into(Users).entries({ ID: userId, sapId: 'admin', email: 'a@b', legacyId: 2 });
+      await INSERT.into(Users).entries({ ID: userId, sapId: 'carol', email: 'carol@b', legacyId: 2 });
       await INSERT.into(EventRegistrations).entries({
         ID: cds.utils.uuid(),
         user_ID: userId, event_ID: eventId,
@@ -124,7 +128,7 @@ describe('GET /api/devtoberfest/status', () => {
         legacyId: 1,
       });
       const res = await project.axios.get('/api/devtoberfest/status', {
-        auth: { username: 'admin', password: 'admin' },
+        auth: { username: 'carol', password: 'carol' },
       });
       expect(res.status).toBe(200);
       expect(res.data.joined).toBe(true);
@@ -134,7 +138,7 @@ describe('GET /api/devtoberfest/status', () => {
     it('authenticated registered for a DIFFERENT event → joined: false', async () => {
       // Discriminator: ensures handler filters by event_ID, not just user_ID.
       // Without the event_ID predicate, a user with any registration would
-      // appear joined for every event.
+      // appear joined for every event. Distinct mock user (dave) — see note above.
       const userId = cds.utils.uuid();
       const otherEventId = cds.utils.uuid();
       const { EventRegistrations } = cds.entities('com.sap.developers.ims');
@@ -143,7 +147,7 @@ describe('GET /api/devtoberfest/status', () => {
         startDate: '2025-10-01T00:00:00Z', endDate: '2025-10-28T00:00:00Z',
         legacyId: 9000,
       });
-      await INSERT.into(Users).entries({ ID: userId, sapId: 'admin', email: 'a@b', legacyId: 3 });
+      await INSERT.into(Users).entries({ ID: userId, sapId: 'dave', email: 'dave@b', legacyId: 3 });
       await INSERT.into(EventRegistrations).entries({
         ID: cds.utils.uuid(),
         user_ID: userId, event_ID: otherEventId,   // <-- NOT the current event

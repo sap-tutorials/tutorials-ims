@@ -465,6 +465,30 @@ async function main() {
       }
       ok('island bundles fingerprinted in hugo/public (manifest took effect)');
     }
+
+    // #2733 — the content bundle's live-SSR renderers (group/mission/concept/
+    // puzzle/topic) resolve island scripts via islandSrc(), reading an
+    // island-manifest.json seeded beside the bundle by bundle-shared.cjs at
+    // mbt-time (before-all). bundle-shared sources it from
+    // srv/lib/island-manifest.json. That file is written by build:island-manifest
+    // inside build:all (Step 2), so in this local deploy path it MUST exist and
+    // be non-empty now; if it doesn't, bundle-shared will fail-open and the SSR'd
+    // mission/group pages will ship bare /js/<name>.js paths that 404 on the
+    // approuter (the exact #2733 regression). mbt runs after this step, so we
+    // guard the SOURCE here rather than the seeded copies.
+    const srvManifest = path.join(ROOT, 'srv', 'lib', 'island-manifest.json');
+    if (fs.existsSync(viteManifest)) {
+      let entries = 0;
+      try { entries = Object.keys(JSON.parse(fs.readFileSync(srvManifest, 'utf8'))).length; } catch { entries = 0; }
+      if (entries === 0) {
+        die(1, 'srv/lib/island-manifest.json is missing or empty, but a Vite manifest exists.\n' +
+               '             bundle-shared.cjs would then fail-open and the LIVE-SSR mission/group\n' +
+               '             pages would ship bare /js/<name>.js island paths that 404 on the\n' +
+               '             approuter (issue #2733). Fix: ensure `npm run build:island-manifest`\n' +
+               '             ran inside build:all before this deploy, then rebuild.');
+      }
+      ok(`srv/lib/island-manifest.json present (${entries} entries) — content bundle will resolve hashed island paths (#2733)`);
+    }
   }
 
   // ---- Step 2.7: build the QA author-preview channel (static/qa) --------

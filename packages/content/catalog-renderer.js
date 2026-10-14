@@ -1,4 +1,4 @@
-// srv/lib/catalog-renderer.js
+// packages/content/catalog-renderer.js
 //
 // Pure body-markup renderer for /tutorials/group-* and /tutorials/mission-*.
 // No DB access, no HTTP — takes a context (from catalog-data.js) and returns
@@ -17,9 +17,14 @@ import { fileURLToPath } from 'node:url';
 
 const _dir = dirname(fileURLToPath(import.meta.url));
 // Lazy-loaded island manifest: maps entry name → content-hashed public path.
-// Written by scripts/build-island-manifest.cjs alongside hugo/data/island_manifest.json.
-// Fail-open: returns the bare /js/<name>.js path if the file is absent
-// (e.g. local `cds watch` without running build:apps first).
+// Seeded beside this module (and the shipped content.bundle.mjs) by
+// scripts/lib/copy-island-manifest.cjs, from srv/lib/island-manifest.json
+// (which scripts/build-island-manifest.cjs writes during build:all). These
+// pages are SSR'd live in the deployed srv process, so the manifest MUST sit
+// next to the bundle — see issue #2733. Fail-open: returns the bare /js/<name>.js
+// path if the file is absent (e.g. local `cds watch` without running build:apps
+// first), which 404s against the hashed-only approuter — so a real deploy must
+// ensure the seed landed (guarded by scripts/deploy-mta.cjs Step 2.5).
 let _islandManifest;
 function islandSrc(name) {
   if (!_islandManifest) {

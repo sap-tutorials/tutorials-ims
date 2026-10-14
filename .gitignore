@@ -153,6 +153,12 @@ srv/lib/explore-bundle-manifest.json
 # hugo/data/island_manifest.json) so CAP renderers can resolve content-hashed
 # island paths at runtime without Hugo (issue #1604 item 4).
 srv/lib/island-manifest.json
+# #2733 — the same manifest seeded beside each content bundle (and into the
+# packages/content source dir) by scripts/lib/copy-island-manifest.cjs so the
+# live-SSR catalog/concept/puzzle/topic renderers resolve hashed island paths.
+srv/lib/_shared/island-manifest.json
+srv-qa/lib/_shared/island-manifest.json
+packages/content/island-manifest.json
 
 # OAuth discovery docs (#1105) — generated at mbt build time from *.template files.
 approuter/static/.well-known/oauth-authorization-server
