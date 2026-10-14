@@ -16,7 +16,7 @@ import {
   runJobByName,
 } from './jobs/scheduler.js';
 import { reconcileOrphanedRunningJobs } from './lib/pipeline-log-reconciler.js';
-import { scheduleBootHealthCheck } from './lib/scheduler-boot-healthcheck.js';
+import { reapTombstonedOutboxRows, armSchedulerSelfHeal } from './lib/scheduler-reaper.js';
 
 const LOG = cds.log('cron-service');
 
@@ -59,18 +59,39 @@ export default class CronService extends cds.ApplicationService {
         .catch(err => LOG.warn(`boot reconcile failed: ${err.message ?? err}`));
     });
 
-    // #2762: arm the one-shot post-boot scheduler-stall self-check. A
-    // blue-green cutover can leave the shared CronService queue processor
-    // stalled AFTER the operator resumes the swap — too late for any
-    // deploy-time step to catch. ~6 min after boot (plus a per-instance
-    // stagger so both instances never drop at once) this reads the
-    // metrics-rollup / kg-ondemand-drain canaries from JobLastRun; if BOTH
-    // are stale it raises an ALERT and process.exit(1)s so CF reschedules
-    // this instance, re-seeding the outbox. Disabled off-CF; fail-open on
-    // any read fault (never self-exits on a transient DB hiccup). Runbook:
-    // docs/developers/operations/scheduler-troubleshooting.md
-    // § "All jobs overdue — queue-processor stall".
-    scheduleBootHealthCheck();
+    // #2782: outbox tombstone reaper — the durable fix for the blue-green
+    // cutover stall. A SIGTERM mid-tick leaves a cds.outbox.Messages row stuck
+    // at status='processing' with lastAttemptTimestamp=NULL and no successor
+    // row; CAP's reclaim predicate (status IS NULL OR lastAttemptTimestamp <
+    // now-1h) can never match it, so the job silently drops. This replaces the
+    // #2762 process.exit self-restart (which couldn't clear these rows and
+    // churned the outbox on every bounce). See srv/lib/scheduler-reaper.js.
+    //
+    // Build the jobName → cron map once so the reaper can age each stuck row
+    // against its own schedule (reusing scheduler-wedge.isRowStale).
+    const jobSchedules = new Map(
+      Array.from(_getJobRegistry().values()).map(j => [j.jobName, j.schedule])
+    );
+
+    // (a) One boot-time sweep, deferred so it never blocks super.init() /
+    //     schedule registration — clears any tombstone the instance that just
+    //     cut over left behind. Fail-open (reaper never throws).
+    setImmediate(() => {
+      reapTombstonedOutboxRows(jobSchedules)
+        .then(({ reaped, inspected }) => {
+          if (reaped > 0) LOG.warn(`boot reap cleared ${reaped} outbox tombstone(s) of ${inspected} processing row(s) (#2782)`);
+        })
+        .catch(err => LOG.warn(`boot reap failed: ${err.message ?? err}`));
+    });
+
+    // (b) Periodic self-heal: every ~10 min, re-reap (a tombstone can be
+    //     created AFTER this instance booted, so the boot sweep can't catch it)
+    //     and run the ALERT-ONLY canary stall check. Enabled on CF, off locally;
+    //     fail-open; .unref()'d. No process.exit — the reaper is the recovery,
+    //     the alert is just the signal.
+    //     Runbook: docs/developers/operations/scheduler-troubleshooting.md
+    //     § "All jobs overdue — queue-processor stall".
+    armSchedulerSelfHeal({ jobSchedules });
 
     await super.init();
   }
