@@ -1,5 +1,4 @@
-import { createFenceTracker } from './fence-tracker.js'
-import { commentLineFlags } from './html-comment-lines.js'
+import { classifyLines } from './md-grammar.js'
 
 const V1_STEP = /\[ACCORDION-BEGIN \[Step \d+:\s*\]\(.+?\)\]/
 
@@ -13,44 +12,43 @@ const V1_STEP = /\[ACCORDION-BEGIN \[Step \d+:\s*\]\(.+?\)\]/
  */
 export function extractIntro(body: string, isV2: boolean): string {
   const lines = body.split('\n')
-  const fence = createFenceTracker()
+  // One CommonMark-grammar classification (md-grammar.ts) does the work the old
+  // createFenceTracker + commentLineFlags pair did: 'code'/'html' lines are
+  // non-delimiting (and HTML covers multi-line `<!-- ... -->` comments), while
+  // 'heading' marks real section boundaries. Same grammar Goldmark renders.
+  const classes = classifyLines(body)
 
-  // 1. Find the first step-delimiter line index (fence-aware).
+  // 1. Find the first step-delimiter line index (grammar-aware).
   let firstStep = lines.length
   for (let i = 0; i < lines.length; i++) {
-    const inFence = fence(lines[i])
-    if (inFence) continue
-    if (isV2 ? /^### /.test(lines[i]) : V1_STEP.test(lines[i])) { firstStep = i; break }
+    const kind = classes[i]?.kind
+    if (kind === 'code' || kind === 'html') continue
+    if (isV2 ? classes[i]?.kind === 'heading' && classes[i].level === 3 : V1_STEP.test(lines[i])) { firstStep = i; break }
   }
 
   const pre = lines.slice(0, firstStep)
 
-  // Flag lines inside multi-line HTML comments (fence-aware). A commented-out
-  // `## You will learn` / `## Prerequisites` must NOT be treated as a section
-  // heading here — otherwise its opening `<!--` is stranded into the intro as
-  // an unterminated comment that swallows every following step at render time
-  // (root cause of the codejam-events-process-1-bah break). Such lines are
-  // pushed verbatim so the comment stays balanced and renders invisibly.
-  const commented = commentLineFlags(pre)
-
   // 2. Remove recognized blocks. A "section" runs from its `## Heading` up to
-  //    the next `## `/`### ` heading (or end of pre-step region).
+  //    the next `## `/`### ` heading (or end of pre-step region). A commented-
+  //    out `## You will learn` / `## Prerequisites` classifies as 'html' and is
+  //    dropped entirely (never treated as a section heading, never stranded as
+  //    an unterminated comment that swallows the following steps — root cause of
+  //    the codejam-events-process-1-bah break).
   const out: string[] = []
   let skipSectionUntilHeading = false
   for (let i = 0; i < pre.length; i++) {
     const line = pre[i]
-    // Drop lines inside a multi-line HTML comment entirely — the author
-    // disabled that block, so it belongs in neither the intro nor a lifted
-    // section. Dropping the whole (balanced) block also guarantees no stranded
-    // `<!--`/`-->` survives into the intro.
-    if (commented[i]) continue
-    const isHeading = /^#{2,3} /.test(line)
+    const kind = classes[i]?.kind
+    // Drop lines inside a multi-line HTML comment entirely (the author disabled
+    // that block) — keeps the balanced comment out of both intro and sections.
+    if (kind === 'html') continue
+    const isHeading = kind === 'heading' && (classes[i].level === 2 || classes[i].level === 3)
     if (skipSectionUntilHeading) {
       if (isHeading) skipSectionUntilHeading = false
       else continue
     }
-    if (/^# /.test(line)) continue                        // H1 title
-    if (/<!--\s*description\s*-->/.test(line)) continue    // description marker line
+    if (classes[i]?.kind === 'heading' && classes[i].level === 1) continue   // H1 title
+    if (/<!--\s*description\s*-->/.test(line)) continue                        // inline description marker
     if (/^## (You will learn|Prerequisites)\s*$/.test(line)) {
       skipSectionUntilHeading = true
       continue
