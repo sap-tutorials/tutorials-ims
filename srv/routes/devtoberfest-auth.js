@@ -12,7 +12,7 @@
 import cds from '@sap/cds';
 import express from 'express';
 import { resolveUser } from '../lib/resolve-user.js';
-import { resolveUserSapId, provisionDbUser } from '../lib/resolve-db-user.js';
+import { resolveUserSapId, resolveDbUser, provisionDbUser } from '../lib/resolve-db-user.js';
 import { getNextLegacyId } from '../lib/legacy-id.js';
 
 const LOG = cds.log('devtoberfest');
@@ -25,7 +25,7 @@ async function meHandler(req, res) {
     if (!sapId) return res.status(401).json({ error: 'UNAUTHENTICATED' });
 
     await cds.connect.to('db');
-    const { Users, DevtoberfestConfig, EventRegistrations } =
+    const { DevtoberfestConfig, EventRegistrations } =
       cds.entities('com.sap.developers.ims');
 
     const config = await SELECT.one.from(DevtoberfestConfig).where({ isActive: true });
@@ -33,7 +33,11 @@ async function meHandler(req, res) {
       return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
     }
 
-    const dbUser = await SELECT.one.from(Users).columns('ID').where({ sapId });
+    // resolveDbUser honours the identity pin applied by the /api/devtoberfest
+    // router middleware (attr.dbUserId) so a P-user/S-user (multiple sapIds under
+    // one universal SAP ID) resolves to their single canonical row, not a stale
+    // merged husk a bare where({ sapId }) would hit.
+    const dbUser = await resolveDbUser(user, ['ID']);
     if (!dbUser) {
       return res.status(200).json({ joined: false });
     }
