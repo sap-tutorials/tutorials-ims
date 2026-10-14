@@ -1,6 +1,5 @@
 import type { TutorialStep } from './types.js'
-import { createFenceTracker } from './fence-tracker.js'
-import { commentLineFlags } from './html-comment-lines.js'
+import { classifyLines } from './md-grammar.js'
 
 const VALIDATE_LINE = /^\s*\[VALIDATE_\d+\]\s*$/
 const DONE_LINE = /^\s*\[DONE\]\s*$/
@@ -11,30 +10,31 @@ export function parseV2Steps(body: string): TutorialStep[] {
   let currentTitle = ''
   let currentLines: string[] = []
   let inStep = false
-  // Track fenced-code-block state so an H3 quoted inside a code block
-  // (e.g. a tutorial that demonstrates authoring syntax) is treated as
-  // literal content, not a step delimiter. Root cause of the cookbook
-  // tutorial's phantom-step bug.
-  const fence = createFenceTracker()
-  // Per-line mask for lines inside a *multi-line* `<!-- ... -->` comment. An
-  // author disabling a not-yet-ready step by commenting it out must not have
-  // that `### ` lifted as a phantom step, nor its `<!--`/`-->` markers stranded
-  // across the split (which breaks Hugo rendering of the whole page). Root cause
-  // of the Devtoberfest validation-tutorial break (#2127). Commented lines are
-  // both non-delimiting and dropped from step content, mirroring intro.ts.
-  const commented = commentLineFlags(lines)
+  // Single CommonMark-grammar classification (md-grammar.ts) replaces the old
+  // createFenceTracker + commentLineFlags pair. It is the SAME block grammar
+  // Goldmark renders with, so an H3 our splitter sees as a delimiter is exactly
+  // an H3 Goldmark renders as a heading — no divergence, no phantom steps.
+  //   - lines inside a fenced OR indented code block classify as 'code': an H3
+  //     quoted there (authoring-syntax demos) is literal content, not a step
+  //     (cookbook phantom-step bug).
+  //   - lines inside a multi-line `<!-- ... -->` comment classify as 'html':
+  //     a commented-out `### ` is neither a delimiter nor stranded across the
+  //     split (Devtoberfest validation-tutorial break #2127). html lines are
+  //     dropped from step content, mirroring intro.ts.
+  const classes = classifyLines(body)
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    if (fence(line)) {
+    const kind = classes[i]?.kind
+
+    if (kind === 'code') {
       if (inStep) currentLines.push(line)
       continue
     }
 
-    if (commented[i]) continue
+    if (kind === 'html') continue // commented/raw-HTML lines: non-delimiting, dropped from content
 
-    const h3Match = line.match(/^### (.+)$/)
-    if (h3Match) {
+    if (classes[i]?.kind === 'heading' && classes[i].level === 3) {
       if (inStep) {
         steps.push({
           number: steps.length + 1,
@@ -42,7 +42,7 @@ export function parseV2Steps(body: string): TutorialStep[] {
           content: stripMarkers(currentLines).join('\n').trim()
         })
       }
-      currentTitle = h3Match[1].trim()
+      currentTitle = line.replace(/^###\s+/, '').trim()
       currentLines = []
       inStep = true
       continue

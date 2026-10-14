@@ -11,7 +11,7 @@
 // context so fetch-tutorials.ts can surface them with file path.
 
 import { parseCondition, ConditionParseError } from '../../srv/lib/branch/condition.js';
-import { createFenceTracker } from './fence-tracker.js';
+import { classifyLines, isNonDelimiterLine, type LineClass } from './md-grammar.js';
 
 export class BranchParseError extends Error {
   line: number;
@@ -92,9 +92,13 @@ function parseMarkerAttrs(raw: string, line: number, slug: string): MarkerAttrs 
 function sliceSubSteps(lines: string[], slug: string, baseLine: number): BranchSubStep[] {
   const steps: BranchSubStep[] = [];
   let current: BranchSubStep | null = null;
-  const fence = createFenceTracker();
-  for (const line of lines) {
-    if (fence(line)) {
+  // Classify this branch's inner slice with the shared CommonMark grammar so an
+  // H3 quoted inside a fenced/indented code block is literal body, not a
+  // sub-step delimiter (same grammar Goldmark renders).
+  const classes = classifyLines(lines.join('\n'));
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx];
+    if (isNonDelimiterLine(classes, idx)) {
       if (current) {
         current.body += (current.body ? '\n' : '') + line;
       }
@@ -125,17 +129,17 @@ function sliceSubSteps(lines: string[], slug: string, baseLine: number): BranchS
 
 function countParentStepBefore(
   lines: string[],
+  classes: LineClass[],
   beginIdx: number,
   consumedRanges: Array<[number, number]>,
 ): number {
   let n = 0;
-  const fence = createFenceTracker();
   for (let i = 0; i < beginIdx; i++) {
     // Skip lines inside any previously-consumed [BRANCH_BEGIN]…[BRANCH_END]
-    // block — their H3s belong to a sub-step, not the parent stream. The
-    // fence tracker also doesn't advance over consumed lines, matching the
-    // original behavior: a malformed (unclosed) fence inside a consumed
-    // branch can't bleed into the outer stream.
+    // block — their H3s belong to a sub-step, not the parent stream. A
+    // code-classified line (fenced/indented code) is likewise not a parent H3,
+    // so a malformed fence inside a consumed branch can't bleed into the outer
+    // stream.
     let insideConsumed = false;
     for (const [start, end] of consumedRanges) {
       if (i >= start && i <= end) {
@@ -144,7 +148,7 @@ function countParentStepBefore(
       }
     }
     if (insideConsumed) continue;
-    if (fence(lines[i])) continue;
+    if (isNonDelimiterLine(classes, i)) continue;
     if (H3_RE.test(lines[i])) n++;
   }
   return n;
@@ -162,6 +166,9 @@ export function extractBranchGroups(body: string, slug: string): ExtractResult {
   }
 
   const lines = body.split('\n');
+  // One shared CommonMark classification of the whole body: code/html lines are
+  // never marker/H3 delimiters, matching Goldmark's block grammar.
+  const classes = classifyLines(body);
   const out: string[] = [];
   const branchGroups: BranchGroup[] = [];
   let pendingGroup: PendingGroup | null = null;
@@ -191,15 +198,13 @@ export function extractBranchGroups(body: string, slug: string): ExtractResult {
   }
 
   let i = 0;
-  const fence = createFenceTracker();
   while (i < lines.length) {
     const line = lines[i];
 
-    // Inside a fenced code block, skip ALL marker detection so meta-tutorials
-    // documenting the [BRANCH_BEGIN]/[BRANCH_END] syntax don't false-trigger.
-    // Uses the shared fence tracker (handles ``` and ~~~, run-length-aware
-    // close — see scripts/parsers/fence-tracker.ts).
-    if (fence(line)) {
+    // Inside a fenced OR indented code block (or HTML block), skip ALL marker
+    // detection so meta-tutorials documenting the [BRANCH_BEGIN]/[BRANCH_END]
+    // syntax don't false-trigger. Uses the shared md-grammar classification.
+    if (isNonDelimiterLine(classes, i)) {
       if (pendingGroup && line.trim() !== '') {
         flushGroup();
       }
@@ -281,7 +286,7 @@ export function extractBranchGroups(body: string, slug: string): ExtractResult {
       _beginLine: beginLine,
     };
 
-    const parentStepNumber = countParentStepBefore(lines, beginIdx, consumedRanges);
+    const parentStepNumber = countParentStepBefore(lines, classes, beginIdx, consumedRanges);
 
     if (
       pendingGroup &&

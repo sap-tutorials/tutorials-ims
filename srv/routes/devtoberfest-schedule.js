@@ -10,7 +10,7 @@ import { computeRelatedTechEdByDtfSession } from '../lib/teched-devtoberfest-cro
 import { buildICS, buildEventICS, addToCalendarLinks } from '../lib/devtoberfest-ical.js';
 import { buildRSS } from '../lib/devtoberfest-rss.js';
 import { resolveUser } from '../lib/resolve-user.js';
-import { resolveUserSapId, resolveDbUser } from '../lib/resolve-db-user.js';
+import { resolveUserSapId, resolveUser as resolveDbUserTiered } from '../lib/resolve-db-user.js';
 import { getMyCompletedTutorialsForPoints } from '../lib/user-progress.js';
 import { sumCatGameBonus } from '../lib/cat-game-award.js';
 import { fetchTranscript } from '../lib/devtoberfest-transcript.js';
@@ -256,7 +256,7 @@ async function myCompletionsHandler(req, res) {
       try {
         const { DevtoberfestConfig } = cds.entities('com.sap.developers.ims');
         const cfg = await SELECT.one.from(DevtoberfestConfig).where({ isActive: true }).columns('currentEvent_ID');
-        const dbUser = await resolveDbUser(user, ['ID']);
+        const dbUser = await resolveDbUserTiered(user);
         if (cfg?.currentEvent_ID && dbUser?.ID) {
           catGameBonus = await sumCatGameBonus(db, { userId: dbUser.ID, eventId: cfg.currentEvent_ID });
           earnedPoints += catGameBonus;

@@ -89,6 +89,35 @@ describe('decideFastPath', () => {
   it('allowFeedDrift still requires a slug-targeted run', () => {
     expect(decideFastPath({ flagEnabled: true, isSlugTargeted: false, sidecar, currentFingerprint: 'DIFFERENT', allowFeedDrift: true }).eligible).toBe(false)
   })
+
+  // #2766 — the pipeline token (parser/template/CSS hash) is a build-time reuse
+  // gate that allowFeedDrift must NOT waive. Before this, a parser-code change on
+  // unchanged source was masked on QA: allowFeedDrift waived the only runtime
+  // gate, so stale HTML was reused and republished.
+  describe('pipeline-token gate (#2766)', () => {
+    const tokened: ContentCacheSidecar = { version: SIDECAR_VERSION, feedFingerprint: 'fp', navEntries: [], pipelineToken: 'tok-1' }
+    it('not eligible when the pipeline token changed (feeds unchanged)', () => {
+      const d = decideFastPath({ flagEnabled: true, isSlugTargeted: true, sidecar: tokened, currentFingerprint: 'fp', sidecarPipelineToken: 'tok-1', currentPipelineToken: 'tok-2' })
+      expect(d.eligible).toBe(false)
+      expect(d.reason).toMatch(/pipeline token/i)
+    })
+    it('NOT waived by allowFeedDrift — a parser change still busts QA reuse', () => {
+      const d = decideFastPath({ flagEnabled: true, isSlugTargeted: true, sidecar: tokened, currentFingerprint: 'DIFFERENT', allowFeedDrift: true, sidecarPipelineToken: 'tok-1', currentPipelineToken: 'tok-2' })
+      expect(d.eligible).toBe(false)
+      expect(d.reason).toMatch(/pipeline token/i)
+    })
+    it('eligible when the pipeline token matches', () => {
+      expect(decideFastPath({ flagEnabled: true, isSlugTargeted: true, sidecar: tokened, currentFingerprint: 'fp', sidecarPipelineToken: 'tok-1', currentPipelineToken: 'tok-1' }).eligible).toBe(true)
+    })
+    it('fails open for a legacy sidecar with no pipeline token', () => {
+      // sidecar predates the field (undefined) — fall through to the feed gate,
+      // matching pre-#2766 behavior (the Actions cache key still bites on first run).
+      expect(decideFastPath({ flagEnabled: true, isSlugTargeted: true, sidecar, currentFingerprint: 'fp', currentPipelineToken: 'tok-2' }).eligible).toBe(true)
+    })
+    it('fails open when the current token is unknown (caller omitted it)', () => {
+      expect(decideFastPath({ flagEnabled: true, isSlugTargeted: true, sidecar: tokened, currentFingerprint: 'fp', sidecarPipelineToken: 'tok-1' }).eligible).toBe(true)
+    })
+  })
 })
 
 describe('navEntriesBySlug', () => {
