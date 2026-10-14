@@ -2342,6 +2342,31 @@ html.dark .tutorial-main img:hover {
   background: var(--sapBaseColor, #fff);
   z-index: 1;
 }
+
+/* #2733 — per-user completion on the numbered markers, matching the
+   tutorial-page step-TOC completed circle (green fill + white check).
+   Applied client-side by the goal-completion island for signed-in users;
+   anonymous pages keep the plain numbered circles above. */
+.tutorial-number.completed,
+.timeline-circle.completed {
+  border-color: var(--sapPositiveColor, #30914c);
+  background: var(--sapPositiveColor, #30914c);
+  color: #fff;
+}
+
+/* #2733 — group-level "N of M complete" indicator in the group header.
+   Rendered empty by the server; filled client-side by the island. */
+.group-completion {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--sapContent_LabelColor, #556b82);
+}
+.group-completion:empty {
+  display: none;
+}
+.group-completion--complete {
+  color: var(--sapPositiveColor, #30914c);
+}
 .timeline-line {
   width: 2px;
   flex: 1;
