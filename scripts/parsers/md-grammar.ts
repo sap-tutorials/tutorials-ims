@@ -170,3 +170,44 @@ export function isNonDelimiterLine(classes: LineClass[], idx: number): boolean {
 export function countHeadings(classes: LineClass[], level?: number): number {
   return classes.filter(c => c.kind === 'heading' && (level === undefined || c.level === level)).length
 }
+
+export interface FenceHealth {
+  /** Lines that look like an ATX heading (`#..###### `) in the raw source. */
+  rawAtxHeadings: number
+  /** Of those, how many actually classify as headings (not swallowed by a code/html block). */
+  classifiedHeadings: number
+  /**
+   * A raw ATX-heading line that classified as 'code' means a malformed/
+   * unterminated fenced block swallowed it — the segmentation-collapse
+   * signature behind the #1931/#2287/#2720 breaks. Zero on well-formed source.
+   */
+  swallowedHeadings: number
+}
+
+/**
+ * Structural health signal for the corpus regression gate and the author-time
+ * lint. A well-formed tutorial has every raw ATX heading classify AS a heading;
+ * when a drifted/unterminated fence runs past a heading, that heading classifies
+ * as 'code' instead and is "swallowed" (steps collapse). `swallowedHeadings > 0`
+ * is the direct, source-level red flag — independent of step-count baselines.
+ */
+export function fenceHealth(md: string): FenceHealth {
+  const rawLines = md.split('\n')
+  const classes = classifyLines(md)
+  const atx = /^ {0,3}#{1,6}\s/
+  // Ignore ATX-looking lines inside the frontmatter block (blankFrontmatter
+  // handles classification; here we just avoid counting YAML as a heading).
+  const deFm = blankFrontmatter(rawLines)
+  let rawAtxHeadings = 0
+  let swallowedHeadings = 0
+  for (let i = 0; i < deFm.length; i++) {
+    if (!atx.test(deFm[i])) continue
+    rawAtxHeadings++
+    if (classes[i]?.kind === 'code' || classes[i]?.kind === 'html') swallowedHeadings++
+  }
+  return {
+    rawAtxHeadings,
+    classifiedHeadings: rawAtxHeadings - swallowedHeadings,
+    swallowedHeadings,
+  }
+}
