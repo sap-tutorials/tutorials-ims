@@ -47,7 +47,7 @@ export interface ConvertOptions {
  *  Fenced code blocks are honored — an `### ` line quoted inside a code fence
  *  is treated as literal content, not as a step heading. (Tutorials that
  *  document authoring syntax embed H3s inside fences; see the matching
- *  fence-awareness in v2.ts and branches.ts via fence-tracker.ts.) */
+ *  grammar-awareness in v2.ts and branches.ts via md-grammar.ts.) */
 function priorStepSlug(content: string, index: number): string | undefined {
   const before = content.slice(0, index);
   const classes = classifyLines(before);
