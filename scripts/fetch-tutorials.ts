@@ -15,6 +15,7 @@ import {
   navEntriesBySlug,
   SIDECAR_VERSION,
 } from './lib/content-cache.js'
+import { computePipelineToken } from './lib/pipeline-token.js'
 import { parseRulesVrEnriched, collectAiGradedSpecs, collectAllRules } from './parsers/rules.js'
 import { expandAiAuthoredQuestions, populateAiAuthoredSiblingMaps, isStepSubstantive, type ExpandStats } from './lib/expand-ai-authored.js'
 import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
@@ -990,12 +991,19 @@ async function main() {
   // parser hash) and OUT of hugo/data (Hugo would load it as site.Data).
   const contentSidecarPath = join(__dirname, '..', '.content-cache', 'content-cache-sidecar.json')
   const decisionFingerprint = computeFeedFingerprint({ catalog: loadCapCache(), tagLabels: tagRegistry, semaphore: semaphoreMap })
+  // #2766 — render-pipeline token over parser/template/CSS source. Folded into
+  // the reuse decision so a parser/compose CODE change on unchanged source busts
+  // build-time reuse even on QA (where allowFeedDrift waives the feed gate).
+  // Computed from the worktree root (__dirname is scripts/, so one level up).
+  const currentPipelineToken = computePipelineToken({ root: join(__dirname, '..') })
   const restoredSidecar = CONTENT_CACHE_FAST_PATH ? readSidecar(contentSidecarPath) : null
   const fastPath = decideFastPath({
     flagEnabled: CONTENT_CACHE_FAST_PATH,
     isSlugTargeted: !!tutorialSlugFilter,
     sidecar: restoredSidecar,
     currentFingerprint: decisionFingerprint,
+    currentPipelineToken,
+    sidecarPipelineToken: restoredSidecar?.pipelineToken,
     // QA is an author-preview channel that rebuilds rarely, so its cached feed
     // fingerprint is almost always stale vs prod's frequently-republished
     // catalog — which would force a ~10-min full regen for a single-slug
@@ -1762,6 +1770,7 @@ async function main() {
         writeSidecar(contentSidecarPath, {
           version: SIDECAR_VERSION,
           feedFingerprint: computeFeedFingerprint({ catalog: writeCatalog, tagLabels: tagRegistry }),
+          pipelineToken: currentPipelineToken,
           navEntries: navEntries as unknown as Record<string, unknown>[],
           authorRows: authorRows as unknown as Record<string, unknown>[],
         })
