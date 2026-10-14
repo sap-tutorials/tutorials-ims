@@ -16,6 +16,7 @@ import {
   runJobByName,
 } from './jobs/scheduler.js';
 import { reconcileOrphanedRunningJobs } from './lib/pipeline-log-reconciler.js';
+import { scheduleBootHealthCheck } from './lib/scheduler-boot-healthcheck.js';
 
 const LOG = cds.log('cron-service');
 
@@ -57,6 +58,19 @@ export default class CronService extends cds.ApplicationService {
         })
         .catch(err => LOG.warn(`boot reconcile failed: ${err.message ?? err}`));
     });
+
+    // #2762: arm the one-shot post-boot scheduler-stall self-check. A
+    // blue-green cutover can leave the shared CronService queue processor
+    // stalled AFTER the operator resumes the swap — too late for any
+    // deploy-time step to catch. ~6 min after boot (plus a per-instance
+    // stagger so both instances never drop at once) this reads the
+    // metrics-rollup / kg-ondemand-drain canaries from JobLastRun; if BOTH
+    // are stale it raises an ALERT and process.exit(1)s so CF reschedules
+    // this instance, re-seeding the outbox. Disabled off-CF; fail-open on
+    // any read fault (never self-exits on a transient DB hiccup). Runbook:
+    // docs/developers/operations/scheduler-troubleshooting.md
+    // § "All jobs overdue — queue-processor stall".
+    scheduleBootHealthCheck();
 
     await super.init();
   }
