@@ -21,6 +21,8 @@ import { expandAiAuthoredQuestions, populateAiAuthoredSiblingMaps, isStepSubstan
 import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
 import { seedAiQuizCache, autoDetectPrimaryCacheDir } from './lib/ai-quiz-cache-seed.js'
 import { callQuizModel } from '../srv/lib/ai-quiz-llm.js'
+import { resolveAiAuthorGate } from './lib/ai-author-gate.js'
+import { resolveChatLlmSettings } from '../srv/lib/chat-settings-resolver.js'
 import { generateChallengeSpec } from '../srv/lib/ai-challenge-spec.js'
 import { PROMPT_VERSION as CHALLENGE_PROMPT_VERSION } from '../srv/lib/ai-challenge-spec.js'
 import { loadChallengeSpecCache, saveChallengeSpecCache, hashKey as challengeHashKey } from './lib/challenge-spec-cache.js'
@@ -1038,6 +1040,14 @@ async function main() {
   let cacheRefreshes = 0
   let cacheFetches = 0
 
+  // [#2761] Resolve ONCE whether the AI-author phase (AI-quiz expansion +
+  // json-render challenge specs) runs this build. SKIP_AI_AUTHOR skips it on
+  // deploy builds (the rendered bodies are discarded by the approuter); a
+  // missing AI Hub binding fails open to a single warning instead of a
+  // per-step throw loop that burns the AI_AUTHOR_BUILD_CAP. See ai-author-gate.ts.
+  const aiAuthorGate = await resolveAiAuthorGate({ resolveSettings: resolveChatLlmSettings })
+  console.log(`[ai-author] ${aiAuthorGate.enabled ? 'ENABLED' : 'DISABLED'} — ${aiAuthorGate.reason}`)
+
   const tasks = allTutorials.map((t, idx) => async () => {
     const tutStart = performance.now()
     const label = `[${idx + 1}/${allTutorials.length}] ${t.repo}/${t.slug}`
@@ -1155,20 +1165,35 @@ async function main() {
           steps.map(s => [s.number, s.content ?? '']),
         )
         const aiCache = loadAiQuizCache(t.slug)
-        await expandAiAuthoredQuestions(validationMap, stepBodies, {
-          cache: aiCache,
-          callModel: callQuizModel,
-          onCallStats: globalCallStats,
-          allDirective,
-          // [#208 precedence-fix] forward the set of hand-authored steps
-          // so AI never fires on top of regex-substring or other [VALIDATE_N]
-          // blocks where parseBlock returned [].
-          handAuthoredSteps,
-          // [#2345] video-sourced quizzes ([AUTOAUTHOR_VIDEO_*]) fetch the
-          // transcript from the deployed transcript endpoint (CAP_BASE_URL).
-          fetchTranscript: fetchTranscriptViaHttp,
-        })
-        saveAiQuizCache(t.slug, aiCache)
+        // [#2761] Gate the only model-calling line in this block. When disabled
+        // (SKIP_AI_AUTHOR, or no AI Hub binding), hand-authored [VALIDATE_N]
+        // questions in validationMap still flow through untouched — only the
+        // [AUTOAUTHOR_*] expansion is skipped, and its placeholders are dropped
+        // below so no unmaterialized placeholder leaks into the page.
+        if (aiAuthorGate.enabled) {
+          await expandAiAuthoredQuestions(validationMap, stepBodies, {
+            cache: aiCache,
+            callModel: callQuizModel,
+            onCallStats: globalCallStats,
+            allDirective,
+            // [#208 precedence-fix] forward the set of hand-authored steps
+            // so AI never fires on top of regex-substring or other [VALIDATE_N]
+            // blocks where parseBlock returned [].
+            handAuthoredSteps,
+            // [#2345] video-sourced quizzes ([AUTOAUTHOR_VIDEO_*]) fetch the
+            // transcript from the deployed transcript endpoint (CAP_BASE_URL).
+            fetchTranscript: fetchTranscriptViaHttp,
+          })
+          saveAiQuizCache(t.slug, aiCache)
+        } else {
+          // Drop any unmaterialized [AUTOAUTHOR_*] placeholders so a skipped
+          // AI phase never ships a placeholder as a real question.
+          for (const [stepNum, questions] of validationMap) {
+            if (questions.some(q => (q as { __autoauthor?: boolean }).__autoauthor === true)) {
+              validationMap.set(stepNum, questions.filter(q => (q as { __autoauthor?: boolean }).__autoauthor !== true))
+            }
+          }
+        }
 
         // [#208] Populate sibling maps for AI-authored text questions so
         // collectAiGradedSpecs (below) emits the validate-answer-spec
@@ -1277,7 +1302,7 @@ async function main() {
       // step.challenge (rides in <script id="tutorial-data">) and writes the
       // freeText reference answers to a server-only sidecar for the
       // ValidateAnswerSpecs path — mirroring the AI-quiz anti-leak seam above.
-      if (process.env.CHALLENGE_WIDGET_ENABLED === 'true') {
+      if (process.env.CHALLENGE_WIDGET_ENABLED === 'true' && aiAuthorGate.enabled) {
         const challengeAnswers: Array<{ stepNumber: number; nodeId: string; reference: string }> = []
         // [#2441 gate 2] Per-slug spec cache mirroring the AI-quiz cache above.
         // A HIT reconstructs step.challenge + the reference sidecar with no model
