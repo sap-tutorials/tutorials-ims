@@ -14,7 +14,7 @@
 
 import cds from '@sap/cds';
 import { resolveUser } from '../lib/resolve-user.js';
-import { resolveDbUser } from '../lib/resolve-db-user.js';
+import { resolveUser as resolveDbUserTiered } from '../lib/resolve-db-user.js';
 import { fetchBanner } from '../lib/devtoberfest-banner-store.js';
 
 const LOG = cds.log('devtoberfest');
@@ -40,11 +40,10 @@ async function statusHandler(req, res) {
     const user = resolveUser(req, cds);
     let joined = false;
     if (user) {
-      // resolveDbUser honours the identity pin applied by the /api/devtoberfest
-      // router middleware (attr.dbUserId), so a P-user/S-user (multiple sapIds
-      // under one universal SAP ID) resolves to the single canonical row — not a
-      // stale merged husk a bare where({ sapId }) would hit.
-      const dbUser = await resolveDbUser(user, ['ID']);
+      // Tiered resolver (iss,sub link → sapId → email) — same path joinHandler
+      // uses — so the status READ agrees with the join WRITE. A bare sapId
+      // lookup misses when the token user_uuid ≠ the stored Users.sapId.
+      const dbUser = await resolveDbUserTiered(user);
       if (dbUser) {
         const { EventRegistrations } = cds.entities('com.sap.developers.ims');
         const reg = await SELECT.one.from(EventRegistrations).columns('ID').where({

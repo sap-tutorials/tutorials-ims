@@ -12,7 +12,7 @@
 import cds from '@sap/cds';
 import express from 'express';
 import { resolveUser } from '../lib/resolve-user.js';
-import { resolveUserSapId, resolveDbUser, provisionDbUser } from '../lib/resolve-db-user.js';
+import { resolveUserSapId, resolveUser as resolveDbUserTiered, provisionDbUser } from '../lib/resolve-db-user.js';
 import { getNextLegacyId } from '../lib/legacy-id.js';
 
 const LOG = cds.log('devtoberfest');
@@ -33,11 +33,12 @@ async function meHandler(req, res) {
       return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
     }
 
-    // resolveDbUser honours the identity pin applied by the /api/devtoberfest
-    // router middleware (attr.dbUserId) so a P-user/S-user (multiple sapIds under
-    // one universal SAP ID) resolves to their single canonical row, not a stale
-    // merged husk a bare where({ sapId }) would hit.
-    const dbUser = await resolveDbUser(user, ['ID']);
+    // Resolve via the TIERED resolver (iss,sub link → sapId → email) — the same
+    // path joinHandler uses — so the READ agrees with the WRITE. resolveDbUser's
+    // unpinned fallback is a bare where({ sapId }) that misses when the token
+    // user_uuid ≠ the stored Users.sapId (universal SAP ID), which produced the
+    // "shows Join but Join 409s ALREADY_JOINED" split.
+    const dbUser = await resolveDbUserTiered(user);
     if (!dbUser) {
       return res.status(200).json({ joined: false });
     }
