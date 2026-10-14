@@ -14,7 +14,7 @@
 
 import cds from '@sap/cds';
 import { resolveUser } from '../lib/resolve-user.js';
-import { resolveUserSapId } from '../lib/resolve-db-user.js';
+import { resolveDbUser } from '../lib/resolve-db-user.js';
 import { fetchBanner } from '../lib/devtoberfest-banner-store.js';
 
 const LOG = cds.log('devtoberfest');
@@ -40,17 +40,17 @@ async function statusHandler(req, res) {
     const user = resolveUser(req, cds);
     let joined = false;
     if (user) {
-      const sapId = resolveUserSapId(user);
-      if (sapId) {
-        const { Users, EventRegistrations } = cds.entities('com.sap.developers.ims');
-        const dbUser = await SELECT.one.from(Users).columns('ID').where({ sapId });
-        if (dbUser) {
-          const reg = await SELECT.one.from(EventRegistrations).columns('ID').where({
-            user_ID: dbUser.ID,
-            event_ID: config.currentEvent_ID,
-          });
-          joined = Boolean(reg);
-        }
+      // resolveDbUser honours the before('*') identity pin (attr.dbUserId), so a
+      // user with multiple logins/sapIds under one SAP ID resolves to the single
+      // canonical row — not a stale merged husk a bare where({ sapId }) would hit.
+      const dbUser = await resolveDbUser(user, ['ID']);
+      if (dbUser) {
+        const { EventRegistrations } = cds.entities('com.sap.developers.ims');
+        const reg = await SELECT.one.from(EventRegistrations).columns('ID').where({
+          user_ID: dbUser.ID,
+          event_ID: config.currentEvent_ID,
+        });
+        joined = Boolean(reg);
       }
     }
 
