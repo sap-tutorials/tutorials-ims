@@ -29,7 +29,9 @@ const { discoverComponents } = require('./discover-admin-components');
 const PRELOAD_EXCLUDE = new Set([]);
 
 function computePreloadComponents() {
-  const { components } = discoverComponents();
+  // Pass PRELOAD_EXCLUDE so discoverComponents' ui5.yaml-presence guard exempts
+  // exactly the folders we intentionally keep on the raw-copy path.
+  const { components } = discoverComponents(undefined, PRELOAD_EXCLUDE);
   return new Set(
     components
       .map(c => c.folder)
