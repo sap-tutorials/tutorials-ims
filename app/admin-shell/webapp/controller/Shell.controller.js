@@ -68,6 +68,7 @@ sap.ui.define([
     channelTopicMap: "channelTopicMap",
     channelSubmissions: "channelSubmissions",
     semaphoreConfig: "semaphoreConfig",
+    health: "health",
     quarantineEvents: "quarantineEvents"
   };
 
