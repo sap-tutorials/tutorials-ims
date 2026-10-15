@@ -75,7 +75,8 @@
         { "key": "tutorialSurvey", "title": "Tutorial Survey", "href": "/analytics-ui/#/reports/survey", "target": "_self", "requiredScope": "Tutorial.Author" },
         { "key": "statistics", "title": "Statistics" },
         { "key": "metrics", "title": "Metrics" },
-        { "key": "dataExport", "title": "Data Export" }
+        { "key": "dataExport", "title": "Data Export" },
+        { "key": "health", "title": "URL Health", "icon": "sap-icon://chain-link", "requiredScope": "Admin" }
       ]
     },
     {

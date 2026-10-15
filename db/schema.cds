@@ -21,6 +21,17 @@ type TaskType        : String(20)  enum { TUTORIAL; GROUP; CHECKPOINT; PUZZLE; P
 type EventType       : String(20)  enum { DEVTOBERFEST; TECHED; CODEJAM; CHALLENGE; OTHER; }
 type AttendanceMode  : String(20)  enum { VIRTUAL; IN_PERSON; HYBRID; } // #2370
 
+type LinkHealthStatus : String(8) enum { UNKNOWN; OK; SLOW; BROKEN; };
+
+// Per-row URL reachability, written by the url-health-check job (#2787).
+// linkStatus/lastChecked are job-written; linkStatusOverride is admin-pinned
+// to silence false-BROKEN on auth-gated/bot-detecting URLs.
+aspect LinkHealth {
+  linkStatus         : LinkHealthStatus default 'UNKNOWN' @assert.range;
+  lastChecked        : Timestamp;
+  linkStatusOverride : LinkHealthStatus @assert.range;
+}
+
 aspect TaskBase : cuid, managed, LegacyKeyed {
   title                     : String(255) @mandatory;
   description               : LargeString;
@@ -32,7 +43,7 @@ aspect TaskBase : cuid, managed, LegacyKeyed {
 }
 
 @assert.unique.slug: [slug]
-entity Tutorials : TaskBase {
+entity Tutorials : TaskBase, LinkHealth {
   slug                      : String(255) @mandatory;
   mdFileUrl                 : String(1000);
   featuredOrder             : Integer;
@@ -55,7 +66,7 @@ entity Tutorials : TaskBase {
 }
 
 @assert.unique.slug: [slug]
-entity Missions : TaskBase {
+entity Missions : TaskBase, LinkHealth {
   slug                      : String(255);
   communityMissionId        : String(255);
   // Set when the mission was drafted via promoteCommunityToMission (#917).
@@ -83,7 +94,7 @@ entity Missions : TaskBase {
 }
 
 @assert.unique.slug: [slug]
-entity Groups : TaskBase {
+entity Groups : TaskBase, LinkHealth {
   slug                      : String(255);
   // Default false: see Missions.published comment above. Same SuperAdmin
   // write-guard at admin-service.js:788. Issue #348.

@@ -10,6 +10,7 @@ import cds from '@sap/cds';
 import {
   loadGroupSlots, loadMissionSlots, evaluateSlots, getUserCompletedMap, upsertRollupRecord,
 } from './completion-rollup.js';
+import { filterServableSlugs } from './servable-slugs.js';
 import * as metrics from './metrics.js';
 
 const NS = 'com.sap.developers.ims';
@@ -148,7 +149,14 @@ export async function findUnhealthyEntities(db) {
   try {
     const out = [];
     const { Missions, Groups, Tutorials, GroupPathItems, CompletionPaths, CompletionPathItems } = cds.entities(NS);
-    const isActive = (s) => s == null || s === 'ACTIVE';
+
+    /** Classify a resolved tutorial slot. Returns 'deleted', 'inactive', or null (active). */
+    function classify(t) {
+      if (!t) return 'unresolved';
+      if (t.status === 'DELETED') return 'deleted';
+      if (!(t.status == null || t.status === 'ACTIVE')) return 'inactive';
+      return null; // active — candidate for not-served check below
+    }
 
     // --- Groups ---
     const groups = await db.run(SELECT.from(Groups).columns('ID', 'legacyId', 'title', 'slug').where({ published: true }));
@@ -157,19 +165,30 @@ export async function findUnhealthyEntities(db) {
       if (!items.length) continue;
       const tutIds = items.map(i => i.tutorial_ID).filter(Boolean);
       const tuts = tutIds.length
-        ? await db.run(SELECT.from(Tutorials).columns('ID', 'legacyId', 'status').where({ ID: { in: tutIds } }))
+        ? await db.run(SELECT.from(Tutorials).columns('ID', 'legacyId', 'slug', 'status').where({ ID: { in: tutIds } }))
         : [];
       const byId = new Map(tuts.map(t => [t.ID, t]));
       const badSlots = [];
       let activeCount = 0;
+      const activeCandidates = [];
       for (const i of items) {
         const t = byId.get(i.tutorial_ID);
-        if (!t) {
+        const reason = classify(t);
+        if (reason === 'unresolved') {
           badSlots.push({ taskLegacyId: null, reason: 'unresolved' });
-        } else if (!isActive(t.status)) {
-          badSlots.push({ taskLegacyId: t.legacyId, reason: 'inactive' });
+        } else if (reason !== null) {
+          badSlots.push({ taskLegacyId: t.legacyId, reason });
         } else {
           activeCount++;
+          activeCandidates.push(t);
+        }
+      }
+      // not-served: active children whose slug has no ContentCurrent row
+      const activeSlugs = activeCandidates.map(t => (t.slug || '').toLowerCase()).filter(Boolean);
+      const served = await filterServableSlugs(db, activeSlugs);
+      for (const t of activeCandidates) {
+        if (t.slug && !served.has(t.slug.toLowerCase())) {
+          badSlots.push({ taskLegacyId: t.legacyId, reason: 'not-served' });
         }
       }
       // 'empty' marks the whole entity as zero-active — independent of per-slot badSlots.
@@ -193,19 +212,30 @@ export async function findUnhealthyEntities(db) {
       if (!items.length) continue;
       const legacyIds = items.map(i => i.taskLegacyId).filter(v => v != null);
       const tuts = legacyIds.length
-        ? await db.run(SELECT.from(Tutorials).columns('legacyId', 'status').where({ legacyId: { in: legacyIds } }))
+        ? await db.run(SELECT.from(Tutorials).columns('legacyId', 'slug', 'status').where({ legacyId: { in: legacyIds } }))
         : [];
       const byLegacy = new Map(tuts.map(t => [t.legacyId, t]));
       const badSlots = [];
       let activeCount = 0;
+      const activeCandidates = [];
       for (const i of items) {
         const t = byLegacy.get(i.taskLegacyId);
-        if (!t) {
+        const reason = classify(t);
+        if (reason === 'unresolved') {
           badSlots.push({ taskLegacyId: i.taskLegacyId, reason: 'unresolved' });
-        } else if (!isActive(t.status)) {
-          badSlots.push({ taskLegacyId: t.legacyId, reason: 'inactive' });
+        } else if (reason !== null) {
+          badSlots.push({ taskLegacyId: t.legacyId, reason });
         } else {
           activeCount++;
+          activeCandidates.push(t);
+        }
+      }
+      // not-served: active children whose slug has no ContentCurrent row
+      const activeSlugs = activeCandidates.map(t => (t.slug || '').toLowerCase()).filter(Boolean);
+      const served = await filterServableSlugs(db, activeSlugs);
+      for (const t of activeCandidates) {
+        if (t.slug && !served.has(t.slug.toLowerCase())) {
+          badSlots.push({ taskLegacyId: t.legacyId, reason: 'not-served' });
         }
       }
       // 'empty' marks the whole entity as zero-active — independent of per-slot badSlots.

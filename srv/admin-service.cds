@@ -1317,6 +1317,13 @@ service AdminService {
     slug      : String;
     badSlots  : array of { taskLegacyId : Integer; reason : String; };
   };
+
+  // #2787: run the URL health scan on demand (nightly job also runs it).
+  action runUrlHealthScan() returns {
+    ok      : Boolean;
+    broken  : Integer;
+    message : String;
+  };
 }
 
 // ── Rebuild-button action (issue: rebuild-button, spec: 2026-06-24-admin-tutorial-rebuild-button) ──

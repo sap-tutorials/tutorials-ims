@@ -1,0 +1,119 @@
+<mvc:View
+  controllerName="sap.tutorials.admin.health.controller.Health"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m"
+  xmlns:core="sap.ui.core"
+  height="100%">
+  <ScrollContainer height="100%" width="100%" vertical="true" horizontal="false">
+    <VBox class="sapUiSmallMargin">
+      <Title text="URL Health" level="H2" class="sapUiSmallMarginBottom" />
+
+      <Toolbar class="sapUiSmallMarginBottom">
+        <Button
+          id="runScanBtn"
+          text="Run scan now"
+          type="Emphasized"
+          press=".onRunScan"
+          icon="sap-icon://chain-link" />
+        <ToolbarSeparator />
+        <Text id="scanResultText" text="{health>/scanMessage}" visible="{= !!${health>/scanMessage} }" />
+      </Toolbar>
+
+      <IconTabBar
+        id="healthTabs"
+        expanded="true"
+        applyContentPadding="false"
+        class="sapUiSmallMarginBottom">
+        <items>
+          <IconTabFilter key="urlStatus" text="URL Status" icon="sap-icon://monitor-payments">
+            <Table
+              id="urlStatusTable"
+              growing="true"
+              growingThreshold="50"
+              busyIndicatorDelay="0"
+              items="{
+                path: '/Tutorials',
+                parameters: {
+                  $select: 'slug,linkStatus,lastChecked,linkStatusOverride',
+                  $filter: 'linkStatus ne null',
+                  $orderby: 'lastChecked desc'
+                }
+              }">
+              <headerToolbar>
+                <OverflowToolbar>
+                  <Title text="Tutorials — URL Status" level="H3" />
+                </OverflowToolbar>
+              </headerToolbar>
+              <noData>
+                <IllustratedMessage
+                  illustrationType="sapIllus-NoEntries"
+                  title="No scan data yet"
+                  description="Run a scan to populate link-status results." />
+              </noData>
+              <columns>
+                <Column width="14rem"><Text text="Slug" /></Column>
+                <Column width="8rem"><Text text="Link Status" /></Column>
+                <Column width="12rem"><Text text="Last Checked" /></Column>
+                <Column><Text text="Override" /></Column>
+              </columns>
+              <items>
+                <ColumnListItem>
+                  <cells>
+                    <Text text="{slug}" />
+                    <ObjectStatus
+                      text="{linkStatus}"
+                      state="{= ${linkStatus} === 'OK' ? 'Success' : ${linkStatus} === 'BROKEN' ? 'Error' : ${linkStatus} === 'SLOW' ? 'Warning' : 'None' }" />
+                    <Text text="{= ${lastChecked} ? new Date(${lastChecked}).toLocaleString() : '—' }" />
+                    <Input value="{linkStatusOverride}" placeholder="(none)" />
+                  </cells>
+                </ColumnListItem>
+              </items>
+            </Table>
+          </IconTabFilter>
+
+          <IconTabFilter key="membership" text="Membership Issues" icon="sap-icon://alert">
+            <Table
+              id="membershipTable"
+              growing="true"
+              growingThreshold="50"
+              busyIndicatorDelay="0"
+              items="{membership>/issues}">
+              <headerToolbar>
+                <OverflowToolbar>
+                  <Title text="Membership Issues" level="H3" />
+                </OverflowToolbar>
+              </headerToolbar>
+              <noData>
+                <IllustratedMessage
+                  illustrationType="sapIllus-NoEntries"
+                  title="No membership issues"
+                  description="No completion-health issues found." />
+              </noData>
+              <columns>
+                <Column width="8rem"><Text text="Kind" /></Column>
+                <Column><Text text="Title" /></Column>
+                <Column width="12rem"><Text text="Slug" /></Column>
+                <Column><Text text="Bad Slots (reasons)" /></Column>
+              </columns>
+              <items>
+                <ColumnListItem>
+                  <cells>
+                    <ObjectStatus text="{membership>kind}" state="Warning" />
+                    <Text text="{membership>title}" wrapping="false" />
+                    <Text text="{membership>slug}" />
+                    <Text
+                      text="{
+                        path: 'membership>badSlots',
+                        formatter: '.formatBadSlots'
+                      }"
+                      wrapping="true" />
+                  </cells>
+                </ColumnListItem>
+              </items>
+            </Table>
+          </IconTabFilter>
+        </items>
+      </IconTabBar>
+    </VBox>
+  </ScrollContainer>
+</mvc:View>

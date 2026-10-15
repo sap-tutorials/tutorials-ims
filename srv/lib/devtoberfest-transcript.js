@@ -95,8 +95,26 @@ function parseTimedText(xml) {
   return out;
 }
 
-function pickCaptionTrack(list, { preferUploaded = true } = {}) {
+// Pick a caption track from the InnerTube list. Preference order:
+//   1. a track whose language is in `preferLangs` (exact match, e.g. 'en'),
+//   2. a track whose language starts with a preferred prefix (e.g. 'en-GB'),
+//   3. an uploaded (non-asr) track when `preferUploaded`,
+//   4. the first track.
+// #2345: YouTube returns ~20 auto-translated asr tracks for SAP/DevRel talks and
+// the English one is rarely first; without a language preference we fed the LLM a
+// machine translation (Arabic/Bengali). `preferLangs` defaults to English because
+// these are English-spoken talks, but a non-English-only video still falls through
+// to the uploaded/first-track behaviour, so no language is ever hard-required.
+function pickCaptionTrack(list, { preferUploaded = true, preferLangs = ['en'] } = {}) {
   if (!Array.isArray(list) || !list.length) return null;
+  const langOf = (t) => (t.lang || '').toLowerCase();
+  const wanted = preferLangs.map((l) => l.toLowerCase());
+  if (wanted.length) {
+    const exact = list.find((t) => wanted.includes(langOf(t)));
+    if (exact) return exact;
+    const prefixed = list.find((t) => wanted.some((l) => langOf(t).startsWith(`${l}-`)));
+    if (prefixed) return prefixed;
+  }
   if (preferUploaded) {
     const uploaded = list.find((t) => t.kind !== 'asr');
     if (uploaded) return uploaded;
@@ -174,13 +192,19 @@ async function fetchTranscript(videoId) {
   const tracks = await listCaptionTracks(videoId);
   if (!tracks.length) return { source: 'none', lang: '', segments: [] };
 
-  // Try uploaded (non-asr) first, then fall back to auto (asr) — livestreams
-  // often have only auto captions. Try each candidate until one yields text.
-  const uploaded = pickCaptionTrack(tracks, { preferUploaded: true });
-  const auto = tracks.find((t) => t.kind === 'asr');
+  // Build an ordered, de-duplicated candidate list. Within both the uploaded and
+  // the auto (asr) pools we prefer an English track (#2345) before falling back
+  // to the first available track, so a multi-language auto-translated list no
+  // longer hands the LLM a machine translation. Uploaded is tried before auto
+  // because livestreams often only have auto captions.
+  const uploadedPool = tracks.filter((t) => t.kind !== 'asr');
+  const autoPool = tracks.filter((t) => t.kind === 'asr');
   const candidates = [];
-  if (uploaded) candidates.push(uploaded);
-  if (auto && auto !== uploaded) candidates.push(auto);
+  const add = (t) => { if (t && !candidates.includes(t)) candidates.push(t); };
+  add(pickCaptionTrack(uploadedPool, { preferUploaded: false }));
+  add(pickCaptionTrack(autoPool, { preferUploaded: false }));
+  // Last-resort: anything we have not already queued (non-English uploaded/auto).
+  for (const t of tracks) add(t);
 
   for (const track of candidates) {
     const segments = await fetchTrackSegments(track);

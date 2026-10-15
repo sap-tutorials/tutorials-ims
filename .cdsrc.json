@@ -64,16 +64,6 @@
       },
       {
         "for": "cds-caching"
-      },
-      {
-        "for": "hana",
-        "src": "db",
-        "dest": "db",
-        "options": {
-          "model": [
-            "cds-caching/db/statistics"
-          ]
-        }
       }
     ]
   },

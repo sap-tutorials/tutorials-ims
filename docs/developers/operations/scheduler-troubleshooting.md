@@ -135,28 +135,34 @@ The most severe mode: **every** scheduled job shows stale/overdue on `/admin-ui/
 
 > **Reminder on normal outbox state.** CAP keeps **one future-fire row per job** at `target='queue'`. `STATUS=NULL` is a healthy pending tick; on success the row is DELETE'd and the next future row inserted. A full healthy fleet shows ~1 NULL row per registered job (~54 at time of writing) and **0** processing. A job with **no row** is the anomaly.
 
-### How it happens
+### How it happens (root cause — #2782)
 
-CAP 10's `CronService` drives all scheduled jobs through **one shared outbox queue**. If the queue **processor** stalls (e.g. after a batch operator **Force-close** of several jobs, which closes the `PipelineLog` row but does not reconcile the outbox control state — see [follow-up](#open-follow-up)), two things go wrong together:
+CAP 10's `CronService` drives all scheduled jobs through **one shared outbox queue** (`cds.outbox.Messages`, `target='queue'`, one singleton row per job keyed on a deterministic ID). The next occurrence of an `.every()` job is **not** seeded at boot or on a timer — it is inserted **only when the current tick completes**, atomically with the delete of the current row (`@sap/cds/libx/queue/processing.js`). Crucially the lifecycle spans **two separate transactions**:
 
-1. A singleton row can be left at `status='processing'`, and
-2. jobs that were mid-cycle get their row **consumed but never re-inserted** — so they silently drop out of the schedule.
+1. **Claim** — `UPDATE … SET status='processing'`, committed immediately. The payload is *only* `status`; `lastAttemptTimestamp` is **not** written here.
+2. **Complete** — DELETE the current row **and** INSERT the next occurrence, in a *later* tx that wraps the entire handler runtime.
 
-Deleting the stuck `processing` row (Force-unwedge / the HANA escape hatch above) clears the lock but **cannot resurrect the dropped rows** — per `srv/lib/scheduler-wedge.js`, a deleted schedule row is only re-created "until the next scheduler boot re-inserts it". And the stalled processor may still be running on an un-restarted CF instance.
+`lastAttemptTimestamp` is written **only** on the failed/retry branch — never on claim, never on success.
 
-### Automatic recovery — post-boot self-check (#2762)
+**The deploy trigger:** a blue-green cutover sends SIGTERM to the draining instance. If that lands *between* the two transactions (i.e. any time a job is mid-run — seconds to minutes), the row is left durably at `status='processing'` with `lastAttemptTimestamp` still **NULL**, and **no successor row** is ever inserted. CAP's own reclaim predicate is `(status IS NULL OR lastAttemptTimestamp < now-1h)` — a `processing` row with NULL `lastAttemptTimestamp` matches *neither* disjunct (`NULL < ?` is SQL UNKNOWN), so **CAP never reclaims it**. The job silently drops out of the schedule with **no error and no log line**, and survives restarts. This is the "consumed-but-not-reinserted" mode, and it reproduces on **every** deploy because every cutover SIGTERMs an instance that may be mid-tick.
 
-Since #2762, every srv boot arms a **one-shot scheduler-stall self-check** (`srv/lib/scheduler-boot-healthcheck.js`, armed from `CronService.init()`). It targets exactly this failure mode — the one a deploy-time step can't catch because the stall surfaces ~26 min **after** the operator resumes the blue-green swap, long after the deploy script has exited.
+> A `processing` row that *did* fail at least once has `lastAttemptTimestamp` set and **is** reclaimed by the built-in 1h lease — it's specifically the cutover-death row (never-failed, NULL `lastAttemptTimestamp`) that escapes the lease.
 
-~6 minutes after boot it reads `JobLastRun.lastSuccessAt` for the two high-frequency canaries (`metrics-rollup` `*/5`, `kg-ondemand-drain` `*/2`). If **both** are stale past the grace window, the instance raises a `SchedulerStallDetected` **ALERT** and `process.exit(1)`s, so CF reschedules it and `CronService.init()` re-seeds the outbox.
+Deleting the stuck `processing` row (Force-unwedge / the HANA escape hatch above) clears that one lock but **cannot resurrect the dropped rows** — `forceUnwedge` only deletes, it doesn't re-seed. (A batch operator **Force-close** of several jobs can *also* strand a `processing` row, but that is a secondary path; the primary, every-deploy cause is the SIGTERM-mid-tick tombstone above.)
 
-- **Both instances get restarted, staggered.** Instance N delays its exit by `N × 45 s`, so instance 0 restarts and is back re-seeding the outbox before instance 1 drops — the rolling-restart-of-both this runbook requires, with no joint outage.
-- **One-shot, fail-open.** Fires once per boot (no crash-loop: a healthy reboot sees fresh canaries and stays up); any DB/read fault is treated as healthy and never self-exits.
-- **Crash-loop backstop.** A persisted self-restart marker (a sentinel `JobLastRun` row) gates the exit: if the fleet already self-restarted within a cooldown (default 30 min) and the stall *persists*, the instance raises a louder `SchedulerStallPersistent` alert but does **not** exit again — a structural (non-transient) stall degrades to alert-only instead of an endless restart loop. **If you see `SchedulerStallPersistent` fire, the auto-restart did not clear it:** disable the check with `SCHEDULER_HEALTHCHECK_ENABLED=false` if it's noisy, then do the manual rolling restart below and investigate the root cause.
-- **Requires both canaries stale.** A single legitimately-erroring job can't trigger a false restart.
-- **Knobs** (default-safe): `SCHEDULER_HEALTHCHECK_ENABLED` (on in CF, off locally), `SCHEDULER_HEALTHCHECK_GRACE_MS` (default 6 min), `SCHEDULER_HEALTHCHECK_STAGGER_MS` (default 90 s), `SCHEDULER_HEALTHCHECK_COOLDOWN_MS` (default 30 min).
+### Automatic recovery — outbox tombstone reaper (#2782)
 
-If the `SchedulerStallDetected` alert fires but the board **still** shows all jobs overdue after the auto-restart (e.g. the stall recurs or the self-check was disabled), fall back to the manual rolling restart below.
+Since #2782, every srv boot arms a **tombstone reaper** (`srv/lib/scheduler-reaper.js`, from `CronService.init()`). It targets the root cause directly: the NULL-`lastAttemptTimestamp` `processing` rows CAP's lease can never reclaim.
+
+- **Boot sweep.** Right after init, a deferred `reapTombstonedOutboxRows()` pass clears any tombstone left by the instance that just cut over.
+- **Periodic self-heal.** Every ~10 min (`SCHEDULER_SELFHEAL_INTERVAL_MS`) a single `.unref()`'d timer re-reaps — a tombstone can be created *after* an instance booted, which the boot sweep can't catch — **and** runs an **alert-only** canary check (`metrics-rollup` `*/5`, `kg-ondemand-drain` `*/2`): if **both** are stale past the grace window it raises a `SchedulerStallDetected` **ALERT**. There is **no `process.exit`** — the reaper is the recovery, the alert is just the signal.
+- **What the reaper deletes.** Only rows at `status='processing'` that are genuinely **stale** per `scheduler-wedge.isRowStale` (the 60-min floor + cron-period rule). A legitimately long-running job (e.g. `extractConcepts` ~40 min) inside the floor is **never** reaped; a pending `status=NULL` future row is never touched. Deleting (rather than nulling status) lets the next `CronService.init()` `.every().as()` UPSERT — or the next healthy tick — re-seed a fresh future row; nulling status would instead make CAP immediately **retry** the dead row.
+- **Fail-open throughout.** A missing entity, DB fault, or a single row's DELETE throwing never aborts the pass, never kills the timer, and never fails a scheduled tick. Enabled on CF, off locally (`SCHEDULER_HEALTHCHECK_ENABLED` overrides).
+- **Replaces #2762.** The prior post-boot self-check `process.exit(1)`'d to force a CF reschedule. That did **not** durably recover the 2026-10-14 fleet — a restart can't clear a NULL-`lastAttemptTimestamp` tombstone, and re-running `init()` churns the outbox (deterministic-ID UPSERTs) on every bounce. The exit / per-instance stagger / crash-loop cooldown / self-restart marker machinery was removed; only the pure canary evaluator survives, now consumed by the reaper's alert-only tick.
+
+- **Knobs** (default-safe): `SCHEDULER_HEALTHCHECK_ENABLED` (on in CF, off locally), `SCHEDULER_HEALTHCHECK_GRACE_MS` (default 6 min, canary staleness), `SCHEDULER_SELFHEAL_INTERVAL_MS` (default 10 min, reaper cadence).
+
+If the `SchedulerStallDetected` alert fires but the board **still** shows all jobs overdue after a couple of reaper ticks, fall back to the manual rolling restart below.
 
 ### Recovery — rolling restart (manual)
 
@@ -188,9 +194,9 @@ SELECT TO_VARCHAR(STARTEDAT), STATUS, METADATA
 
 `kg-ondemand-drain` (every 2 min) and `metrics-rollup` (every 5 min) are the fastest signals — a couple of SUCCESS rows for those within ~5 minutes confirms the queue is draining.
 
-### Open follow-up
+### Resolved follow-up (#2782)
 
-Batch **Force-close** (`#1293`) closes `PipelineLog` rows but does not reconcile the shared outbox, which is what stranded the `processing` row AND dropped the high-frequency rows in the 2026-10-12 incident. Candidate hardening (track via DEV PR): have `forceClose` also clear/re-arm the affected outbox rows, or codify "force-close N jobs → restart srv" so operators don't hit this. The existing `forceUnwedge` single-row delete is **insufficient** for this mode by design.
+The earlier candidate hardening ("have `forceClose` also re-arm the affected outbox rows, or codify force-close-then-restart") is superseded by the **tombstone reaper** above, which clears the stranded `processing` rows automatically on boot and every ~10 min regardless of how they were stranded (SIGTERM mid-tick *or* batch Force-close). The `forceUnwedge` single-row delete remains available for manual operator use but is no longer the only line of defence.
 
 ## References
 
@@ -198,7 +204,8 @@ Batch **Force-close** (`#1293`) closes `PipelineLog` rows but does not reconcile
 - Issue: [#1021](https://github.com/sap-tutorials/tutorials-ims/issues/1021) — this fix
 - Issue: [#1022](https://github.com/sap-tutorials/tutorials-ims/issues/1022) — upstream CAP hook (in progress)
 - Issue: [#1293](https://github.com/sap-tutorials/tutorials-ims/issues/1293) — orphaned RUNNING PipelineLog reconciler + Force close
-- Issue: [#2762](https://github.com/sap-tutorials/tutorials-ims/issues/2762) — post-boot scheduler-stall self-check + auto rolling-restart (blue-green stall)
+- Issue: [#2762](https://github.com/sap-tutorials/tutorials-ims/issues/2762) — post-boot scheduler-stall self-check + auto rolling-restart (blue-green stall); **superseded by #2782** (the self-restart didn't durably recover)
+- Issue: [#2782](https://github.com/sap-tutorials/tutorials-ims/issues/2782) — outbox tombstone reaper: durable fix for the NULL-`lastAttemptTimestamp` `processing` row CAP's lease can't reclaim
 - Code: `srv/jobs/scheduler.js:runWithLock` — belt-and-suspenders
 - Code: `srv/lib/scheduler-wedge.js` — helpers (`deleteStuckOutboxRow`, `loadStuckOutboxTargets`)
 - Code: `srv/lib/pipeline-log-reconciler.js` — orphaned-row reconciler (`reconcileOrphanedRunningJobs`, `forceCloseRunningPipelineLog`)

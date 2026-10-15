@@ -36,12 +36,30 @@ export function extractIntro(body: string, isV2: boolean): string {
   //    the codejam-events-process-1-bah break).
   const out: string[] = []
   let skipSectionUntilHeading = false
+  let inHtmlComment = false
   for (let i = 0; i < pre.length; i++) {
     const line = pre[i]
     const kind = classes[i]?.kind
-    // Drop lines inside a multi-line HTML comment entirely (the author disabled
-    // that block) — keeps the balanced comment out of both intro and sections.
-    if (kind === 'html') continue
+    // Drop lines inside an HTML *comment* only (the author disabled that block)
+    // — but preserve raw HTML blocks such as a `## Video Version` <iframe>, which
+    // the grammar also classifies as 'html' (html_block). Track the comment span
+    // across the html-classified lines by its `<!-- … -->` delimiters so a
+    // commented-out `## You will learn` is dropped while the video iframe stays.
+    if (kind === 'html') {
+      const opensComment = /<!--/.test(line)
+      const closesComment = /-->/.test(line)
+      if (inHtmlComment) {
+        if (closesComment) inHtmlComment = false
+        continue
+      }
+      if (opensComment) {
+        if (!closesComment) inHtmlComment = true // multi-line comment: keep skipping
+        continue
+      }
+      // Raw (non-comment) HTML block — preserve verbatim (e.g. the video iframe).
+      out.push(line)
+      continue
+    }
     const isHeading = kind === 'heading' && (classes[i].level === 2 || classes[i].level === 3)
     if (skipSectionUntilHeading) {
       if (isHeading) skipSectionUntilHeading = false
