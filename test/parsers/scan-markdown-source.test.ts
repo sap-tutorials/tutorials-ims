@@ -64,7 +64,7 @@ describe('scan-markdown-source', () => {
       expect(second.findings.filter(f => f.classification === 'source-fixable')).toHaveLength(0)
     })
 
-    it('passes the golden-render gate (compose output unchanged)', () => {
+    it('passes the golden-render gate (steps/intro structure unchanged)', () => {
       const original = doc(body)
       const { fixedBody } = scanSource(original, META)
       const fixed = rebuildSource(original, fixedBody!)
