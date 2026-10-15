@@ -1,0 +1,13 @@
+{
+  "name": "sap.tutorials.admin.health",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Health - Admin UI",
+  "scripts": {
+    "start": "fiori run --open index.html",
+    "build": "ui5 build --clean-dest"
+  },
+  "devDependencies": {
+    "@ui5/cli": "^4.0.0"
+  }
+}
