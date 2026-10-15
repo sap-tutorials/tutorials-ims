@@ -23,11 +23,18 @@
     }
   },
   "sap.ui5": {
+    "rootView": {
+      "viewName": "sap.tutorials.admin.health.view.Health",
+      "type": "XML",
+      "id": "health",
+      "async": true
+    },
     "dependencies": {
       "minUI5Version": "1.148.0",
       "libs": {
         "sap.m": {},
-        "sap.fe.templates": {}
+        "sap.ui.core": {},
+        "sap.ui.model.odata.v4": {}
       }
     },
     "models": {
@@ -42,59 +49,6 @@
         }
       }
     },
-    "routing": {
-      "routes": [
-        { "pattern": ":?query:", "name": "TutorialsHealthList", "target": "TutorialsHealthList" }
-      ],
-      "targets": {
-        "TutorialsHealthList": {
-          "type": "Component",
-          "id": "TutorialsHealthList",
-          "name": "sap.fe.templates.ListReport",
-          "options": {
-            "settings": {
-              "contextPath": "/Tutorials",
-              "initialLoad": "Enabled",
-              "controlConfiguration": {
-                "@com.sap.vocabularies.UI.v1.LineItem": {
-                  "columns": {
-                    "DataField::slug": { "availability": "Default" },
-                    "DataField::linkStatus": { "availability": "Default" },
-                    "DataField::lastChecked": { "availability": "Default" },
-                    "DataField::linkStatusOverride": { "availability": "Default" }
-                  },
-                  "actions": {
-                    "runUrlHealthScan": {
-                      "press": "sap.tutorials.admin.health.ext.MembershipIssues.onRunUrlHealthScan",
-                      "visible": true,
-                      "enabled": true,
-                      "text": "Run scan now"
-                    }
-                  }
-                }
-              },
-              "views": {
-                "paths": [
-                  {
-                    "key": "tab1",
-                    "annotationPath": "com.sap.vocabularies.UI.v1.SelectionVariant#URLStatus"
-                  }
-                ]
-              },
-              "editableHeaderContent": false
-            }
-          }
-        }
-      }
-    },
-    "extends": {
-      "extensions": {
-        "sap.ui.controllerExtensions": {
-          "sap.fe.templates.ListReport.ListReportController": {
-            "controllerName": "sap.tutorials.admin.health.ext.MembershipIssues"
-          }
-        }
-      }
-    }
+    "contentDensities": { "compact": true, "cozy": true }
   }
 }
