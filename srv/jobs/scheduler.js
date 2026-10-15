@@ -1249,6 +1249,18 @@ export function registerJobs() {
     fn: (logId) => import('./freshness-scan-job.js').then(m => m.runFreshnessScan(logId)),
   });
 
+  // URL health check (#2787): nightly reachability scan of all ACTIVE tutorials
+  // + published missions/groups. Also manually triggerable via JobControls.runJob.
+  // 17 4 — off-minute, shares the 04:xx window with other nightly scans (jobName
+  // uniqueness is what the scheduler enforces, not minute uniqueness).
+  registerJob({
+    jobName: 'url-health-check',
+    schedule: '17 4 * * *',
+    ttlMs: 1800000,
+    description: 'URL reachability scan for tutorials/missions/groups (#2787)',
+    fn: (logId) => import('./url-health-check-job.js').then(m => m.runUrlHealthCheck(logId)),
+  });
+
   LOG.info('All scheduled jobs registered');
 
   // #756 (Task 1): pre-seed JobLastRun so the admin Cron health tile shows
