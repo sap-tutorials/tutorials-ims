@@ -21,7 +21,7 @@ type TaskType        : String(20)  enum { TUTORIAL; GROUP; CHECKPOINT; PUZZLE; P
 type EventType       : String(20)  enum { DEVTOBERFEST; TECHED; CODEJAM; CHALLENGE; OTHER; }
 type AttendanceMode  : String(20)  enum { VIRTUAL; IN_PERSON; HYBRID; } // #2370
 
-type LinkHealthStatus : String(8) enum { OK; SLOW; BROKEN; };
+type LinkHealthStatus : String(8) enum { UNKNOWN; OK; SLOW; BROKEN; };
 
 // Per-row URL reachability, written by the url-health-check job (#2787).
 // linkStatus/lastChecked are job-written; linkStatusOverride is admin-pinned
