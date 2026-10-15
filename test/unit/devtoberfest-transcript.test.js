@@ -89,6 +89,31 @@ describe('pickCaptionTrack', () => {
   it('returns null when list empty', () => {
     expect(pickCaptionTrack([], { preferUploaded: true })).toBeNull();
   });
+  // #2345 follow-up: YouTube returns ~20 auto-translated asr tracks for SAP/DevRel
+  // talks; the English one is rarely first. Without a language preference we fed
+  // the LLM an Arabic/Bengali machine translation. Prefer English.
+  it('prefers an English track over an earlier non-English one', () => {
+    const list = [
+      { url: 'ar', kind: 'asr', lang: 'ar' },
+      { url: 'bn', kind: 'asr', lang: 'bn' },
+      { url: 'en', kind: 'asr', lang: 'en' },
+    ];
+    expect(pickCaptionTrack(list, { preferLangs: ['en'] })).toEqual({ url: 'en', kind: 'asr', lang: 'en' });
+  });
+  it('falls back to the first track when no preferred language is present', () => {
+    const list = [
+      { url: 'de', kind: 'asr', lang: 'de' },
+      { url: 'fr', kind: 'asr', lang: 'fr' },
+    ];
+    expect(pickCaptionTrack(list, { preferLangs: ['en'] })).toEqual({ url: 'de', kind: 'asr', lang: 'de' });
+  });
+  it('matches an en-* regional variant when no exact en exists', () => {
+    const list = [
+      { url: 'de', kind: 'asr', lang: 'de' },
+      { url: 'engb', kind: 'asr', lang: 'en-GB' },
+    ];
+    expect(pickCaptionTrack(list, { preferLangs: ['en'] })).toEqual({ url: 'engb', kind: 'asr', lang: 'en-GB' });
+  });
 });
 
 // A minimal InnerTube player response carrying the given caption tracks.
@@ -157,6 +182,35 @@ describe('fetchTranscript orchestration', () => {
   it('returns source:none when there are no caption tracks', async () => {
     global.fetch = stubFetch({ tracks: [] });
     expect(await fetchTranscript('vid')).toEqual({ source: 'none', lang: '', segments: [] });
+  });
+
+  it('picks the English asr track out of a multi-language auto-translated list (#2345)', async () => {
+    global.fetch = stubFetch({
+      tracks: [
+        { baseUrl: 'https://yt/ar', languageCode: 'ar', kind: 'asr' },
+        { baseUrl: 'https://yt/bn', languageCode: 'bn', kind: 'asr' },
+        { baseUrl: 'https://yt/en', languageCode: 'en', kind: 'asr' },
+        { baseUrl: 'https://yt/de', languageCode: 'de', kind: 'asr' },
+      ],
+      captionByUrl: {
+        'https://yt/ar': SRV3(1000, 'arabic'),
+        'https://yt/en': SRV3(1000, 'english'),
+      },
+    });
+    const r = await fetchTranscript('vid');
+    expect(r).toEqual({ source: 'auto', lang: 'en', segments: [{ start: 1, text: 'english' }] });
+  });
+
+  it('still returns a non-English transcript when no English track exists', async () => {
+    global.fetch = stubFetch({
+      tracks: [
+        { baseUrl: 'https://yt/de', languageCode: 'de', kind: 'asr' },
+        { baseUrl: 'https://yt/fr', languageCode: 'fr', kind: 'asr' },
+      ],
+      captionByUrl: { 'https://yt/de': SRV3(1000, 'deutsch') },
+    });
+    const r = await fetchTranscript('vid');
+    expect(r).toEqual({ source: 'auto', lang: 'de', segments: [{ start: 1, text: 'deutsch' }] });
   });
 
   it('fails soft (source:none) when a fetch throws — never bubbles to a 500', async () => {
