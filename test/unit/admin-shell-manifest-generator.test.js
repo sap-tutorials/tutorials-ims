@@ -8,8 +8,9 @@
 // mirrors with a scan-driven build step — these tests lock in the invariants.
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { discoverComponents, toCamelCase } from '../../app/admin-shell/scripts/discover-admin-components.js';
 import { buildBlocks } from '../../app/admin-shell/scripts/generate-manifest.js';
 
@@ -114,5 +115,48 @@ describe('toCamelCase', () => {
   it('is idempotent for already-camelCase names', () => {
     expect(toCamelCase('videos')).toBe('videos');
     expect(toCamelCase('kgCommunities')).toBe('kgCommunities');
+  });
+});
+
+// Guard: every real admin app under app/admin/ carries its own ui5.yaml.
+// Without it, copy-components.js silently falls back from the preload build to
+// a raw copy that ships NO Component-preload.js; a freestyle OData-V4 tile
+// (app/admin/health) then dies at runtime with a "script load error"
+// ModuleError on sap/ui/model/odata/v4/library.js. discoverComponents now fails
+// the build the moment a non-excluded component lacks its ui5.yaml.
+describe('ui5.yaml-presence guard', () => {
+  it('every real admin component ships a ui5.yaml', () => {
+    // Real tree must pass — if this fails, a tile is missing its ui5.yaml.
+    expect(() => discoverComponents(ADMIN)).not.toThrow();
+  });
+
+  it('throws when a discovered component has no ui5.yaml', () => {
+    const root = mkdtempSync(join(tmpdir(), 'admin-guard-'));
+    try {
+      const webapp = join(root, 'widget', 'webapp');
+      mkdirSync(webapp, { recursive: true });
+      writeFileSync(join(webapp, 'Component.js'), '// stub');
+      writeFileSync(join(webapp, 'manifest.json'),
+        JSON.stringify({ 'sap.app': { id: 'sap.tutorials.admin.widget' } }));
+      // No ui5.yaml written → must throw.
+      expect(() => discoverComponents(root)).toThrow(/missing ui5\.yaml/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('exempts a component listed in the preload-exclude set', () => {
+    const root = mkdtempSync(join(tmpdir(), 'admin-guard-'));
+    try {
+      const webapp = join(root, 'widget', 'webapp');
+      mkdirSync(webapp, { recursive: true });
+      writeFileSync(join(webapp, 'Component.js'), '// stub');
+      writeFileSync(join(webapp, 'manifest.json'),
+        JSON.stringify({ 'sap.app': { id: 'sap.tutorials.admin.widget' } }));
+      const { components } = discoverComponents(root, new Set(['widget']));
+      expect(components.map(c => c.folder)).toContain('widget');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
