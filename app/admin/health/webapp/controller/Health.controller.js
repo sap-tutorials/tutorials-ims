@@ -62,6 +62,15 @@ sap.ui.define([
       return aBadSlots.map(function (s) {
         return s.reason || s.slot || JSON.stringify(s);
       }).join(", ");
+    },
+
+    // Formats an ISO timestamp into a locale date-time string.
+    // A formatter (not an expression binding) because UI5 expression-binding
+    // grammar forbids `new` — `{= new Date(...) }` is a parse error.
+    formatTimestamp: function (sTimestamp) {
+      if (!sTimestamp) { return "—"; }
+      var oDate = new Date(sTimestamp);
+      return isNaN(oDate.getTime()) ? "—" : oDate.toLocaleString();
     }
   });
 });
