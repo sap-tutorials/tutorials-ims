@@ -91,6 +91,10 @@
                     "AskJouleAction": {
                       "press": "sap.tutorials.admin.tutorials.ext.AskJoule.onAskJoule",
                       "text": "Ask Joule for tutorial improvement suggestions"
+                    },
+                    "RebuildTutorialAction": {
+                      "press": "sap.tutorials.admin.tutorials.ext.SourceMarkdownHandler.onRebuildTutorial",
+                      "text": "Rebuild this tutorial"
                     }
                   }
                 },

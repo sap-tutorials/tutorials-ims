@@ -702,12 +702,14 @@ annotate AdminService.Tutorials with @UI: {
     { Value: redirectUrl, Label: 'Redirect URL (external)' }
   ]},
   Identification: [
-    {
-      $Type            : 'UI.DataFieldForAction',
-      Label            : 'Rebuild this tutorial',
-      Action           : 'AdminService.rebuildContent',
-      ![@UI.Importance]: #High,
-    },
+    // "Rebuild this tutorial" is wired as a manifest custom header action
+    // (content.header.actions.RebuildTutorialAction → SourceMarkdownHandler.
+    // onRebuildTutorial) rather than a @UI.DataFieldForAction. FE V4 fires a
+    // DataFieldForAction through its generic action path, bypassing the
+    // controller-extension handler that owns the confirm dialog + success/
+    // error feedback + submit debounce — so the annotation form rendered a
+    // button that POSTed silently with no user feedback. The manifest custom
+    // action (AskJoule pattern) routes the press straight to the handler.
     { $Type: 'UI.DataFieldForAction', Label: 'Check freshness', Action: 'AdminService.checkFreshness', ![@UI.Importance]: #High }
   ]
 };
