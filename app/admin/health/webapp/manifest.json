@@ -33,8 +33,7 @@
       "minUI5Version": "1.148.0",
       "libs": {
         "sap.m": {},
-        "sap.ui.core": {},
-        "sap.ui.model.odata.v4": {}
+        "sap.ui.core": {}
       }
     },
     "models": {
