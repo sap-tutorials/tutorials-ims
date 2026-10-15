@@ -3760,6 +3760,20 @@ export default class AdminService extends cds.ApplicationService {
       return findUnhealthyEntities(db);
     });
 
+    // #2787: run the URL health scan on demand.
+    // runWithLock returns { skipped: false, outcome: 'success'|'error', result, errorMessage }.
+    // result = { ok: number, slow: number, broken: number, skipped: number } | { ok: false, error: string }
+    this.on('runUrlHealthScan', async (req) => {
+      const { runJobByName } = await import('./jobs/scheduler.js');
+      const r = await runJobByName('url-health-check', { manualTrigger: true, user: req.user?.id });
+      const broken = r?.result?.broken ?? r?.broken ?? 0;
+      return {
+        ok: r?.outcome !== 'FAILED' && r?.ok !== false,
+        broken,
+        message: r?.skipped ? 'Scan already running — skipped' : `Scan complete: ${broken} broken.`,
+      };
+    });
+
     // Bound action on Tutorials. Resolves slug, audit-logs intent, dispatches
     // a slug-targeted rebuild via scheduleRebuild's 60s debounce. Shared body
     // lives in srv/lib/rebuild-action-handler.js so AuthorService can reuse it
