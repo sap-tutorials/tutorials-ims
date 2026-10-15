@@ -63,7 +63,7 @@
                     <ObjectStatus
                       text="{linkStatus}"
                       state="{= ${linkStatus} === 'OK' ? 'Success' : ${linkStatus} === 'BROKEN' ? 'Error' : ${linkStatus} === 'SLOW' ? 'Warning' : 'None' }" />
-                    <Text text="{= ${lastChecked} ? new Date(${lastChecked}).toLocaleString() : '—' }" />
+                    <Text text="{ path: 'lastChecked', formatter: '.formatTimestamp' }" />
                     <Input value="{linkStatusOverride}" placeholder="(none)" />
                   </cells>
                 </ColumnListItem>
