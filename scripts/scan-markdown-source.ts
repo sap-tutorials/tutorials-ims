@@ -232,7 +232,9 @@ export function scanSource(raw: string, meta: DiscoveredTutorial): FileScan {
   detect(SOURCE_FIXABLE[5], body)          // image-directive    ← source body (comments untouched by prior steps)
   for (const fixer of RENDER_TIME) detect(fixer, body)
 
-  // ── Fix (chained in compose order — matches in-flight behavior) ──
+  // ── Fix (chained in SOURCE_FIXABLE registry order) ──
+  // These transforms formerly ran in-flight inside composeTutorial; they were
+  // retired from compose (e95c75d8f) and now apply at source time only.
   let cur = body
   for (const fixer of SOURCE_FIXABLE) cur = fixer.transform(cur)
   const anyChange = cur !== body
@@ -252,16 +254,26 @@ export function rebuildSource(raw: string, fixedBody: string): string {
 }
 
 // ── Golden-render gate ─────────────────────────────────────────────────────────
-// composeTutorial applies the pre-processors in flight, so composing the
-// ORIGINAL and the FIXED source must yield identical output for the fields the
-// pre-processors GOVERN: steps, body, intro. We deliberately do NOT compare
-// `prerequisites` / `youWillLearn` — those are extracted from their own `##`
-// sections and are never run through the body pre-processors (compose only
-// URL-rewrites them). A structural fix landing inside one of those sections
-// therefore *legitimately* changes their rendered output (the malformed pattern
-// renders broken there today); requiring equality would wrongly quarantine a
-// genuine improvement. Body/steps/intro equality is the real idempotency
-// invariant and still catches any body corruption.
+// The source-fixable fence healers (list-continuation-fence #1931,
+// list-fence-column-zero #2720, list-continuation-prose) used to run as
+// in-flight pre-processors inside composeTutorial, so the gate could assert that
+// composing the ORIGINAL and the FIXED source yielded byte-identical output. As
+// of e95c75d8f those healers were RETIRED from compose (they were collapsing
+// multi-step tutorials) and now live only here, as source-time fixers. So a
+// source fence fix now LEGITIMATELY changes compose's raw `body` (the whole
+// point: 4-space → 3-space fence indent) — comparing `body` would wrongly
+// quarantine every such fix.
+//
+// The surviving invariant is structural, not byte-level: a source fix must not
+// corrupt the rendered STEPS (the real failure #2720 fought — a mis-indented
+// fence swallowing subsequent steps into one <pre>, collapsing a multi-step
+// tutorial). We therefore compare `steps` only; raw `body` and `intro` now
+// change LEGITIMATELY under a source fence fix (the 4→3-space de-indent lands in
+// the pre-step/intro region when the fence sits above the first `### ` step).
+// We also still require BOTH composes to succeed — a fix that makes compose
+// throw is a corruption. `prerequisites` / `youWillLearn` were never compared
+// (own `##` sections, not body-governed). This keeps the steps-corruption guard
+// while allowing the body/intro change source fence fixers now produce.
 
 function composeSig(src: string, meta: DiscoveredTutorial): string | null {
   try {
@@ -269,7 +281,7 @@ function composeSig(src: string, meta: DiscoveredTutorial): string | null {
       repo: meta.repo, branch: meta.branch, slug: meta.slug,
       target: 'hugo', rewriteImages: true,
     })
-    return JSON.stringify({ steps: r.steps, body: r.body, intro: r.intro })
+    return JSON.stringify({ steps: r.steps })
   } catch {
     return null
   }
