@@ -131,6 +131,19 @@ function completedActivityPoints(activities = [], completedSlugSet = new Set()) 
   return { earnedPoints, maxPoints, completedActivityIds };
 }
 
+// Goal denominator shown by the points banner. The "Tag the Cat" (Kasimir)
+// mini-game is a bonus worth up to `catGameMaxPoints` that is NOT modelled as
+// an activity row (it was set up separately), so its ceiling is absent from the
+// activity-sum `activityMaxPoints` (issue #2788). It only counts toward the goal
+// when the cat game is actually in play, i.e. there is an active Devtoberfest
+// event (`catGameActive`). Independent of a given user's join state — the goal
+// total is the same for everyone. Non-numeric inputs coerce to 0.
+function totalPossiblePoints({ activityMaxPoints = 0, catGameActive = false, catGameMaxPoints = 0 } = {}) {
+  const base = Number(activityMaxPoints) || 0;
+  const bonus = catGameActive ? (Number(catGameMaxPoints) || 0) : 0;
+  return base + bonus;
+}
+
 function sortByWeekThenDate(a, b) {
   const w = String(a.week || '').localeCompare(String(b.week || ''), undefined, { numeric: true });
   return w !== 0 ? w : String(a.scheduledStart || '').localeCompare(String(b.scheduledStart || ''));
@@ -140,4 +153,4 @@ function sortByWeekThenTitle(a, b) {
   return w !== 0 ? w : String(a.title || '').localeCompare(String(b.title || ''));
 }
 
-export { assembleFeed, completedActivityPoints, normalizeSlugSet, normalizeBroadcastingPreference, filterCompletionsWithinWindow, isVisibleStatus };
+export { assembleFeed, completedActivityPoints, totalPossiblePoints, normalizeSlugSet, normalizeBroadcastingPreference, filterCompletionsWithinWindow, isVisibleStatus };
