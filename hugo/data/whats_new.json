@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-15T20:33:45.264Z",
+  "generatedAt": "2026-10-15T21:16:29.187Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,32 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2796",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2796,
+      "title": "URL Health admin tile loads reliably",
+      "summary": "The new URL Health admin screen is now built into the admin UI bundle instead of depending on a CDN, so it loads reliably in all environments.",
+      "category": "Fix",
+      "mergedAt": "2026-10-15T20:56:43Z",
+      "week": "2026-W42",
+      "weekStart": "2026-10-12",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2796"
+    },
+    {
+      "id": "tutorials-ims#2795",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2795,
+      "title": "Release promotion",
+      "summary": "Promoted the URL Health subsystem and the 1.39.0 release train to the production release line.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-15T20:39:53Z",
+      "week": "2026-W42",
+      "weekStart": "2026-10-12",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2795"
+    },
     {
       "id": "tutorials-ims#2793",
       "repo": "tutorials-ims",
