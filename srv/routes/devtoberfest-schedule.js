@@ -5,14 +5,14 @@
 // Reads the cross-container planner facades (external.devtoberfest.*). Fails
 // soft (503 / empty) when the facades are unavailable (e.g. unit SQLite).
 import cds from '@sap/cds';
-import { assembleFeed, completedActivityPoints, normalizeSlugSet, filterCompletionsWithinWindow } from '../lib/devtoberfest-feed.js';
+import { assembleFeed, completedActivityPoints, totalPossiblePoints, normalizeSlugSet, filterCompletionsWithinWindow } from '../lib/devtoberfest-feed.js';
 import { computeRelatedTechEdByDtfSession } from '../lib/teched-devtoberfest-crosslink.js';
 import { buildICS, buildEventICS, addToCalendarLinks } from '../lib/devtoberfest-ical.js';
 import { buildRSS } from '../lib/devtoberfest-rss.js';
 import { resolveUser } from '../lib/resolve-user.js';
 import { resolveUserSapId, resolveUser as resolveDbUserTiered } from '../lib/resolve-db-user.js';
 import { getMyCompletedTutorialsForPoints } from '../lib/user-progress.js';
-import { sumCatGameBonus } from '../lib/cat-game-award.js';
+import { sumCatGameBonus, MAX_POINTS as CAT_GAME_MAX_POINTS } from '../lib/cat-game-award.js';
 import { fetchTranscript } from '../lib/devtoberfest-transcript.js';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { isJoinedCurrentEvent } from '../lib/devtoberfest-registration.js';
@@ -229,7 +229,28 @@ async function myCompletionsHandler(req, res) {
     // statuses via isVisibleStatus, matching the feed. Independent of join/date
     // state. earnedPoints is gated: only completions inside the edition window
     // count, and only when the user has joined.
-    const { maxPoints } = completedActivityPoints(activities, new Set());
+    let { maxPoints } = completedActivityPoints(activities, new Set());
+
+    // Resolve the active Devtoberfest event (keyed by DevtoberfestConfig, NOT
+    // the schedule edition) once up front. The "Tag the Cat" (Kasimir) mini-game
+    // is a bonus worth up to CAT_GAME_MAX_POINTS (100) that is NOT modelled as an
+    // activity row, so its ceiling is absent from the activity-sum maxPoints
+    // (issue #2788). When an active event exists the cat game is in play, so add
+    // its ceiling to the denominator for ALL users — the goal total is the same
+    // whether or not a given user has joined, mirroring how earnedPoints shows 0
+    // for non-joined users against an unchanged goal. Fails soft: if the config
+    // read throws or there is no active event, the denominator is unchanged.
+    let currentEventId = null;
+    try {
+      const { DevtoberfestConfig } = cds.entities('com.sap.developers.ims');
+      const cfg = await SELECT.one.from(DevtoberfestConfig).where({ isActive: true }).columns('currentEvent_ID');
+      currentEventId = cfg?.currentEvent_ID || null;
+    } catch (e) { LOG.warn('myCompletions devtoberfest config read failed:', e?.message); }
+    maxPoints = totalPossiblePoints({
+      activityMaxPoints: maxPoints,
+      catGameActive: !!currentEventId,
+      catGameMaxPoints: CAT_GAME_MAX_POINTS,
+    });
 
     let earnedPoints = 0;
     let completedSlugSet = new Set();
@@ -251,14 +272,12 @@ async function myCompletionsHandler(req, res) {
       // Add the "Hit the Cat" (Kasimir) bonus so the banner total matches the
       // arcade, which unions activity + cat-game points via the external
       // gameboard service (issue #2455). The ledger is keyed by Events.ID (the
-      // active Devtoberfest event), NOT the schedule *edition*, so resolve the
-      // event the same way the cat-game award endpoint does. Fails soft to 0.
+      // active Devtoberfest event resolved above), NOT the schedule *edition*.
+      // Fails soft to 0.
       try {
-        const { DevtoberfestConfig } = cds.entities('com.sap.developers.ims');
-        const cfg = await SELECT.one.from(DevtoberfestConfig).where({ isActive: true }).columns('currentEvent_ID');
         const dbUser = await resolveDbUserTiered(user);
-        if (cfg?.currentEvent_ID && dbUser?.ID) {
-          catGameBonus = await sumCatGameBonus(db, { userId: dbUser.ID, eventId: cfg.currentEvent_ID });
+        if (currentEventId && dbUser?.ID) {
+          catGameBonus = await sumCatGameBonus(db, { userId: dbUser.ID, eventId: currentEventId });
           earnedPoints += catGameBonus;
         }
       } catch (e) { LOG.warn('myCompletions cat-game bonus read failed:', e?.message); }

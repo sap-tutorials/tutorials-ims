@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { assembleFeed, completedActivityPoints, normalizeSlugSet, filterCompletionsWithinWindow, isVisibleStatus } from '../../srv/lib/devtoberfest-feed.js';
+import { assembleFeed, completedActivityPoints, totalPossiblePoints, normalizeSlugSet, filterCompletionsWithinWindow, isVisibleStatus } from '../../srv/lib/devtoberfest-feed.js';
 
 describe('devtoberfest-feed', () => {
   const tracks = [{ ID: 't1', NAME: 'ABAP', DAYOFWEEK: 'Monday' }];
@@ -196,6 +196,31 @@ describe('devtoberfest-feed', () => {
       expect(r.earnedPoints).toBe(500);
       expect(r.maxPoints).toBe(500);
       expect(r.completedActivityIds).toEqual(['aV']);
+    });
+  });
+
+  describe('totalPossiblePoints (issue #2788 — Tag the Cat bonus in the goal denominator)', () => {
+    it('adds the cat-game ceiling to the activity sum when the cat game is active', () => {
+      expect(totalPossiblePoints({ activityMaxPoints: 800, catGameActive: true, catGameMaxPoints: 100 })).toBe(900);
+    });
+
+    it('omits the cat-game ceiling when no active event (cat game not in play)', () => {
+      expect(totalPossiblePoints({ activityMaxPoints: 800, catGameActive: false, catGameMaxPoints: 100 })).toBe(800);
+    });
+
+    it('is independent of join state — same goal for every user', () => {
+      // The route passes the same activityMaxPoints/catGameActive regardless of
+      // whether the caller has joined, so the goal denominator never varies.
+      const joined = totalPossiblePoints({ activityMaxPoints: 800, catGameActive: true, catGameMaxPoints: 100 });
+      const anon = totalPossiblePoints({ activityMaxPoints: 800, catGameActive: true, catGameMaxPoints: 100 });
+      expect(joined).toBe(anon);
+      expect(joined).toBe(900);
+    });
+
+    it('coerces non-numeric / missing inputs to 0 (fail-soft)', () => {
+      expect(totalPossiblePoints()).toBe(0);
+      expect(totalPossiblePoints({ activityMaxPoints: undefined, catGameActive: true, catGameMaxPoints: 100 })).toBe(100);
+      expect(totalPossiblePoints({ activityMaxPoints: 500, catGameActive: true, catGameMaxPoints: NaN })).toBe(500);
     });
   });
 });
