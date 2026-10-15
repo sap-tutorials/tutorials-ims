@@ -35,6 +35,7 @@
                 path: '/Tutorials',
                 parameters: {
                   $select: 'slug,linkStatus,lastChecked,linkStatusOverride',
+                  $filter: 'linkStatus ne null',
                   $orderby: 'lastChecked desc'
                 }
               }">
@@ -61,7 +62,7 @@
                     <Text text="{slug}" />
                     <ObjectStatus
                       text="{linkStatus}"
-                      state="{= ${linkStatus} === 'ok' ? 'Success' : ${linkStatus} === 'broken' ? 'Error' : ${linkStatus} === 'warn' ? 'Warning' : 'None' }" />
+                      state="{= ${linkStatus} === 'OK' ? 'Success' : ${linkStatus} === 'BROKEN' ? 'Error' : ${linkStatus} === 'SLOW' ? 'Warning' : 'None' }" />
                     <Text text="{= ${lastChecked} ? new Date(${lastChecked}).toLocaleString() : '—' }" />
                     <Input value="{linkStatusOverride}" placeholder="(none)" />
                   </cells>
