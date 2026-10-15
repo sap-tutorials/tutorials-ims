@@ -101,7 +101,8 @@
       "sap.tutorials.admin.channels": "./components/channels",
       "sap.tutorials.admin.channelCollections": "./components/channel-collections",
       "sap.tutorials.admin.channelTopicMap": "./components/channel-topic-map",
-      "sap.tutorials.admin.channelSubmissions": "./components/channel-submissions"
+      "sap.tutorials.admin.channelSubmissions": "./components/channel-submissions",
+      "sap.tutorials.admin.health": "./components/health"
     },
     "models": {
       "admin": {
@@ -432,6 +433,12 @@
       },
       "channelSubmissionsComponent": {
         "name": "sap.tutorials.admin.channelSubmissions",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "healthComponent": {
+        "name": "sap.tutorials.admin.health",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -1026,6 +1033,16 @@
           ]
         },
         {
+          "name": "health",
+          "pattern": "health",
+          "target": [
+            {
+              "name": "healthTarget",
+              "prefix": "he"
+            }
+          ]
+        },
+        {
           "name": "feedbackDashboard",
           "pattern": "feedback/dashboard",
           "target": "feedbackDashboardTarget"
@@ -1423,6 +1440,13 @@
           "id": "channelSubmissionsTarget",
           "viewLevel": 1,
           "prefix": "csub"
+        },
+        "healthTarget": {
+          "type": "Component",
+          "usage": "healthComponent",
+          "id": "healthTarget",
+          "viewLevel": 1,
+          "prefix": "he"
         },
         "feedbackDashboardTarget": {
           "viewName": "TutorialFeedbackDashboard",
