@@ -1258,23 +1258,44 @@ async function upsertBodyTexts(namespace, bodyTexts) {
   // Upsert TutorialBodyText (sidecar for SearchableItems full-text search).
   // Replace-on-publish so search reflects current content; per-slug upsert means
   // partial publishes (e.g. single-slug rebuild) don't wipe other tutorials' body text.
+  //
+  // Batched: one SELECT per 500-slug chunk (HANA packet-safe ceiling established
+  // at content-publish-session.js:265) → one multi-row INSERT for new slugs +
+  // one UPDATE per changed slug. Replaces per-slug N+1 SELECT+write pattern.
   const { TutorialBodyText } = cds.entities(namespace);
   let bodyUpserted = 0;
 
-  for (const [slug, text] of Object.entries(bodyTexts)) {
-    if (typeof text !== 'string') continue;
+  // Filter to valid entries up-front
+  const entries = Object.entries(bodyTexts).filter(([, text]) => typeof text === 'string');
+  if (entries.length === 0) return;
+
+  const CHUNK = 500;
+  for (let i = 0; i < entries.length; i += CHUNK) {
+    const chunk = entries.slice(i, i + CHUNK);
+    const chunkSlugs = chunk.map(([slug]) => slug);
     try {
-      // slug-canonical: write-path-canonicalizes
-      const existing = await SELECT.one.from(TutorialBodyText).where({ slug }).columns('slug');
-      if (existing) {
-        // slug-canonical: write-path-canonicalizes
-        await UPDATE(TutorialBodyText).where({ slug }).set({ bodyText: text });
-      } else {
-        await INSERT.into(TutorialBodyText).entries({ slug, bodyText: text });
+      // ONE SELECT for the whole chunk — slug-canonical: write-path-canonicalizes
+      const existing = await SELECT.from(TutorialBodyText)
+        .where({ slug: { in: chunkSlugs } })
+        .columns('slug');
+      const existingSet = new Set(existing.map(r => r.slug));
+
+      const insertRows = [];
+      for (const [slug, text] of chunk) {
+        if (existingSet.has(slug)) {
+          // slug-canonical: write-path-canonicalizes
+          await UPDATE(TutorialBodyText).where({ slug }).set({ bodyText: text });
+          bodyUpserted++;
+        } else {
+          insertRows.push({ slug, bodyText: text });
+        }
       }
-      bodyUpserted++;
+      if (insertRows.length > 0) {
+        await INSERT.into(TutorialBodyText).entries(insertRows);
+        bodyUpserted += insertRows.length;
+      }
     } catch (bodyErr) {
-      console.warn(`[content/publish] body text upsert failed for ${slug}:`, bodyErr.message);
+      console.warn(`[content/publish] body text upsert failed for chunk [${chunkSlugs[0]}..]:`, bodyErr.message);
     }
   }
 
@@ -1288,32 +1309,58 @@ async function upsertBranchSpecs(namespace, branchSpecs) {
   // JSON per slug). The decide handler reads from this rather than re-parsing
   // the gzipped HTML BLOB. Tutorials without branches/skips never appear in
   // the payload, so absence implicitly means "linear" — no row write needed.
+  //
+  // Batched: one SELECT per 500-slug chunk (HANA packet-safe ceiling established
+  // at content-publish-session.js:265) → one multi-row INSERT for new slugs +
+  // one UPDATE per changed slug. Replaces per-slug N+1 SELECT+write pattern.
+  // JSON.stringify of branchPoints/skipPoints is preserved identical to before.
   const { BranchSpecs } = cds.entities(namespace);
   let bsUpserted = 0;
 
-  for (const [slug, spec] of Object.entries(branchSpecs)) {
-    if (!spec || typeof spec !== 'object') continue;
-    const branchPointsJson = JSON.stringify(spec.branchPoints ?? []);
-    const skipPointsJson   = JSON.stringify(spec.skipPoints   ?? []);
+  // Filter to valid entries up-front; compute JSON strings before chunking
+  const entries = Object.entries(branchSpecs)
+    .filter(([, spec]) => spec && typeof spec === 'object')
+    .map(([slug, spec]) => ({
+      slug,
+      branchPointsJson: JSON.stringify(spec.branchPoints ?? []),
+      skipPointsJson:   JSON.stringify(spec.skipPoints   ?? []),
+    }));
+  if (entries.length === 0) return;
+
+  const CHUNK = 500;
+  for (let i = 0; i < entries.length; i += CHUNK) {
+    const chunk = entries.slice(i, i + CHUNK);
+    const chunkSlugs = chunk.map(e => e.slug);
     try {
-      // slug-canonical: write-path-canonicalizes
-      const existing = await SELECT.one.from(BranchSpecs).where({ slug }).columns('slug');
-      if (existing) {
-        // slug-canonical: write-path-canonicalizes
-        await UPDATE(BranchSpecs).where({ slug }).set({
-          branchPoints: branchPointsJson,
-          skipPoints:   skipPointsJson,
-        });
-      } else {
-        await INSERT.into(BranchSpecs).entries({
-          slug,
-          branchPoints: branchPointsJson,
-          skipPoints:   skipPointsJson,
-        });
+      // ONE SELECT for the whole chunk — slug-canonical: write-path-canonicalizes
+      const existing = await SELECT.from(BranchSpecs)
+        .where({ slug: { in: chunkSlugs } })
+        .columns('slug');
+      const existingSet = new Set(existing.map(r => r.slug));
+
+      const insertRows = [];
+      for (const { slug, branchPointsJson, skipPointsJson } of chunk) {
+        if (existingSet.has(slug)) {
+          // slug-canonical: write-path-canonicalizes
+          await UPDATE(BranchSpecs).where({ slug }).set({
+            branchPoints: branchPointsJson,
+            skipPoints:   skipPointsJson,
+          });
+          bsUpserted++;
+        } else {
+          insertRows.push({
+            slug,
+            branchPoints: branchPointsJson,
+            skipPoints:   skipPointsJson,
+          });
+        }
       }
-      bsUpserted++;
+      if (insertRows.length > 0) {
+        await INSERT.into(BranchSpecs).entries(insertRows);
+        bsUpserted += insertRows.length;
+      }
     } catch (bsErr) {
-      console.warn(`[content/publish] branch specs upsert failed for ${slug}:`, bsErr.message);
+      console.warn(`[content/publish] branch specs upsert failed for chunk [${chunkSlugs[0]}..]:`, bsErr.message);
     }
   }
 
