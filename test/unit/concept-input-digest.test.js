@@ -1,5 +1,5 @@
 // test/unit/concept-input-digest.test.js
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { digestFromProbes } from '../../srv/lib/concept-input-digest.js';
 
 describe('digestFromProbes', () => {

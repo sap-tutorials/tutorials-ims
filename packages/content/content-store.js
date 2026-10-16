@@ -2061,9 +2061,9 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
   async function commitHandler(req, res) {
     try {
-      const { sessionId, allowRevertSlugs, pipelineToken } = req.body || {};
+      const { sessionId, allowRevertSlugs, pipelineToken, conceptPhaseToken } = req.body || {};
       if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
-      const result = await sessionHelpers.commitSession({ sessionId, allowRevertSlugs, pipelineToken });
+      const result = await sessionHelpers.commitSession({ sessionId, allowRevertSlugs, pipelineToken, conceptPhaseToken });
       cache.invalidate();
       await bumpCacheGeneration();  // #1592/#1621: propagate wipe to peer instances
       // Fire-and-forget edge Fast-Purge of the freshly published slugs — void,

@@ -1579,6 +1579,9 @@ async function main() {
   // absent route → 404 → abortSession → exit 1, which is exactly what silently
   // broke every QA merge-to-main publish. Gating here keeps the caller
   // consistent with the server's route surface.
+  // #2802: mirror pipelineToken — capture conceptPhaseToken from the render result
+  // so commitSession can persist it on ContentManifest for Level-1 phase-skip.
+  let localConceptPhaseToken: string | null = null;
   if (!isScoped && channel === 'prod') {
     try {
       const rc = await withRetry(
@@ -1590,6 +1593,7 @@ async function main() {
           },
         }
       );
+      localConceptPhaseToken = rc.conceptPhaseToken ?? null;
       log(`render-concepts: ${rc.conceptsChanged} changed, ${rc.conceptsSkipped} skipped, ${rc.conceptsErrored} errored of ${rc.conceptsSeen} (${rc.durationMs} ms)`);
     } catch (err) {
       console.error(`[publish-content] render-concepts failed permanently: ${formatErrorChain(err)}`);
@@ -1639,7 +1643,7 @@ async function main() {
   let commit;
   try {
     commit = await withRetry(
-      () => commitSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, allowRevertSlugs, pipelineToken: localPipelineToken }),
+      () => commitSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, allowRevertSlugs, pipelineToken: localPipelineToken, conceptPhaseToken: localConceptPhaseToken }),
       {
         // Widened from [1000,3000,9000]/3 attempts: the old schedule only ever
         // waited 1s then 3s (~4s total window) — too short to ride out a transient

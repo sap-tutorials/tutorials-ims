@@ -30,6 +30,10 @@ export interface CommitInput { baseUrl: string; apiKey: string; sessionId: strin
    * with. The server records it on the committed ContentManifest so the next
    * publish can detect a pipeline change. Optional (older servers ignore it). */
   pipelineToken?: string;
+  /** #2802 — concept-render phase token. Mirrors pipelineToken: the server
+   * records it on ContentManifest.conceptPhaseToken so the next render-concepts
+   * call can detect an unchanged phase and skip (Level-1 skip). Optional. */
+  conceptPhaseToken?: string | null;
 }
 export interface CommitResult {
   version: number; fileCount: number; totalSizeBytes: number;
@@ -103,7 +107,7 @@ export async function appendBatch(i: AppendInput): Promise<AppendResult> {
 }
 
 export async function commitSession(i: CommitInput): Promise<CommitResult> {
-  return postJson(`${i.baseUrl}/content/publish/commit`, i.apiKey, { sessionId: i.sessionId, allowRevertSlugs: i.allowRevertSlugs ?? [], pipelineToken: i.pipelineToken });
+  return postJson(`${i.baseUrl}/content/publish/commit`, i.apiKey, { sessionId: i.sessionId, allowRevertSlugs: i.allowRevertSlugs ?? [], pipelineToken: i.pipelineToken, conceptPhaseToken: i.conceptPhaseToken ?? null });
 }
 
 export interface RenderConceptsInput { baseUrl: string; apiKey: string; sessionId: string }
@@ -113,6 +117,10 @@ export interface RenderConceptsResult {
   conceptsSkipped: number;
   conceptsErrored: number;
   durationMs: number;
+  /** #2802 — token computed during this render phase. Returned so the publisher
+   * can forward it to commitSession → ContentManifest.conceptPhaseToken, enabling
+   * Level-1 phase-skip on the next full publish. Mirrors pipelineToken handling. */
+  conceptPhaseToken?: string | null;
 }
 
 /**
@@ -193,27 +201,6 @@ export async function fetchRemoteHashes({ baseUrl, apiKey }: { baseUrl: string; 
   const hashes = await res.json() as Record<string, string>;
   const pipelineToken = res.headers.get('x-pipeline-token');
   return { hashes, pipelineToken };
-}
-
-/**
- * #2727 — the server's active render-pipeline token, piggybacked on
- * `/content/hashes` as the `X-Pipeline-Token` response header (the JSON body
- * is left untouched). Returns `undefined` when the header is absent — a legacy
- * server that predates this change, or a server with no ACTIVE manifest. The
- * caller treats `undefined` as "pipeline token unknown" → forces a full
- * republish, which is the safe default (never silently skip a changed render).
- *
- * A dedicated HEAD-like GET so the publish flow can read the token without
- * reshaping `fetchRemoteHashes`'s return contract (used by several callers).
- */
-export async function fetchRemotePipelineToken({ baseUrl, apiKey }: { baseUrl: string; apiKey?: string }): Promise<string | undefined> {
-  try {
-    const res = await fetch(`${baseUrl}/content/hashes`, apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : undefined);
-    if (!res.ok) return undefined;
-    return res.headers.get('x-pipeline-token') ?? undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 /**

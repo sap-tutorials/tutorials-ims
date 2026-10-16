@@ -377,11 +377,15 @@ describe('upsertTutorialMetadata batched SELECT+write (#2802)', () => {
 
     const counts = await runWithCounts(sessionId, metadata);
 
-    // 1 raw LOWER(slug) IN lookup per chunk (2 slugs fit in one chunk of 500)
+    // 2 raw LOWER(slug) IN lookups per full appendToSession call:
+    //   1st: upsertTutorialMetadata (Task 8) — Tutorials batch slug lookup
+    //   2nd: linkTutorialAuthorship (Task 9) — authorship batch slug lookup
+    // Both are intentional N+1 wins; asserting 2 confirms neither has regressed
+    // back to a per-slug pattern.
     expect(
       counts.rawSlugInSelects,
-      `Expected exactly 1 raw LOWER(slug) IN SELECT for 2 slugs, got ${counts.rawSlugInSelects}.`
-    ).toBe(1);
+      `Expected exactly 2 raw LOWER(slug) IN SELECTs (1 metadata + 1 authorship), got ${counts.rawSlugInSelects}.`
+    ).toBe(2);
 
     // 1 IN-list SELECT on Steps for the resolved tutorial IDs (not per-slug)
     expect(
