@@ -23,7 +23,7 @@ dominant phases, each ~100–165s, that the issue did not separate:
 
 Secondary: the issue's guessed defaults (4/25) are wrong — actual is **concurrency=6,
 batch-size=50**. The `carryForwardUnchanged` OOM fix (#1932) **still holds** — no remaining
-whole-corpus BLOB path. Image-refresh is **not** always 0–2s (one run was 361s).
+whole-corpus BLOB path. Image-refresh is **not** always 0–2s (one run was 361s) — root-caused and fixed in #2805 (plural `slugs` input not threaded to the image step).
 
 ## Evidence — per-phase wall-clock from real PROD runs (2026-10-15)
 
@@ -158,7 +158,15 @@ These are HANA-only wins (SQLite unit tests won't show them). Measure with the e
   response or run the three in parallel. Low value (seconds), low risk.
 - **Image-refresh is NOT innocent.** The issue says it is "always 0–2s"; run 38816499609
   spent **361s** on `Refresh tutorial images (slug-targeted)` — co-equal with publish as a
-  wall-clock cost. Worth its own look (separate from this spike, but flag it).
+  wall-clock cost. **Root cause (#2805): the `slugs` plural input was not threaded to the
+  image step.** That run was a `workflow_dispatch` with `mode=slug-targeted` and the plural
+  `slugs=` input set (singular `slug` empty), but the step env was
+  `REFRESH_SLUG: inputs.slug || dispatch_slug` — it never read `inputs.slugs`, so
+  `REFRESH_SLUG` was empty and `backfill-images.ts --slug ""` enumerated the whole catalog
+  (21,712 images). **Fixed in #2805:** `backfill-images.ts` now accepts a comma-list
+  `--slug`/`--slugs`, and the step also passes
+  `REFRESH_SLUGS: inputs.slugs || dispatch_slugs` (mirroring the publish step's
+  `PUBLISH_SLUGS`). The same plural-input gap had already been fixed on the publish side.
 
 ## Suggested implementation order (separate PRs)
 
@@ -167,7 +175,8 @@ These are HANA-only wins (SQLite unit tests won't show them). Measure with the e
 2. **Finding 2 — batch metadata reads then writes** in `appendToSession` (HANA round-trip
    reduction). ~tens of seconds; higher blast radius, needs hybrid/PROD timing proof.
 3. Finding 3 micro-wins (parallel/fold the pre-session GETs; A/B concurrency) only after 1 & 2.
-4. Open a sibling issue for the image-refresh 361s outlier.
+4. ~~Open a sibling issue for the image-refresh 361s outlier.~~ Done — #2805, root-caused
+   and fixed (see Finding 3 above: plural `slugs` input not threaded to the image step).
 
 ## Not changed by this spike
 
