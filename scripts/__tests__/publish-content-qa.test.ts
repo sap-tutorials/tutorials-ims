@@ -72,8 +72,11 @@ describe('publish-content qa channel', () => {
   // 404s → abortSession → exit 1, which silently broke every QA
   // merge-to-main publish. The caller MUST gate the phase to channel==='prod'.
   it('gates the render-concepts phase to the prod channel only', () => {
+    // The scope guard was generalized from `!opts.slug` to `!isScoped`
+    // (single --slug OR multi --slugs) in #2801; the load-bearing invariant
+    // this test protects is the `channel === 'prod'` clause, which must stay.
     const gate = SRC.match(
-      /if \(!opts\.slug && channel === 'prod'\) \{/,
+      /if \(!(?:opts\.slug|isScoped) && channel === 'prod'\) \{/,
     );
     expect(
       gate,
