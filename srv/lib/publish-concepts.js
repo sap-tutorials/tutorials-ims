@@ -80,6 +80,25 @@ function stripMarkdown(s) {
 }
 
 /**
+ * Compute a per-concept body hash for delta detection during publish.
+ * @param {string} body The concept body HTML (from renderConceptDetail).
+ * @param {object} meta The concept metadata { kind, slug, title, description }.
+ * @returns {string} SHA256 hex digest of body + NUL + stringified meta.
+ */
+export function computeConceptBodyHash(body, meta) {
+  return createHash('sha256').update(`${body}\u0000${JSON.stringify(meta)}`, 'utf-8').digest('hex');
+}
+
+// Helper to extract a subset of an object by keys.
+function pick(obj, keys) {
+  const result = {};
+  for (const k of keys) {
+    if (k in obj) result[k] = obj[k];
+  }
+  return result;
+}
+
+/**
  * Render every published concept into an open publish session.
  *
  * @param {object} args
@@ -105,6 +124,7 @@ export async function renderConceptsIntoSession({ db, sessionId, helpers, priorH
   // Render + delta-filter into a flat file map first, so we can enforce the
   // error threshold before writing anything.
   const changedFiles = {}; // slug → base64(gzip(full doc))
+  const bodyHashes = {}; // slug → sha256(body + NUL + meta)
   let conceptsSkipped = 0;
   let conceptsErrored = 0;
 
@@ -119,12 +139,14 @@ export async function renderConceptsIntoSession({ db, sessionId, helpers, priorH
         description: conceptMetaDescription(raw),
       };
       const fullDoc = composeShell(shell, body, meta);
+      const bodyHash = computeConceptBodyHash(body, meta);
       const contentHash = createHash('sha256').update(fullDoc, 'utf-8').digest('hex');
       if (priorHashes[key] === contentHash) {
         conceptsSkipped++;
         continue;
       }
       changedFiles[key] = gzipSync(Buffer.from(fullDoc, 'utf-8')).toString('base64');
+      bodyHashes[key] = bodyHash;
     } catch (err) {
       conceptsErrored++;
       metrics.counter('concept_render_error');
@@ -144,7 +166,7 @@ export async function renderConceptsIntoSession({ db, sessionId, helpers, priorH
     const slice = keys.slice(i, i + BATCH_SIZE);
     const files = {};
     for (const k of slice) files[k] = changedFiles[k];
-    await helpers.appendToSession({ sessionId, files });
+    await helpers.appendToSession({ sessionId, files, bodyHashes: pick(bodyHashes, slice) });
   }
 
   const durationMs = Date.now() - started;
