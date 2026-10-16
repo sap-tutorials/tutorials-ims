@@ -41,6 +41,10 @@ aspect ContentFilesAspect : managed {
   sourceHash                : Sha256;
   sourceCommit              : String(64);   // git commit SHA of source .md at publish time (#2245); null for pre-2245 rows
   sourceRepo                : String(255);  // owner/name of the GitHub repo the source came from (e.g. "sap-tutorials/developer-advocates"); null for pre-guard rows. Used by the public-namespace -Contribution publish guard.
+  // #2802 — per-concept body-only hash (excludes __shell__ chrome). Publish-only
+  // metadata; the serve path never reads it. Nullable: pre-#2802 rows have none,
+  // and a null forces a full concept render (no shell-only re-compose shortcut).
+  bodyHash                  : Sha256;
 }
 
 aspect ContentManifestAspect : managed {
@@ -70,6 +74,10 @@ aspect ContentManifestAspect : managed {
   // change and force-republish all slugs even when per-slug source+HTML hashes
   // are unchanged. NULL on rows published before this field landed.
   pipelineToken             : String(64);
+  // #2802 — sha256(conceptInputDigest + shellHash) at commit. If the next publish
+  // computes the same token AND the shell is unchanged, the render-concepts phase
+  // is skipped entirely (concepts carried forward). Null on pre-#2802 manifests.
+  conceptPhaseToken         : String(64);
 }
 
 // Option B (slug-targeted-delta-rebuild): the MUTABLE current-content table —
@@ -88,6 +96,10 @@ aspect ContentCurrentAspect : managed {
   sourceHash                : Sha256;
   sourceCommit              : String(64);   // git commit SHA of source .md at publish time (#2245); null for pre-2245 rows
   sourceVersion             : Integer;
+  // #2802 — per-concept body-only hash (excludes __shell__ chrome). Publish-only
+  // metadata; the serve path never reads it. Nullable: pre-#2802 rows have none,
+  // and a null forces a full concept render (no shell-only re-compose shortcut).
+  bodyHash                  : Sha256;
 }
 
 // Option B: append-only per-(version, slug) history for drift-detection
@@ -107,6 +119,10 @@ aspect ContentHistoryAspect : managed {
   sourceContent             : LargeBinary;
   sourceHash                : Sha256;
   sourceCommit              : String(64);   // git commit SHA of source .md at publish time (#2245); null for pre-2245 rows
+  // #2802 — per-concept body-only hash (excludes __shell__ chrome). Publish-only
+  // metadata; the serve path never reads it. Nullable: pre-#2802 rows have none,
+  // and a null forces a full concept render (no shell-only re-compose shortcut).
+  bodyHash                  : Sha256;
 }
 
 aspect TutorialBodyTextAspect : managed {
