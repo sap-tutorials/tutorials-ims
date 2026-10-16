@@ -1335,30 +1335,94 @@ export async function linkTutorialAuthorship(namespace, metadata) {
   let linkedOwnerEmails = 0;  // #862 reopen
   let linkedOwners = 0;  // #1501 — TutorialMeta.owner from frontmatter author_name
 
+  // -----------------------------------------------------------------------
+  // Phase 0: Batch-resolve slug → tutorialId (one IN-list SELECT per 500-
+  // slug chunk, matching the LOWER-IN pattern in upsertTutorialMetadata).
+  // This eliminates the dominant N+1 per-slug SELECT on the Tutorials table.
+  // -----------------------------------------------------------------------
+  const slugToTutorialId = new Map();
+  const allSlugs = Object.keys(metadata).map(s => s.toLowerCase());
+  const AUTH_CHUNK = 500;
+
+  for (let i = 0; i < allSlugs.length; i += AUTH_CHUNK) {
+    const chunk = allSlugs.slice(i, i + AUTH_CHUNK);
+    let batch;
+    try {
+      const placeholders = chunk.map(() => '?').join(',');
+      batch = await db.run(
+        `SELECT "ID" AS id, LOWER("SLUG") AS lslug FROM ${tutorialsTable} WHERE LOWER("SLUG") IN (${placeholders})`,
+        chunk
+      );
+    } catch (e) {
+      // Fallback: some HANA driver versions reject positional placeholders for
+      // IN (...). Interpolate a sanitized single-quoted list (slug is already
+      // lowercased and the DB schema constrains it, but the single-quote
+      // escape is belt-and-suspenders).
+      LOG.warn(`linkTutorialAuthorship: positional bind failed (${e.message}); falling back to inline literal`);
+      const lit = chunk.map(s => `'${String(s).replace(/'/g, "''")}'`).join(',');
+      batch = await db.run(
+        `SELECT "ID" AS id, LOWER("SLUG") AS lslug FROM ${tutorialsTable} WHERE LOWER("SLUG") IN (${lit})`
+      );
+    }
+    if (batch) {
+      for (const row of batch) {
+        const id  = row.id  || row.ID;
+        const lsl = row.lslug || row.LSLUG;
+        if (id && lsl) slugToTutorialId.set(lsl, id);
+      }
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Phase 0b: Batch-fetch contributors for all resolved tutorial IDs (one IN-
+  // list SELECT per 500-id chunk). Groups rows by tutorial_ID so the per-slug
+  // loop below can do a Map lookup instead of a DB round-trip.
+  // -----------------------------------------------------------------------
+  const contribsByTutorialId = new Map();
+  const resolvedTutorialIds = [...slugToTutorialId.values()];
+
+  for (let i = 0; i < resolvedTutorialIds.length; i += AUTH_CHUNK) {
+    const chunk = resolvedTutorialIds.slice(i, i + AUTH_CHUNK);
+    let batch;
+    try {
+      const placeholders = chunk.map(() => '?').join(',');
+      batch = await db.run(
+        `SELECT "ID" AS id, "TUTORIAL_ID" AS tutorial_id, "EMAIL" AS email, "ROLE" AS role FROM ${contributorsTable} WHERE "TUTORIAL_ID" IN (${placeholders})`,
+        chunk
+      );
+    } catch (e) {
+      LOG.warn(`linkTutorialAuthorship: contributors positional bind failed (${e.message}); falling back to inline literal`);
+      const lit = chunk.map(s => `'${String(s).replace(/'/g, "''")}'`).join(',');
+      batch = await db.run(
+        `SELECT "ID" AS id, "TUTORIAL_ID" AS tutorial_id, "EMAIL" AS email, "ROLE" AS role FROM ${contributorsTable} WHERE "TUTORIAL_ID" IN (${lit})`
+      );
+    }
+    if (batch) {
+      for (const row of batch) {
+        const tid = row.tutorial_id || row.TUTORIAL_ID;
+        if (!tid) continue;
+        if (!contribsByTutorialId.has(tid)) contribsByTutorialId.set(tid, []);
+        contribsByTutorialId.get(tid).push({
+          id:    row.id    || row.ID,
+          email: row.email || row.EMAIL || null,
+          role:  row.role  || row.ROLE  || null,
+        });
+      }
+    }
+  }
+
   for (const [rawSlug, meta] of Object.entries(metadata)) {
     const slug = rawSlug.toLowerCase();
     try {
-      // Look up tutorial ID (case-insensitive). If the row didn't get
-      // upserted for some reason, skip — backfill will catch it later.
-      const tuts = await db.run(
-        `SELECT "ID" AS id FROM ${tutorialsTable} WHERE LOWER("SLUG") = ?`,
-        [slug]
-      );
-      const tutorialId = tuts?.[0]?.id ?? tuts?.[0]?.ID;
+      // Look up tutorial ID from the pre-built batch map. If the row didn't
+      // get upserted for some reason, skip — backfill will catch it later.
+      const tutorialId = slugToTutorialId.get(slug);
       if (!tutorialId) continue;
 
-      // Fetch existing contributors (to opportunistically link their
-      // user_IDs AND to feed the resolver's "first contributor (any
-      // role)" fallback).
-      const contribRows = await db.run(
-        `SELECT "ID" AS id, "EMAIL" AS email, "ROLE" AS role FROM ${contributorsTable} WHERE "TUTORIAL_ID" = ?`,
-        [tutorialId]
-      );
-      const contribs = (contribRows || []).map(r => ({
-        id: r.id || r.ID,
-        email: r.email || r.EMAIL || null,
-        role: r.role || r.ROLE || null,
-      }));
+      // Fetch existing contributors from the pre-built batch map (to
+      // opportunistically link their user_IDs AND to feed the resolver's
+      // "first contributor (any role)" fallback).
+      const contribs = contribsByTutorialId.get(tutorialId) || [];
 
       // ownerEmail = TutorialMeta.ownerEmail (already written above) OR
       // the publish payload's primaryContributorEmail as a fallback for
