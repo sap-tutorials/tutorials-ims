@@ -246,6 +246,7 @@ export default defineConfig({
           { text: 'Iframe allowlist',          link: '/developers/reference/iframe-allowlist' },
           { text: 'MCP server tool reference', link: '/developers/reference/mcp-server' },
           { text: 'On-read fetch caching',     link: '/developers/reference/on-read-fetch-caching' },
+          { text: 'Publish performance spike (#2802)', link: '/developers/reference/publish-performance-spike-2802' },
           { text: 'Sage extension migration',  link: '/developers/reference/sage-extension-migration' },
           { text: 'TechEd sessions',           link: '/developers/reference/teched' },
           { text: 'Test hygiene',              link: '/developers/reference/test-hygiene' },
