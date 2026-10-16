@@ -1017,6 +1017,9 @@ jobs:
       #    force-publish is set — that is exactly the "push my stubborn change
       #    through" case). POST /content/image dedups on image bytes; changed
       #    bytes are re-stored, unchanged report 'unchanged'.
+      #    #2805: REFRESH_SLUG (inputs.slug / dispatch_slug) and REFRESH_SLUGS
+      #    (inputs.slugs / dispatch_slugs) are both passed so a plural-slugs
+      #    dispatch scopes the warm to those N tutorials, not the whole catalog.
       #
       # 2. full: re-warm the whole catalog (warm-images input, default true).
       #    No full-catalog warm existed before #2346; the prior comment claiming
@@ -1036,7 +1039,8 @@ jobs:
           CONTENT_API_KEY: ${{ steps.env.outputs.target == 'qa' && secrets.CONTENT_API_KEY_QA || secrets.CONTENT_API_KEY }}
           GITHUB_TOKEN:    ${{ steps.app-token.outputs.token || secrets.TUTORIALS_GITHUB_TOKEN }}
           REFRESH_SLUG:    ${{ inputs.slug || steps.mode.outputs.dispatch_slug }}
-        run: npx tsx scripts/backfill-images.ts --slug "$REFRESH_SLUG"
+          REFRESH_SLUGS:   ${{ inputs.slugs || steps.mode.outputs.dispatch_slugs }}
+        run: npx tsx scripts/backfill-images.ts --slug "$REFRESH_SLUG" --slugs "$REFRESH_SLUGS"
 
       - name: Refresh tutorial images (full catalog)
         if: ${{ steps.publish.outcome == 'success' && steps.mode.outputs.effective_mode == 'full' && inputs.warm-images != false }}
