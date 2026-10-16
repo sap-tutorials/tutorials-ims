@@ -179,18 +179,20 @@ export async function abortSession({ baseUrl, apiKey, sessionId, reason }: {
   }
 }
 
-export async function fetchRemoteHashes({ baseUrl, apiKey }: { baseUrl: string; apiKey?: string }): Promise<Record<string, string>> {
+export async function fetchRemoteHashes({ baseUrl, apiKey }: { baseUrl: string; apiKey?: string }): Promise<{ hashes: Record<string, string>; pipelineToken: string | null }> {
   // srv-qa gates /content/hashes behind contentAuthMiddleware (unlike prod srv,
   // where it's public-read). Send the bearer when we have one — harmless on the
   // public prod route, required on QA or delta detection 401s.
   const res = await fetch(`${baseUrl}/content/hashes`, apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : undefined);
   if (!res.ok) {
-    if (res.status === 503) return {};
+    if (res.status === 503) return { hashes: {}, pipelineToken: null };
     const err: any = new Error(`HTTP ${res.status}`);
     err.status = res.status;
     throw err;
   }
-  return res.json() as Promise<Record<string, string>>;
+  const hashes = await res.json() as Record<string, string>;
+  const pipelineToken = res.headers.get('x-pipeline-token');
+  return { hashes, pipelineToken };
 }
 
 /**
