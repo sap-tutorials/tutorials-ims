@@ -147,7 +147,7 @@ export function createSessionHelpers({ namespace }) {
     return row;
   }
 
-  async function appendToSession({ sessionId, files = {}, metadata = {}, bodyTexts = {}, branchSpecs = {}, sources = {}, sourceCommits = {}, sourceRepos = {} }) {
+  async function appendToSession({ sessionId, files = {}, metadata = {}, bodyTexts = {}, branchSpecs = {}, sources = {}, sourceCommits = {}, sourceRepos = {}, bodyHashes = {} }) {
     const appendStartHr = process.hrtime.bigint();  // #805
     const session = await findActiveSession(sessionId);
     const { ContentFiles, ContentManifest } = cds.entities(namespace);
@@ -244,6 +244,7 @@ export function createSessionHelpers({ namespace }) {
         sourceHash,
         sourceCommit: sourceCommits[slug] || null,
         sourceRepo: sourceRepos[slug] || null,
+        bodyHash: bodyHashes[slug] ?? null,
       });
       totalSizeBytes += decompressed.length;
     }
@@ -479,7 +480,7 @@ export function createSessionHelpers({ namespace }) {
     return rejected;
   }
 
-  async function commitSession({ sessionId, allowRevertSlugs = [], pipelineToken = null }) {
+  async function commitSession({ sessionId, allowRevertSlugs = [], pipelineToken = null, conceptPhaseToken = null }) {
     const { ContentManifest } = cds.entities(namespace);
 
     const existing = await SELECT.one.from(ContentManifest).where({ sessionId });
@@ -611,7 +612,12 @@ export function createSessionHelpers({ namespace }) {
         // null (older client that omits it) leaves the column NULL → the next
         // delta publish sees serverToken=undefined and force-republishes once,
         // which is the safe degrade.
-        pipelineToken: pipelineToken ?? null
+        pipelineToken: pipelineToken ?? null,
+        // #2802 — record the concept-render phase token so the next publish can
+        // skip the concept-render phase when concepts + shell are unchanged.
+        // null (older client or skip path) leaves the column NULL → force-renders
+        // on the next publish, which is the safe degrade.
+        conceptPhaseToken: conceptPhaseToken ?? null
       });
 
     await releaseLock(LOCK_NAME, sessionId, namespace).catch(() => {});
