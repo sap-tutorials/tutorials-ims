@@ -178,6 +178,12 @@ jobs:
           # source repos via ONLY_CONTRIBUTION_REPOS=true).
           CAP_BASE_URL: ${{ secrets.CAP_SRV_URL_DEV }}
           TUTORIAL_SLUG: ${{ github.event.client_payload.slug || inputs.slug }}
+          # Multi-slug (N-tutorial push) companion to TUTORIAL_SLUG. The notify
+          # template emits a validated comma-separated client_payload.slugs when
+          # 2..CAP tutorials changed; fetch-tutorials parses TUTORIAL_SLUG +
+          # TUTORIAL_SLUGS together. Passed via env (never the command line) so
+          # the payload value can't be re-parsed by the shell.
+          TUTORIAL_SLUGS: ${{ github.event.client_payload.slugs }}
           # [#208/#275/#312] AI-quiz authoring on the QA channel. Always-on
           # post-#312 (2026-06-27). The QA channel is gated by Tutorial.Author
           # XSUAA scope so AI questions land somewhere safe to preview before
@@ -402,6 +408,13 @@ jobs:
           # the slug and re-seeds the whole catalog (--force). EXCEPTION: an allow-revert
           # run keeps the slug set so its `--force` stays scoped to the one tutorial.
           PUBLISH_SLUG: ${{ ((! inputs.force-publish) || inputs.allow-revert) && (github.event.client_payload.slug || inputs.slug) || '' }}
+          # Multi-slug (N-tutorial push) companion. Scope the publish to exactly
+          # the changed slugs when the notify template sent a validated
+          # client_payload.slugs — publish-content.ts reads PUBLISH_SLUGS as the
+          # --slugs fallback (filterToSlugs). Empty on force-publish (full
+          # re-seed) and on single-slug/allow-revert runs. Payload-only (no
+          # inputs.slugs — the QA workflow_dispatch has no slugs input).
+          PUBLISH_SLUGS: ${{ (! inputs.force-publish) && github.event.client_payload.slugs || '' }}
 
       # #1373 — synthetic watchdog. The publish step reporting success is not
       # proof rows landed: the render-concepts 404 that hid for days (#1372)
