@@ -199,7 +199,10 @@ export async function fetchRemoteHashes({ baseUrl, apiKey }: { baseUrl: string; 
     throw err;
   }
   const hashes = await res.json() as Record<string, string>;
-  const pipelineToken = res.headers.get('x-pipeline-token');
+  // `res.headers?.get` — the X-Pipeline-Token header is optional, and some
+  // callers/mocks supply a Response without a `headers` object; treat a missing
+  // header as "no token" (null) rather than throwing.
+  const pipelineToken = res.headers?.get('x-pipeline-token') ?? null;
   return { hashes, pipelineToken };
 }
 
