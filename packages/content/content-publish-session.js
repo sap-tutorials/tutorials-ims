@@ -1045,11 +1045,20 @@ async function upsertTutorialMetadata(namespace, metadata) {
       legacyId: await getTutLegacyId(),  // [#431]
     });
   }
+  // Track which NEW tutorialIds actually landed in the DB. On INSERT chunk
+  // success all toInsert IDs are present; on failure none are. This gates the
+  // step/meta writes below so we never attempt FK-violating step inserts for a
+  // tutorial row that doesn't exist.
+  const insertedTutorialIds = new Set();
   if (tutorialInsertRows.length > 0) {
     try {
       await INSERT.into(Tutorials).entries(tutorialInsertRows);
+      // Chunk succeeded — all IDs are now in the DB.
+      for (const { tutorialId } of toInsert) insertedTutorialIds.add(tutorialId);
     } catch (err) {
       console.warn(`[content/publish] Tutorials INSERT chunk failed:`, err.message);
+      // insertedTutorialIds stays empty — steps and meta for these tutorials
+      // will be skipped below rather than causing FK-violation warnings.
     }
   }
 
@@ -1080,14 +1089,21 @@ async function upsertTutorialMetadata(namespace, metadata) {
   // Phase 4b: Write Steps. Partition into INSERT rows and per-row UPDATEs.
   // -----------------------------------------------------------------------
   const stepInsertRows = [];
-  // For steps on tutorials that failed the INSERT chunk, the tutorialId won't
-  // exist in the DB — skip gracefully (don't push steps for those).
-  const insertedTutorialIds = new Set(toInsert.map(e => e.tutorialId));
+  // insertedTutorialIds was populated above after the Tutorials INSERT chunk.
+  // Existing tutorials (toUpdate) always proceed — their ID is already in the DB.
+  // New tutorials (toInsert) only get steps written if their Tutorials row landed.
 
   const tutorialIds = []; // for the batched progress recompute (#382 phase E)
 
+  // Set of IDs that came from toInsert (used to distinguish new vs existing).
+  const isNewTutorial = new Set(toInsert.map(e => e.tutorialId));
+
   for (const { slug, meta, tutorialId } of [...toUpdate, ...toInsert]) {
     if (!Array.isArray(meta.steps)) continue;
+
+    // For NEW tutorials whose Tutorials INSERT chunk failed, skip all steps —
+    // the parent row doesn't exist in the DB and FK-violating writes would warn.
+    if (isNewTutorial.has(tutorialId) && !insertedTutorialIds.has(tutorialId)) continue;
 
     // Collect tutorialIds for the batched bulk recompute (#382 phase E).
     // The caller in appendToSession runs ONE set-based MERGE for every
@@ -1156,6 +1172,10 @@ async function upsertTutorialMetadata(namespace, metadata) {
   const metaInsertRows = [];
 
   for (const { slug, meta, tutorialId } of [...toUpdate, ...toInsert]) {
+    // For NEW tutorials whose Tutorials INSERT chunk failed, skip meta —
+    // the parent row doesn't exist in the DB.
+    if (isNewTutorial.has(tutorialId) && !insertedTutorialIds.has(tutorialId)) continue;
+
     const lastUpdated = meta.lastUpdated || null;
     const existingMeta = existingMetaMap.get(tutorialId);
 

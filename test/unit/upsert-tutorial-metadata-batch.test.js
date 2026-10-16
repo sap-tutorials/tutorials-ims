@@ -409,4 +409,101 @@ describe('upsertTutorialMetadata batched SELECT+write (#2802)', () => {
       `Expected 0 per-tutorial_ID SELECT.one on TutorialMeta, got ${counts.metaPerTutSelects}. N+1 still running.`
     ).toBe(0);
   });
+
+  // -------------------------------------------------------------------------
+  // Test 4: insertedTutorialIds guard — when the Tutorials INSERT chunk fails
+  // for a new tutorial, its steps and meta must NOT be written (no FK violation).
+  // An existing tutorial in the same batch must still have its steps updated.
+  // -------------------------------------------------------------------------
+  it('skips steps and meta for a new tutorial whose Tutorials INSERT chunk fails, existing tutorial steps still update', async () => {
+    const EXISTING_SLUG = 'guard-existing-tutorial';
+    const NEW_SLUG      = 'guard-new-tutorial';
+
+    // Seed an existing tutorial with one step
+    const existingId = cds.utils.uuid();
+    await INSERT.into(Tutorials).entries({
+      ID: existingId,
+      slug: EXISTING_SLUG,
+      title: 'Old Guard Title',
+      status: 'ACTIVE',
+      legacyId: 6000001,
+    });
+    await INSERT.into(Steps).entries({
+      ID: cds.utils.uuid(),
+      tutorial_ID: existingId,
+      stepOrder: 1,
+      title: 'Old Guard Step',
+      status: 'ACTIVE',
+      legacyId: 6000002,
+    });
+
+    const { sessionId } = await helpers.beginPublishSession({
+      trigger: 'unit-test-metadata-guard',
+      hugoVersion: '0.147.0',
+      expectedSlugCount: 2,
+      initiator: 'test-suite',
+    });
+
+    // Stub db.run to throw on Tutorials INSERT (simulates a chunk failure for
+    // the new tutorial). The stub only fires once (on the INSERT CQN), then
+    // restores to normal so subsequent reads/writes proceed.
+    const origRun = db.run.bind(db);
+    let insertThrown = false;
+    db.run = async (q, ...rest) => {
+      if (
+        !insertThrown &&
+        q?.INSERT?.into?.ref?.[0] === TUTORIALS_TABLE
+      ) {
+        insertThrown = true;
+        throw new Error('simulated Tutorials INSERT chunk failure');
+      }
+      return origRun(q, ...rest);
+    };
+
+    try {
+      await helpers.appendToSession({
+        sessionId,
+        files: {},
+        metadata: {
+          [EXISTING_SLUG]: {
+            title: 'Updated Guard Title',
+            steps: [{ number: 1, title: 'Updated Guard Step' }],
+          },
+          [NEW_SLUG]: {
+            title: 'New Guard Tutorial',
+            steps: [{ number: 1, title: 'New Guard Step' }],
+          },
+        },
+      });
+    } finally {
+      db.run = origRun;
+    }
+
+    // The Tutorials INSERT threw — NEW_SLUG tutorial row must NOT exist.
+    const allTuts = await SELECT.from(Tutorials);
+    const newTut = allTuts.find(t => t.slug === NEW_SLUG);
+    expect(newTut, 'new tutorial must NOT have been inserted (INSERT failed)').toBeUndefined();
+
+    // Steps for the new tutorial must NOT exist (FK guard fired).
+    const newTutSteps = await SELECT.from(Steps);
+    // All steps in the DB belong to the existing tutorial only.
+    const orphanSteps = newTutSteps.filter(s => s.tutorial_ID !== existingId);
+    expect(
+      orphanSteps,
+      `Expected no steps for the failed-insert new tutorial, found ${orphanSteps.length}`
+    ).toHaveLength(0);
+
+    // TutorialMeta for the new tutorial must NOT exist.
+    const allMeta = await SELECT.from(TutorialMeta);
+    const newTutMeta = allMeta.find(m => m.tutorial_ID !== existingId);
+    expect(
+      newTutMeta,
+      'TutorialMeta for failed-insert new tutorial must NOT have been created'
+    ).toBeUndefined();
+
+    // Existing tutorial must still have its step updated.
+    const existingStep = await SELECT.one.from(Steps).where({ tutorial_ID: existingId, stepOrder: 1 });
+    expect(existingStep, 'existing step must still exist').toBeTruthy();
+    expect(existingStep.title).toBe('Updated Guard Step');
+  });
 });
