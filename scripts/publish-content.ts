@@ -5,7 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { userInfo, hostname } from 'node:os';
 import { parse as parseYaml } from 'yaml';
 import { parseChannel, type Channel } from './fetch-tutorials.js';
-import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes, fetchRemoteSourceHashes, fetchRemotePipelineToken, renderConceptsPhase, renderTopicsPhase, renderChannelsPhase } from './lib/publish-client.js';
+import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes, fetchRemoteSourceHashes, renderConceptsPhase, renderTopicsPhase, renderChannelsPhase } from './lib/publish-client.js';
 import { computePipelineToken } from './lib/pipeline-token.js';
 import { withRetry, formatErrorChain } from './lib/publish-retry.js';
 import { chunk, runConcurrent } from './lib/publish-batcher.js';
@@ -1361,13 +1361,23 @@ async function main() {
   else if (opts.heal) mode = 'heal';
 
   let remoteHashes: Record<string, string> = {};
+  // #2727 — render-pipeline token. Hash the inputs that determine how every
+  // slug renders (parsers, Hugo templates, CSS). If it differs from the server's
+  // active token, the pipeline changed and every slug must re-publish even when
+  // per-slug source+HTML hashes match. Computed once; sent on commit so the next
+  // publish can compare. Server token lives on the X-Pipeline-Token header of
+  // /content/hashes; null (legacy server / no ACTIVE manifest) → full publish.
+  const localPipelineToken = computePipelineToken();
+  let serverPipelineToken: string | null = null;
   if (mode !== 'force') {
     log(`Fetching remote hashes from ${opts.baseUrl}/content/hashes...`);
     // #2286 — retry transient 500s (HANA pool-acquire timeout) so a momentary
     // load spike during delta detection doesn't fatally abort the rebuild
     // before a session is even opened. 503 already returns {} inside the client.
+    // pipelineToken (#2727) is read from the same response header — no second GET.
+    let fetchResult: { hashes: Record<string, string>; pipelineToken: string | null };
     try {
-      remoteHashes = await withRetry(
+      fetchResult = await withRetry(
         () => fetchRemoteHashes({ baseUrl: opts.baseUrl, apiKey: opts.apiKey }),
         {
           attempts: 4, backoffMs: [1000, 3000, 6000], jitterRatio: 0.2,
@@ -1381,18 +1391,10 @@ async function main() {
       console.error(`Cannot reach ${opts.baseUrl}/content/hashes: ${formatErrorChain(err)}`);
       process.exit(1);
     }
-  }
-
-  // #2727 — render-pipeline token. Hash the inputs that determine how every
-  // slug renders (parsers, Hugo templates, CSS). If it differs from the server's
-  // active token, the pipeline changed and every slug must re-publish even when
-  // per-slug source+HTML hashes match. Computed once; sent on commit so the next
-  // publish can compare. Server token lives on the X-Pipeline-Token header of
-  // /content/hashes; undefined (legacy server / no ACTIVE manifest) → full publish.
-  const localPipelineToken = computePipelineToken();
-  let serverPipelineToken: string | undefined;
-  if (mode === 'delta') {
-    serverPipelineToken = await fetchRemotePipelineToken({ baseUrl: opts.baseUrl, apiKey: opts.apiKey });
+    remoteHashes = fetchResult!.hashes;
+    if (mode === 'delta') {
+      serverPipelineToken = fetchResult!.pipelineToken;
+    }
   }
 
   const planResult = computePublishPlan({
@@ -1400,7 +1402,7 @@ async function main() {
     remote: remoteHashes,
     mode,
     localToken: mode === 'delta' ? localPipelineToken : undefined,
-    serverToken: mode === 'delta' ? serverPipelineToken : undefined,
+    serverToken: mode === 'delta' ? serverPipelineToken ?? undefined : undefined,
   });
   let targetSlugs = planResult.targetSlugs;
   if (planResult.pipelineChanged) {
@@ -1577,6 +1579,9 @@ async function main() {
   // absent route → 404 → abortSession → exit 1, which is exactly what silently
   // broke every QA merge-to-main publish. Gating here keeps the caller
   // consistent with the server's route surface.
+  // #2802: mirror pipelineToken — capture conceptPhaseToken from the render result
+  // so commitSession can persist it on ContentManifest for Level-1 phase-skip.
+  let localConceptPhaseToken: string | null = null;
   if (!isScoped && channel === 'prod') {
     try {
       const rc = await withRetry(
@@ -1588,6 +1593,7 @@ async function main() {
           },
         }
       );
+      localConceptPhaseToken = rc.conceptPhaseToken ?? null;
       log(`render-concepts: ${rc.conceptsChanged} changed, ${rc.conceptsSkipped} skipped, ${rc.conceptsErrored} errored of ${rc.conceptsSeen} (${rc.durationMs} ms)`);
     } catch (err) {
       console.error(`[publish-content] render-concepts failed permanently: ${formatErrorChain(err)}`);
@@ -1637,7 +1643,7 @@ async function main() {
   let commit;
   try {
     commit = await withRetry(
-      () => commitSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, allowRevertSlugs, pipelineToken: localPipelineToken }),
+      () => commitSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, allowRevertSlugs, pipelineToken: localPipelineToken, conceptPhaseToken: localConceptPhaseToken }),
       {
         // Widened from [1000,3000,9000]/3 attempts: the old schedule only ever
         // waited 1s then 3s (~4s total window) — too short to ride out a transient
@@ -1830,7 +1836,7 @@ async function main() {
   // --- auto-verify ---
   log('Verifying server state matches local...');
   let postRemote: Record<string, string>;
-  try { postRemote = await fetchRemoteHashes({ baseUrl: opts.baseUrl, apiKey: opts.apiKey }); }
+  try { postRemote = await fetchRemoteHashes({ baseUrl: opts.baseUrl, apiKey: opts.apiKey }).then(r => r.hashes); }
   catch (err) {
     console.error(`Auto-verify warning: cannot reach /content/hashes after commit: ${formatErrorChain(err)}`);
     process.exit(0); // commit was successful; don't punish for a transient verify-fetch error

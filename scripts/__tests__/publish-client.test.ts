@@ -113,15 +113,20 @@ describe('publish-client', () => {
   it('fetchRemoteHashes returns the hash map', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true, status: 200,
+      headers: new Headers({ 'x-pipeline-token': 'ptok' }),
       json: () => Promise.resolve({ slug1: 'h1', slug2: 'h2' })
     }));
     const out = await fetchRemoteHashes({ baseUrl });
-    expect(out).toEqual({ slug1: 'h1', slug2: 'h2' });
+    // #2802: fetchRemoteHashes now folds the X-Pipeline-Token header read into
+    // this single GET, returning { hashes, pipelineToken } instead of the bare map.
+    expect(out).toEqual({ hashes: { slug1: 'h1', slug2: 'h2' }, pipelineToken: 'ptok' });
   });
 
   it('fetchRemoteHashes sends a Bearer header when apiKey is given (srv-qa gates /content/hashes)', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
-      ok: true, status: 200, json: () => Promise.resolve({ slug1: 'h1' }),
+      ok: true, status: 200,
+      headers: new Headers(),
+      json: () => Promise.resolve({ slug1: 'h1' }),
     });
     vi.stubGlobal('fetch', fetchMock);
     await fetchRemoteHashes({ baseUrl, apiKey: 'qa-key' });
