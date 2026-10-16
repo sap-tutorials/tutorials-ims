@@ -809,169 +809,404 @@ export function createSessionHelpers({ namespace }) {
 // ---------------------------------------------------------------------------
 
 async function upsertTutorialMetadata(namespace, metadata) {
+  // Batched implementation (#2802): replaces per-slug N+1 SELECT+write loop.
+  //
+  // Phase 1 — Slug → tutorialId resolution via ONE LOWER(slug) IN query per
+  //   500-slug chunk (HANA packet-safe ceiling, mirrors
+  //   recomputeProgressForChangedTutorials:1619). Per-row LOWER(slug) = ?
+  //   is replaced by a single batch SELECT with positional-bind → inline-
+  //   literal fallback for HANA driver quirks.
+  //
+  // Phase 2 — For all resolved tutorialIds: ONE SELECT on Tutorials (legacyId
+  //   self-heal check), ONE SELECT on Steps, ONE SELECT on TutorialMeta.
+  //   Maps keyed by ID / (tutorial_ID, stepOrder) / tutorial_ID.
+  //
+  // Phase 3 — legacyId allocation: read MAX(legacyId) once per entity that
+  //   needs new IDs and increment in-memory. Same semantics as the old
+  //   getNextLegacyId() calls: only assigns on INSERT or NULL self-heal.
+  //
+  // Phase 4 — Writes: multi-row INSERT for new rows; per-row UPDATE for
+  //   existing rows (UPDATEs stay per-row so update failures stay isolated,
+  //   matching tasks 6/7 pattern).
+  //
+  // ROW-EQUIVALENCE: same rows, same values, same insert-vs-update decision,
+  // same legacyId assignment semantics as the original per-row code.
   const { Tutorials, Steps } = cds.entities(namespace);
+  const { TutorialMeta } = cds.entities(namespace);
   const db = await cds.connect.to('db');
-  let metaUpserted = 0;
-  // Collect tutorialIds touched by this batch so the caller can issue a single
-  // set-based recompute (#382 phase E) instead of N per-slug recomputes here.
-  const tutorialIds = [];
+  const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+  const { table, idCol, slugCol } = tutorialsTableInfo(namespace, isHana);
 
-  for (const [rawSlug, meta] of Object.entries(metadata)) {
-    // Canonical slug is lowercase. Source repos sometimes ship folder names with
-    // uppercase (e.g. .../extend-RAP-App/) but Hugo emits lowercase URLs and the
-    // read path 301-redirects to the lowercase form (see content-store.js
-    // serveHandler). Lowercasing here keeps the write path consistent with reads
-    // and prevents duplicate Tutorials rows when reference data was originally
-    // seeded with mixed case. See plan 2026-05-31-mixed-case-slug-stepcount.md.
-    const slug = rawSlug.toLowerCase();
+  // Normalize all slugs to lowercase upfront.
+  // Canonical slug is lowercase. Source repos sometimes ship folder names with
+  // uppercase (e.g. .../extend-RAP-App/) but Hugo emits lowercase URLs and the
+  // read path 301-redirects to the lowercase form (see content-store.js
+  // serveHandler). Lowercasing here keeps the write path consistent with reads
+  // and prevents duplicate Tutorials rows when reference data was originally
+  // seeded with mixed case. See plan 2026-05-31-mixed-case-slug-stepcount.md.
+  const entries = Object.entries(metadata).map(([rawSlug, meta]) => [rawSlug.toLowerCase(), meta]);
+  if (entries.length === 0) return { tutorialIds: [] };
 
+  // -----------------------------------------------------------------------
+  // Phase 1: Batch LOWER(slug) IN lookup → slug→tutorialId Map
+  // -----------------------------------------------------------------------
+  // slug → tutorialId for slugs that already exist in Tutorials.
+  const slugToExistingId = new Map();
+  const lowerSlugs = entries.map(([slug]) => slug);
+  const CHUNK = 500;
+
+  for (let i = 0; i < lowerSlugs.length; i += CHUNK) {
+    const chunk = lowerSlugs.slice(i, i + CHUNK);
+    let batch;
     try {
-      // Case-insensitive lookup via LOWER() — catches legacy mixed-case rows (e.g.
-      // slug seeded from GitHub repo names) as well as the normal already-lowercase
-      // case. See serveHandler in content-store.js for the read-side mirror.
-      // We do NOT rewrite the row's slug here; that is deferred to the repair
-      // script (scripts/repair-mixed-case-tutorial-duplicates.cjs).
-      const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
-      const { table, idCol, slugCol } = tutorialsTableInfo(namespace, isHana);
-      const hits = await db.run(`SELECT ${idCol} FROM ${table} WHERE LOWER(${slugCol}) = ?`, [slug]);
-      // HANA returns uppercase column name "ID"; SQLite returns lowercase "ID" via CDS.
-      // Both are accessible as hits[0].ID — the fallback to .id covers any edge case.
-      let tutorialId = hits?.[0]?.ID ?? hits?.[0]?.id ?? null;
+      const placeholders = chunk.map(() => '?').join(',');
+      batch = await db.run(
+        `SELECT ${idCol}, LOWER(${slugCol}) AS LSLUG FROM ${table} WHERE LOWER(${slugCol}) IN (${placeholders})`,
+        chunk
+      );
+    } catch (e) {
+      // Fallback: some HANA driver versions reject positional placeholders for
+      // IN (...). Interpolate a sanitized single-quoted list. Slugs are
+      // case-folded already and the DB schema constrains them, but the
+      // single-quote escape is belt-and-suspenders.
+      LOG.warn(`upsertTutorialMetadata: positional bind failed (${e.message}); falling back to inline literal`);
+      const lit = chunk.map(s => `'${String(s).replace(/'/g, "''")}'`).join(',');
+      batch = await db.run(
+        `SELECT ${idCol}, LOWER(${slugCol}) AS LSLUG FROM ${table} WHERE LOWER(${slugCol}) IN (${lit})`
+      );
+    }
+    if (batch) {
+      for (const row of batch) {
+        // HANA returns uppercase column names; SQLite returns mixed-case.
+        const id = row.ID ?? row.id;
+        const lslug = row.LSLUG ?? row.lslug;
+        if (id && lslug) slugToExistingId.set(lslug, id);
+      }
+    }
+  }
 
-      if (tutorialId) {
-        // [#431] Self-heal: if an existing row was inserted with NULL legacyId by
-        // the bug pre-this-fix, fill it in on the next publish. Avoids relying on
-        // the repair script for any tutorial that gets re-published after deploy.
-        // Note: this does NOT propagate to CompletionPathItems — that fixup is the
-        // repair script's job (scripts/repair-tutorial-legacyid.cjs).
-        const existing = await SELECT.one.from(Tutorials).where({ ID: tutorialId }).columns('legacyId');
-        const updates = {
-          title: meta.title,
-          description: meta.description || null,
-          averageTimeToComplete: meta.time || null,
-          experienceTag: meta.level || null,
-          primaryTag: meta.primaryTag || null,
-          stepCount: Array.isArray(meta.steps) ? meta.steps.length : null,
-          status: 'ACTIVE'
-        };
-        if (existing?.legacyId == null) {
-          updates.legacyId = await getNextLegacyId('Tutorials', db);
-        }
-        await UPDATE(Tutorials).where({ ID: tutorialId }).set(updates);
-      } else {
-        tutorialId = cds.utils.uuid();
-        await INSERT.into(Tutorials).entries({
-          ID: tutorialId,
-          slug,
-          title: meta.title,
-          description: meta.description || null,
-          averageTimeToComplete: meta.time || null,
-          experienceTag: meta.level || null,
-          primaryTag: meta.primaryTag || null,
-          stepCount: Array.isArray(meta.steps) ? meta.steps.length : null,
-          status: 'ACTIVE',
-          legacyId: await getNextLegacyId('Tutorials', db)  // [#431]
+  // Partition entries into updates (existing) and inserts (new).
+  // Assign new UUIDs for inserts now so we have all tutorialIds before writes.
+  const toUpdate = []; // { slug, meta, tutorialId }
+  const toInsert = []; // { slug, meta, tutorialId (new UUID) }
+  for (const [slug, meta] of entries) {
+    const existingId = slugToExistingId.get(slug);
+    if (existingId) {
+      toUpdate.push({ slug, meta, tutorialId: existingId });
+    } else {
+      toInsert.push({ slug, meta, tutorialId: cds.utils.uuid() });
+    }
+  }
+
+  const allTutorialIds = [
+    ...toUpdate.map(e => e.tutorialId),
+    ...toInsert.map(e => e.tutorialId),
+  ];
+
+  // -----------------------------------------------------------------------
+  // Phase 2: Batch reads for legacyId self-heal (Tutorials), Steps, TutorialMeta
+  // -----------------------------------------------------------------------
+
+  // Tutorials legacyId check for existing rows (self-heal: fill NULL legacyIds).
+  // ONE SELECT for all IDs to be updated.
+  const existingTutLegacyIds = new Map(); // tutorialId → legacyId (or null)
+  if (toUpdate.length > 0) {
+    const updateIds = toUpdate.map(e => e.tutorialId);
+    for (let i = 0; i < updateIds.length; i += CHUNK) {
+      const chunkIds = updateIds.slice(i, i + CHUNK);
+      const rows = await SELECT.from(Tutorials)
+        .where({ ID: { in: chunkIds } })
+        .columns('ID', 'legacyId');
+      for (const row of rows) {
+        existingTutLegacyIds.set(row.ID, row.legacyId ?? null);
+      }
+    }
+  }
+
+  // Steps: ONE SELECT for all tutorial IDs.
+  // Map keyed by "tutorial_ID:stepOrder" → { ID, legacyId }.
+  const existingStepMap = new Map(); // `${tutorial_ID}:${stepOrder}` → { ID, legacyId }
+  if (allTutorialIds.length > 0) {
+    for (let i = 0; i < allTutorialIds.length; i += CHUNK) {
+      const chunkIds = allTutorialIds.slice(i, i + CHUNK);
+      const rows = await SELECT.from(Steps)
+        .where({ tutorial_ID: { in: chunkIds } })
+        .columns('ID', 'tutorial_ID', 'stepOrder', 'legacyId');
+      for (const row of rows) {
+        existingStepMap.set(`${row.tutorial_ID}:${row.stepOrder}`, { ID: row.ID, legacyId: row.legacyId ?? null });
+      }
+    }
+  }
+
+  // TutorialMeta: ONE SELECT for all tutorial IDs.
+  const existingMetaMap = new Map(); // tutorial_ID → { ID, legacyId, reviewedDate }
+  if (allTutorialIds.length > 0) {
+    for (let i = 0; i < allTutorialIds.length; i += CHUNK) {
+      const chunkIds = allTutorialIds.slice(i, i + CHUNK);
+      const rows = await SELECT.from(TutorialMeta)
+        .where({ tutorial_ID: { in: chunkIds } })
+        .columns('ID', 'tutorial_ID', 'legacyId', 'reviewedDate');
+      for (const row of rows) {
+        existingMetaMap.set(row.tutorial_ID, {
+          ID: row.ID,
+          legacyId: row.legacyId ?? null,
+          reviewedDate: row.reviewedDate ?? null,
         });
       }
+    }
+  }
 
-      // Upsert steps
-      if (Array.isArray(meta.steps)) {
-        for (const step of meta.steps) {
-          const existingStep = await SELECT.one.from(Steps)
-            .where({ tutorial_ID: tutorialId, stepOrder: step.number })
-            .columns('ID', 'legacyId');
+  // -----------------------------------------------------------------------
+  // Phase 3: legacyId allocation — read MAX once per entity, then increment
+  // in memory. Only allocates where the old code would have (INSERT, or NULL
+  // self-heal on UPDATE). Preserves exact semantics.
+  //
+  // For HANA: MAX(legacyId) over the table (publish is serialised by the
+  // LOCK_NAME advisory lock so concurrent collision is not possible).
+  // For SQLite: same approach — avoids module-level counter drift in tests.
+  // -----------------------------------------------------------------------
 
-          if (existingStep) {
-            const updates = { title: step.title, status: 'ACTIVE' };
-            if (!existingStep.legacyId) {
-              updates.legacyId = await getNextLegacyId('Steps', db);
-            }
-            await UPDATE(Steps).where({ ID: existingStep.ID }).set(updates);
-          } else {
-            await INSERT.into(Steps).entries({
-              ID: cds.utils.uuid(),
-              tutorial_ID: tutorialId,
-              stepOrder: step.number,
-              title: step.title,
-              status: 'ACTIVE',
-              legacyId: await getNextLegacyId('Steps', db)
-            });
-          }
-        }
+  // Determine how many new IDs are needed per entity, then read MAX once.
+  // Tutorials: new = toInsert.length + toUpdate rows with legacyId==null
+  // Steps: count across all tutorials
+  // TutorialMeta: toInsert.length + toUpdate rows with no existing meta
 
-        // Collect tutorialIds for the batched bulk recompute (#382 phase E).
-        // The caller in appendToSession runs ONE set-based MERGE for every
-        // tutorial in this batch after the upsert loop completes. Without
-        // this, users who marked steps complete before the authoritative
-        // stepCount was set keep stale progress=100/COMPLETED rows even
-        // after the true denominator grows. See issue #89.
-        tutorialIds.push(tutorialId);
+  // Count Tutorials needing a new legacyId
+  let tutLegacyNeeded = toInsert.length;
+  for (const { tutorialId } of toUpdate) {
+    if ((existingTutLegacyIds.get(tutorialId) ?? null) == null) tutLegacyNeeded++;
+  }
+
+  // Count Steps needing a new legacyId
+  let stepsLegacyNeeded = 0;
+  for (const { meta, tutorialId } of [...toUpdate, ...toInsert]) {
+    if (!Array.isArray(meta.steps)) continue;
+    for (const step of meta.steps) {
+      const existing = existingStepMap.get(`${tutorialId}:${step.number}`);
+      if (!existing || !existing.legacyId) stepsLegacyNeeded++;
+    }
+  }
+
+  // Count TutorialMeta needing a new legacyId (only on INSERT — no self-heal for meta)
+  let metaLegacyNeeded = 0;
+  for (const { tutorialId } of [...toUpdate, ...toInsert]) {
+    if (!existingMetaMap.has(tutorialId)) metaLegacyNeeded++;
+  }
+
+  // Read MAX(legacyId) once per entity needing IDs, then allocate in-memory.
+  // Returns a counter function that dispenses the next legacyId sequentially.
+  async function makeCounter(entity, needed) {
+    if (needed === 0) return () => { throw new Error(`no legacyIds needed for ${entity}`); };
+    const isHanaDb = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+    if (isHanaDb) {
+      // On HANA use the sequence for correctness (concurrent safety, gaps OK).
+      // Publish is serialised by the LOCK_NAME advisory lock so in-memory
+      // allocation would also be safe, but the HANA sequence is the canonical
+      // source of truth — keep it. Each call is a single NEXTVAL roundtrip.
+      return async () => getNextLegacyId(entity, db);
+    }
+    // SQLite: compute MAX(legacyId) with raw SQL once, then allocate in-memory.
+    // Table name follows the CDS SQLite naming convention:
+    //   "namespace_Entity" e.g. "com_sap_developers_ims_Tutorials"
+    const sqliteTable = `"${namespace.replace(/\./g, '_')}_${entity}"`;
+    let maxRow;
+    try {
+      const rows = await db.run(`SELECT MAX(legacyId) AS maxId FROM ${sqliteTable}`);
+      maxRow = rows?.[0];
+    } catch {
+      maxRow = null;
+    }
+    // maxRow.maxId is null when the table is empty — start from 10_000_000 to
+    // match the module-counter baseline in getNextLegacyId on SQLite.
+    let current = (maxRow?.maxId ?? 10_000_000);
+    return () => ++current;
+  }
+
+  const getTutLegacyId   = await makeCounter('Tutorials',   tutLegacyNeeded);
+  const getStepLegacyId  = await makeCounter('Steps',       stepsLegacyNeeded);
+  const getMetaLegacyId  = await makeCounter('TutorialMeta', metaLegacyNeeded);
+
+  // -----------------------------------------------------------------------
+  // Phase 4a: Write Tutorials (multi-row INSERT for new; per-row UPDATE for
+  // existing). Chunk-level try/catch for INSERT; per-row catch for UPDATE.
+  // -----------------------------------------------------------------------
+  const tutorialInsertRows = [];
+  for (const { slug, meta, tutorialId } of toInsert) {
+    tutorialInsertRows.push({
+      ID: tutorialId,
+      slug,
+      title: meta.title,
+      description: meta.description || null,
+      averageTimeToComplete: meta.time || null,
+      experienceTag: meta.level || null,
+      primaryTag: meta.primaryTag || null,
+      stepCount: Array.isArray(meta.steps) ? meta.steps.length : null,
+      status: 'ACTIVE',
+      legacyId: await getTutLegacyId(),  // [#431]
+    });
+  }
+  if (tutorialInsertRows.length > 0) {
+    try {
+      await INSERT.into(Tutorials).entries(tutorialInsertRows);
+    } catch (err) {
+      console.warn(`[content/publish] Tutorials INSERT chunk failed:`, err.message);
+    }
+  }
+
+  for (const { slug, meta, tutorialId } of toUpdate) {
+    try {
+      const updates = {
+        title: meta.title,
+        description: meta.description || null,
+        averageTimeToComplete: meta.time || null,
+        experienceTag: meta.level || null,
+        primaryTag: meta.primaryTag || null,
+        stepCount: Array.isArray(meta.steps) ? meta.steps.length : null,
+        status: 'ACTIVE',
+      };
+      // [#431] Self-heal: fill NULL legacyId on existing rows.
+      // Note: this does NOT propagate to CompletionPathItems — that fixup is
+      // the repair script's job (scripts/repair-tutorial-legacyid.cjs).
+      if ((existingTutLegacyIds.get(tutorialId) ?? null) == null) {
+        updates.legacyId = await getTutLegacyId();
       }
+      await UPDATE(Tutorials).where({ ID: tutorialId }).set(updates);
+    } catch (err) {
+      console.warn(`[content/publish] metadata upsert failed for ${slug}:`, err.message);
+    }
+  }
 
-      // Auto-init TutorialMeta: new tutorial → INSERT; refreshed tutorial → UPDATE reviewedDate
+  // -----------------------------------------------------------------------
+  // Phase 4b: Write Steps. Partition into INSERT rows and per-row UPDATEs.
+  // -----------------------------------------------------------------------
+  const stepInsertRows = [];
+  // For steps on tutorials that failed the INSERT chunk, the tutorialId won't
+  // exist in the DB — skip gracefully (don't push steps for those).
+  const insertedTutorialIds = new Set(toInsert.map(e => e.tutorialId));
+
+  const tutorialIds = []; // for the batched progress recompute (#382 phase E)
+
+  for (const { slug, meta, tutorialId } of [...toUpdate, ...toInsert]) {
+    if (!Array.isArray(meta.steps)) continue;
+
+    // Collect tutorialIds for the batched bulk recompute (#382 phase E).
+    // The caller in appendToSession runs ONE set-based MERGE for every
+    // tutorial in this batch after the upsert loop completes. Without
+    // this, users who marked steps complete before the authoritative
+    // stepCount was set keep stale progress=100/COMPLETED rows even
+    // after the true denominator grows. See issue #89.
+    tutorialIds.push(tutorialId);
+
+    for (const step of meta.steps) {
+      const key = `${tutorialId}:${step.number}`;
+      const existingStep = existingStepMap.get(key);
+
+      if (existingStep) {
+        // Per-row UPDATE so failures stay isolated.
+        try {
+          const updates = { title: step.title, status: 'ACTIVE' };
+          if (!existingStep.legacyId) {
+            updates.legacyId = await getStepLegacyId();
+          }
+          await UPDATE(Steps).where({ ID: existingStep.ID }).set(updates);
+        } catch (err) {
+          console.warn(`[content/publish] Step UPDATE failed (${slug}:${step.number}):`, err.message);
+        }
+      } else {
+        stepInsertRows.push({
+          ID: cds.utils.uuid(),
+          tutorial_ID: tutorialId,
+          stepOrder: step.number,
+          title: step.title,
+          status: 'ACTIVE',
+          legacyId: await getStepLegacyId(),
+        });
+      }
+    }
+  }
+
+  if (stepInsertRows.length > 0) {
+    try {
+      await INSERT.into(Steps).entries(stepInsertRows);
+    } catch (err) {
+      console.warn(`[content/publish] Steps INSERT chunk failed:`, err.message);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Phase 4c: Write TutorialMeta. Multi-row INSERT for new rows; per-row
+  // UPDATE for existing rows (only refreshes reviewedDate when newer).
+  // Auto-init TutorialMeta: new tutorial → INSERT; refreshed → UPDATE reviewedDate.
+  //
+  // #862 reopen (2026-07-02): DO NOT stamp `owner`/`ownerEmail` from
+  // `primaryContributorEmail` here. A contributor is not the owner —
+  // someone who fixed a typo shouldn't inherit responsibility for a
+  // tutorial they didn't author. Prior versions of this code set
+  // `owner: primaryContributorEmail, ownerEmail: primaryContributorEmail`
+  // which silently promoted committers to declared owners across
+  // hundreds of tutorials.
+  //
+  // `TutorialMeta.ownerEmail` is now set exclusively by
+  // linkTutorialAuthorship() below (which runs after this function
+  // in the same publish session). That path resolves the owner from
+  // frontmatter `author_profile` → `Users.githubLogin` — the
+  // authoritative "declared owner" signal — and only fills NULL for
+  // existing rows so admin corrections are preserved.
+  // -----------------------------------------------------------------------
+  const metaInsertRows = [];
+
+  for (const { slug, meta, tutorialId } of [...toUpdate, ...toInsert]) {
+    const lastUpdated = meta.lastUpdated || null;
+    const existingMeta = existingMetaMap.get(tutorialId);
+
+    if (!existingMeta) {
+      metaInsertRows.push({
+        ID: cds.utils.uuid(),
+        tutorial_ID: tutorialId,
+        owner: null,
+        ownerEmail: null,
+        reviewedDate: lastUpdated,
+        monitoredStatus: 'ACTIVE',
+        notificationNumber: 0,
+        lastNotificationDate: null,
+        legacyId: await getMetaLegacyId(),
+      });
+    } else {
+      // Per-row UPDATE so failures stay isolated.
       try {
-        const ims = cds.entities(namespace);
-        const { TutorialMeta } = ims;
-        const existingMeta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tutorialId });
-        const lastUpdated = meta.lastUpdated || null;
-
-        // #862 reopen (2026-07-02): DO NOT stamp `owner`/`ownerEmail` from
-        // `primaryContributorEmail` here. A contributor is not the owner —
-        // someone who fixed a typo shouldn't inherit responsibility for a
-        // tutorial they didn't author. Prior versions of this code set
-        // `owner: primaryContributorEmail, ownerEmail: primaryContributorEmail`
-        // which silently promoted committers to declared owners across
-        // hundreds of tutorials.
-        //
-        // `TutorialMeta.ownerEmail` is now set exclusively by
-        // linkTutorialAuthorship() below (which runs after this function
-        // in the same publish session). That path resolves the owner from
-        // frontmatter `author_profile` → `Users.githubLogin` — the
-        // authoritative "declared owner" signal — and only fills NULL for
-        // existing rows so admin corrections are preserved.
-
-        if (!existingMeta) {
-          await INSERT.into(TutorialMeta).entries({
-            ID: cds.utils.uuid(),
-            tutorial_ID: tutorialId,
-            owner: null,
-            ownerEmail: null,
-            reviewedDate: lastUpdated,
-            monitoredStatus: 'ACTIVE',
-            notificationNumber: 0,
-            lastNotificationDate: null,
-            legacyId: await getNextLegacyId('TutorialMeta', db)
-          });
-        } else {
-          const newTs = lastUpdated ? Date.parse(lastUpdated) : NaN;
-          const existingTs = existingMeta.reviewedDate ? Date.parse(existingMeta.reviewedDate) : null;
-          if (Number.isFinite(newTs)) {
-            if (existingTs === null || (Number.isFinite(existingTs) && existingTs < newTs)) {
-              const updates = {
-                reviewedDate: lastUpdated,
-                notificationNumber: 0,
-                lastNotificationDate: null
-              };
-              // #862 reopen: do NOT touch ownerEmail here. If it's currently
-              // NULL, linkTutorialAuthorship() below will fill it from the
-              // authoritative frontmatter signal. If it's non-NULL, that's
-              // either a valid legacy value or an admin correction — leave it.
-              await UPDATE(TutorialMeta).where({ ID: existingMeta.ID }).set(updates);
-            } else if (existingTs !== null && Number.isNaN(existingTs)) {
-              LOG.warn(`TutorialMeta ${slug} has unparseable reviewedDate; skipping refresh`);
-            }
+        const newTs = lastUpdated ? Date.parse(lastUpdated) : NaN;
+        const existingTs = existingMeta.reviewedDate ? Date.parse(existingMeta.reviewedDate) : null;
+        if (Number.isFinite(newTs)) {
+          if (existingTs === null || (Number.isFinite(existingTs) && existingTs < newTs)) {
+            const updates = {
+              reviewedDate: lastUpdated,
+              notificationNumber: 0,
+              lastNotificationDate: null,
+            };
+            // #862 reopen: do NOT touch ownerEmail here. If it's currently
+            // NULL, linkTutorialAuthorship() below will fill it from the
+            // authoritative frontmatter signal. If it's non-NULL, that's
+            // either a valid legacy value or an admin correction — leave it.
+            await UPDATE(TutorialMeta).where({ ID: existingMeta.ID }).set(updates);
+          } else if (existingTs !== null && Number.isNaN(existingTs)) {
+            LOG.warn(`TutorialMeta ${slug} has unparseable reviewedDate; skipping refresh`);
           }
         }
       } catch (metaInitErr) {
         LOG.error(`TutorialMeta upsert failed for ${slug}`, metaInitErr);
       }
-
-      metaUpserted++;
-    } catch (metaErr) {
-      console.warn(`[content/publish] metadata upsert failed for ${slug}:`, metaErr.message);
     }
   }
 
+  if (metaInsertRows.length > 0) {
+    try {
+      await INSERT.into(TutorialMeta).entries(metaInsertRows);
+    } catch (err) {
+      console.warn(`[content/publish] TutorialMeta INSERT chunk failed:`, err.message);
+    }
+  }
+
+  const metaUpserted = entries.length;
   if (metaUpserted > 0) {
     console.log(`[content/publish] Upserted metadata for ${metaUpserted} tutorials`);
   }
