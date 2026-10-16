@@ -745,6 +745,11 @@ function parseArgs(argv: string[]): PublishOptions {
     // Empty string = whole-catalog delta (default). Also accepts env fallback
     // so the workflow can pass TUTORIAL_SLUG through without an extra flag.
     slug: get('--slug', process.env.PUBLISH_SLUG ?? ''),
+    // Multi-slug variant of --slug for the N-tutorial repository_dispatch path.
+    // Comma-separated; scopes the publish to exactly these slugs (O(N), not
+    // O(catalog)). Empty = fall back to --slug / whole-catalog delta. Env
+    // fallback (PUBLISH_SLUGS) lets the workflow pass dispatch_slugs through.
+    slugs: get('--slugs', process.env.PUBLISH_SLUGS ?? ''),
   };
 }
 
@@ -776,6 +781,35 @@ export function filterToSlug(tutorials: Map<string, string>, slug: string): bool
   const only = tutorials.get(slug)!;
   tutorials.clear();
   tutorials.set(slug, only);
+  return true;
+}
+
+/**
+ * Multi-slug variant of filterToSlug: reduce the discovered map to exactly the
+ * requested slugs. Used by the N-tutorial repository_dispatch path (a push that
+ * changed several tutorials) so the publish stays O(changed slugs) instead of
+ * demoting to a whole-catalog delta. The server carries forward every other
+ * slug at commit (same as any delta), so the catalog stays complete.
+ *
+ * Blank/whitespace entries are ignored and the list is de-duplicated. If ANY
+ * requested slug is absent it throws (loud fail) rather than silently
+ * publishing a subset — a typo in one of N slugs must not quietly drop it.
+ * Pure over the Map + a throwing contract, so it's unit-testable without the
+ * filesystem/network. Returns false (no-op) on an empty list.
+ */
+export function filterToSlugs(tutorials: Map<string, string>, slugs: string[]): boolean {
+  const wanted = [...new Set((slugs ?? []).map((s) => (s ?? '').trim()).filter(Boolean))];
+  if (wanted.length === 0) return false;
+  const missing = wanted.filter((s) => !tutorials.has(s));
+  if (missing.length) {
+    throw new Error(
+      `--slugs not found: ${missing.join(', ')} (available count=${tutorials.size}). ` +
+      `Check each slug is lowercase-canonical and its page exists.`
+    );
+  }
+  const kept = new Map(wanted.map((s) => [s, tutorials.get(s)!] as const));
+  tutorials.clear();
+  for (const [k, v] of kept) tutorials.set(k, v);
   return true;
 }
 
@@ -1246,15 +1280,23 @@ async function main() {
   // DEV + PROD. The `concept-<slug>` key convention, serve path, and delta
   // machinery are unchanged — only the source of the BLOBs moved to CAP.
 
-  // #1278 — single-tutorial fast path. Filter the discovered map down to the
-  // one requested slug BEFORE hashing (computeLocalHashes reads 1 file instead
-  // of ~1372). filterToSlug throws on an unknown slug; exit 2 (loud, distinct
-  // from the generic exit 1) so a typo doesn't silently publish nothing. The
-  // server carries forward all other slugs at commit (same as any delta).
-  if (opts.slug) {
+  // #1278 — single-tutorial fast path, generalized to N slugs for the
+  // multi-tutorial repository_dispatch path. Filter the discovered map down to
+  // the requested slug(s) BEFORE hashing (computeLocalHashes reads N files
+  // instead of ~1372). filterToSlug/filterToSlugs throw on an unknown slug;
+  // exit 2 (loud, distinct from the generic exit 1) so a typo doesn't silently
+  // publish nothing. The server carries forward all other slugs at commit
+  // (same as any delta). `--slug` and `--slugs` are unioned; `isScoped` below
+  // gates the page/author/concept full-catalog merges off any scoped publish.
+  const requestedSlugs = [
+    ...(opts.slug ? [opts.slug] : []),
+    ...(opts.slugs ? opts.slugs.split(',') : []),
+  ];
+  const isScoped = requestedSlugs.some((s) => (s ?? '').trim());
+  if (isScoped) {
     try {
-      filterToSlug(tutorials, opts.slug);
-      log(`[--slug] scoped publish to single tutorial: ${opts.slug}`);
+      filterToSlugs(tutorials, requestedSlugs);
+      log(`[--slug(s)] scoped publish to ${tutorials.size} tutorial(s): ${[...tutorials.keys()].join(', ')}`);
     } catch (err) {
       console.error(`Error: ${err instanceof Error ? err.message : err} (hugoDir=${opts.hugoDir})`);
       process.exit(2);
@@ -1292,8 +1334,8 @@ async function main() {
   // page- key namespace. Merge AFTER tutorial-only validation so page files are
   // not subject to tutorial production checks, and BEFORE hashing so the whole
   // begin/append/commit + carry-forward path handles them transparently.
-  // Skipped on single-tutorial hotfixes (opts.slug), like concepts.
-  if (!opts.slug) {
+  // Skipped on scoped hotfixes (--slug / --slugs), like concepts.
+  if (!isScoped) {
     const pages = discoverPageFiles(opts.hugoDir);
     for (const [key, absPath] of pages) tutorials.set(key, absPath);
     log(`[pages] merged ${pages.size} content page(s) into publish set`);
@@ -1535,7 +1577,7 @@ async function main() {
   // absent route → 404 → abortSession → exit 1, which is exactly what silently
   // broke every QA merge-to-main publish. Gating here keeps the caller
   // consistent with the server's route surface.
-  if (!opts.slug && channel === 'prod') {
+  if (!isScoped && channel === 'prod') {
     try {
       const rc = await withRetry(
         () => renderConceptsPhase({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId }),

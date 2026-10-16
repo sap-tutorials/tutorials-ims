@@ -237,6 +237,12 @@ jobs:
           # tutorial slug (#1154 follow-up). Untrusted payload — validated below
           # against a strict slug charset before use.
           PAYLOAD_SLUG: ${{ github.event.client_payload.slug }}
+          # Multi-slug dispatch: a source-repo push that changed N>1 tutorials
+          # sends a comma-separated `slugs` payload so the rebuild stays
+          # slug-targeted (O(N)) instead of silently demoting to a ~10-min full
+          # rebuild. Untrusted payload — each entry validated below against the
+          # same strict charset before use.
+          PAYLOAD_SLUGS: ${{ github.event.client_payload.slugs }}
           # #2349 — tutorials deleted upstream (comma-separated). Untrusted
           # payload; validated below against the same strict charset before use.
           PAYLOAD_DELETED_SLUGS: ${{ github.event.client_payload.deleted_slugs }}
@@ -261,11 +267,39 @@ jobs:
           # junk, embedded newline) falls through to full — safe default.
           if [ "$EVENT" = "repository_dispatch" ]; then
             case "$PAYLOAD_SLUG" in
-              *[!a-z0-9-]* | -* | '' ) : ;;                     # invalid → no-op, stays full
+              *[!a-z0-9-]* | -* | '' ) : ;;                     # invalid → try slugs below
               *) EFFECTIVE='slug-targeted'
                  REASON="auto-inferred (repository_dispatch slug=$PAYLOAD_SLUG)"
                  echo "dispatch_slug=$PAYLOAD_SLUG" >> "$GITHUB_OUTPUT" ;;
             esac
+
+            # Multi-slug path: a push that changed N>1 tutorials sends a
+            # comma-separated `slugs` payload. Validate EVERY entry against the
+            # strict charset (reject newlines outright); if all are clean, stay
+            # slug-targeted and pass the list through as dispatch_slugs so the
+            # fetch + publish scope to exactly those slugs instead of demoting
+            # to a ~10-min full rebuild. Only consulted when the singular slug
+            # above didn't already resolve.
+            if [ "$EFFECTIVE" != 'slug-targeted' ] && [ -n "$PAYLOAD_SLUGS" ]; then
+              case "$PAYLOAD_SLUGS" in
+                *[!a-z0-9,-]* ) : ;;                            # any char outside [a-z0-9,-] (incl newline) → reject whole list
+                *,, * | ,* | *, ) : ;;                          # empty element / leading / trailing comma → reject
+                '' ) : ;;
+                *) EFFECTIVE='slug-targeted'
+                   REASON="auto-inferred (repository_dispatch slugs=$PAYLOAD_SLUGS)"
+                   echo "dispatch_slugs=$PAYLOAD_SLUGS" >> "$GITHUB_OUTPUT" ;;
+              esac
+            fi
+
+            # Loud fallback: a tutorial-updated dispatch that carried neither a
+            # usable slug nor usable slugs silently became a full-corpus rebuild
+            # (~10 min, render-concepts over ~10.8k concepts) for what is almost
+            # always a 1-few-slug change. Warn so the operator/dispatcher sees
+            # it — the fix is to populate client_payload.slug / .slugs upstream
+            # (notify-qa.yml.template + per-repo push workflows).
+            if [ "$EFFECTIVE" != 'slug-targeted' ]; then
+              echo "::warning title=Rebuild demoted to full::repository_dispatch '${{ github.event.action }}' arrived with no usable client_payload.slug/slugs (slug='$PAYLOAD_SLUG' slugs='$PAYLOAD_SLUGS') — running a full-corpus rebuild (~10 min) instead of a slug-targeted one (~2 min). The dispatcher should send the changed slug(s)."
+            fi
           fi
 
           # Issue #orphan-purge — reject purge-orphans=true with anything
@@ -474,7 +508,7 @@ jobs:
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
           TUTORIAL_SLUG: ${{ inputs.slug || steps.mode.outputs.dispatch_slug }}
-          TUTORIAL_SLUGS: ${{ inputs.slugs }}
+          TUTORIAL_SLUGS: ${{ inputs.slugs || steps.mode.outputs.dispatch_slugs }}
           # [#208/#275/#312] AI-quiz authoring. Always-on post-#312
           # (2026-06-27 — soak window completed clean). fetch-tutorials.ts
           # wakes the AI generator on tutorials carrying [AUTOAUTHOR_*]
@@ -912,6 +946,13 @@ jobs:
           # other mode → whole-catalog delta, unchanged. TUTORIAL_SLUG is the
           # already-resolved slug (inputs.slug || dispatch_slug).
           PUBLISH_SLUG: ${{ steps.mode.outputs.effective_mode == 'slug-targeted' && (inputs.slug || steps.mode.outputs.dispatch_slug) || '' }}
+          # Multi-slug variant of PUBLISH_SLUG. In slug-targeted mode, scope the
+          # publish to exactly the changed slugs (publish-content.ts reads
+          # PUBLISH_SLUGS as the --slugs fallback and keeps those N files via
+          # filterToSlugs) instead of a whole-catalog delta. Empty in every
+          # other mode. TUTORIAL_SLUGS is the already-resolved list
+          # (inputs.slugs || dispatch_slugs).
+          PUBLISH_SLUGS: ${{ steps.mode.outputs.effective_mode == 'slug-targeted' && (inputs.slugs || steps.mode.outputs.dispatch_slugs) || '' }}
 
       # #1373 — synthetic watchdog. A green publish step is not proof rows
       # landed (the #1372 render-concepts 404 aborted AFTER an earlier
