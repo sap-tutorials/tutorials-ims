@@ -204,7 +204,7 @@ Three BTP Credential Store aliases back the official YouTube captions.download A
 - The OAuth **client ID** and **client secret** rotate when the Google Cloud project credentials are regenerated (no fixed cadence; rotate on suspected exposure).
 - The **refresh token** does not expire unless revoked or the OAuth client is deleted. Rotate it by revoking the existing token in the Google Cloud Console and re-running the OAuth consent flow as the channel owner.
 - In all cases: update the value via `/admin-ui/#secrets` **Set Value** on each environment (dev, qa, prod). The read-back verify in `setSecretValue` will confirm the write succeeded immediately.
-- The three aliases are consumed exclusively by `scripts/lib/youtube-transcript.ts` (server-side, CI only — the credentials never reach the browser).
+- The three aliases are consumed exclusively by `srv/lib/youtube-official-transcript.js` (called in-process by `scripts/fetch-tutorials.ts` at build time, CI only — the credentials never reach the browser).
 
 ### What happens when the credentials are missing or expired
 
