@@ -550,6 +550,7 @@ export function writeHugoPage(
   video: import('./parsers/types.js').NormalizedVideo | null = null,
   semaphoreMap: Record<string, string> = {},
   osList: string[] = [],
+  variables?: import('./parsers/variables.js').TutorialVariable[],
 ): void {
   const content = renderHugoFrontmatter({
     slug,
@@ -575,6 +576,7 @@ export function writeHugoPage(
     intro,
     video,
     semaphoreMap,
+    variables,
   })
 
   mkdirSync(outputDir, { recursive: true })
@@ -1440,6 +1442,7 @@ async function main() {
           normalizeVideo(frontmatter.video, t.slug),
           semaphoreMap,
           composed.osList,
+          composed.variables,
         )
         authorRows.push({
           authorProfile: frontmatter.author_profile ?? '',

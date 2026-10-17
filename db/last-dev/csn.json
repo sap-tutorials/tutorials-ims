@@ -1190,6 +1190,75 @@
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TUTORIALCONTRIBUTORS"
     },
+    "com.sap.developers.ims.TutorialVariables": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "legacyId": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "LEGACYID"
+        },
+        "tutorial_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "tutorial",
+          "@cds.persistence.name": "TUTORIAL_ID"
+        },
+        "varName": {
+          "type": "cds.String",
+          "length": 100,
+          "@cds.persistence.name": "VARNAME"
+        },
+        "varLabel": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "VARLABEL"
+        },
+        "varType": {
+          "type": "cds.String",
+          "length": 20,
+          "@cds.persistence.name": "VARTYPE"
+        },
+        "maxLength": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "MAXLENGTH"
+        },
+        "isRequired": {
+          "type": "cds.Boolean",
+          "@cds.persistence.name": "ISREQUIRED"
+        },
+        "placeholder": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "PLACEHOLDER"
+        },
+        "defaultFrom": {
+          "type": "cds.String",
+          "length": 50,
+          "@cds.persistence.name": "DEFAULTFROM"
+        },
+        "defaultPattern": {
+          "type": "cds.String",
+          "length": 500,
+          "@cds.persistence.name": "DEFAULTPATTERN"
+        },
+        "configJson": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "CONFIGJSON"
+        },
+        "sortOrder": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "SORTORDER"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TUTORIALVARIABLES"
+    },
     "com.sap.developers.ims.CompletionPaths": {
       "kind": "entity",
       "@assert.unique.slug": [

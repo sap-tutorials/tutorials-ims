@@ -746,6 +746,28 @@ annotate AdminService.TutorialContributors with @UI.LineItem: [
   { Value: role }
 ];
 
+// TutorialVariables — read-only child list on the Tutorials Object Page (#2811).
+// Surfaced as a plain ReferenceFacet so admins can inspect the declared
+// variables without any edit capability (the entity is @readonly on AdminService).
+annotate AdminService.TutorialVariables with {
+  varName   @Common.Label: 'Name';
+  varLabel  @Common.Label: 'Label';
+  varType   @Common.Label: 'Type';
+  isRequired @Common.Label: 'Required';
+};
+
+annotate AdminService.TutorialVariables with @UI: {
+  LineItem: [
+    { Value: varName,    @UI.Importance: #High },
+    { Value: varLabel },
+    { Value: varType },
+    { Value: isRequired }
+  ],
+  PresentationVariant: {
+    SortOrder: [ { Property: sortOrder, Descending: false } ]
+  }
+};
+
 annotate AdminService.Steps with {
   stepOrder @Common.Label: 'Step #';
   title     @Common.Label: 'Title';
@@ -995,6 +1017,7 @@ annotate AdminService.Tutorials with @UI: {
     { $Type: 'UI.ReferenceFacet', Label: 'Categories', ID: 'CategoriesFacet', Target: 'categories/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Steps', ID: 'StepsFacet', Target: 'steps/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Contributors', ID: 'ContributorsFacet', Target: 'contributors/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Variables', ID: 'VariablesFacet', Target: 'variables/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Completion Stats', ID: 'CompletionStatsFacet',
       Target: 'completionStats/@UI.FieldGroup#Stats' },
     { $Type: 'UI.ReferenceFacet', Label: 'AI-Graded Validation', ID: 'ValidationSpecsFacet',

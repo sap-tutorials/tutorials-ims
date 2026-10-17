@@ -277,6 +277,7 @@ service AdminService {
 
   entity TutorialMeta as projection on ims.TutorialMeta;
   entity TutorialContributors as projection on ims.TutorialContributors;
+  @readonly entity TutorialVariables as projection on ims.TutorialVariables;
   entity TutorialRepositories as projection on ims.TutorialRepositories;
   entity ImsConfig as projection on ims.ImsConfig;
   entity StepFailures as projection on ims.StepFailures;

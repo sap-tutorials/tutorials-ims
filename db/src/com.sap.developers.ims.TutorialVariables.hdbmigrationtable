@@ -1,0 +1,17 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_TutorialVariables (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  tutorial_ID NVARCHAR(36),
+  varName NVARCHAR(100),
+  varLabel NVARCHAR(255),
+  varType NVARCHAR(20),
+  maxLength INTEGER,
+  isRequired BOOLEAN,
+  placeholder NVARCHAR(255),
+  defaultFrom NVARCHAR(50),
+  defaultPattern NVARCHAR(500),
+  configJson NCLOB,
+  sortOrder INTEGER,
+  PRIMARY KEY(ID)
+)

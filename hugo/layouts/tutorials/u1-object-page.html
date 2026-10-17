@@ -339,6 +339,10 @@
         {{ end }}
 
         <section id="op-steps" class="op-section" data-op-section>
+          {{/* [#2811] Tutorial variables panel island mount — rendered below overview/prerequisites
+               but above Step 1 content. The island reads the config from
+               <script id="tutorial-variables"> and renders input fields + substitution UI. */}}
+          {{ with .Params.variables }}<div id="tutorial-variables-panel" data-slug="{{ $.Params.slug }}" data-mission-slug="{{ $.Params.missionSlug }}"></div>{{ end }}
           {{/* #2555: only show the "Steps" heading when the tutorial actually has
                steps. `.Content` still renders below unconditionally — it carries the
                intro prose (e.g. a `## Video Version` block or a retirement/redirect
@@ -502,6 +506,9 @@
 {{ with .Params.steps }}
 <script id="tutorial-data" type="application/json">{{ . | jsonify }}</script>
 {{ end }}
+{{ with .Params.variables }}
+<script id="tutorial-variables" type="application/json">{{ . | jsonify }}</script>
+{{ end }}
 
 {{ if not site.Params.previewMode }}
 {{ $js := resources.Get "js/tutorial.ts" | js.Build (dict "minify" true) }}
@@ -519,6 +526,7 @@
 <script type="module" src="{{ partial "island-src.html" "nav-dropdown" }}"></script>
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip-launcher" }}"></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-rating" }}" defer></script>{{ end }}
+{{ if and .Params.variables (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-variables" }}" defer></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "code-check" }}" defer></script>{{ end }}
 <script type="module" src="{{ partial "island-src.html" "validation" }}" defer></script>
 {{/* [#2362] json-render challenge widget island — loaded only when at least
