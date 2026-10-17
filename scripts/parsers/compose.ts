@@ -16,6 +16,8 @@ import { parseRulesVrEnriched } from './rules.js'
 import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './codecheck.js'
 import { parseAssertBlocks, attachAssertSpecs } from './assert.js'
 import type { TutorialStep, TutorialFrontmatter } from './types.js'
+import { validateVariables, wrapTokens } from './variables.js'
+import type { TutorialVariable } from './variables.js'
 
 /**
  * Normalize line endings to LF. Catches CRLF (Windows / GitHub-via-Windows-
@@ -66,6 +68,12 @@ export interface ComposeResult {
    *  supported platforms — #2703. Empty when hasOsOptions is false. */
   osList: string[]
   intro: string
+  /**
+   * [#2811] Validated tutorial variables declared in source frontmatter.
+   * Present only when the author declared a non-empty `variables:` block.
+   * Undefined when no variables are declared (tutorial behaves as before).
+   */
+  variables?: TutorialVariable[]
 }
 
 export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult {
@@ -77,6 +85,16 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     extractFrontmatter(normalized)
 
   const isV2 = frontmatter.parser === 'v2'
+
+  // [#2811] Validate tutorial variables declared in source frontmatter.
+  // Hard fail (let it propagate) on any schema error — malformed variables must
+  // not silently ship with literal `{{var:X}}` tokens or broken HTML spans.
+  // A tutorial with no `variables:` is left completely untouched.
+  let tutorialVariables: TutorialVariable[] | undefined
+  if (frontmatter.variables && frontmatter.variables.length > 0) {
+    // Collect the full body text (pre-split) for undeclared-token detection.
+    tutorialVariables = validateVariables(frontmatter.variables, body)
+  }
 
   // [blockquoted-fence] Heal the AEM-legacy pattern where code content lines
   // inside a `>`-blockquoted fenced code block are missing their `>` marker.
@@ -125,6 +143,15 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   // bare slugs remain. Not gated by rewriteImages: slug links are site-relative,
   // not repo-relative, so the rewrite is correct regardless of that switch.
   processedBody = resolveTutorialSlugLinks(processedBody)
+
+  // [#2811] Wrap `{{var:NAME}}` tokens in the body.
+  // Outside fenced code: emit a `<span class="tut-var">` for the Hugo island.
+  // Inside fenced code: emit the letters-only sentinel `TUTVARxNAMEx` (Chroma
+  // fragments `{{` in operator-lexing languages like bash — sentinel is opaque).
+  // No-op when no variables are declared (tutorialVariables is undefined).
+  if (tutorialVariables && tutorialVariables.length > 0) {
+    processedBody = wrapTokens(processedBody, tutorialVariables)
+  }
 
   // [#1637] Prerequisites bypassed the body's image-URL rewriter and, because
   // its content is markdownified as-is, markdown images/links inside a raw
@@ -254,5 +281,6 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     // Linux, BAS — never author-label order.
     osList: OS_VALUES.filter((os) => osListSet.has(os)),
     intro,
+    ...(tutorialVariables ? { variables: tutorialVariables } : {}),
   }
 }

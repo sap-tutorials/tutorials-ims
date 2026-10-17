@@ -113,6 +113,31 @@ describe('OS_VALUES', () => {
   });
 });
 
+describe('pickInitialOs (#2820 initial selection)', () => {
+  it('honors an explicit stored preference even if this tutorial does not offer it', async () => {
+    const { __test__ } = await import('../../hugo/assets/js/os-toggle');
+    // Stored BAS, tutorial offers only Windows/macOS — stored still wins.
+    expect(__test__.pickInitialOs('BAS', 'Windows', ['Windows', 'macOS'])).toBe('BAS');
+  });
+
+  it('uses the detected OS when the tutorial offers it', async () => {
+    const { __test__ } = await import('../../hugo/assets/js/os-toggle');
+    expect(__test__.pickInitialOs(null, 'macOS', ['Windows', 'macOS', 'Linux'])).toBe('macOS');
+  });
+
+  it('snaps to the first offered OS when the detected OS is not offered (no blank steps)', async () => {
+    const { __test__ } = await import('../../hugo/assets/js/os-toggle');
+    // Detected Windows, tutorial offers only Linux/macOS → land on Linux, not a
+    // placeholder-in-every-group Windows.
+    expect(__test__.pickInitialOs(null, 'Windows', ['Linux', 'macOS'])).toBe('Linux');
+  });
+
+  it('uses the detected OS on a legacy page with no picker buttons', async () => {
+    const { __test__ } = await import('../../hugo/assets/js/os-toggle');
+    expect(__test__.pickInitialOs(null, 'Windows', [])).toBe('Windows');
+  });
+});
+
 describe('selectPickerItem (cross-tab sync helper)', () => {
   beforeEach(() => {
     resetBody();
@@ -148,7 +173,11 @@ describe('selectPickerItem (cross-tab sync helper)', () => {
   });
 });
 
-describe('activate — fallback chain', () => {
+describe('activate — missing-OS placeholder (#2820)', () => {
+  // #2820: when the active OS has no panel in a group, we must NOT swap in
+  // another OS's content (the old FALLBACK_CHAIN behavior). We show a
+  // placeholder strip and render no panel body, so a user who selects Windows
+  // on a Linux/macOS-only step sees "not available here", not macOS content.
   beforeEach(() => {
     resetBody();
     document.body.appendChild(buildOsOptions([
@@ -157,20 +186,20 @@ describe('activate — fallback chain', () => {
     ]));
   });
 
-  it('falls back from Linux -> macOS when no Linux panel exists', async () => {
+  it('activates no panel when the requested OS has no panel (no foreign content)', async () => {
     const { __test__ } = await import('../../hugo/assets/js/os-toggle');
     __test__.activate('Linux');
-    const active = document.querySelector('[data-os-active]') as HTMLElement;
-    expect(active?.dataset.os).toBe('macOS');
+    // No panel is marked active — the step shows nothing for the missing OS.
+    expect(document.querySelector('[data-os-active]')).toBeNull();
   });
 
-  it('renders a ui5-message-strip when fallback fires', async () => {
+  it('renders a "not available" placeholder strip for the missing OS', async () => {
     const { __test__ } = await import('../../hugo/assets/js/os-toggle');
     __test__.activate('Linux');
     const strip = document.querySelector('ui5-message-strip');
     expect(strip).not.toBeNull();
-    // Exact-format assertion locks down the spec phrasing (em-dash, "instructions for this step", "showing").
-    expect(strip?.textContent).toBe('No Linux instructions for this step — showing macOS.');
+    // New spec phrasing: announce absence, do NOT advertise a substitute OS.
+    expect(strip?.textContent).toBe('No Linux instructions for this step.');
     // data-os-fallback-strip is load-bearing for clearStrip's selector.
     expect(strip?.hasAttribute('data-os-fallback-strip')).toBe(true);
   });
@@ -181,23 +210,31 @@ describe('activate — fallback chain', () => {
     expect(document.querySelector('ui5-message-strip')).toBeNull();
   });
 
-  it('clears prior message strip on reactivation', async () => {
+  it('activates the matching panel and shows no strip on exact match', async () => {
     const { __test__ } = await import('../../hugo/assets/js/os-toggle');
-    __test__.activate('Linux');         // creates a strip
+    __test__.activate('macOS');
+    const active = document.querySelectorAll('[data-os-active]');
+    expect(active).toHaveLength(1);
+    expect((active[0] as HTMLElement).dataset.os).toBe('macOS');
+    expect(document.querySelector('ui5-message-strip')).toBeNull();
+  });
+
+  it('clears prior placeholder strip on reactivation', async () => {
+    const { __test__ } = await import('../../hugo/assets/js/os-toggle');
+    __test__.activate('Linux');         // creates a placeholder strip
     __test__.activate('Windows');       // exact match — strip should be removed
     expect(document.querySelector('ui5-message-strip')).toBeNull();
   });
 
-  it('falls back through chain when only BAS is present', async () => {
+  it('shows a placeholder (not BAS content) when only BAS is present and Windows is requested', async () => {
     resetBody();
     document.body.appendChild(buildOsOptions([{ os: 'BAS', body: 'B' }]));
     const { __test__ } = await import('../../hugo/assets/js/os-toggle');
     __test__.activate('Windows');
-    const active = document.querySelector('[data-os-active]') as HTMLElement;
-    expect(active?.dataset.os).toBe('BAS');
-    // Strip must announce the deep-chain fallback, not just the active-panel state.
+    // No cross-OS fallback: BAS content must NOT be shown for a Windows request.
+    expect(document.querySelector('[data-os-active]')).toBeNull();
     const strip = document.querySelector('ui5-message-strip');
-    expect(strip?.textContent).toBe('No Windows instructions for this step — showing BAS.');
+    expect(strip?.textContent).toBe('No Windows instructions for this step.');
   });
 
   it('returns the exact OS when a matching panel exists (#2703)', async () => {
@@ -205,9 +242,11 @@ describe('activate — fallback chain', () => {
     expect(__test__.activate('Windows')).toBe('Windows');
   });
 
-  it('returns the fallback OS when the requested OS has no panel (#2703)', async () => {
-    // Fixture: only Windows + macOS panels exist.
+  it('returns the requested OS even when it has no panel (#2820 — no OS swap)', async () => {
+    // Fixture: only Windows + macOS panels exist. Requesting Linux must keep the
+    // picker selection on Linux (so the user sees the placeholder under Linux),
+    // not silently re-point it to a foreign OS.
     const { __test__ } = await import('../../hugo/assets/js/os-toggle');
-    expect(__test__.activate('Linux')).toBe('macOS');
+    expect(__test__.activate('Linux')).toBe('Linux');
   });
 });

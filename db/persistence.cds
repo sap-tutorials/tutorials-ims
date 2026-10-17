@@ -26,6 +26,7 @@ annotate ims.CompletionPaths with @cds.persistence.journal;
 annotate ims.CompletionPathItems with @cds.persistence.journal;
 annotate ims.TutorialMeta with @cds.persistence.journal;
 annotate ims.TutorialContributors with @cds.persistence.journal;
+annotate ims.TutorialVariables with @cds.persistence.journal;
 annotate ims.TutorialRepositories with @cds.persistence.journal;
 annotate ims.ActiveLearnerRecords with @cds.persistence.journal;
 annotate ims.DashboardMonitoredRecords with @cds.persistence.journal;

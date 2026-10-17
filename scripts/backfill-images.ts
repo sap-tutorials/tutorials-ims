@@ -11,7 +11,8 @@
 //
 // Usage:
 //   CAP_BASE_URL=<srv-url> CONTENT_API_KEY=<key> npm run backfill-images
-//   ...            [--slug <slug>]   # only images referenced by one tutorial (#2288)
+//   ...            [--slug <slug>]    # only images for one tutorial (#2288); comma-separated or multi
+//   ...            [--slugs <a,b,c>]  # comma-list of slugs (#2805); union with --slug
 //   ...            [--channel qa]    # QA: reads CAP_QA_BASE_URL/CONTENT_API_KEY_QA + hugo/public-qa
 //   ...            [--limit N]        # only the first N unique images (smoke)
 //   ...            [--concurrency N]  # parallel fetch+push (default 12)
@@ -25,13 +26,33 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { extractImgCdnUrls, channelFor } from '../srv/lib/image-warm-utils.js';
 
-interface Args { limit: number; concurrency: number; dryRun: boolean; force: boolean; slug?: string; channel: 'prod' | 'qa'; }
+interface Args { limit: number; concurrency: number; dryRun: boolean; force: boolean; slugs: string[]; channel: 'prod' | 'qa'; }
 
 /** Read `--slug <value>` from argv; undefined when absent or blank. */
 export function parseSlug(argv: string[]): string | undefined {
   const i = argv.indexOf('--slug');
   const v = i >= 0 ? argv[i + 1]?.trim() : undefined;
   return v || undefined;
+}
+
+/**
+ * Read `--slug` and `--slugs` from argv, union them, comma-split each,
+ * trim, drop blanks, de-duplicate preserving first-seen order.
+ * Returns [] when neither flag is present or both are blank (whole-catalog default).
+ * Mirrors publish-content.ts filterToSlugs / PUBLISH_SLUGS pattern (#2805).
+ */
+export function parseSlugs(argv: string[]): string[] {
+  const get = (flag: string): string => {
+    const i = argv.indexOf(flag);
+    return i >= 0 ? (argv[i + 1] ?? '') : '';
+  };
+  const raw = [get('--slug'), get('--slugs')].join(',');
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const s of raw.split(',').map(v => v.trim()).filter(Boolean)) {
+    if (!seen.has(s)) { seen.add(s); result.push(s); }
+  }
+  return result;
 }
 
 /** Read `--channel qa|prod` from argv; defaults to 'prod'. Mirrors publish-content.ts. */
@@ -50,7 +71,7 @@ function parseArgs(argv: string[]): Args {
     concurrency: Number(get('--concurrency')) || 12,
     dryRun: argv.includes('--dry-run'),
     force: argv.includes('--force'),
-    slug: parseSlug(argv),
+    slugs: parseSlugs(argv),
     channel: parseChannel(argv),
   };
 }
@@ -58,19 +79,21 @@ function parseArgs(argv: string[]): Args {
 /**
  * Walk hugo/public/tutorials/<slug>/index.html → Map<sourceUrl, slug>.
  *
- * When `slug` is given, only that one tutorial's built HTML is scanned — used
- * by the slug-targeted rebuild path (#2288) to re-warm just the changed
- * tutorial's images without re-fetching the whole catalog. An unknown slug
- * yields an empty map (no throw): nothing to warm.
+ * When `slugs` is a non-empty array, only those tutorials' built HTML is
+ * scanned — used by the slug-targeted rebuild path (#2288, #2805) to re-warm
+ * just the changed tutorials' images without re-fetching the whole catalog.
+ * An unknown slug yields no entries (no throw): best-effort warm.
+ * When `slugs` is undefined or empty, the whole tutorials dir is scanned
+ * (the original default, intentional for full/catalog rebuilds).
  */
-export function collectImageUrls(publicDir: string, slug?: string): Map<string, string> {
+export function collectImageUrls(publicDir: string, slugs?: string[]): Map<string, string> {
   const urlToSlug = new Map<string, string>();
   const tutorialsDir = join(publicDir, 'tutorials');
   if (!existsSync(tutorialsDir)) {
     throw new Error(`Not found: ${tutorialsDir} — run the Hugo build first (npm run build:all).`);
   }
-  const slugs = slug ? [slug] : readdirSync(tutorialsDir);
-  for (const s of slugs) {
+  const list = slugs?.length ? slugs : readdirSync(tutorialsDir);
+  for (const s of list) {
     const indexPath = join(tutorialsDir, s, 'index.html');
     if (!existsSync(indexPath)) continue;
     let html: string;
@@ -126,8 +149,10 @@ async function main() {
   if (!apiKey && !args.dryRun) { console.error(`Fatal: ${isQa ? 'CONTENT_API_KEY_QA' : 'CONTENT_API_KEY'} not set (${envHint})`); process.exit(1); }
 
   const publicDir = join(process.cwd(), 'hugo', isQa ? 'public-qa' : 'public');
-  console.log(`Enumerating image URLs under ${publicDir}/tutorials ${args.slug ? `(slug: ${args.slug}) ` : ''}...`);
-  let urlToSlug = collectImageUrls(publicDir, args.slug);
+  const slugList = args.slugs;
+  const slugLabel = slugList.length ? `(slugs: ${slugList.join(',')}) ` : '';
+  console.log(`Enumerating image URLs under ${publicDir}/tutorials ${slugLabel}...`);
+  let urlToSlug = collectImageUrls(publicDir, slugList.length ? slugList : undefined);
   let entries = [...urlToSlug.entries()];
   const totalUnique = entries.length;
   if (args.limit > 0) entries = entries.slice(0, args.limit);

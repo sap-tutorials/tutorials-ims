@@ -62,6 +62,7 @@ entity Tutorials : TaskBase, LinkHealth {
   meta                      : Composition of many TutorialMeta on meta.tutorial = $self;
   contributors              : Composition of many TutorialContributors on contributors.tutorial = $self;
   categories                : Composition of many TutorialCategories on categories.tutorial = $self;
+  variables                 : Composition of many TutorialVariables on variables.tutorial = $self;
   author                    : Association to Users;
 }
 
@@ -533,6 +534,23 @@ entity TutorialContributors : cuid, LegacyKeyed {
   avatarUrl                 : String(1024);  // https://github.com/<login>.png
   profileUrl                : String(1024);  // https://github.com/<login>
   user                      : Association to Users;
+}
+
+// [#2811] Per-tutorial variable declarations — persisted from parsed frontmatter
+// at publish time. Read-only in the Admin UI; written via replaceVariablesForSlug.
+// HANA reserved-word safe: avoids name/type/required/key/value/default/order.
+entity TutorialVariables : cuid, LegacyKeyed {
+  tutorial                  : Association to Tutorials;
+  varName                   : String(100);    // frontmatter `name`
+  varLabel                  : String(255);    // frontmatter `label`
+  varType                   : String(20);     // frontmatter `type` (string|number)
+  maxLength                 : Integer;        // frontmatter `maxLength`
+  isRequired                : Boolean;        // frontmatter `required`
+  placeholder               : String(255);    // frontmatter `placeholder`
+  defaultFrom               : String(50);     // frontmatter `default.from`
+  defaultPattern            : String(500);    // frontmatter `default.pattern`
+  configJson                : LargeString;    // full JSON.stringify of the variable object
+  sortOrder                 : Integer;        // 0-based index in the declared array
 }
 
 @assert.unique.name : [name]

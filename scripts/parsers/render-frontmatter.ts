@@ -5,6 +5,7 @@ import { escapeHugoDelimiters } from './hugo-delimiters.js'
 import { stripDangerousHtml } from './sanitize-html.js'
 import type { TutorialStep, TutorialNavEntry } from './types.js'
 import type { NormalizedVideo } from './types.js'
+import type { TutorialVariable } from './variables.js'
 
 export interface RenderHugoFrontmatterArgs {
   slug: string
@@ -70,6 +71,13 @@ export interface RenderHugoFrontmatterArgs {
   intro?: string
   /** Optional styled video slot, already normalized by normalizeVideo. */
   video?: NormalizedVideo | null
+  /**
+   * [#2811] Validated tutorial variables declared in source frontmatter.
+   * Emitted as `variables:` frontmatter so Hugo's u1-object-page layout can
+   * render the `<script id="tutorial-variables">` config block and mount the
+   * variables panel island. Omitted (key absent) when no variables are declared.
+   */
+  variables?: TutorialVariable[]
 }
 
 export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
@@ -100,6 +108,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     intro,
     video,
     semaphoreMap,
+    variables,
   } = args
 
   const cleanTags = tags.map(t => t.replace(/\\/g, ''))
@@ -185,6 +194,8 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
   }
 
   if (video) fm.video = { embedUrl: video.embedUrl, title: video.title, provider: video.provider }
+
+  if (variables && variables.length > 0) fm.variables = variables
 
   const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
 

@@ -21,24 +21,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - name: Determine changed slug
+      - name: Determine changed slug(s)
         id: slug
         run: |
           changed=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} \
             | awk -F/ '/^tutorials\//{print $2}' | sort -u)
-          count=$(echo "$changed" | wc -l)
-          # Only emit a slug when EXACTLY one tutorial changed AND it matches the
-          # strict slug charset (whole-value POSIX case match); anything else →
-          # empty slug → rebuild-content-qa.yml runs a full rebuild. Mirrors
-          # docs/authors/tutorial-repo-dispatch.yml.
-          if [ "$count" = "1" ] && [ -n "$changed" ]; then
-            case "$changed" in
-              *[!a-z0-9-]* | -* ) echo "slug=" >> "$GITHUB_OUTPUT" ;;
-              *) echo "slug=$changed" >> "$GITHUB_OUTPUT" ;;
-            esac
-          else
-            echo "slug=" >> "$GITHUB_OUTPUT"
+          count=$(echo "$changed" | grep -c . || true)
+          # Emit a scoped payload so the rebuild stays slug-targeted (~2 min)
+          # instead of demoting to a full-corpus rebuild (~10 min):
+          #   - exactly 1 changed tutorial  → slug=<slug>
+          #   - 2..CAP changed tutorials    → slugs=<csv>
+          #   - 0, >CAP, or any slug failing the strict charset → both empty
+          #     (full rebuild — a huge push is effectively full anyway, and an
+          #     invalid slug must never reach the dispatch payload).
+          # Mirrors the receiver validation in rebuild-content.yml's mode step.
+          SLUG_CAP=20
+          slug=""
+          slugs=""
+          valid=1
+          for s in $changed; do
+            case "$s" in *[!a-z0-9-]* | -* ) valid=0 ;; esac
+          done
+          if [ "$valid" = "1" ] && [ "$count" -ge 1 ] && [ "$count" -le "$SLUG_CAP" ]; then
+            if [ "$count" = "1" ]; then
+              slug="$changed"
+            else
+              slugs=$(echo "$changed" | paste -sd, -)
+            fi
           fi
+          echo "slug=$slug" >> "$GITHUB_OUTPUT"
+          echo "slugs=$slugs" >> "$GITHUB_OUTPUT"
       # GitHub App token (preferred). Activates when this Contribution repo has
       # USE_GITHUB_APP=true and the TUTORIALS_APP_* secrets populated. Falls
       # back to the classic TUTORIALS_POC_DISPATCH_TOKEN PAT while unset.
@@ -62,4 +74,4 @@ jobs:
           token: ${{ steps.app-token.outputs.token || secrets.TUTORIALS_POC_DISPATCH_TOKEN }}
           repository: sap-tutorials/tutorials-ims
           event-type: tutorial-qa-updated
-          client-payload: '{"repo": "${{ github.repository }}", "slug": "${{ steps.slug.outputs.slug }}", "sha": "${{ github.sha }}"}'
+          client-payload: '{"repo": "${{ github.repository }}", "slug": "${{ steps.slug.outputs.slug }}", "slugs": "${{ steps.slug.outputs.slugs }}", "sha": "${{ github.sha }}"}'

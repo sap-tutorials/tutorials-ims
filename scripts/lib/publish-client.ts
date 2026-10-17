@@ -30,6 +30,10 @@ export interface CommitInput { baseUrl: string; apiKey: string; sessionId: strin
    * with. The server records it on the committed ContentManifest so the next
    * publish can detect a pipeline change. Optional (older servers ignore it). */
   pipelineToken?: string;
+  /** #2802 — concept-render phase token. Mirrors pipelineToken: the server
+   * records it on ContentManifest.conceptPhaseToken so the next render-concepts
+   * call can detect an unchanged phase and skip (Level-1 skip). Optional. */
+  conceptPhaseToken?: string | null;
 }
 export interface CommitResult {
   version: number; fileCount: number; totalSizeBytes: number;
@@ -103,7 +107,7 @@ export async function appendBatch(i: AppendInput): Promise<AppendResult> {
 }
 
 export async function commitSession(i: CommitInput): Promise<CommitResult> {
-  return postJson(`${i.baseUrl}/content/publish/commit`, i.apiKey, { sessionId: i.sessionId, allowRevertSlugs: i.allowRevertSlugs ?? [], pipelineToken: i.pipelineToken });
+  return postJson(`${i.baseUrl}/content/publish/commit`, i.apiKey, { sessionId: i.sessionId, allowRevertSlugs: i.allowRevertSlugs ?? [], pipelineToken: i.pipelineToken, conceptPhaseToken: i.conceptPhaseToken ?? null });
 }
 
 export interface RenderConceptsInput { baseUrl: string; apiKey: string; sessionId: string }
@@ -113,6 +117,10 @@ export interface RenderConceptsResult {
   conceptsSkipped: number;
   conceptsErrored: number;
   durationMs: number;
+  /** #2802 — token computed during this render phase. Returned so the publisher
+   * can forward it to commitSession → ContentManifest.conceptPhaseToken, enabling
+   * Level-1 phase-skip on the next full publish. Mirrors pipelineToken handling. */
+  conceptPhaseToken?: string | null;
 }
 
 /**
@@ -179,39 +187,23 @@ export async function abortSession({ baseUrl, apiKey, sessionId, reason }: {
   }
 }
 
-export async function fetchRemoteHashes({ baseUrl, apiKey }: { baseUrl: string; apiKey?: string }): Promise<Record<string, string>> {
+export async function fetchRemoteHashes({ baseUrl, apiKey }: { baseUrl: string; apiKey?: string }): Promise<{ hashes: Record<string, string>; pipelineToken: string | null }> {
   // srv-qa gates /content/hashes behind contentAuthMiddleware (unlike prod srv,
   // where it's public-read). Send the bearer when we have one — harmless on the
   // public prod route, required on QA or delta detection 401s.
   const res = await fetch(`${baseUrl}/content/hashes`, apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : undefined);
   if (!res.ok) {
-    if (res.status === 503) return {};
+    if (res.status === 503) return { hashes: {}, pipelineToken: null };
     const err: any = new Error(`HTTP ${res.status}`);
     err.status = res.status;
     throw err;
   }
-  return res.json() as Promise<Record<string, string>>;
-}
-
-/**
- * #2727 — the server's active render-pipeline token, piggybacked on
- * `/content/hashes` as the `X-Pipeline-Token` response header (the JSON body
- * is left untouched). Returns `undefined` when the header is absent — a legacy
- * server that predates this change, or a server with no ACTIVE manifest. The
- * caller treats `undefined` as "pipeline token unknown" → forces a full
- * republish, which is the safe default (never silently skip a changed render).
- *
- * A dedicated HEAD-like GET so the publish flow can read the token without
- * reshaping `fetchRemoteHashes`'s return contract (used by several callers).
- */
-export async function fetchRemotePipelineToken({ baseUrl, apiKey }: { baseUrl: string; apiKey?: string }): Promise<string | undefined> {
-  try {
-    const res = await fetch(`${baseUrl}/content/hashes`, apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : undefined);
-    if (!res.ok) return undefined;
-    return res.headers.get('x-pipeline-token') ?? undefined;
-  } catch {
-    return undefined;
-  }
+  const hashes = await res.json() as Record<string, string>;
+  // `res.headers?.get` — the X-Pipeline-Token header is optional, and some
+  // callers/mocks supply a Response without a `headers` object; treat a missing
+  // header as "no token" (null) rather than throwing.
+  const pipelineToken = res.headers?.get('x-pipeline-token') ?? null;
+  return { hashes, pipelineToken };
 }
 
 /**

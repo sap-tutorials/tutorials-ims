@@ -702,12 +702,14 @@ annotate AdminService.Tutorials with @UI: {
     { Value: redirectUrl, Label: 'Redirect URL (external)' }
   ]},
   Identification: [
-    {
-      $Type            : 'UI.DataFieldForAction',
-      Label            : 'Rebuild this tutorial',
-      Action           : 'AdminService.rebuildContent',
-      ![@UI.Importance]: #High,
-    },
+    // "Rebuild this tutorial" is wired as a manifest custom header action
+    // (content.header.actions.RebuildTutorialAction → SourceMarkdownHandler.
+    // onRebuildTutorial) rather than a @UI.DataFieldForAction. FE V4 fires a
+    // DataFieldForAction through its generic action path, bypassing the
+    // controller-extension handler that owns the confirm dialog + success/
+    // error feedback + submit debounce — so the annotation form rendered a
+    // button that POSTed silently with no user feedback. The manifest custom
+    // action (AskJoule pattern) routes the press straight to the handler.
     { $Type: 'UI.DataFieldForAction', Label: 'Check freshness', Action: 'AdminService.checkFreshness', ![@UI.Importance]: #High }
   ]
 };
@@ -743,6 +745,28 @@ annotate AdminService.TutorialContributors with @UI.LineItem: [
   { Value: email },
   { Value: role }
 ];
+
+// TutorialVariables — read-only child list on the Tutorials Object Page (#2811).
+// Surfaced as a plain ReferenceFacet so admins can inspect the declared
+// variables without any edit capability (the entity is @readonly on AdminService).
+annotate AdminService.TutorialVariables with {
+  varName   @Common.Label: 'Name';
+  varLabel  @Common.Label: 'Label';
+  varType   @Common.Label: 'Type';
+  isRequired @Common.Label: 'Required';
+};
+
+annotate AdminService.TutorialVariables with @UI: {
+  LineItem: [
+    { Value: varName,    @UI.Importance: #High },
+    { Value: varLabel },
+    { Value: varType },
+    { Value: isRequired }
+  ],
+  PresentationVariant: {
+    SortOrder: [ { Property: sortOrder, Descending: false } ]
+  }
+};
 
 annotate AdminService.Steps with {
   stepOrder @Common.Label: 'Step #';
@@ -993,6 +1017,7 @@ annotate AdminService.Tutorials with @UI: {
     { $Type: 'UI.ReferenceFacet', Label: 'Categories', ID: 'CategoriesFacet', Target: 'categories/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Steps', ID: 'StepsFacet', Target: 'steps/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Contributors', ID: 'ContributorsFacet', Target: 'contributors/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Variables', ID: 'VariablesFacet', Target: 'variables/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Completion Stats', ID: 'CompletionStatsFacet',
       Target: 'completionStats/@UI.FieldGroup#Stats' },
     { $Type: 'UI.ReferenceFacet', Label: 'AI-Graded Validation', ID: 'ValidationSpecsFacet',

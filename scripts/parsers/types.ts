@@ -14,6 +14,22 @@ export interface TutorialFrontmatter {
   title?: string
   description?: string
   /**
+   * [#2811] Author-declared interactive variables. Each entry describes a
+   * user-fillable slot (name, label, type, optional default/placeholder).
+   * Validated by `scripts/parsers/variables.ts:validateVariables` — hard fail
+   * on schema errors (duplicate name, bad regex, off-allowlist from, undeclared
+   * token in body). A declared-but-unused variable is allowed (soft).
+   */
+  variables?: Array<{
+    name: string
+    label: string
+    type: 'string' | 'number'
+    maxLength?: number
+    required?: boolean
+    placeholder?: string
+    default?: { from: 'email' | 'id' | 'givenName' | 'familyName'; pattern: string }
+  }>
+  /**
    * Optional author-supplied intro video. Object `{ url, title?, provider? }`
    * or a bare URL/id string. Normalized by scripts/parsers/video.ts →
    * emitted as the `video` Hugo frontmatter object. Unrecognized hosts are
@@ -110,6 +126,12 @@ export interface TutorialStep {
   content: string
   validation?: ValidationQuestion[]
   codeCheck?: PublicCodeCheckSpec
+
+  // [#2800] Source discriminator for video-quiz steps: 'captions' when the
+  // quiz was generated from YouTube caption tracks (uploaded or auto-generated);
+  // 'description' when generated from the video description fallback tier.
+  // Absent on non-video-quiz steps. Read by the Vue quiz island (Task 6).
+  questionSource?: 'captions' | 'description'
 
   // [#2362] json-render challenge widget — the public UI spec authored by the
   // AI (srv/lib/ai-challenge-spec.js) and rendered by the challenge-render
