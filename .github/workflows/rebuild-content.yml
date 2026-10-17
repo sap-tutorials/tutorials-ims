@@ -283,7 +283,7 @@ jobs:
             if [ "$EFFECTIVE" != 'slug-targeted' ] && [ -n "$PAYLOAD_SLUGS" ]; then
               case "$PAYLOAD_SLUGS" in
                 *[!a-z0-9,-]* ) : ;;                            # any char outside [a-z0-9,-] (incl newline) → reject whole list
-                *,, * | ,* | *, ) : ;;                          # empty element / leading / trailing comma → reject
+                *,,* | ,* | *, ) : ;;                           # empty element / leading / trailing comma → reject
                 '' ) : ;;
                 *) EFFECTIVE='slug-targeted'
                    REASON="auto-inferred (repository_dispatch slugs=$PAYLOAD_SLUGS)"
