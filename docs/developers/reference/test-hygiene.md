@@ -105,9 +105,88 @@ purpose — see "What NOT to convert"):
   `PREDICATE_TO_COUNT_FIELD` map size is *itself* the canary that fails CI when
   a projection predicate is added without a count column.
 
-## Related
+## Flake audit (#2813) — "CI flake" that was a deterministic signature regression
+
+> **Filed under issue [#2813](https://github.com/sap-tutorials/tutorials-ims/issues/2813).**
+> Same class as #1089 (a source-of-truth shape grew in one PR; a test in a
+> *different* file encoded the old shape), one layer up: a **function signature**
+> widened, and a stale test kept calling the old shape.
+
+### What happened
+
+`scripts/__tests__/backfill-images-slug-filter.test.ts > restricts enumeration
+to the target slug` read as a CI flake (`expected [] to deeply equal ['beta']`,
+intermittent, only in the 4-worker forks pool, survived `retry:1`). PR #2812
+diagnosed it as a non-hermetic `beforeAll` fixture + async-import-shim timing
+race and shipped a `beforeEach` rewrite + a shim-resolution guard.
+
+**That diagnosis was wrong.** The test fails **1/1 locally in isolation** — it is
+deterministic. Root cause: PR #2805 (`48da7d835`) widened
+
+```diff
+- export function collectImageUrls(publicDir: string, slug?: string)
++ export function collectImageUrls(publicDir: string, slugs?: string[])
+```
+
+and updated the production call site and the *new* `.js` sibling test
+(`test/unit/backfill-images-slug-filter.test.js`, which calls with arrays), but
+left this older `.ts` test passing a bare string `'beta'`. The impl does
+`for (const s of slugs?.length ? slugs : readdir(...))`; a string has truthy
+`.length` and **iterates by character** (`'b','e','t','a'`) → no matching dirs →
+empty map. `retry:1` then re-ran it, it lost again, and the plausible
+"Node22/Vitest-4 forks pool" story made a dead signature read as noise.
+
+#2812's guard (`expect(typeof collectImageUrls).toBe('function')`) was a **no-op**
+for this bug — the binding *was* a function; the *call shape* was wrong.
+
+### The fix (this PR)
+
+- Call sites pass arrays (`['beta']`, `['does-not-exist']`), matching the #2805
+  signature.
+- The `beforeEach` guard now asserts the **call contract**, not just the binding:
+  `expect(collectImageUrls(publicDir, ['beta']).size).toBe(1)`. A future
+  signature/shape drift (string vs `string[]`, renamed param) fails loudly at the
+  guard line instead of as a cryptic empty-map assertion. Verified: reverting any
+  call to a bare string fails all 5 tests *at the guard*, not as a no-op.
+
+### retry:1 policy decision — **keep it, scoped to the real failure**
+
+The scope step the issue asked for (surface every retry-dependent pass) was run
+against the **actual CI environment** by scanning the unit-tier log of the DEV
+merge `fdceca151` (the commit that *contains* #2812 and still went red). Result:
+
+- **Exactly one** `(retry xN)` marker in the whole 1490-file / 11,541-test run —
+  `restricts enumeration to the target slug`, and it **lost both attempts**
+  (`× … (retry x1)`). Summary: `1 failed | 1487 passed | 2 skipped`.
+- There is **no swarm of timing flakes** hiding behind `retry:1`. The single
+  retried test was the deterministic regression above.
+
+So `retry:1` did **not** mask flake debt here — it masked a *real red*, by making
+a deterministic failure look stochastic. **Recommendation: keep `retry:1`** (it
+genuinely absorbs the cold-boot starvation blip the config comment documents —
+the smoke tier has the same lever for the same reason) **but treat any
+retried-*then-failed* test as a deterministic bug first**, not a flake: reproduce
+it in isolation (`npx vitest run <file>`) before reaching for "it's the forks
+pool". A test that needs a retry to go green, or fails both tries, is signal, not
+noise. No config change is warranted on this evidence; the fix is diagnostic
+discipline, codified here.
+
+### Structural note — the flake *shape* is pervasive, so don't mechanically guard it
+
+An audit of the suite for #2812's structural shape (per-file `beforeAll`/`afterAll`
+shared fixture **and** reaching a module through the workspace-first async-import
+shim) found the shape is **everywhere**, not rare: **119** modules contain the
+shim (`try { await import('@tutorials/…') } catch { await import(<bundle>) }`),
+**615** `test/**` files use `beforeAll`/`afterAll`, and **432** boot a shared CAP
+fixture via module-level `cds.test()`. Hundreds of files have *both* ingredients
+and are green. Bolting a contract guard onto all of them would be churn against a
+hypothesis this audit **disproved** — the shim/`beforeAll` shape was not the cause
+of the one real failure. Add a contract guard where a test's call shape can drift
+from its SUT's signature (the pattern above), not everywhere the shim appears.
+
 
 - Issue [#1089](https://github.com/sap-tutorials/tutorials-ims/issues/1089) — audit + convert
 - PR [#1088](https://github.com/sap-tutorials/tutorials-ims/pull/1088) — the fix that motivated this pattern
 - Issue [#1043](https://github.com/sap-tutorials/tutorials-ims/issues/1043) — CSV-column parallel gotcha (different mechanism, same class)
+- Issue [#2813](https://github.com/sap-tutorials/tutorials-ims/issues/2813) — flake audit: the "CI flake" that was a deterministic `string`→`string[]` signature regression (see section above); PR [#2812](https://github.com/sap-tutorials/tutorials-ims/pull/2812) — the misdiagnosed first attempt
 - [`cap-cds-gotchas.md`](./cap-cds-gotchas.md) — general CAP/CDS test-hygiene guidance
