@@ -74,3 +74,59 @@ export async function getAccessToken(deps = {}) {
 export function _resetTokenCache() {
   cachedAccessToken = null;
 }
+
+/**
+ * Fetches video snippet from YouTube API.
+ * Gets the channelId, title, and description for a video.
+ *
+ * @param {string} videoId - YouTube video ID
+ * @param {Object} deps - Optional dependencies for testing
+ * @param {string} deps.apiKey - YouTube API key (defaults to credstore YOUTUBE_API_KEY)
+ * @param {Function} deps.fetchImpl - Fetch implementation (defaults to globalThis.fetch)
+ * @returns {Promise<{channelId: string, title: string, description: string} | null>}
+ *          Returns snippet object or null if video not found
+ */
+export async function getVideoSnippet(videoId, deps = {}) {
+  let apiKey = deps.apiKey;
+
+  if (!apiKey) {
+    apiKey = await resolveSecret('YOUTUBE_API_KEY', { logTag: '[youtube-oauth]' });
+  }
+
+  const fetchImpl = deps.fetchImpl || globalThis.fetch;
+
+  const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`;
+
+  const response = await fetchImpl(url);
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`YouTube videos API request failed: ${response.status} ${response.statusText} - ${text}`);
+  }
+
+  const data = await response.json();
+
+  // Return null if no items found
+  if (!data.items || data.items.length === 0) {
+    return null;
+  }
+
+  const snippet = data.items[0].snippet;
+
+  return {
+    channelId: snippet.channelId,
+    title: snippet.title,
+    description: snippet.description || '',
+  };
+}
+
+/**
+ * Checks if a channel ID is the SAP Developers channel.
+ *
+ * @param {string} channelId - Channel ID to check
+ * @returns {boolean} True if the channel is the SAP Developers channel
+ */
+export function isSapDevelopersChannel(channelId) {
+  const sapDevChannelId = process.env.SAP_DEV_CHANNEL_ID || 'UCNfmelKDrvRmjYwSi9yvrMg';
+  return channelId === sapDevChannelId;
+}
