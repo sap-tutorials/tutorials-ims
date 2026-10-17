@@ -127,6 +127,12 @@ export interface TutorialStep {
   validation?: ValidationQuestion[]
   codeCheck?: PublicCodeCheckSpec
 
+  // [#2800] Source discriminator for video-quiz steps: 'captions' when the
+  // quiz was generated from YouTube caption tracks (uploaded or auto-generated);
+  // 'description' when generated from the video description fallback tier.
+  // Absent on non-video-quiz steps. Read by the Vue quiz island (Task 6).
+  questionSource?: 'captions' | 'description'
+
   // [#2362] json-render challenge widget — the public UI spec authored by the
   // AI (srv/lib/ai-challenge-spec.js) and rendered by the challenge-render
   // island. Reference answers for freeText nodes are NOT here (anti-leak):

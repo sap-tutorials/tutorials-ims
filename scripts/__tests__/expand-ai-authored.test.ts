@@ -518,3 +518,151 @@ describe('expandAiAuthoredQuestions — video source (#2345)', () => {
     expect(parsedMap.get(2) ?? []).toEqual([])
   })
 })
+
+describe('expandAiAuthoredQuestions — description tier + questionSource discriminator (#2800)', () => {
+  const VIDEO_PLACEHOLDER = (stepNum: number, url: string) => ({
+    id: `autoauthor-${stepNum}`,
+    question: '__autoauthor_placeholder__',
+    type: 'text' as const,
+    __autoauthor: true,
+    __directiveTypes: 'mcq-and-text' as const,
+    __videoUrl: url,
+  })
+
+  // 60 words of distinct transcript words (well above MIN_SUBSTANTIVE_WORDS=50)
+  const LONG_TRANSCRIPT_SEGMENTS = Array.from({ length: 60 }, (_, i) => ({ start: i, text: `word${i}` }))
+  // A description text with 60+ substantive words
+  const LONG_DESCRIPTION = Array.from({ length: 12 }, (_, i) => `substantive sentence number ${i} with several words`).join('. ')
+
+  let vcache: AiQuizCache
+  beforeEach(() => {
+    vcache = { promptVersion: 'v2', modelName: 'gpt-test', entries: {} }
+  })
+
+  // (a) source='description' no longer drops -> generates -> step stamped questionSource:'description'
+  it('source:description flows through to generation and stamps questionSource:description on step questions', async () => {
+    const fetchTranscript = vi.fn().mockResolvedValue({
+      source: 'description',
+      segments: [{ start: 0, text: LONG_DESCRIPTION }],
+    })
+    const callModel = vi.fn().mockResolvedValue({
+      toolCalls: [{ name: 'submitQuiz', arguments: JSON.stringify({
+        questions: [{ type: 'multiple-choice', question: 'Q', options: ['a', 'b', 'c', 'd'], correctAnswer: 'a' }],
+      })}],
+      modelName: 'gpt-test', promptTokens: 1, completionTokens: 1,
+    })
+    const stats = { calls: 0, hits: 0, errors: 0 }
+    const parsedMap = new Map<number, any[]>([[1, [VIDEO_PLACEHOLDER(1, 'https://youtu.be/dQw4w9WgXcQ')]]])
+    const stepBodies = new Map<number, string>([[1, 'short step body']])
+
+    await expandAiAuthoredQuestions(parsedMap, stepBodies, {
+      cache: vcache, callModel, onCallStats: stats, fetchTranscript, minSubstantiveWords: 0,
+    })
+
+    expect(callModel).toHaveBeenCalledTimes(1)
+    expect(stats.errors).toBe(0)
+    const emitted = parsedMap.get(1)
+    expect(emitted).toBeDefined()
+    expect(emitted!.length).toBeGreaterThan(0)
+    // questionSource discriminator stamped on each question
+    expect((emitted![0] as any).questionSource).toBe('description')
+  })
+
+  // (b) source='uploaded' stamps 'captions'
+  it('source:uploaded stamps questionSource:captions on step questions', async () => {
+    const fetchTranscript = vi.fn().mockResolvedValue({
+      source: 'uploaded',
+      segments: LONG_TRANSCRIPT_SEGMENTS,
+    })
+    const callModel = vi.fn().mockResolvedValue({
+      toolCalls: [{ name: 'submitQuiz', arguments: JSON.stringify({
+        questions: [{ type: 'multiple-choice', question: 'Q', options: ['a', 'b', 'c', 'd'], correctAnswer: 'a' }],
+      })}],
+      modelName: 'gpt-test', promptTokens: 1, completionTokens: 1,
+    })
+    const stats = { calls: 0, hits: 0, errors: 0 }
+    const parsedMap = new Map<number, any[]>([[1, [VIDEO_PLACEHOLDER(1, 'https://youtu.be/dQw4w9WgXcQ')]]])
+    const stepBodies = new Map<number, string>([[1, 'short step body']])
+
+    await expandAiAuthoredQuestions(parsedMap, stepBodies, {
+      cache: vcache, callModel, onCallStats: stats, fetchTranscript, minSubstantiveWords: 0,
+    })
+
+    expect(callModel).toHaveBeenCalledTimes(1)
+    const emitted = parsedMap.get(1)
+    expect(emitted!.length).toBeGreaterThan(0)
+    expect((emitted![0] as any).questionSource).toBe('captions')
+  })
+
+  // (b) source='auto' stamps 'captions'
+  it('source:auto stamps questionSource:captions on step questions', async () => {
+    const fetchTranscript = vi.fn().mockResolvedValue({
+      source: 'auto',
+      segments: LONG_TRANSCRIPT_SEGMENTS,
+    })
+    const callModel = vi.fn().mockResolvedValue({
+      toolCalls: [{ name: 'submitQuiz', arguments: JSON.stringify({
+        questions: [{ type: 'multiple-choice', question: 'Q', options: ['a', 'b', 'c', 'd'], correctAnswer: 'a' }],
+      })}],
+      modelName: 'gpt-test', promptTokens: 1, completionTokens: 1,
+    })
+    const stats = { calls: 0, hits: 0, errors: 0 }
+    const parsedMap = new Map<number, any[]>([[1, [VIDEO_PLACEHOLDER(1, 'https://youtu.be/dQw4w9WgXcQ')]]])
+    const stepBodies = new Map<number, string>([[1, 'short step body']])
+
+    await expandAiAuthoredQuestions(parsedMap, stepBodies, {
+      cache: vcache, callModel, onCallStats: stats, fetchTranscript, minSubstantiveWords: 0,
+    })
+
+    expect(callModel).toHaveBeenCalledTimes(1)
+    const emitted = parsedMap.get(1)
+    expect(emitted!.length).toBeGreaterThan(0)
+    expect((emitted![0] as any).questionSource).toBe('captions')
+  })
+
+  // (c) source='none' emits [ai-author][EMPTY-QUIZ] marker + drops
+  it('source:none emits [ai-author][EMPTY-QUIZ] greppable marker and drops placeholder', async () => {
+    const fetchTranscript = vi.fn().mockResolvedValue({ source: 'none', segments: [] })
+    const callModel = vi.fn()
+    const stats = { calls: 0, hits: 0, errors: 0 }
+    const parsedMap = new Map<number, any[]>([[1, [VIDEO_PLACEHOLDER(1, 'https://youtu.be/dQw4w9WgXcQ')]]])
+    const stepBodies = new Map<number, string>([[1, 'body']])
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await expandAiAuthoredQuestions(parsedMap, stepBodies, {
+      cache: vcache, callModel, onCallStats: stats, fetchTranscript, minSubstantiveWords: 0,
+    })
+
+    expect(callModel).not.toHaveBeenCalled()
+    expect(parsedMap.get(1)).toEqual([])
+    // LOUD greppable marker present in the warn output
+    const allWarnCalls = warnSpy.mock.calls.map(c => c.join(' '))
+    expect(allWarnCalls.some(s => s.includes('[ai-author][EMPTY-QUIZ]'))).toBe(true)
+    // Must include the videoId in the marker output
+    expect(allWarnCalls.some(s => s.includes('dQw4w9WgXcQ'))).toBe(true)
+    warnSpy.mockRestore()
+  })
+
+  // (d) description under 50 substantive words drops via existing MIN_SUBSTANTIVE_WORDS guard
+  it('description tier with under 50 substantive words drops via existing MIN_SUBSTANTIVE_WORDS guard', async () => {
+    const fetchTranscript = vi.fn().mockResolvedValue({
+      source: 'description',
+      segments: [{ start: 0, text: 'only a few words here' }],
+    })
+    const callModel = vi.fn()
+    const stats = { calls: 0, hits: 0, errors: 0, skips: 0 }
+    const parsedMap = new Map<number, any[]>([[1, [VIDEO_PLACEHOLDER(1, 'https://youtu.be/dQw4w9WgXcQ')]]])
+    const stepBodies = new Map<number, string>([[1, 'body']])
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await expandAiAuthoredQuestions(parsedMap, stepBodies, {
+      cache: vcache, callModel, onCallStats: stats, fetchTranscript,
+      // Default MIN_SUBSTANTIVE_WORDS=50 applies
+    })
+
+    expect(callModel).not.toHaveBeenCalled()
+    expect(parsedMap.get(1)).toEqual([])
+    expect(stats.skips).toBeGreaterThan(0)
+    warnSpy.mockRestore()
+  })
+})

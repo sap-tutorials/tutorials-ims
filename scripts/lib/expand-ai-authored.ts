@@ -15,10 +15,10 @@ import type { ValidationQuestion } from '../parsers/types.js'
 import { QUESTION_TYPE_TEXT } from '../parsers/types.js'
 
 // [#2345] Transcript fetcher signature. Injected so the build path can supply
-// an HTTP-to-deployed-backend impl and unit tests can mock it. Mirrors the
-// return shape of srv/lib/devtoberfest-transcript.js's fetchTranscript.
+// an in-process impl and unit tests can mock it. Mirrors the return shape of
+// srv/lib/youtube-official-transcript.js's fetchTranscript (#2800).
 export type TranscriptFetcher = (videoId: string) => Promise<{
-  source: 'uploaded' | 'auto' | 'none'
+  source: 'uploaded' | 'auto' | 'description' | 'none'
   segments: Array<{ start: number; text: string }>
 }>
 
@@ -205,6 +205,8 @@ export async function expandAiAuthoredQuestions(
     let stepBody = stepBodies.get(stepNum) ?? ''
     let videoContext: string | undefined
     let videoId: string | undefined
+    // [#2800] Per-step questionSource discriminator; set inside the video branch.
+    let questionSource: 'captions' | 'description' | undefined
     if (source === 'video') {
       videoId = youtubeId(placeholder.__videoUrl!) ?? undefined
       if (!videoId) {
@@ -225,13 +227,22 @@ export async function expandAiAuthoredQuestions(
         parsedMap.set(stepNum, [])
         continue
       }
+      // [#2800] Only 'none' (no transcript at all) drops. 'description', 'uploaded',
+      // and 'auto' all flow through to generation. Emit a LOUD greppable marker for
+      // the none case so operators can grep the build log for skipped video quizzes.
       if (!transcript || transcript.source === 'none' || !transcript.segments?.length) {
-        console.warn(`[ai-author] step ${stepNum}: no transcript for ${videoId} — dropping video quiz`)
+        console.warn(`[ai-author][EMPTY-QUIZ] step ${stepNum}: no transcript for ${videoId} — dropping video quiz`)
         deps.onCallStats.skips = (deps.onCallStats.skips ?? 0) + 1
         parsedMap.set(stepNum, [])
         delete deps.cache.entries[String(stepNum)]
         continue
       }
+      // [#2800] Derive the per-step questionSource discriminator from the transcript
+      // source. 'captions' for uploaded/auto (actual caption tracks); 'description'
+      // for the description fallback tier. This is stamped onto emitted questions
+      // below so fetch-tutorials.ts can propagate it to the step frontmatter.
+      questionSource =
+        transcript.source === 'description' ? 'description' : 'captions'
       stepBody = transcript.segments.map(s => s.text).join(' ')
       // Excerpt persisted alongside the emitted questions so the runtime
       // grader can reference the video (bounded — see VIDEO_CONTEXT_CAP).
@@ -303,10 +314,18 @@ export async function expandAiAuthoredQuestions(
     }
 
     // [#2345] Stamp the transcript excerpt onto every emitted question so the
-    // pipeline (collectAiGradedSpecs → ValidateAnswerSpecs.videoContext) and
+    // pipeline (collectAiGradedSpecs -> ValidateAnswerSpecs.videoContext) and
     // the eval cache both carry it. Server-only, never shipped to the client.
     if (videoContext) {
       for (const q of result.questions) (q as any).__videoContext = videoContext
+    }
+
+    // [#2800] Stamp the per-step questionSource discriminator onto every emitted
+    // question so fetch-tutorials.ts can read it and propagate it to the step
+    // frontmatter object. Only set for video-sourced questions ('captions' or
+    // 'description'); step-sourced questions carry no questionSource.
+    if (source === 'video' && questionSource) {
+      for (const q of result.questions) (q as any).questionSource = questionSource
     }
 
     // Two transforms — same questions, different shape per consumer:
