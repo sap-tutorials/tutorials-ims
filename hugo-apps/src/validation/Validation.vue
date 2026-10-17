@@ -20,12 +20,16 @@ interface Props {
   isPreview?: boolean;
   aiInvolved?: boolean;
   rulesBlockId?: string;
+  // [#2800] Source of auto-generated questions (Task 5). Absent for
+  // hand-authored quizzes; present when the questions came from video content.
+  questionSource?: 'captions' | 'description';
 }
 
 const props = withDefaults(defineProps<Props>(), {
   isPreview: false,
   aiInvolved: false,
   rulesBlockId: undefined,
+  questionSource: undefined,
 });
 
 // [#655] In preview mode, when the step involves AI, we render the
@@ -695,6 +699,10 @@ defineExpose({
         </ui5-button>
       </template>
     </form>
+    <p v-if="props.questionSource" class="validation-source-notice">
+      <template v-if="props.questionSource === 'captions'">Questions generated from the video's captions</template>
+      <template v-else>Questions generated from the video description</template>
+    </p>
     </template>
   </div>
 </template>
@@ -702,6 +710,11 @@ defineExpose({
 <style scoped>
 .validation-widget {
   margin: 1rem 0;
+}
+.validation-source-notice {
+  font-size: 0.75rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  margin-top: 0.5rem;
 }
 .validation-question {
   border: 1px solid var(--sapNeutralBorderColor, #e5e5e5);

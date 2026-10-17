@@ -177,3 +177,41 @@ Guards installed by [#1018](https://github.com/sap-tutorials/tutorials-ims/issue
 - **Post-deploy publish-endpoint smoke** in `.github/workflows/deploy.yml` — after `cf deploy` succeeds, the workflow POSTs `/content/publish/begin` with the CI-side `CONTENT_API_KEY` as Bearer and expects a 400. A 503 fails the deploy job.
 
 Even with all four in place, the pre-flight above is still cheap and cuts the "silent drift" window from "hours until the next rebuild" to "seconds during code review".
+
+---
+
+## YouTube OAuth credentials for AUTOAUTHOR_VIDEO transcripts (#2800)
+
+**Design doc:** [docs/superpowers/specs/2026-10-17-autoauthor-video-official-transcript-design.md](../../superpowers/specs/2026-10-17-autoauthor-video-official-transcript-design.md)
+
+Three BTP Credential Store aliases back the official YouTube captions.download API used by the `AUTOAUTHOR_VIDEO` transcript fetcher. The fetcher requests captions for any video on the SAP Developers channel (`UCNfmelKDrvRmjYwSi9yvrMg`); OAuth is required because caption download requires channel-owner authorization.
+
+| Alias | Kind | Description |
+|---|---|---|
+| `YOUTUBE_OAUTH_CLIENT_ID` | `other` | OAuth 2.0 client ID for the Google Cloud project authorized to download SAP Developers channel captions |
+| `YOUTUBE_OAUTH_CLIENT_SECRET` | `other` | OAuth 2.0 client secret paired with `YOUTUBE_OAUTH_CLIENT_ID` |
+| `YOUTUBE_OAUTH_REFRESH_TOKEN` | `other` | Long-lived refresh token minted once via OAuth consent as the SAP Developers channel owner; used to obtain short-lived access tokens at fetch time |
+
+### Initial setup (one-time, per environment)
+
+1. In the Google Cloud Console, create OAuth 2.0 credentials for the project that has YouTube Data API v3 enabled.
+2. Complete the OAuth consent flow as the SAP Developers channel owner to obtain a refresh token (see the design doc for the exact scopes: `https://www.googleapis.com/auth/youtube.readonly`).
+3. In `/admin-ui/#secrets` for the target environment, create three rows (one per alias above) and set their values via **Set Value**.
+4. Verify: trigger a rebuild that includes a tutorial with an `AUTOAUTHOR_VIDEO` directive on a SAP Developers video. The fetch log should show `source: 'uploaded'` or `source: 'auto'` rather than `source: 'none'`.
+
+### Rotation
+
+- The OAuth **client ID** and **client secret** rotate when the Google Cloud project credentials are regenerated (no fixed cadence; rotate on suspected exposure).
+- The **refresh token** does not expire unless revoked or the OAuth client is deleted. Rotate it by revoking the existing token in the Google Cloud Console and re-running the OAuth consent flow as the channel owner.
+- In all cases: update the value via `/admin-ui/#secrets` **Set Value** on each environment (dev, qa, prod). The read-back verify in `setSecretValue` will confirm the write succeeded immediately.
+- The three aliases are consumed exclusively by `srv/lib/youtube-official-transcript.js` (called in-process by `scripts/fetch-tutorials.ts` at build time, CI only — the credentials never reach the browser).
+
+### What happens when the credentials are missing or expired
+
+The transcript fetcher is three-tiered and fail-open (#2800):
+
+1. **Official API (OAuth)** — attempted first; if the credentials are absent/invalid, falls through.
+2. **ASR auto-captions** — attempted next (no auth required for public videos with auto-captions enabled).
+3. **Video description** — last resort; used when description is ≥ 50 substantive words.
+
+If all three tiers yield nothing, the quiz is dropped with a greppable `[ai-author][EMPTY-QUIZ]` marker in the CI log, and the step summary surfaces the drop (see `.github/workflows/rebuild-content.yml` step "Surface dropped video quizzes"). The build continues; no quiz is published for that step.

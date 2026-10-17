@@ -44,6 +44,10 @@ import type { AuthorSessions } from './parsers/author-index.js'
 import { buildContributorsSidecar } from './parsers/contributors-sidecar.js'
 import { fetchExcludedSlugs } from './lib/publish-client.js'
 import { applyExclusion } from './lib/discovery-exclusion.js'
+// [#2800] In-process transcript fetcher replacing the HTTP round-trip to the
+// deployed backend (which is blocked in CF during builds). fetchTranscript is
+// the three-tier orchestrator from Task 4 of the video-transcript work.
+import { fetchTranscript as fetchTranscriptInProcess } from '../srv/lib/youtube-official-transcript.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -698,29 +702,17 @@ async function fetchSemaphoreMap(): Promise<Record<string, string>> {
   }
 }
 
-// [#2345] Transcript fetcher for the build-time AI video-quiz path. Reuses the
-// deployed, anonymous GET /api/devtoberfest/transcript?video=<id> endpoint,
-// which reads/populates the shared Transcript entity (7d/1h cache, gzip BLOB,
-// LOB-safe raw SQL) for ANY video id — it is not event-scoped in behavior, so
-// we reuse it rather than add a near-duplicate /content/transcript endpoint.
+// [#2800] Transcript fetcher for the build-time AI video-quiz path. Uses the
+// in-process fetchTranscript from youtube-official-transcript.js (Task 4),
+// which uses the YouTube OAuth + Data API directly and never needs a deployed
+// CAP backend — eliminating the CF-blocked HTTP round-trip of the old impl.
 // Returns { source:'none', segments:[] } on any failure so expandAiAuthored
 // drops the video quiz and the build never fails on a bad/unreachable video.
 async function fetchTranscriptViaHttp(
   videoId: string,
-): Promise<{ source: 'uploaded' | 'auto' | 'none'; segments: Array<{ start: number; text: string }> }> {
-  const capBaseUrl = process.env.CAP_BASE_URL ?? 'http://localhost:4004'
-  const url = `${capBaseUrl}/api/devtoberfest/transcript?video=${encodeURIComponent(videoId)}`
+): Promise<{ source: 'uploaded' | 'auto' | 'description' | 'none'; segments: Array<{ start: number; text: string }> }> {
   try {
-    const res = await fetch(url)
-    if (!res.ok) {
-      console.warn(`[ai-author] transcript endpoint ${url} returned ${res.status} — dropping video quiz`)
-      return { source: 'none', segments: [] }
-    }
-    const body = await res.json() as { source?: string; segments?: Array<{ start: number; text: string }> }
-    return {
-      source: (body.source as 'uploaded' | 'auto' | 'none') ?? 'none',
-      segments: Array.isArray(body.segments) ? body.segments : [],
-    }
+    return await fetchTranscriptInProcess(videoId)
   } catch (e) {
     console.warn(`[ai-author] transcript fetch failed (${(e as Error).message}) — dropping video quiz`)
     return { source: 'none', segments: [] }
@@ -1216,6 +1208,12 @@ async function main() {
             ?? steps.find(s => s.number === validateNum)
           if (target) {
             target.validation = [...(target.validation ?? []), ...questions]
+            // [#2800] Lift per-step questionSource discriminator from the first
+            // question that carries it onto the step object. This is a build-internal
+            // carrier set by expandAiAuthoredQuestions for video-quiz steps; it is
+            // stripped from individual questions in the anti-leak pass below.
+            const qs = (questions[0] as any)?.questionSource as 'captions' | 'description' | undefined
+            if (qs) target.questionSource = qs
           }
         }
 
@@ -1265,6 +1263,12 @@ async function main() {
             // frontmatter shipped to clients.
             if ((q as any).__videoContext !== undefined) {
               delete (q as any).__videoContext
+            }
+            // [#2800] questionSource is per-step metadata (lifted to target.questionSource
+            // above). Strip from individual questions so it is not duplicated in
+            // every question object in the public Hugo frontmatter.
+            if ((q as any).questionSource !== undefined) {
+              delete (q as any).questionSource
             }
           }
         }
