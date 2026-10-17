@@ -152,12 +152,27 @@ describe('wrapTokens', () => {
     expect(result).not.toContain('{{var:groupNumber}}')
   })
 
-  it('wraps an inline-code occurrence as a span (inline code is not a fenced block)', () => {
-    // Inline code (single backtick) is NOT a fenced block — spans are emitted
-    const md = 'Run `da164-{{var:groupNumber}}` to connect.'
+  it('wraps an inline-code occurrence as a SENTINEL (not a span)', () => {
+    // Inline code (single backtick): Goldmark HTML-escapes <code> content, so
+    // a raw <span> would render as escaped literal text and never become a real
+    // DOM element. Tokens inside backtick runs must become sentinels so that
+    // the client-side expandSentinels() helper can convert them after render.
+    const md = 'Run `da164-{{var:groupNumber}}@x` to connect.'
+    const result = wrapTokens(md, vars)
+    expect(result).toContain('TUTVARxgroupNumberx')
+    expect(result).not.toContain('{{var:groupNumber}}')
+    // Must NOT produce a raw span inside backticks
+    expect(result).not.toContain('<span class="tut-var"')
+    // The backtick delimiters and surrounding prose must be preserved
+    expect(result).toContain('`da164-TUTVARxgroupNumberx@x`')
+  })
+
+  it('wraps a prose occurrence (not in backticks) as a span even when the line has backtick content elsewhere', () => {
+    // The backtick span covers only the backtick-delimited portion; prose outside it gets a real span.
+    const md = 'Use `code` and then {{var:groupNumber}} here.'
     const result = wrapTokens(md, vars)
     expect(result).toContain('<span class="tut-var" data-tut-var="groupNumber">XXX</span>')
-    expect(result).not.toContain('{{var:groupNumber}}')
+    expect(result).not.toContain('TUTVARx')
   })
 
   it('replaces a fenced-block occurrence with the sentinel (not a span)', () => {

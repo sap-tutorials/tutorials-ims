@@ -251,16 +251,22 @@ function escapeHtml(s: string): string {
 /**
  * Replaces `{{var:NAME}}` tokens in `markdown` depending on context:
  *
- *  - **Outside** fenced code (prose + inline code):
- *    `<span class="tut-var" data-tut-var="NAME">PLACEHOLDER</span>`
- *    where PLACEHOLDER is the declared `placeholder` (HTML-escaped) or empty.
+ *  - **Inside fenced code blocks**: `TUTVARxNAMEx` — a letters-only sentinel
+ *    that is lexer-opaque in all Chroma-highlighted languages, including bash.
+ *    Does NOT emit a span. (Handled by the Hugo fenced-code render hook.)
  *
- *  - **Inside** fenced code (code blocks):
- *    `TUTVARxNAMEx` — a letters-only sentinel that is lexer-opaque in all
- *    Chroma-highlighted languages, including bash. Does NOT emit a span.
+ *  - **Inside inline-code spans** (backtick runs on a non-fenced line):
+ *    `TUTVARxNAMEx` — also a sentinel. Goldmark HTML-escapes the content of
+ *    `<code>` elements, so a raw `<span>` injected here would render as escaped
+ *    literal text and NEVER become a real DOM element. The client-side
+ *    `expandSentinels()` helper in the island converts these at mount time.
  *
- * Uses `createFenceTracker()` line-by-line to distinguish prose/inline from
- * fenced blocks, matching CommonMark semantics.
+ *  - **Prose** (everything else): `<span class="tut-var" data-tut-var="NAME">
+ *    PLACEHOLDER</span>` — a real HTML element that Hugo passes through.
+ *
+ * Uses `createFenceTracker()` line-by-line to detect fenced blocks.
+ * Within non-fenced lines, a CommonMark inline-code-span tracker detects
+ * backtick runs so tokens inside them become sentinels instead of spans.
  *
  * @param markdown  The markdown string to transform (typically a step's content)
  * @param vars      Validated TutorialVariable array from validateVariables()
@@ -289,15 +295,89 @@ export function wrapTokens(markdown: string, vars: TutorialVariable[]): string {
       })
       out.push(replaced)
     } else {
-      // Outside a fenced block (prose or inline code):
-      // replace every {{var:NAME}} with a tut-var span
-      const replaced = line.replace(TOKEN_RE, (_match, name: string) => {
-        const placeholder = placeholderFor.get(name) ?? ''
-        return `<span class="tut-var" data-tut-var="${name}">${placeholder}</span>`
-      })
-      out.push(replaced)
+      // Outside a fenced block: walk the line character-by-character, tracking
+      // inline-code spans (CommonMark: a run of N backticks opens a code span
+      // closed by the next run of exactly N backticks). Tokens inside an open
+      // inline-code span become sentinels; tokens in prose become spans.
+      out.push(wrapNonFencedLine(line, placeholderFor))
     }
   }
 
   return out.join('\n')
+}
+
+/**
+ * Processes a single non-fenced line, replacing {{var:NAME}} tokens:
+ *  - inside an open backtick run (inline-code span) → sentinel
+ *  - in prose → <span class="tut-var" ...>
+ *
+ * Implements CommonMark inline-code detection: a run of N backticks opens
+ * a code span, closed by the NEXT run of exactly N backticks. Nested or
+ * mismatched runs are left as-is (standard CommonMark fallback).
+ */
+function wrapNonFencedLine(line: string, placeholderFor: Map<string, string>): string {
+  // Fast path: if the line has no token at all, skip processing entirely.
+  TOKEN_RE.lastIndex = 0
+  if (!TOKEN_RE.test(line)) return line
+
+  // Two-pass approach:
+  //   Pass 1: parse inline-code span boundaries using CommonMark backtick rules.
+  //   Pass 2: replace tokens, using the boundary map to decide sentinel vs span.
+
+  // Pass 1: collect all inline-code span [start, end) byte ranges on this line.
+  // Uses the CommonMark algorithm: scan for backtick runs; when a run is found
+  // that closes a previously-opened run of the same length, record the span.
+  const inCodeRanges: Array<[number, number]> = []
+
+  let i = 0
+  const len = line.length
+  // pendingOpeners: map from backtick-run-length → position of the opening run's first backtick.
+  // We only track the FIRST opener per length (CommonMark: leftmost wins).
+  const pendingOpeners = new Map<number, number>()
+
+  while (i < len) {
+    if (line[i] !== '`') {
+      i++
+      continue
+    }
+    // Count the backtick run
+    const runStart = i
+    while (i < len && line[i] === '`') i++
+    const runLen = i - runStart
+
+    if (pendingOpeners.has(runLen)) {
+      // This run closes the pending opener of the same length
+      const openStart = pendingOpeners.get(runLen)!
+      const closeEnd = i
+      // The CODE SPAN content is (openStart + runLen) … (closeEnd - runLen)
+      // but for our purposes we need the FULL span including backticks,
+      // because token positions reference the raw line.
+      inCodeRanges.push([openStart, closeEnd])
+      pendingOpeners.delete(runLen)
+    } else {
+      // New potential opener — only record if not already tracking this length
+      pendingOpeners.set(runLen, runStart)
+    }
+  }
+
+  if (inCodeRanges.length === 0) {
+    // No inline-code spans found — all tokens are in prose
+    TOKEN_RE.lastIndex = 0
+    return line.replace(TOKEN_RE, (_match, name: string) => {
+      const placeholder = placeholderFor.get(name) ?? ''
+      return `<span class="tut-var" data-tut-var="${name}">${placeholder}</span>`
+    })
+  }
+
+  // Pass 2: replace tokens with context-awareness
+  TOKEN_RE.lastIndex = 0
+  return line.replace(TOKEN_RE, (match, name: string, offset: number) => {
+    // Check whether this token starts inside any inline-code span range
+    const isInCode = inCodeRanges.some(([start, end]) => offset >= start && offset < end)
+    if (isInCode) {
+      return sentinelFor(name)
+    }
+    const placeholder = placeholderFor.get(name) ?? ''
+    return `<span class="tut-var" data-tut-var="${name}">${placeholder}</span>`
+  })
 }

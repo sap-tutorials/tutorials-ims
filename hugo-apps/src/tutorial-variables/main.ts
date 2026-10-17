@@ -12,6 +12,7 @@
 import { createApp } from 'vue'
 import TutorialVariables from './TutorialVariables.vue'
 import type { TutorialVariable } from './substitution'
+import { expandSentinels } from './substitution'
 
 const configEl = document.getElementById('tutorial-variables')
 const mountEl = document.getElementById('tutorial-variables-panel') as HTMLElement | null
@@ -29,6 +30,12 @@ if (configEl && mountEl) {
     // malformed config — mount with empty variables (panel hides itself)
     variables = []
   }
+
+  // Expand build-time sentinels (TUTVARxNAMEx) left in text nodes by
+  // wrapTokens for inline-code contexts (and as a safety net for fenced code).
+  // Must run BEFORE the Vue app mounts so that applyValue() on initial-value
+  // restore finds all [data-tut-var] spans including the newly created ones.
+  expandSentinels(document)
 
   const slug = mountEl.dataset.slug ?? ''
   const missionSlug = mountEl.dataset.missionSlug ?? ''

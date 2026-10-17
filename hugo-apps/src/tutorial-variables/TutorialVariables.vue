@@ -128,7 +128,19 @@ onMounted(async () => {
 // onInput — live substitution
 // ──────────────────────────────────────────────────────────────────────────────
 
-function onInput(v: TutorialVariable, value: string) {
+function onInput(v: TutorialVariable, rawValue: string) {
+  // I2: browsers ignore :maxlength on type="number". Enforce digit-length
+  // manually: if the variable is numeric AND maxLength is set AND the entered
+  // value exceeds maxLength characters, clamp it to the first maxLength chars
+  // and reflect back into the field so the visual state stays consistent.
+  let value = rawValue
+  if (v.type === 'number' && v.maxLength !== undefined && value.length > v.maxLength) {
+    value = value.slice(0, v.maxLength)
+    // Reflect the clamped value back into the <input> DOM node.
+    const input = document.getElementById(`tv-input-${v.name}`) as HTMLInputElement | null
+    if (input) input.value = value
+  }
+
   fieldValues[v.name] = value
 
   // Validation: mark required-but-empty fields
