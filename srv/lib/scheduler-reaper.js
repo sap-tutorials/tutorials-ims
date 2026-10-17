@@ -40,6 +40,17 @@
 // Nulling status instead would make CAP immediately RETRY the dead row, re-
 // running a job that was mid-flight when the instance died — worse.
 //
+// #2814: #2782 only fast-recovered the tombstone on an app restart (the
+// blue-green cutover case). A HANA HA failover (uptime patch / standby
+// takeover) strands the SAME row WITHOUT bouncing srv, so CronService.init()
+// and its boot sweep never re-run — up to ~70 min of silent stall (60-min floor
+// + one 10-min reaper interval). The reaper now cross-checks each stuck job's
+// PipelineLog: a job with NO RUNNING SCHEDULED_JOB PipelineLog row is not
+// actually in-flight, so its tombstone is reaped regardless of age (sub-floor
+// fast path). A job WITH a RUNNING row is protected at any age — even past the
+// floor — so genuinely long runs are never reaped mid-flight. See
+// loadRunningScheduledJobNames.
+//
 // Fail-open throughout, matching scheduler-wedge.js: a missing entity, DB
 // fault, or a single row's DELETE throwing never aborts the pass and never
 // fails a scheduled tick. A legitimately long-running job (status='processing'
@@ -51,11 +62,84 @@ import { evaluateCanaries, isHealthCheckEnabled, CANARY_JOBS, _DEFAULT_GRACE_MS 
 
 const LOG = cds.log('scheduler-reaper');
 
+const IMS_NS = 'com.sap.developers.ims';
+
+/**
+ * #2814: load the set of scheduled-job names that are genuinely in-flight RIGHT
+ * NOW, per their PipelineLog RUNNING row. This is the authoritative "is the
+ * handler actually running" signal — a status='processing' outbox row whose job
+ * has NO RUNNING SCHEDULED_JOB PipelineLog row is a tombstone regardless of age
+ * (the handler either never started or already died), so the 60-min stale floor
+ * can be bypassed for it. A row whose job DOES have a RUNNING row is protected
+ * at any age (a legitimately long run — e.g. extractConcepts ~40 min — must not
+ * be reaped mid-flight).
+ *
+ * jobName lives in the PipelineLog.metadata JSON string ({"jobName":"..."}), NOT
+ * a column — parsed in JS exactly like AdminService.listRunningJobs
+ * (srv/admin-service.js) and pipeline-log-reconciler.closeRunningRows, so the
+ * code path is byte-identical across SQLite (unit tests) and HANA (hybrid/prod).
+ * No HANA JSON_VALUE.
+ *
+ * Fail-open with a SENTINEL: returns a Set on success (possibly empty = "nothing
+ * is running, verified"), or `null` when the PipelineLog entity is missing or
+ * the query faults ("could not determine"). The caller treats `null` as
+ * inconclusive and falls back to the floor-only behaviour — it NEVER reaps more
+ * aggressively on error. An empty Set is a positive answer and DOES enable the
+ * fast path.
+ *
+ * @returns {Promise<Set<string>|null>} RUNNING job names, or null if undeterminable
+ */
+export async function loadRunningScheduledJobNames() {
+  try {
+    const { PipelineLog } = cds.entities(IMS_NS);
+    if (!PipelineLog) return null;
+    const rows = await SELECT
+      .from(PipelineLog)
+      .columns('metadata')
+      .where({ pipelineType: 'SCHEDULED_JOB', status: 'RUNNING' });
+    const running = new Set();
+    for (const row of rows ?? []) {
+      const name = extractJobName(row.metadata ?? row.METADATA);
+      if (name) running.add(name);
+    }
+    return running;
+  } catch (err) {
+    LOG.warn(`loadRunningScheduledJobNames failed (treating as undeterminable → floor-only): ${err.message ?? err}`);
+    return null;
+  }
+}
+
+/**
+ * Extract jobName from a PipelineLog.metadata JSON string. Returns null on
+ * missing/malformed metadata — mirrors listRunningJobs / closeRunningRows.
+ * @param {string|null|undefined} metadata
+ * @returns {string|null}
+ */
+function extractJobName(metadata) {
+  if (!metadata) return null;
+  try {
+    const parsed = JSON.parse(metadata);
+    return parsed && typeof parsed.jobName === 'string' ? parsed.jobName : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Delete stale status='processing' outbox rows that CAP's 1h lease can never
  * reclaim (the NULL-lastAttemptTimestamp cutover tombstone). Idempotent and
  * safe to run on every instance: the DELETE is keyed on the row ID, and a row
  * already gone just affects 0 rows.
+ *
+ * #2814: before judging a row by the 60-min stale floor, cross-check its job's
+ * PipelineLog RUNNING state (loadRunningScheduledJobNames). This closes the
+ * HANA-HA-failover coverage hole (#2782 only fast-recovered on an app restart):
+ *   - job has a RUNNING PipelineLog row  → NEVER reap (any age; protects genuine
+ *     long runs even past the floor).
+ *   - job provably NOT running (lookup OK, job absent) → reap regardless of age
+ *     (the sub-floor fast path — a tombstone from a failover with no restart).
+ *   - lookup undeterminable (null) → fall back to the floor-only behaviour
+ *     (reap iff isRowStale) — never reaps more aggressively on error.
  *
  * @param {Map<string,string>} jobSchedules  jobName → cron expression, so each
  *   row's staleness is judged against its own cron period. A row whose job is
@@ -73,6 +157,10 @@ export async function reapTombstonedOutboxRows(jobSchedules, now = new Date()) {
     if (!outbox?.Messages) return { inspected, reaped };
     const db = await cds.connect.to('db');
     const rows = await db.run(SELECT.from(outbox.Messages));
+
+    // #2814: one PipelineLog lookup per pass (not per-row) — cheap on the 10-min
+    // timer. null = undeterminable → floor-only fallback below.
+    const runningJobs = await loadRunningScheduledJobNames();
 
     for (const row of rows ?? []) {
       // Scope to the SCHEDULER queue only. cds.outbox.Messages is shared with
@@ -107,7 +195,21 @@ export async function reapTombstonedOutboxRows(jobSchedules, now = new Date()) {
       if (isNaN(rowStartedAt.getTime())) continue;
 
       const cronExpr = jobSchedules?.get?.(task);
-      if (!isRowStale(cronExpr, rowStartedAt, now)) continue;
+      const stale = isRowStale(cronExpr, rowStartedAt, now);
+
+      // #2814 decision. runningJobs is a Set on a successful PipelineLog lookup,
+      // or null when undeterminable.
+      //   - provablyRunning (Set has task) → NEVER reap, any age (genuine run).
+      //   - lookup OK + task absent        → reap, any age (fast path, incl.
+      //                                       sub-floor failover tombstone).
+      //   - lookup null (undeterminable)   → floor-only: reap iff stale.
+      let fastPath = false;
+      if (runningJobs instanceof Set) {
+        if (runningJobs.has(task)) continue; // genuine in-flight run → protect
+        fastPath = !stale;                   // not running + inside floor → fast-path reap
+      } else if (!stale) {
+        continue; // undeterminable + inside floor → keep the floor (fail-open)
+      }
 
       // Reap it. Per-row try/catch so one failing DELETE doesn't abort the
       // whole sweep.
@@ -116,7 +218,10 @@ export async function reapTombstonedOutboxRows(jobSchedules, now = new Date()) {
         reaped++;
         LOG.warn(
           `reaped tombstoned outbox row for job '${task}' (ID ${id}, status=processing, ` +
-          `started ${rowStartedAt.toISOString()}) — CAP's 1h lease could not reclaim it`
+          `started ${rowStartedAt.toISOString()})` +
+          (fastPath
+            ? ` — no RUNNING PipelineLog, reaped inside the 60-min floor (#2814 HANA-failover fast path)`
+            : ` — CAP's 1h lease could not reclaim it`)
         );
       } catch (err) {
         LOG.warn(`reap DELETE for job '${task}' (ID ${id}) failed: ${err.message ?? err}`);

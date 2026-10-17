@@ -6,6 +6,10 @@
 // cds.outbox.Messages, including the exact tombstone shape CAP leaves on a
 // blue-green cutover death: status='processing', lastAttemptTimestamp=NULL.
 //
+// #2814: also covers the PipelineLog cross-check (HANA-HA-failover fast path) —
+// a fresh processing row is protected IFF a real RUNNING SCHEDULED_JOB
+// PipelineLog row exists for its job, and fast-path-reaped when none does.
+//
 // Gated on ALLOW_HYBRID_WRITES=1 (same pattern as the sibling wedge hybrid test).
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
@@ -19,11 +23,14 @@ const maybeDescribe = HYBRID ? describe : describe.skip;
 maybeDescribe('scheduler tombstone reaper recovery (hybrid)', () => {
   let db;
   let outbox;
+  let PipelineLog;
 
   beforeAll(async () => {
     db = await cds.connect.to('db');
     outbox = cds.entities('cds.outbox');
     if (!outbox?.Messages) throw new Error('cds.outbox.Messages missing — CAP version mismatch');
+    ({ PipelineLog } = cds.entities('com.sap.developers.ims'));
+    if (!PipelineLog) throw new Error('PipelineLog missing — model mismatch');
   });
 
   afterAll(async () => { await cds.disconnect(); });
@@ -31,6 +38,12 @@ maybeDescribe('scheduler tombstone reaper recovery (hybrid)', () => {
   afterEach(async () => {
     await db.run(
       DELETE.from(outbox.Messages).where({ target: 'queue', task: { like: 'test-reaper-%' } })
+    );
+    // #2814: clean any RUNNING PipelineLog rows this suite inserted. jobName
+    // lives in the metadata JSON (no column), so match on the metadata text —
+    // our sentinel jobNames all start with 'test-reaper-'.
+    await db.run(
+      DELETE.from(PipelineLog).where({ pipelineType: 'SCHEDULED_JOB', metadata: { like: '%test-reaper-%' } })
     );
   });
 
@@ -77,7 +90,7 @@ maybeDescribe('scheduler tombstone reaper recovery (hybrid)', () => {
     expect(rows.length).toBe(1); // untouched
   });
 
-  it('does NOT reap a fresh processing row inside the 60-min floor (legitimate long run)', async () => {
+  it('does NOT reap a fresh processing row inside the 60-min floor when its job has a RUNNING PipelineLog row (legitimate long run)', async () => {
     const jobName = 'test-reaper-running';
     const freshIso = new Date(Date.now() - 5 * 60 * 1000).toISOString(); // 5 min ago
     await db.run(INSERT.into(outbox.Messages).entries({
@@ -85,6 +98,14 @@ maybeDescribe('scheduler tombstone reaper recovery (hybrid)', () => {
       task: jobName,
       status: 'processing',
       timestamp: freshIso,
+    }));
+    // #2814: a REAL RUNNING SCHEDULED_JOB PipelineLog row makes the reaper treat
+    // the job as genuinely in-flight → the fresh row must survive.
+    await db.run(INSERT.into(PipelineLog).entries({
+      pipelineType: 'SCHEDULED_JOB',
+      status: 'RUNNING',
+      startedAt: freshIso,
+      metadata: JSON.stringify({ jobName }),
     }));
 
     const schedules = new Map([[jobName, '13 2 * * *']]);
@@ -94,5 +115,29 @@ maybeDescribe('scheduler tombstone reaper recovery (hybrid)', () => {
       SELECT.from(outbox.Messages).where({ target: 'queue', task: jobName })
     );
     expect(rows.length).toBe(1); // still running, not reaped
+  });
+
+  it('#2814 fast path: reaps a fresh processing row (daily cron, inside floor) when its job has NO RUNNING PipelineLog row', async () => {
+    const jobName = 'test-reaper-failover';
+    // HANA-HA-failover tombstone: claimed then DB connection dropped, no app
+    // restart. Daily cron so isRowStale rule (a) doesn't fire — only the #2814
+    // PipelineLog cross-check can reap it. No RUNNING PipelineLog row exists →
+    // not in-flight → reaped regardless of the 60-min floor.
+    const freshIso = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    await db.run(INSERT.into(outbox.Messages).entries({
+      target: 'queue',
+      task: jobName,
+      status: 'processing',
+      timestamp: freshIso,
+    }));
+
+    const schedules = new Map([[jobName, '13 2 * * *']]);
+    const { reaped } = await reapTombstonedOutboxRows(schedules);
+    expect(reaped).toBeGreaterThanOrEqual(1);
+
+    const rows = await db.run(
+      SELECT.from(outbox.Messages).where({ target: 'queue', task: jobName })
+    );
+    expect(rows.length).toBe(0); // fast-path reaped
   });
 });
