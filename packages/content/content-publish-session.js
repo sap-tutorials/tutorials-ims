@@ -12,6 +12,7 @@ import { logPipelineStart, logPipelineEnd, logPipelineItem } from '@tutorials/co
 import { resolveTutorialAuthor } from '@tutorials/core/resolve-tutorial-author.js';
 import { isDeltaWrite, isDeltaSkipCarryForward } from '@tutorials/core/content-delta-flags.js';
 import { classifyAndPersist } from './category-classifier.js';
+import { upsertTutorialVariables } from '../../srv/lib/variables-publish.js';
 
 // Incremental publishes above this many touched tutorials are treated as "bulk"
 // and skip the fire-and-forget self-heal (categories are (re)populated in bulk by
@@ -291,6 +292,14 @@ export function createSessionHelpers({ namespace }) {
         await linkTutorialAuthorship(namespace, metadata);
       } catch (err) {
         LOG.warn('linkTutorialAuthorship failed; skipping', err);
+      }
+      // [#2811] Persist tutorial variable declarations to HANA. Best-effort:
+      // errors logged + swallowed so a variable write failure never fails the
+      // content publish. Slugs with no `variables` key are skipped cheaply.
+      try {
+        await upsertTutorialVariables(namespace, metadata);
+      } catch (err) {
+        LOG.warn('upsertTutorialVariables failed; skipping', err);
       }
       // Fire-and-forget: keep categories populated for publish-created tutorials.
       classifyTouchedTutorials(tutorialIds);
