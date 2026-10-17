@@ -127,12 +127,12 @@
     {{- if eq $lang "text" -}}
       {{/* security-reviewed: .Inner is Goldmark-escaped markdown code content; printf wraps it in a fixed pre/code scaffold */}}
       {{- $rawHtml := printf "<pre><code>%s</code></pre>" .Inner -}}
-      {{- $replaced := replaceRE `TUTVARx([A-Za-z0-9_]+)x` `<span class="tut-var" data-tut-var="$1"></span>` $rawHtml -}}
+      {{- $replaced := replaceRE `TUTVARx([A-Za-z0-9_]+?)x` `<span class="tut-var" data-tut-var="$1"></span>` $rawHtml -}}
       {{/* security-reviewed: variable-token sentinel→span, fixed attribute shape, name is [A-Za-z0-9_] only */}}
       {{ $replaced | safeHTML }}
     {{- else -}}
       {{- $highlighted := highlight .Inner $lang $optsStr -}}
-      {{- $replaced := replaceRE `TUTVARx([A-Za-z0-9_]+)x` `<span class="tut-var" data-tut-var="$1"></span>` $highlighted -}}
+      {{- $replaced := replaceRE `TUTVARx([A-Za-z0-9_]+?)x` `<span class="tut-var" data-tut-var="$1"></span>` $highlighted -}}
       {{/* security-reviewed: variable-token sentinel→span, fixed attribute shape, name is [A-Za-z0-9_] only */}}
       {{ $replaced | safeHTML }}
     {{- end -}}
