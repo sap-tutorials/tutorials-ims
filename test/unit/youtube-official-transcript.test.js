@@ -5,7 +5,7 @@ vi.mock('../../srv/lib/secret-resolver.js', () => ({
   resolveSecret: vi.fn(),
 }));
 
-import { getAccessToken, _resetTokenCache, getVideoSnippet, isSapDevelopersChannel } from '../../srv/lib/youtube-official-transcript.js';
+import { getAccessToken, _resetTokenCache, getVideoSnippet, isSapDevelopersChannel, listCaptions, pickCaptionTrack, downloadCaption, parseSbv } from '../../srv/lib/youtube-official-transcript.js';
 import { resolveSecret } from '../../srv/lib/secret-resolver.js';
 
 describe('youtube-official-transcript', () => {
@@ -352,6 +352,172 @@ describe('youtube-official-transcript', () => {
     it('returns false for null or undefined', () => {
       expect(isSapDevelopersChannel(null)).toBe(false);
       expect(isSapDevelopersChannel(undefined)).toBe(false);
+    });
+  });
+
+  describe('listCaptions', () => {
+    it('fetches captions list and maps to {id, language, trackKind}', async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          items: [
+            { id: 'cap1', snippet: { language: 'en', trackKind: 'standard' } },
+            { id: 'cap2', snippet: { language: 'de', trackKind: 'ASR' } },
+          ],
+        }),
+      }));
+
+      const result = await listCaptions('vid123', 'tok123', { fetchImpl: fetchMock });
+
+      expect(result).toEqual([
+        { id: 'cap1', language: 'en', trackKind: 'standard' },
+        { id: 'cap2', language: 'de', trackKind: 'ASR' },
+      ]);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=vid123',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            authorization: 'Bearer tok123',
+          }),
+        })
+      );
+    });
+
+    it('returns [] when no captions found', async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ items: [] }),
+      }));
+
+      const result = await listCaptions('vid123', 'tok123', { fetchImpl: fetchMock });
+
+      expect(result).toEqual([]);
+    });
+
+    it('throws on non-ok response', async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        text: async () => 'No access',
+      }));
+
+      await expect(
+        listCaptions('vid123', 'tok123', { fetchImpl: fetchMock })
+      ).rejects.toThrow(/captions.*failed/i);
+    });
+  });
+
+  describe('pickCaptionTrack', () => {
+    it('prefers en across kinds (und-standard + en-asr)', () => {
+      const tracks = [
+        { language: 'und', trackKind: 'standard', id: 'u' },
+        { language: 'en', trackKind: 'ASR', id: 'e' },
+      ];
+      expect(pickCaptionTrack(tracks).id).toBe('e');
+    });
+
+    it('returns track with language === en', () => {
+      const tracks = [
+        { language: 'de', trackKind: 'standard', id: 'd' },
+        { language: 'en', trackKind: 'standard', id: 'e' },
+      ];
+      expect(pickCaptionTrack(tracks).id).toBe('e');
+    });
+
+    it('falls back to language startsWith en-', () => {
+      const tracks = [
+        { language: 'de', trackKind: 'standard', id: 'd' },
+        { language: 'en-US', trackKind: 'standard', id: 'us' },
+      ];
+      expect(pickCaptionTrack(tracks).id).toBe('us');
+    });
+
+    it('returns first track when no en or en-* found', () => {
+      const tracks = [
+        { language: 'fr', trackKind: 'standard', id: 'f' },
+        { language: 'de', trackKind: 'standard', id: 'd' },
+      ];
+      expect(pickCaptionTrack(tracks).id).toBe('f');
+    });
+
+    it('returns null for empty tracks', () => {
+      expect(pickCaptionTrack([])).toBeNull();
+    });
+  });
+
+  describe('downloadCaption', () => {
+    it('downloads caption in SBV format', async () => {
+      const sbvText = '0:00:01.680,0:00:05.440\nHello there\n\n0:00:05.440,0:00:09.599\nwelcome';
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        text: async () => sbvText,
+      }));
+
+      const result = await downloadCaption('cap123', 'tok123', { fetchImpl: fetchMock });
+
+      expect(result).toBe(sbvText);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://www.googleapis.com/youtube/v3/captions/cap123?tfmt=sbv',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            authorization: 'Bearer tok123',
+          }),
+        })
+      );
+    });
+
+    it('throws on non-ok response', async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        text: async () => 'Not allowed',
+      }));
+
+      await expect(
+        downloadCaption('cap123', 'tok123', { fetchImpl: fetchMock })
+      ).rejects.toThrow(/caption.*failed/i);
+    });
+  });
+
+  describe('parseSbv', () => {
+    it('strips timestamps and keeps text', () => {
+      const sbv = '0:00:01.680,0:00:05.440\nHello there\n\n0:00:05.440,0:00:09.599\nwelcome';
+      expect(parseSbv(sbv)).toEqual([
+        { start: 1.68, text: 'Hello there' },
+        { start: 5.44, text: 'welcome' },
+      ]);
+    });
+
+    it('handles multi-line text in a block', () => {
+      const sbv = '0:00:01.000,0:00:05.000\nLine 1\nLine 2\n\n0:00:05.000,0:00:10.000\nLine 3';
+      expect(parseSbv(sbv)).toEqual([
+        { start: 1.0, text: 'Line 1 Line 2' },
+        { start: 5.0, text: 'Line 3' },
+      ]);
+    });
+
+    it('returns [] on empty input', () => {
+      expect(parseSbv('')).toEqual([]);
+    });
+
+    it('returns [] on input with no timestamp lines', () => {
+      expect(parseSbv('just some text\nwithout timestamps')).toEqual([]);
+    });
+
+    it('handles timestamps with hours', () => {
+      const sbv = '1:23:45.678,1:23:50.100\nTest';
+      expect(parseSbv(sbv)).toEqual([{ start: 5025.678, text: 'Test' }]);
+    });
+
+    it('handles edge case: single block no trailing blank', () => {
+      const sbv = '0:00:02.500,0:00:06.000\nOnly block';
+      expect(parseSbv(sbv)).toEqual([{ start: 2.5, text: 'Only block' }]);
     });
   });
 });
