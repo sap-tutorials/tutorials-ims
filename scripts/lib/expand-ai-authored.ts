@@ -210,12 +210,12 @@ export async function expandAiAuthoredQuestions(
     if (source === 'video') {
       videoId = youtubeId(placeholder.__videoUrl!) ?? undefined
       if (!videoId) {
-        console.warn(`[ai-author] step ${stepNum}: invalid YouTube URL "${placeholder.__videoUrl}" — dropping video quiz`)
+        console.warn(`[ai-author][EMPTY-QUIZ] step ${stepNum}: invalid YouTube URL "${placeholder.__videoUrl}" — dropping video quiz`)
         parsedMap.set(stepNum, [])
         continue
       }
       if (!deps.fetchTranscript) {
-        console.warn(`[ai-author] step ${stepNum}: no transcript fetcher available — dropping video quiz`)
+        console.warn(`[ai-author][EMPTY-QUIZ] step ${stepNum}: no transcript fetcher available — dropping video quiz`)
         parsedMap.set(stepNum, [])
         continue
       }
@@ -223,7 +223,7 @@ export async function expandAiAuthoredQuestions(
       try {
         transcript = await deps.fetchTranscript(videoId)
       } catch (err: any) {
-        console.warn(`[ai-author] step ${stepNum}: transcript fetch failed for ${videoId}: ${err?.message ?? err} — dropping video quiz`)
+        console.warn(`[ai-author][EMPTY-QUIZ] step ${stepNum}: transcript fetch failed for ${videoId}: ${err?.message ?? err} — dropping video quiz`)
         parsedMap.set(stepNum, [])
         continue
       }

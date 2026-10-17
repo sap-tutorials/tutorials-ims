@@ -643,6 +643,29 @@ describe('expandAiAuthoredQuestions — description tier + questionSource discri
     warnSpy.mockRestore()
   })
 
+  // (d-pre) fetchTranscript REJECTS (off-channel / OAuth failure) emits [ai-author][EMPTY-QUIZ] marker
+  it('fetchTranscript rejection emits [ai-author][EMPTY-QUIZ] marker with videoId and drops placeholder', async () => {
+    const fetchTranscript = vi.fn().mockRejectedValue(new Error('OAuth token revoked'))
+    const callModel = vi.fn()
+    const stats = { calls: 0, hits: 0, errors: 0 }
+    const parsedMap = new Map<number, any[]>([[1, [VIDEO_PLACEHOLDER(1, 'https://youtu.be/dQw4w9WgXcQ')]]])
+    const stepBodies = new Map<number, string>([[1, 'body']])
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await expandAiAuthoredQuestions(parsedMap, stepBodies, {
+      cache: vcache, callModel, onCallStats: stats, fetchTranscript, minSubstantiveWords: 0,
+    })
+
+    expect(callModel).not.toHaveBeenCalled()
+    expect(parsedMap.get(1)).toEqual([])
+    const allWarnCalls = warnSpy.mock.calls.map(c => c.join(' '))
+    // LOUD greppable marker present in the warn output
+    expect(allWarnCalls.some(s => s.includes('[ai-author][EMPTY-QUIZ]'))).toBe(true)
+    // Must include the videoId in the marker output
+    expect(allWarnCalls.some(s => s.includes('dQw4w9WgXcQ'))).toBe(true)
+    warnSpy.mockRestore()
+  })
+
   // (d) description under 50 substantive words drops via existing MIN_SUBSTANTIVE_WORDS guard
   it('description tier with under 50 substantive words drops via existing MIN_SUBSTANTIVE_WORDS guard', async () => {
     const fetchTranscript = vi.fn().mockResolvedValue({
