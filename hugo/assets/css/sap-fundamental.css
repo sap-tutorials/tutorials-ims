@@ -2842,6 +2842,38 @@ ui5-li .step-badge-row {
   margin-left: 1.5rem;
 }
 
+/*
+ * #2820 — keep figures left-aligned when an OPTION block detaches them from
+ * their <li>.
+ *
+ * A .tutorial-figure is globally centred (align-items: center, see the base
+ * .tutorial-figure rule). The left-align override is scoped to figures inside a
+ * list item (`.step-content li .tutorial-figure` below), which is where
+ * in-step images normally live. But options.ts closes the surrounding <ol> to
+ * emit an OPTION block (the #2703 flush-left splice above), so two kinds of
+ * figure fall OUTSIDE any <li> and revert to centred — the exact "image is
+ * centred vs left-aligned" report (#2820):
+ *   1. a figure authored INSIDE an [OPTION BEGIN]…[OPTION END] body, rendered
+ *      into an .os-panel / .option-tabs panel via markdownify, and
+ *   2. a figure that TRAILS the OPTION group but belongs to the same substep,
+ *      landing as a direct .step-content child right after the block.
+ * Re-apply the list-item figure treatment to both so a step reads consistently
+ * whether or not it contains an OPTION block. The `>` combinator binds the
+ * trailing figure as a direct .step-content child, so figures in LATER substeps
+ * (inside the reopened <ol start="N"> <li>) are untouched by this rule — they
+ * keep matching `.step-content li .tutorial-figure` with the same declarations.
+ * The only figure this re-aligns is a column-0 one authored AFTER an OPTION
+ * block in the same step; an author who wants a standalone centred image there
+ * can place it before the block or outside the step.
+ */
+.os-panel .tutorial-figure,
+.option-tabs .tutorial-figure,
+.step-content > .os-options ~ .tutorial-figure,
+.step-content > .option-tabs ~ .tutorial-figure {
+  margin: 0.5rem 0;
+  align-items: flex-start;
+}
+
 
 /* Empty paragraphs between figures and adjacent prose are an artefact of the
  * markdown -> HTML pipeline (an empty line between `\3c !-- border -->` and the
