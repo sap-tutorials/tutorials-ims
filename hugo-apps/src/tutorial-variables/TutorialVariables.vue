@@ -55,6 +55,7 @@
 import { reactive, onMounted } from 'vue'
 import { applyValue, resolveDefault } from './substitution'
 import type { TutorialVariable } from './substitution'
+import { readValue, writeValue } from './storage'
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Props
@@ -99,11 +100,15 @@ onMounted(async () => {
     invalid[v.name] = false
   }
 
-  // TASK-6 SEAM: Task 6 will insert a readValue(slug, name) call here to
-  // restore persisted values before falling back to the identity default.
-  // Expected shape:
-  //   const stored = readValue(props.slug, v.name)
-  //   if (stored !== null) { fieldValues[v.name] = stored; applyValue(v.name, stored); continue; }
+  // TASK-6: Restore persisted values before fetching identity defaults.
+  const storageCtx = { missionSlug: props.missionSlug || undefined, tutorialSlug: props.slug }
+  for (const v of props.variables) {
+    const stored = readValue(v.name, storageCtx)
+    if (stored !== null) {
+      fieldValues[v.name] = stored
+      applyValue(v.name, stored)
+    }
+  }
 
   const identity = await fetchIdentity()
 
@@ -133,8 +138,8 @@ function onInput(v: TutorialVariable, value: string) {
 
   applyValue(v.name, value)
 
-  // TASK-6 SEAM: Task 6 inserts here:
-  //   writeValue(props.slug, v.name, value)
+  // TASK-6: Persist the new value to localStorage.
+  writeValue(v.name, value, { missionSlug: props.missionSlug || undefined, tutorialSlug: props.slug })
 }
 </script>
 
