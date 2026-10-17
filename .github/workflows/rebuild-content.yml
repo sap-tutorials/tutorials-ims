@@ -502,7 +502,11 @@ jobs:
         # (24h TTL) and pulls fresh from /build/catalog. Use after fixing data
         # the catalog reads from (publish flag, slug format, etc.) so the
         # rebuild reflects the change in the same run.
-        run: npm run fetch-tutorials -- ${{ inputs.force-cap-refetch == true && '--force-cap' || '' }}
+        # Tee to /tmp/fetch-tutorials.log so the EMPTY-QUIZ summary step below
+        # can grep it without re-running the build (#2800).
+        run: |
+          npm run fetch-tutorials -- ${{ inputs.force-cap-refetch == true && '--force-cap' || '' }} 2>&1 | tee /tmp/fetch-tutorials.log
+          exit "${PIPESTATUS[0]}"
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.TUTORIALS_GITHUB_TOKEN }}
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
@@ -536,6 +540,37 @@ jobs:
           #  - full → PRIME only: decideFastPath refuses reuse on non-slug-targeted
           #    runs, but the sidecar is still written so the SAVE step warms it.
           CONTENT_CACHE_FAST_PATH: ${{ steps.mode.outputs.content_cache_enabled }}
+
+      # [#2800] Surface any AUTOAUTHOR_VIDEO tutorials whose quiz was dropped
+      # because no transcript was available (source='none'). The marker
+      # [ai-author][EMPTY-QUIZ] is emitted by expand-ai-authored.ts via
+      # console.warn and captured in /tmp/fetch-tutorials.log by the tee above.
+      # Non-failing (warn-and-continue by design): a missing transcript is
+      # never a build-blocker, but the rebuild operator should know about it.
+      # Runs even when the Fetch step failed (if: always()) so the log is
+      # always drained; the grep is a no-op when the log is absent.
+      - name: Surface dropped video quizzes (EMPTY-QUIZ)
+        if: ${{ always() && steps.mode.outputs.effective_mode != 'catalog-only' }}
+        run: |
+          LOG=/tmp/fetch-tutorials.log
+          if [ ! -f "$LOG" ]; then
+            exit 0
+          fi
+          MATCHES=$(grep -F '[ai-author][EMPTY-QUIZ]' "$LOG" || true)
+          if [ -z "$MATCHES" ]; then
+            exit 0
+          fi
+          {
+            echo "### ⚠️ AUTOAUTHOR_VIDEO quizzes dropped (empty)"
+            echo ""
+            echo "The following steps had no transcript and their video quizzes were dropped:"
+            echo ""
+            echo '```'
+            echo "$MATCHES"
+            echo '```'
+            echo ""
+            echo "_To fix: add captions to the YouTube video, or ensure the description is ≥ 50 substantive words._"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Workstream C: SAVE the generated content tree + sidecar so the NEXT
       # slug-targeted hotfix can restore and reuse it. Runs on full (to PRIME a
