@@ -5,7 +5,7 @@ vi.mock('../../srv/lib/secret-resolver.js', () => ({
   resolveSecret: vi.fn(),
 }));
 
-import { getAccessToken, _resetTokenCache, getVideoSnippet, isSapDevelopersChannel, listCaptions, pickCaptionTrack, downloadCaption, parseSbv } from '../../srv/lib/youtube-official-transcript.js';
+import { getAccessToken, _resetTokenCache, getVideoSnippet, isSapDevelopersChannel, listCaptions, pickCaptionTrack, downloadCaption, parseSbv, fetchTranscript } from '../../srv/lib/youtube-official-transcript.js';
 import { resolveSecret } from '../../srv/lib/secret-resolver.js';
 
 describe('youtube-official-transcript', () => {
@@ -518,6 +518,173 @@ describe('youtube-official-transcript', () => {
     it('handles edge case: single block no trailing blank', () => {
       const sbv = '0:00:02.500,0:00:06.000\nOnly block';
       expect(parseSbv(sbv)).toEqual([{ start: 2.5, text: 'Only block' }]);
+    });
+  });
+
+  describe('fetchTranscript', () => {
+    it('returns uploaded source for standard caption track', async () => {
+      const deps = {
+        getVideoSnippet: vi.fn(async () => ({
+          channelId: 'UCNfmelKDrvRmjYwSi9yvrMg',
+          title: 'Test Video',
+          description: 'Test description',
+        })),
+        isSapDevelopersChannel: vi.fn(() => true),
+        getAccessToken: vi.fn(async () => 'access_token_123'),
+        listCaptions: vi.fn(async () => [
+          { id: 'cap1', language: 'en', trackKind: 'standard' },
+        ]),
+        pickCaptionTrack: vi.fn((tracks) => tracks[0]),
+        downloadCaption: vi.fn(async () => '0:00:01.000,0:00:05.000\nTest caption'),
+        parseSbv: vi.fn((text) => [{ start: 1.0, text: 'Test caption' }]),
+      };
+
+      const result = await fetchTranscript('vid123', deps);
+
+      expect(result).toEqual({
+        source: 'uploaded',
+        segments: [{ start: 1.0, text: 'Test caption' }],
+      });
+    });
+
+    it('returns auto source for ASR caption track', async () => {
+      const deps = {
+        getVideoSnippet: vi.fn(async () => ({
+          channelId: 'UCNfmelKDrvRmjYwSi9yvrMg',
+          title: 'Test Video',
+          description: 'Test description',
+        })),
+        isSapDevelopersChannel: vi.fn(() => true),
+        getAccessToken: vi.fn(async () => 'access_token_123'),
+        listCaptions: vi.fn(async () => [
+          { id: 'cap1', language: 'en', trackKind: 'ASR' },
+        ]),
+        pickCaptionTrack: vi.fn((tracks) => tracks[0]),
+        downloadCaption: vi.fn(async () => '0:00:01.000,0:00:05.000\nAuto caption'),
+        parseSbv: vi.fn((text) => [{ start: 1.0, text: 'Auto caption' }]),
+      };
+
+      const result = await fetchTranscript('vid123', deps);
+
+      expect(result).toEqual({
+        source: 'auto',
+        segments: [{ start: 1.0, text: 'Auto caption' }],
+      });
+    });
+
+    it('returns description source when no captions but description exists', async () => {
+      const deps = {
+        getVideoSnippet: vi.fn(async () => ({
+          channelId: 'UCNfmelKDrvRmjYwSi9yvrMg',
+          title: 'Test Video',
+          description: 'This is a test description',
+        })),
+        isSapDevelopersChannel: vi.fn(() => true),
+        getAccessToken: vi.fn(async () => 'access_token_123'),
+        listCaptions: vi.fn(async () => []),
+        pickCaptionTrack: vi.fn(() => null),
+      };
+
+      const result = await fetchTranscript('vid123', deps);
+
+      expect(result).toEqual({
+        source: 'description',
+        segments: [{ start: 0, text: 'This is a test description' }],
+      });
+    });
+
+    it('returns none source when no captions and no description', async () => {
+      const deps = {
+        getVideoSnippet: vi.fn(async () => ({
+          channelId: 'UCNfmelKDrvRmjYwSi9yvrMg',
+          title: 'Test Video',
+          description: '',
+        })),
+        isSapDevelopersChannel: vi.fn(() => true),
+        getAccessToken: vi.fn(async () => 'access_token_123'),
+        listCaptions: vi.fn(async () => []),
+        pickCaptionTrack: vi.fn(() => null),
+      };
+
+      const result = await fetchTranscript('vid123', deps);
+
+      expect(result).toEqual({
+        source: 'none',
+        segments: [],
+      });
+    });
+
+    it('returns none source when snippet is null', async () => {
+      const deps = {
+        getVideoSnippet: vi.fn(async () => null),
+      };
+
+      const result = await fetchTranscript('vid123', deps);
+
+      expect(result).toEqual({
+        source: 'none',
+        segments: [],
+      });
+    });
+
+    it('throws labeled error for off-channel video', async () => {
+      const deps = {
+        getVideoSnippet: vi.fn(async () => ({
+          channelId: 'UCOffChannel123',
+          title: 'Test Video',
+          description: 'Test description',
+        })),
+        isSapDevelopersChannel: vi.fn(() => false),
+      };
+
+      await expect(fetchTranscript('vid123', deps)).rejects.toThrow(/off-channel/i);
+      await expect(fetchTranscript('vid123', deps)).rejects.toThrow(/vid123/);
+    });
+
+    it('returns description fallback when captions empty segments', async () => {
+      const deps = {
+        getVideoSnippet: vi.fn(async () => ({
+          channelId: 'UCNfmelKDrvRmjYwSi9yvrMg',
+          title: 'Test Video',
+          description: 'Description fallback',
+        })),
+        isSapDevelopersChannel: vi.fn(() => true),
+        getAccessToken: vi.fn(async () => 'access_token_123'),
+        listCaptions: vi.fn(async () => [
+          { id: 'cap1', language: 'en', trackKind: 'standard' },
+        ]),
+        pickCaptionTrack: vi.fn((tracks) => tracks[0]),
+        downloadCaption: vi.fn(async () => ''),
+        parseSbv: vi.fn((text) => []),
+      };
+
+      const result = await fetchTranscript('vid123', deps);
+
+      expect(result).toEqual({
+        source: 'description',
+        segments: [{ start: 0, text: 'Description fallback' }],
+      });
+    });
+
+    it('returns none when no captions, no description, no picked track', async () => {
+      const deps = {
+        getVideoSnippet: vi.fn(async () => ({
+          channelId: 'UCNfmelKDrvRmjYwSi9yvrMg',
+          title: 'Test Video',
+          description: '',
+        })),
+        isSapDevelopersChannel: vi.fn(() => true),
+        getAccessToken: vi.fn(async () => 'access_token_123'),
+        listCaptions: vi.fn(async () => []),
+        pickCaptionTrack: vi.fn(() => null),
+      };
+
+      const result = await fetchTranscript('vid123', deps);
+
+      expect(result).toEqual({
+        source: 'none',
+        segments: [],
+      });
     });
   });
 });

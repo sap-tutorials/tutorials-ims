@@ -278,3 +278,69 @@ export function parseSbv(text) {
 
   return result;
 }
+
+/**
+ * Three-tier orchestrator that fetches a transcript for a YouTube video.
+ * Tier 1: Video snippet + channel gate
+ * Tier 2: Try captions → parse to segments
+ * Tier 3: Fallback to description or none
+ *
+ * @param {string} videoId - YouTube video ID
+ * @param {Object} deps - Optional dependencies for testing
+ * @param {Function} deps.getVideoSnippet - (videoId, deps) => Promise<snippet|null>
+ * @param {Function} deps.isSapDevelopersChannel - (channelId) => bool
+ * @param {Function} deps.getAccessToken - (deps) => Promise<string>
+ * @param {Function} deps.listCaptions - (videoId, token, deps) => Promise<tracks[]>
+ * @param {Function} deps.pickCaptionTrack - (tracks) => track|null
+ * @param {Function} deps.downloadCaption - (captionId, token, deps) => Promise<string>
+ * @param {Function} deps.parseSbv - (text) => segments[]
+ * @returns {Promise<{source:'uploaded'|'auto'|'description'|'none', segments:Array<{start,text}>}>}
+ * @throws {Error} If video is from off-channel (labeled with 'off-channel' and videoId)
+ */
+export async function fetchTranscript(videoId, deps = {}) {
+  // Use provided deps or the module exports as defaults
+  const _getVideoSnippet = deps.getVideoSnippet || getVideoSnippet;
+  const _isSapDevelopersChannel = deps.isSapDevelopersChannel || isSapDevelopersChannel;
+  const _getAccessToken = deps.getAccessToken || getAccessToken;
+  const _listCaptions = deps.listCaptions || listCaptions;
+  const _pickCaptionTrack = deps.pickCaptionTrack || pickCaptionTrack;
+  const _downloadCaption = deps.downloadCaption || downloadCaption;
+  const _parseSbv = deps.parseSbv || parseSbv;
+
+  // Tier 1: Get snippet + channel gate
+  const snippet = await _getVideoSnippet(videoId, deps);
+
+  if (!snippet) {
+    return { source: 'none', segments: [] };
+  }
+
+  // Channel gate: off-channel videos throw a labeled error
+  if (!_isSapDevelopersChannel(snippet.channelId)) {
+    throw new Error(`Video off-channel; videoId=${videoId}`);
+  }
+
+  // Tier 2: Try captions
+  const accessToken = await _getAccessToken(deps);
+  const tracks = await _listCaptions(videoId, accessToken, deps);
+  const track = _pickCaptionTrack(tracks);
+
+  if (track) {
+    const sbvText = await _downloadCaption(track.id, accessToken, deps);
+    const segments = _parseSbv(sbvText);
+
+    if (segments.length > 0) {
+      const source = track.trackKind === 'standard' ? 'uploaded' : 'auto';
+      return { source, segments };
+    }
+  }
+
+  // Tier 3: Fallback to description or none
+  if (snippet.description && snippet.description.trim()) {
+    return {
+      source: 'description',
+      segments: [{ start: 0, text: snippet.description }],
+    };
+  }
+
+  return { source: 'none', segments: [] };
+}
