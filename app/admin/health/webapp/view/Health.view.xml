@@ -31,17 +31,43 @@
               growing="true"
               growingThreshold="50"
               busyIndicatorDelay="0"
+              sticky="ColumnHeaders,HeaderToolbar"
+              ariaLabelledBy="urlStatusTitle"
               items="{
                 path: '/Tutorials',
                 parameters: {
                   $select: 'slug,linkStatus,lastChecked,linkStatusOverride',
                   $filter: 'linkStatus ne null',
-                  $orderby: 'lastChecked desc'
+                  $orderby: 'lastChecked desc',
+                  $count: true
                 }
               }">
               <headerToolbar>
                 <OverflowToolbar>
-                  <Title text="Tutorials — URL Status" level="H3" />
+                  <Title id="urlStatusTitle" text="Tutorials — URL Status ({= ${urlStatus>/count} })" level="H3" />
+                  <ToolbarSpacer />
+                  <SearchField
+                    id="urlStatusSearch"
+                    width="18rem"
+                    placeholder="Search slug…"
+                    search=".onUrlStatusSearch"
+                    liveChange=".onUrlStatusSearch" />
+                  <Select
+                    id="urlStatusFilter"
+                    selectedKey="all"
+                    change=".onUrlStatusFilterChange"
+                    tooltip="Filter by link status">
+                    <core:Item key="all" text="All statuses" />
+                    <core:Item key="notok" text="Not OK only" />
+                    <core:Item key="OK" text="OK" />
+                    <core:Item key="BROKEN" text="Broken" />
+                    <core:Item key="SLOW" text="Slow" />
+                  </Select>
+                  <Button
+                    id="urlStatusSettingsBtn"
+                    icon="sap-icon://action-settings"
+                    tooltip="Sort, filter and columns"
+                    press=".onUrlStatusPersonalize" />
                 </OverflowToolbar>
               </headerToolbar>
               <noData>
@@ -51,10 +77,10 @@
                   description="Run a scan to populate link-status results." />
               </noData>
               <columns>
-                <Column width="14rem"><Text text="Slug" /></Column>
-                <Column width="8rem"><Text text="Link Status" /></Column>
-                <Column width="12rem"><Text text="Last Checked" /></Column>
-                <Column><Text text="Override" /></Column>
+                <Column id="colSlug" width="14rem"><header><Text text="Slug" /></header></Column>
+                <Column id="colLinkStatus" width="8rem"><header><Text text="Link Status" /></header></Column>
+                <Column id="colLastChecked" width="12rem" hAlign="End"><header><Text text="Last Checked" /></header></Column>
+                <Column id="colOverride"><header><Text text="Override" /></header></Column>
               </columns>
               <items>
                 <ColumnListItem>
