@@ -79,6 +79,7 @@ export async function upsertTutorialVariables(namespace, metadata) {
 
     const slug = rawSlug.toLowerCase()
     try {
+      // slug-canonical: caller-canonicalizes — `slug` is rawSlug.toLowerCase() (line above)
       const tut = await db.run(SELECT.one.from(Tutorials).columns('ID').where({ slug }))
       if (!tut) continue
 
