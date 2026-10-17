@@ -9,6 +9,7 @@ import { shuffleArray } from '@shared/shuffle';
 interface StepData {
   number: number;
   validation?: ValidationQuestion[];
+  questionSource?: 'captions' | 'description';
 }
 
 const dataEl = document.getElementById('tutorial-data');
@@ -53,6 +54,7 @@ if (dataEl) {
       isPreview,
       aiInvolved,
       rulesBlockId,
+      questionSource: step.questionSource,
     }).mount(host);
   });
 }
