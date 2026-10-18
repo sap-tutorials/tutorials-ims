@@ -85,13 +85,23 @@ export default class CronService extends cds.ApplicationService {
     });
 
     // (b) Periodic self-heal: every ~10 min, re-reap (a tombstone can be
-    //     created AFTER this instance booted, so the boot sweep can't catch it)
-    //     and run the ALERT-ONLY canary stall check. Enabled on CF, off locally;
-    //     fail-open; .unref()'d. No process.exit — the reaper is the recovery,
-    //     the alert is just the signal.
+    //     created AFTER this instance booted, so the boot sweep can't catch it),
+    //     #2827 re-seed any registered job that has NO outbox queue row at all
+    //     (the "missing successor row" stall — a crash mid-tick consumed the row
+    //     without re-inserting the next occurrence; nothing for the reaper to
+    //     reap), and run the ALERT-ONLY canary stall check. Enabled on CF, off
+    //     locally; fail-open; .unref()'d. No process.exit — the reaper/re-seed
+    //     are the recovery, the alert is just the signal.
     //     Runbook: docs/developers/operations/scheduler-troubleshooting.md
     //     § "All jobs overdue — queue-processor stall".
-    armSchedulerSelfHeal({ jobSchedules });
+    //
+    //     reseedJob re-runs the SAME `.every().as()` UPSERT init() uses, so a
+    //     dropped job is re-seeded without a reboot. `.as(name)` is an idempotent
+    //     singleton UPSERT (deterministic ID) — safe to call even if the row
+    //     reappeared since reseedMissingSuccessorRows counted.
+    const reseedJob = (jobName, cron) =>
+      this.schedule(`cron.${jobName}`, {}).every(cron).as(jobName);
+    armSchedulerSelfHeal({ jobSchedules, reseedJob });
 
     await super.init();
   }
