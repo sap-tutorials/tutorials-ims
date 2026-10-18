@@ -12,10 +12,10 @@
 //
 // Gated on ALLOW_HYBRID_WRITES=1 (same pattern as the sibling wedge hybrid test).
 
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import cds from '@sap/cds';
 
-import { reapTombstonedOutboxRows } from '../../srv/lib/scheduler-reaper.js';
+import { reapTombstonedOutboxRows, reseedMissingSuccessorRows } from '../../srv/lib/scheduler-reaper.js';
 
 const HYBRID = process.env.ALLOW_HYBRID_WRITES === '1';
 const maybeDescribe = HYBRID ? describe : describe.skip;
@@ -139,5 +139,47 @@ maybeDescribe('scheduler tombstone reaper recovery (hybrid)', () => {
       SELECT.from(outbox.Messages).where({ target: 'queue', task: jobName })
     );
     expect(rows.length).toBe(0); // fast-path reaped
+  });
+
+  // ─── #2827: missing-successor-row re-seed (real cds.outbox.Messages read) ───
+
+  it('#2827 re-seeds a registered job that has NO queue row, and leaves one that does', async () => {
+    // The crash-mid-tick stall: `missing` was consumed-but-not-reinserted, so it
+    // has ZERO target='queue' rows. `present` still has its pending future row.
+    // reseedMissingSuccessorRows must call reseedJob exactly for `missing`.
+    const missing = 'test-reaper-missing';
+    const present = 'test-reaper-present';
+    const futureIso = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    await db.run(INSERT.into(outbox.Messages).entries({
+      target: 'queue', task: present, status: null, timestamp: futureIso,
+    }));
+    // `missing` deliberately gets NO row inserted.
+
+    const schedules = new Map([[missing, '*/5 * * * *'], [present, '*/2 * * * *']]);
+    const reseedJob = vi.fn().mockResolvedValue(undefined);
+    const { checked, reseeded } = await reseedMissingSuccessorRows(schedules, reseedJob);
+
+    expect(checked).toBe(2);
+    expect(reseeded).toBe(1);
+    expect(reseedJob).toHaveBeenCalledTimes(1);
+    expect(reseedJob).toHaveBeenCalledWith(missing, '*/5 * * * *');
+    expect(reseedJob).not.toHaveBeenCalledWith(present, expect.anything());
+  });
+
+  it('#2827 does NOT re-seed a job whose only row is a processing tombstone (reaper territory)', async () => {
+    // A 'processing' row still counts as presence — re-seeding here would create
+    // a duplicate concurrent tick. The reaper, not the re-seeder, clears it.
+    const jobName = 'test-reaper-proc-only';
+    const staleIso = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    await db.run(INSERT.into(outbox.Messages).entries({
+      target: 'queue', task: jobName, status: 'processing', timestamp: staleIso,
+    }));
+
+    const schedules = new Map([[jobName, '*/5 * * * *']]);
+    const reseedJob = vi.fn().mockResolvedValue(undefined);
+    const { reseeded } = await reseedMissingSuccessorRows(schedules, reseedJob);
+
+    expect(reseeded).toBe(0);
+    expect(reseedJob).not.toHaveBeenCalled();
   });
 });

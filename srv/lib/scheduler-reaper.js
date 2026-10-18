@@ -233,6 +233,93 @@ export async function reapTombstonedOutboxRows(jobSchedules, now = new Date()) {
   return { inspected, reaped };
 }
 
+/**
+ * #2827: re-seed the "missing successor row" scheduler-stall mode the tombstone
+ * reaper structurally cannot recover.
+ *
+ * A CAP 10 scheduled tick completes in a SECOND tx that DELETEs the claimed row
+ * and INSERTs the next `.every()` occurrence (processing.js:333 + :356-371). A
+ * crash/SIGTERM landing AFTER the DELETE commits but BEFORE the successor INSERT
+ * commits leaves a high-frequency job with NO cds.outbox.Messages row at all —
+ * neither 'processing' (so there is nothing for reapTombstonedOutboxRows to
+ * delete) nor NULL. Re-seeding then happens ONLY at the next CronService.init()
+ * boot, so without this pass the job silently drops until a manual restart
+ * (PROD incident 2026-10-18).
+ *
+ * For every job registered in registerJobs() (passed in as jobSchedules), count
+ * its target='queue' rows. A job with ZERO is missing its successor → re-seed it
+ * via reseedJob(jobName, cron), which the caller binds to the SAME
+ * `srv.schedule(eventName, {}).every(cron).as(jobName)` UPSERT CronService.init()
+ * uses. `.as(name)` is idempotent (deterministic-ID singleton UPSERT), so even a
+ * benign race where the row reappears between the count and the re-seed just
+ * re-UPSERTs the same future row — never a duplicate tick.
+ *
+ * Deliberately conservative — only ZERO rows triggers a re-seed:
+ *   - a 'processing' tombstone counts as a row (reaper territory, not dropped);
+ *   - a pending status=NULL future row counts (healthy low-freq job, untouched);
+ *   - a null-`task` row (unrelated audit-log SecurityEvent processing rows the
+ *     reaper also skips) never satisfies any registered job's presence check and
+ *     is never itself treated as a job to re-seed.
+ *
+ * Fail-open throughout, matching reapTombstonedOutboxRows: a missing outbox
+ * entity, a faulting queue SELECT, a single job's reseed throwing, or no
+ * reseedJob callback at all never aborts the pass and never fails a scheduled
+ * tick.
+ *
+ * @param {Map<string,string>} jobSchedules  jobName → cron expression (the
+ *   registry snapshot). Only jobs in this map are candidates for re-seeding.
+ * @param {(jobName:string, cron:string)=>Promise<unknown>} [reseedJob]  bound to
+ *   the CronService's `schedule().every().as()` UPSERT. Omitted on paths with no
+ *   service handle (e.g. the boot sweep) → the pass is a no-op.
+ * @returns {Promise<{checked:number, reseeded:number}>}
+ *   checked = registered jobs examined; reseeded = jobs actually re-seeded.
+ */
+export async function reseedMissingSuccessorRows(jobSchedules, reseedJob) {
+  let checked = 0;
+  let reseeded = 0;
+  // No callback → nothing we can re-seed with. Fail-open no-op.
+  if (typeof reseedJob !== 'function') return { checked, reseeded };
+  if (!(jobSchedules instanceof Map) || jobSchedules.size === 0) return { checked, reseeded };
+  try {
+    const outbox = cds.entities('cds.outbox');
+    if (!outbox?.Messages) return { checked, reseeded };
+    const db = await cds.connect.to('db');
+    const rows = await db.run(SELECT.from(outbox.Messages));
+
+    // Build the set of jobNames that currently have at least one target='queue'
+    // row (any status). A row's `task` is the `.as(<name>)` scheduled-job name;
+    // null-task rows (unrelated audit-log events) contribute nothing.
+    const present = new Set();
+    for (const row of rows ?? []) {
+      const target = row.target ?? row.TARGET;
+      if (target !== 'queue') continue;
+      const task = row.task ?? row.TASK;
+      if (typeof task !== 'string' || task.length === 0) continue;
+      present.add(task);
+    }
+
+    for (const [jobName, cron] of jobSchedules) {
+      checked++;
+      if (present.has(jobName)) continue; // healthy — has a queue row
+      // Missing successor row → re-seed. Per-job try/catch so one failing UPSERT
+      // doesn't abort the whole pass.
+      try {
+        await reseedJob(jobName, cron);
+        reseeded++;
+        LOG.warn(
+          `re-seeded scheduled job '${jobName}' (cron '${cron}') — no cds.outbox.Messages ` +
+          `target='queue' row existed (missing-successor stall, #2827)`
+        );
+      } catch (err) {
+        LOG.warn(`re-seed for job '${jobName}' failed: ${err.message ?? err}`);
+      }
+    }
+  } catch (err) {
+    LOG.warn(`reseedMissingSuccessorRows failed (treating as no-op): ${err.message ?? err}`);
+  }
+  return { checked, reseeded };
+}
+
 // Default self-heal interval: 10 min. Long enough that the reaper's SELECT over
 // cds.outbox.Messages (~54 rows) is negligible load; short enough that a
 // tombstone created AFTER an instance booted (so its own boot sweep missed it)
@@ -281,6 +368,8 @@ async function loadCanaryRows() {
  * @param {Map<string,string>} opts.jobSchedules  jobName → cron, passed to the reaper
  * @param {(fn:Function, ms:number)=>any} [opts.setIntervalFn=setInterval]
  * @param {(schedules:Map, now?:Date)=>Promise<{inspected:number,reaped:number}>} [opts.reap=reapTombstonedOutboxRows]
+ * @param {(schedules:Map, reseedJob?:Function)=>Promise<{checked:number,reseeded:number}>} [opts.reseed=reseedMissingSuccessorRows]
+ * @param {(jobName:string, cron:string)=>Promise<unknown>} [opts.reseedJob]  #2827: bound to the CronService's schedule().every().as() UPSERT. Omitted → the re-seed pass is a no-op.
  * @param {()=>Promise<Array>} [opts.loadRows=loadCanaryRows]
  * @param {(input:object)=>Promise<unknown>} [opts.raiseAlert]
  * @param {number} [opts.graceMs]
@@ -300,6 +389,8 @@ export function armSchedulerSelfHeal(opts = {}) {
   const setIntervalFn = opts.setIntervalFn ?? setInterval;
   const jobSchedules = opts.jobSchedules ?? new Map();
   const reap = opts.reap ?? reapTombstonedOutboxRows;
+  const reseed = opts.reseed ?? reseedMissingSuccessorRows;
+  const reseedJob = opts.reseedJob; // #2827: no default — only wired when a service handle exists
   const loadRows = opts.loadRows ?? loadCanaryRows;
   const raiseAlert = opts.raiseAlert ?? (async (input) => {
     const alerting = await import('./alerting.js');
@@ -316,6 +407,23 @@ export function armSchedulerSelfHeal(opts = {}) {
       }
     } catch (err) {
       LOG.warn(`scheduler self-heal reap tick failed (ignored): ${err.message ?? err}`);
+    }
+
+    // 1b. #2827: re-seed any registered job that has NO cds.outbox.Messages
+    //     target='queue' row — the "missing successor row" stall the reaper
+    //     cannot touch (a crash mid-tick consumed the row without re-inserting
+    //     the next occurrence). Only runs when a reseedJob callback was wired
+    //     (the periodic path has the CronService handle; the boot sweep does
+    //     not). Fail-open — never let a re-seed fault skip the canary check.
+    if (typeof reseedJob === 'function') {
+      try {
+        const { checked, reseeded } = await reseed(jobSchedules, reseedJob);
+        if (reseeded > 0) {
+          LOG.warn(`scheduler self-heal re-seeded ${reseeded} job(s) with a missing successor row (checked ${checked} registered job(s)) (#2827)`);
+        }
+      } catch (err) {
+        LOG.warn(`scheduler self-heal re-seed tick failed (ignored): ${err.message ?? err}`);
+      }
     }
 
     // 2. Alert-only canary check. If both canaries are stale, the queue is
