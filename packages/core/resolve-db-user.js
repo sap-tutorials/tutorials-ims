@@ -348,8 +348,12 @@ export async function resolveUser(user, db) {
  */
 export async function pinResolvedUser(user, db) {
   if (!user || !user.id || user.id === 'anonymous') return null;
-  // Idempotent: if already pinned this request, don't re-resolve.
-  if (user.attr?.dbUserId) return { ID: user.attr.dbUserId, sapId: user.authInfo?.token?.userId ?? null };
+  // Idempotent: if already pinned this request, don't re-resolve. Read the
+  // cached sapId from user.attr (always writable) first, falling back to the
+  // token for older pins.
+  if (user.attr?.dbUserId) {
+    return { ID: user.attr.dbUserId, sapId: user.attr.sapId ?? user.authInfo?.token?.userId ?? null };
+  }
   let row;
   try {
     row = await resolveUser(user, db);
@@ -362,9 +366,23 @@ export async function pinResolvedUser(user, db) {
   user.attr = user.attr || {};
   user.attr.dbUserId = row.ID;
   if (row.sapId) {
-    user.authInfo = user.authInfo || {};
-    user.authInfo.token = user.authInfo.token || {};
-    user.authInfo.token.userId = row.sapId;
+    // Cache sapId on user.attr (always a plain writable object).
+    user.attr.sapId = row.sapId;
+    // Best-effort mirror onto authInfo.token.userId for any consumer that still
+    // reads it there. In PROD the real @sap/xssec XsuaaToken exposes `userId`
+    // as a GETTER-ONLY property, so a bare assignment throws
+    // `Cannot set property userId of #<XsuaaToken> which has only a getter`
+    // (#2552). Only assign when the slot is actually writable.
+    try {
+      user.authInfo = user.authInfo || {};
+      user.authInfo.token = user.authInfo.token || {};
+      const desc = Object.getOwnPropertyDescriptor(user.authInfo.token, 'userId');
+      const writable = !desc || desc.writable || typeof desc.set === 'function';
+      if (writable) user.authInfo.token.userId = row.sapId;
+    } catch {
+      // Getter-only token (production XSUAA): the attr.sapId cache above is the
+      // source of truth; swallow and continue.
+    }
   }
   return row;
 }
