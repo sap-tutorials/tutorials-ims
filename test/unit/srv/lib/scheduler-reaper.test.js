@@ -24,7 +24,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import cds from '@sap/cds';
 
-import { reapTombstonedOutboxRows, armSchedulerSelfHeal } from '../../../../srv/lib/scheduler-reaper.js';
+import { reapTombstonedOutboxRows, reseedMissingSuccessorRows, armSchedulerSelfHeal } from '../../../../srv/lib/scheduler-reaper.js';
 
 // Fixed "now" far past any fixture timestamp so the 60-min stale floor fires.
 const NOW = new Date('2026-10-14T18:00:00.000Z');
@@ -374,6 +374,187 @@ describe('scheduler-reaper — reapTombstonedOutboxRows', () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────
+// #2827: reseedMissingSuccessorRows — recover the "missing successor row"
+// stall mode the tombstone reaper cannot touch.
+//
+// A crash/SIGTERM that lands BETWEEN the two txs of a tick (claim deletes the
+// row at :333; the successor INSERT at :356-371 never commits) leaves a
+// high-frequency job with NO cds.outbox.Messages row at all — neither
+// 'processing' nor NULL. There is no tombstone to reap, so the reaper is a
+// structural no-op until the next CronService.init() reboot. This function
+// detects a registered job with ZERO target='queue' rows and re-seeds it via
+// the same reseedJob(jobName) callback CronService.init() uses
+// (srv.schedule(...).every(cron).as(jobName) — an idempotent UPSERT).
+//
+// Reuses mockOutbox for the queue read; reseedJob is a plain injected spy.
+// ─────────────────────────────────────────────────────────────────────
+describe('scheduler-reaper — reseedMissingSuccessorRows (#2827 missing successor row)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (_savedSelect !== undefined) {
+      if (_savedSelect) Object.defineProperty(globalThis, 'SELECT', _savedSelect);
+      else delete globalThis.SELECT;
+      _savedSelect = undefined;
+    }
+  });
+
+  it('re-seeds a registered job that has NO target=queue row (the dropped-successor stall)', async () => {
+    // metrics-rollup was consumed-but-not-reinserted by a crash mid-tick. No
+    // outbox row exists for it at all. Other jobs are healthy (have a row).
+    mockOutbox([
+      { ID: 'r-kg', target: 'queue', task: 'kg-ondemand-drain', status: null, timestamp: FRESH_TS },
+    ]);
+    const schedules = new Map([
+      ['metrics-rollup', '*/5 * * * *'],   // MISSING from the queue → must re-seed
+      ['kg-ondemand-drain', '*/2 * * * *'], // present → must NOT re-seed
+    ]);
+    const reseedJob = vi.fn().mockResolvedValue(undefined);
+    const { checked, reseeded } = await reseedMissingSuccessorRows(schedules, reseedJob);
+    expect(checked).toBe(2);
+    expect(reseeded).toBe(1);
+    expect(reseedJob).toHaveBeenCalledTimes(1);
+    expect(reseedJob).toHaveBeenCalledWith('metrics-rollup', '*/5 * * * *');
+  });
+
+  it('does NOT re-seed a job that already has a pending NULL future row (healthy low-freq job)', async () => {
+    // A daily job with a future status=NULL row is healthy — untouched.
+    mockOutbox([
+      { ID: 'r-daily', target: 'queue', task: 'daily-digest', status: null, timestamp: FRESH_TS },
+    ]);
+    const schedules = new Map([['daily-digest', '13 2 * * *']]);
+    const reseedJob = vi.fn().mockResolvedValue(undefined);
+    const { checked, reseeded } = await reseedMissingSuccessorRows(schedules, reseedJob);
+    expect(checked).toBe(1);
+    expect(reseeded).toBe(0);
+    expect(reseedJob).not.toHaveBeenCalled();
+  });
+
+  it('does NOT re-seed a job that has only a processing row (reaper territory, not dropped)', async () => {
+    // A 'processing' tombstone still counts as a row → not the missing-successor
+    // mode. The reaper handles that row; re-seeding here would duplicate the job.
+    mockOutbox([
+      { ID: 'r-proc', target: 'queue', task: 'metrics-rollup', status: 'processing', lastAttemptTimestamp: null, timestamp: STALE_TS },
+    ]);
+    const schedules = new Map([['metrics-rollup', '*/5 * * * *']]);
+    const reseedJob = vi.fn().mockResolvedValue(undefined);
+    const { checked, reseeded } = await reseedMissingSuccessorRows(schedules, reseedJob);
+    expect(checked).toBe(1);
+    expect(reseeded).toBe(0);
+    expect(reseedJob).not.toHaveBeenCalled();
+  });
+
+  it('ignores non-queue rows when counting a job\'s presence (an emitted-event row is not a scheduled tick)', async () => {
+    // metrics-rollup has NO queue row; a same-named-ish event row on a different
+    // target must not count as presence. (Defensive — tasks differ in practice.)
+    mockOutbox([
+      { ID: 'evt', target: 'TutorialProgressService', task: 'metrics-rollup', status: null, timestamp: FRESH_TS },
+    ]);
+    const schedules = new Map([['metrics-rollup', '*/5 * * * *']]);
+    const reseedJob = vi.fn().mockResolvedValue(undefined);
+    const { checked, reseeded } = await reseedMissingSuccessorRows(schedules, reseedJob);
+    expect(checked).toBe(1);
+    expect(reseeded).toBe(1);
+    expect(reseedJob).toHaveBeenCalledWith('metrics-rollup', '*/5 * * * *');
+  });
+
+  it('skips unrelated TASK=null audit-log processing rows (SecurityEvent sharing the table)', async () => {
+    // The incident: 5 audit-log SecurityEvent rows at target='queue'? No — those
+    // were TASK=null. A null-task row must never satisfy any registered job's
+    // presence check, and must never itself be treated as a job to re-seed.
+    mockOutbox([
+      { ID: 'audit-1', target: 'queue', task: null, status: 'processing', timestamp: STALE_TS },
+      { ID: 'r-kg', target: 'queue', task: 'kg-ondemand-drain', status: null, timestamp: FRESH_TS },
+    ]);
+    const schedules = new Map([
+      ['metrics-rollup', '*/5 * * * *'],    // missing → re-seed
+      ['kg-ondemand-drain', '*/2 * * * *'], // present → skip
+    ]);
+    const reseedJob = vi.fn().mockResolvedValue(undefined);
+    const { reseeded } = await reseedMissingSuccessorRows(schedules, reseedJob);
+    expect(reseeded).toBe(1);
+    expect(reseedJob).toHaveBeenCalledWith('metrics-rollup', '*/5 * * * *');
+    expect(reseedJob).not.toHaveBeenCalledWith('kg-ondemand-drain', expect.anything());
+  });
+
+  it('re-seeds multiple dropped jobs in one pass', async () => {
+    mockOutbox([
+      { ID: 'r-ok', target: 'queue', task: 'kg-ondemand-drain', status: null, timestamp: FRESH_TS },
+    ]);
+    const schedules = new Map([
+      ['metrics-rollup', '*/5 * * * *'],
+      ['community-blogs-classify', '41 * * * *'],
+      ['publish-stuck-manifest-watchdog', '*/3 * * * *'],
+      ['kg-ondemand-drain', '*/2 * * * *'], // present
+    ]);
+    const reseedJob = vi.fn().mockResolvedValue(undefined);
+    const { checked, reseeded } = await reseedMissingSuccessorRows(schedules, reseedJob);
+    expect(checked).toBe(4);
+    expect(reseeded).toBe(3);
+  });
+
+  it('tolerates uppercase column names (HANA casing)', async () => {
+    mockOutbox([
+      { ID: 'r-kg', TARGET: 'queue', TASK: 'kg-ondemand-drain', STATUS: null, TIMESTAMP: FRESH_TS },
+    ]);
+    const schedules = new Map([
+      ['metrics-rollup', '*/5 * * * *'],
+      ['kg-ondemand-drain', '*/2 * * * *'],
+    ]);
+    const reseedJob = vi.fn().mockResolvedValue(undefined);
+    const { reseeded } = await reseedMissingSuccessorRows(schedules, reseedJob);
+    expect(reseeded).toBe(1);
+    expect(reseedJob).toHaveBeenCalledWith('metrics-rollup', '*/5 * * * *');
+  });
+
+  it('fail-open: one job\'s reseed throwing does not abort the pass', async () => {
+    mockOutbox([]); // no queue rows at all → every job is missing
+    const schedules = new Map([
+      ['metrics-rollup', '*/5 * * * *'],
+      ['kg-ondemand-drain', '*/2 * * * *'],
+    ]);
+    let n = 0;
+    const reseedJob = vi.fn().mockImplementation(async () => {
+      n++;
+      if (n === 1) throw new Error('schedule UPSERT faulted');
+    });
+    const { checked, reseeded } = await reseedMissingSuccessorRows(schedules, reseedJob);
+    expect(checked).toBe(2);
+    expect(reseeded).toBe(1); // first threw, second succeeded; pass survived
+  });
+
+  it('fail-open: returns zeros when cds.outbox.Messages is missing', async () => {
+    Object.defineProperty(cds, 'entities', { get: () => () => ({}), configurable: true });
+    const reseedJob = vi.fn();
+    const { checked, reseeded } = await reseedMissingSuccessorRows(new Map([['metrics-rollup', '*/5 * * * *']]), reseedJob);
+    expect(checked).toBe(0);
+    expect(reseeded).toBe(0);
+    expect(reseedJob).not.toHaveBeenCalled();
+  });
+
+  it('fail-open: returns zeros when the queue SELECT throws', async () => {
+    Object.defineProperty(cds, 'entities', {
+      get: () => () => ({ Messages: { name: 'cds.outbox.Messages' } }),
+      configurable: true,
+    });
+    const fakeDb = { run: vi.fn().mockRejectedValue(new Error('DB down')) };
+    Object.defineProperty(cds, 'connect', { value: { to: vi.fn().mockResolvedValue(fakeDb) }, configurable: true });
+    const reseedJob = vi.fn();
+    const { checked, reseeded } = await reseedMissingSuccessorRows(new Map([['metrics-rollup', '*/5 * * * *']]), reseedJob);
+    expect(checked).toBe(0);
+    expect(reseeded).toBe(0);
+    expect(reseedJob).not.toHaveBeenCalled();
+  });
+
+  it('no-op when no reseedJob callback is supplied (nothing to call → fail-open)', async () => {
+    mockOutbox([]);
+    const schedules = new Map([['metrics-rollup', '*/5 * * * *']]);
+    const { checked, reseeded } = await reseedMissingSuccessorRows(schedules, undefined);
+    expect(reseeded).toBe(0);
+    expect(checked).toBe(0);
+  });
+});
+
 describe('scheduler-reaper — armSchedulerSelfHeal (periodic timer wiring)', () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
@@ -413,6 +594,58 @@ describe('scheduler-reaper — armSchedulerSelfHeal (periodic timer wiring)', ()
     await tickFn();
     expect(reap).toHaveBeenCalledTimes(1);
     expect(reap.mock.calls[0][0]).toBe(schedules);
+  });
+
+  it('#2827 each tick runs the missing-successor re-seed when a reseedJob is supplied', async () => {
+    let tickFn;
+    const setIntervalFn = vi.fn().mockImplementation((fn) => { tickFn = fn; return { unref() {} }; });
+    const schedules = new Map([['metrics-rollup', '*/5 * * * *']]);
+    const reseedJob = vi.fn().mockResolvedValue(undefined);
+    const reseed = vi.fn().mockResolvedValue({ checked: 1, reseeded: 1 });
+    armSchedulerSelfHeal({
+      env: enabledEnv, setIntervalFn, jobSchedules: schedules,
+      reap: vi.fn().mockResolvedValue({ inspected: 0, reaped: 0 }),
+      reseed, reseedJob,
+      loadRows: async () => [], raiseAlert: vi.fn(),
+    });
+    await tickFn();
+    expect(reseed).toHaveBeenCalledTimes(1);
+    expect(reseed.mock.calls[0][0]).toBe(schedules);
+    expect(reseed.mock.calls[0][1]).toBe(reseedJob);
+  });
+
+  it('#2827 does NOT run the re-seed pass when no reseedJob is supplied (boot path has no service handle)', async () => {
+    let tickFn;
+    const setIntervalFn = vi.fn().mockImplementation((fn) => { tickFn = fn; return { unref() {} }; });
+    const reseed = vi.fn().mockResolvedValue({ checked: 0, reseeded: 0 });
+    armSchedulerSelfHeal({
+      env: enabledEnv, setIntervalFn, jobSchedules: new Map(),
+      reap: vi.fn().mockResolvedValue({ inspected: 0, reaped: 0 }),
+      reseed, // no reseedJob
+      loadRows: async () => [], raiseAlert: vi.fn(),
+    });
+    await tickFn();
+    expect(reseed).not.toHaveBeenCalled();
+  });
+
+  it('#2827 a tick where the re-seed throws still runs the canary check (fail-open, timer survives)', async () => {
+    let tickFn;
+    const setIntervalFn = vi.fn().mockImplementation((fn) => { tickFn = fn; return { unref() {} }; });
+    const stale = new Date(Date.now() - 30 * 60_000).toISOString();
+    const raiseAlert = vi.fn().mockResolvedValue(undefined);
+    armSchedulerSelfHeal({
+      env: enabledEnv, setIntervalFn, jobSchedules: new Map(),
+      reap: vi.fn().mockResolvedValue({ inspected: 0, reaped: 0 }),
+      reseed: vi.fn().mockRejectedValue(new Error('reseed blew up')),
+      reseedJob: vi.fn(),
+      loadRows: async () => [
+        { jobName: 'metrics-rollup', lastSuccessAt: stale },
+        { jobName: 'kg-ondemand-drain', lastSuccessAt: stale },
+      ],
+      raiseAlert,
+    });
+    await expect(tickFn()).resolves.toBeUndefined();
+    expect(raiseAlert).toHaveBeenCalledTimes(1);
   });
 
   it('raises SchedulerStallDetected ALERT (alert-only, NO exit) when both canaries are stale', async () => {
