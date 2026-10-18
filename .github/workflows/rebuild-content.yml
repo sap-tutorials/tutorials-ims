@@ -540,6 +540,17 @@ jobs:
           #  - full → PRIME only: decideFastPath refuses reuse on non-slug-targeted
           #    runs, but the sidecar is still written so the SAVE step warms it.
           CONTENT_CACHE_FAST_PATH: ${{ steps.mode.outputs.content_cache_enabled }}
+          # [#2800] YouTube official Data API v3 credentials for AUTOAUTHOR_VIDEO
+          # transcript fetch. No BTP Credential Store binding exists on a CI
+          # runner, so srv/lib/youtube-official-transcript.js resolves these via
+          # resolveSecret()'s process.env fallback — env var names MUST match the
+          # credstore aliases verbatim. Without them the snippet fetch sends an
+          # empty key, YouTube returns 200 + empty items, and every video quiz
+          # silently drops (the original #2800 symptom).
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          YOUTUBE_OAUTH_CLIENT_ID: ${{ secrets.YOUTUBE_OAUTH_CLIENT_ID }}
+          YOUTUBE_OAUTH_CLIENT_SECRET: ${{ secrets.YOUTUBE_OAUTH_CLIENT_SECRET }}
+          YOUTUBE_OAUTH_REFRESH_TOKEN: ${{ secrets.YOUTUBE_OAUTH_REFRESH_TOKEN }}
 
       # [#2800] Surface any AUTOAUTHOR_VIDEO tutorials whose quiz was dropped
       # because no transcript was available (source='none'). The marker

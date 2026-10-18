@@ -197,6 +197,20 @@ jobs:
           # only (decideFastPath refuses reuse off slug-targeted; sidecar still
           # written so the SAVE step warms it).
           CONTENT_CACHE_FAST_PATH: ${{ steps.cc.outputs.content_cache_enabled }}
+          # [#2800] YouTube official Data API v3 credentials for AUTOAUTHOR_VIDEO
+          # transcript fetch. On a CI runner there is no BTP Credential Store
+          # binding, so srv/lib/youtube-official-transcript.js resolves these via
+          # resolveSecret()'s process.env fallback — the env var names MUST match
+          # the credstore aliases verbatim (YOUTUBE_API_KEY, YOUTUBE_OAUTH_*).
+          # Without them the snippet fetch sends &key= empty, YouTube returns
+          # 200 + empty items, and every video quiz silently drops (the original
+          # #2800 symptom). YOUTUBE_API_KEY powers videos.list (channel gate +
+          # description fallback); the three OAuth secrets mint the short-lived
+          # access token for captions.list/download.
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          YOUTUBE_OAUTH_CLIENT_ID: ${{ secrets.YOUTUBE_OAUTH_CLIENT_ID }}
+          YOUTUBE_OAUTH_CLIENT_SECRET: ${{ secrets.YOUTUBE_OAUTH_CLIENT_SECRET }}
+          YOUTUBE_OAUTH_REFRESH_TOKEN: ${{ secrets.YOUTUBE_OAUTH_REFRESH_TOKEN }}
 
       # Author content-error routing (#2384). A slug-targeted QA run whose
       # source markdown could not be fetched (missing/misnamed file, e.g.
