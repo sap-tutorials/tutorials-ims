@@ -78,6 +78,7 @@ author_profile: https://github.com/janedoe
 | `auto_validation` | No | Set `true` if the tutorial has quiz rules in the `-Contribution` repo. |
 | `author_name`, `author_profile` | Recommended | Shown on the tutorial page. |
 | `video` | No | Optional intro video shown as a styled player at the top of the steps. See [§3.3 Adding a video](#_3-3-adding-a-video). |
+| `variables` | No | Array of per-reader values (e.g. a workshop group number) the reader fills in once and the platform substitutes live throughout the tutorial. See [§3.7 Personalize with variables](#_3-7-personalize-with-variables). |
 
 A canonical taxonomy of allowed `primary_tag` and `tags` values is maintained in the platform's `Tags` entity. To add a new tag or category, see [Center Admin](center-admin.md) § "Import a new tag".
 
@@ -318,6 +319,52 @@ entity Books : managed {
 \`\`\`
 ```
 
+### 3.7 Personalize with variables
+
+When a tutorial contains a value that is **different for every reader** — most often a workshop group or seat number — declare it as a *variable*. The reader types it once into a field at the top of the page and the platform substitutes it **live** into every marked occurrence: prose, inline code, and copy-pasteable fenced code blocks alike. No more "replace `XXX` everywhere" instructions.
+
+Declare variables in frontmatter under a `variables:` key — one entry per value:
+
+```yaml
+variables:
+  - name: groupNumber              # identifier + body-token key; must match [A-Za-z][A-Za-z0-9_]*, unique
+    label: Your workshop group number   # field label the reader sees
+    type: string                   # string | number
+    maxLength: 3                   # optional: caps input length + drives validation
+    required: true                 # optional: marks the field required
+    placeholder: XXX               # optional: shown until the reader types a value
+```
+
+Reference a variable anywhere in the body with a `{{var:<name>}}` token — the **same syntax works in all three contexts**:
+
+```markdown
+In prose: your group number is {{var:groupNumber}}.
+In inline code: your space is `dev-{{var:groupNumber}}`.
+```
+
+````markdown
+```bash
+cf create-space dev-{{var:groupNumber}}
+```
+````
+
+Optionally pre-fill the value from the reader's identity with a `default` regex (capture group 1 becomes the default):
+
+```yaml
+    default:
+      from: email                  # one of: email | id | givenName | familyName
+      pattern: 'da164-(\d+)@'      # capture group 1 → default value
+```
+
+Key behaviors:
+
+- **Build-enforced.** A malformed `variables:` block, an invalid `type`, a `default.from` off the allowlist `{email, id, givenName, familyName}`, an uncompilable `default.pattern`, or a `{{var:<name>}}` token referencing an undeclared name is a **hard build failure** — it can never reach readers. (A declared-but-unused variable is a soft warning.)
+- **Client-side only.** Substitution happens in the reader's browser; nothing is rendered or stored server-side, so the feature is privacy-clean.
+- **Persists + carries over.** A typed value survives a browser restart and carries across the tutorials in a mission **by variable `name`** — use the *same* name across a mission for the same value.
+- `placeholder` only sets the greyed-out hint and the pre-substitution text; it is **not** a scan-and-replace target. Only `{{var:<name>}}` tokens are substituted — a bare `XXX` in your text stays `XXX`.
+
+Full worked walkthrough (self-demonstrating): **[Use Variables to Personalize Your Tutorials](https://developers.sap.com/tutorials/use-variables-in-tutorials)** (source: `sap-tutorials/meta-tutorials`).
+
 ---
 
 ## 4. The author workflow today
@@ -391,6 +438,7 @@ Run through this before opening your PR:
 - [ ] Code fences have a language tag.
 - [ ] Inline HTML is avoided (or limited to allowed tags only).
 - [ ] If you used `OPTION` blocks, each `BEGIN` has a matching `END`.
+- [ ] If you declared `variables:`, every `{{var:<name>}}` token references a declared `name`, and typing a value updates prose, inline code, **and** fenced code blocks (copy-paste one command to confirm your value is baked in).
 - [ ] Tutorial renders cleanly in `npm run dev` with no warnings.
 
 ---
@@ -474,3 +522,4 @@ If any of these items become a blocker for your work, open an issue on the proje
 - [repo-group-owners.md](repo-group-owners.md) — for repo owners reviewing your PRs
 - [center-admin.md](center-admin.md) — for taxonomy, tag onboarding, and rollback
 - [../developers/operations/qa-channel-bootstrap.md](../developers/operations/qa-channel-bootstrap.md) — author-preview channel
+- [Use Variables to Personalize Your Tutorials](https://developers.sap.com/tutorials/use-variables-in-tutorials) — self-demonstrating walkthrough of the `variables:` feature (§3.7)
