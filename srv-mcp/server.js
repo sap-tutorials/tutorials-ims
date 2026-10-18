@@ -18,6 +18,28 @@
 import cds from '@sap/cds';
 import { isFlagEnabled } from './lib/db-flags.js';
 
+// Process-level safety net (#2828). srv-mcp was crash-looping in PROD with CF
+// "Codependent step exited" — an unhandled promise rejection under Node 22
+// (default action: non-zero exit) with NO app-level handler to intercept it.
+// Memory was fine (~106M/1G), ruling out OOM; crashes clustered daily
+// ~04:00–08:40Z (an external trigger — e.g. a HANA maintenance/failover band
+// hitting an unguarded async path such as the MCP read handlers or the
+// @cap-js/mcp SSE transport — not an internal timer; srv-mcp has none).
+//
+// These handlers are DIAGNOSTIC and NON-EXITING: they log the full error +
+// stack (so the real origin surfaces in SAP Cloud Logging, which the next
+// occurrence will reveal) and keep the process alive. A single rejected
+// promise must not take the whole instance down. If a future error genuinely
+// warrants a restart, make THAT exit explicit — do not rely on Node's default.
+// Registered at module top-level so coverage starts before `cds.server` boots.
+process.on('unhandledRejection', (reason) => {
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  cds.log('mcp').error('unhandledRejection (survived, not exiting) —', err);
+});
+process.on('uncaughtException', (err) => {
+  cds.log('mcp').error('uncaughtException (survived, not exiting) —', err);
+});
+
 cds.on('bootstrap', (app) => {
   app.disable('x-powered-by');
 
