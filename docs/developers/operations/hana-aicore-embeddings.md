@@ -66,34 +66,49 @@ with `SELECT * FROM NLP_VECTOR_EMBEDDING_MODELS;`.
    > `d2f9fa53543e5c4e` (defaultOrchestrationConfig),
    > `dfad0fa7cd47ab38` (text-embedding-3-small).
 
-### Step B1 — grant `CREATE PSE` (declarative)
+### Step B1 — grant `CREATE PSE` via `default_access_role.hdbrole`
 
 The container runtime user already holds `CREATE REMOTE SOURCE`; it is
-missing only `CREATE PSE`. Grant it through the existing
-`db/src/_grants.hdbgrants` / `tutorials-kg-grantor` mechanism — add
-`CREATE PSE` to the `system_privileges` of both `application_user` and
-`object_owner`, then deploy `tutorials-db-deployer`.
+missing only the system privilege `CREATE PSE`. Grant it the **HDI-native
+way**, through the container's own `default_access_role` — **not** via
+`_grants.hdbgrants` (that path needs an external grantor holding the
+privilege `WITH ADMIN OPTION`, which `tutorials-kg-grantor` does not, and
+it emits `GRANT "CREATE PSE" TO …#OO` which HANA rejects as an *invalid
+role name*).
 
-```jsonc
-// db/src/_grants.hdbgrants  →  tutorials-kg-grantor → application_user / object_owner
-"privileges": [ "SPARQL QUERY", "SPARQL UPDATE", "CREATE PSE" ]
+Per the [`@sap/hdi-deploy` README](https://www.npmjs.com/package/@sap/hdi-deploy)
+(the definitive HDI reference), a role at `src/defaults/default_access_role.hdbrole`
+named `default_access_role` is, on deploy, created by the container object
+owner (`#OO`) and granted to the service instance's global access role —
+so a system privilege listed in it is granted by `#OO`, with no external
+grantor service.
+
+```json
+// db/src/defaults/default_access_role.hdbrole
+{
+  "role": {
+    "name": "default_access_role",
+    "system_privileges": [ "CREATE PSE" ]
+  }
+}
 ```
 
-> **Try-first risk.** The grant only lands if the grantor identity behind
-> `tutorials-kg-grantor` holds `CREATE PSE` **WITH ADMIN OPTION**.
->
-> - **If deploy succeeds:** done, proceed to B2.
-> - **Failure signature:** `tutorials-db-deployer` fails with an
->   insufficient-privilege / cannot-grant error naming `CREATE PSE`.
-> - **Fallback:** as a DEV HANA Cloud admin (DBADMIN or equivalent), run
->   **one** of:
->   ```sql
->   -- Option 1: let the grantor delegate it (keeps the declarative path working)
->   GRANT CREATE PSE TO <kg_grantor_user> WITH ADMIN OPTION;
->   -- Option 2: grant the container user directly (bypasses the grantor)
->   GRANT CREATE PSE TO AC9753D6C4764F5ABE3B3CA4E88233C0_..._RT;
->   ```
->   then re-deploy (Option 1) or skip straight to B2 (Option 2).
+Notes:
+- The file **must** be at exactly `src/defaults/default_access_role.hdbrole`
+  and not excluded by an include-filter, or the auto-assignment won't fire.
+- `.hdinamespace`: only needed (empty `"name":""` at `src/defaults/`) if
+  `db/src` defines a real namespace prefix. This repo has none, so no
+  `.hdinamespace` is added.
+- `db/src/.hdiconfig` already maps `.hdbrole`, so the artifact deploys.
+- Do **not** re-add `CREATE PSE` to `_grants.hdbgrants` — that was the
+  failed first attempt (DEV deploy `20261019-105602`,
+  `invalid role name: CREATE PSE`).
+
+After deploy, confirm the privilege landed:
+```sql
+SELECT PRIVILEGE FROM EFFECTIVE_PRIVILEGES
+  WHERE USER_NAME = CURRENT_USER AND PRIVILEGE = 'CREATE PSE';  -- expect one row
+```
 
 ### Step B2 — create the PSE and remote source
 
