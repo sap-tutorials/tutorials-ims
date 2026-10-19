@@ -1,0 +1,8 @@
+{
+  "role": {
+    "name": "default_access_role",
+    "system_privileges": [
+      "CREATE PSE"
+    ]
+  }
+}

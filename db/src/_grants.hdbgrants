@@ -5,8 +5,7 @@
                 {
                     "privileges": [
                         "SPARQL QUERY",
-                        "SPARQL UPDATE",
-                        "CREATE PSE"
+                        "SPARQL UPDATE"
                     ]
                 }
             ]
@@ -16,8 +15,7 @@
                 {
                     "privileges": [
                         "SPARQL QUERY",
-                        "SPARQL UPDATE",
-                        "CREATE PSE"
+                        "SPARQL UPDATE"
                     ]
                 }
             ]
