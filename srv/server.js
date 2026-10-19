@@ -2352,6 +2352,13 @@ cds.on('served', async () => {
   if (globalThis.__identityPinHookRegistered) return;
   for (const srv of Object.values(cds.services)) {
     if (!(srv instanceof cds.ApplicationService)) continue;
+    // Skip the internal CronService: scheduled ticks are synthetic events with
+    // no HTTP request, so `cds.tx(req)` dereferences `ctx.context._set` on a
+    // non-EventContext and throws on EVERY tick (#2552). The pin is a no-op
+    // there anyway — a cron tick's user is always system/anonymous. The throw
+    // is fail-open (WARN) but spams the log and trips the scheduler-stall
+    // canary (#2782) after a restart resets the canary clocks.
+    if (srv.name === 'com.sap.developers.ims.CronService') continue;
     srv.before('*', async (req) => {
       // Only authenticated requests carry a resolvable identity; anonymous
       // and tech-user paths no-op inside pinResolvedUser.

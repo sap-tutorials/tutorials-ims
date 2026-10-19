@@ -84,4 +84,31 @@ describe('CronService schedule smoke (hybrid)', () => {
       );
     }
   });
+
+  // #2552 regression: the global identity-pin before('*') hook (srv/server.js)
+  // must NOT be registered on CronService. On a scheduled tick the pin calls
+  // `cds.tx(req)` against a synthetic cron event whose context is not a real
+  // EventContext, throwing `ctx.context._set is not a function` on EVERY tick
+  // (fail-open WARN, but it spams the log and trips the #2782 stall canary
+  // after a restart). The server.js loop skips CronService by name.
+  it('does not register the identity-pin before(*) hook on CronService', async () => {
+    const cron = cds.services['com.sap.developers.ims.CronService'];
+    expect(cron, 'CronService should be served').toBeTruthy();
+
+    // CAP keeps registered phase handlers on srv.before (array of {on, handler}).
+    const beforeHandlers = cron.before || cron._handlers?.before || [];
+    // The identity-pin handler is an async fn whose source mentions
+    // pinResolvedUser. A '*'/undefined-event before handler whose body
+    // references the pin would be the regression.
+    const pinHandlers = (Array.isArray(beforeHandlers) ? beforeHandlers : [])
+      .filter((h) => {
+        const src = String(h?.handler ?? h ?? '');
+        return src.includes('pinResolvedUser') || src.includes('identity-pin');
+      });
+
+    expect(
+      pinHandlers.length,
+      'identity-pin before(*) must be skipped on CronService (#2552)'
+    ).toBe(0);
+  });
 });

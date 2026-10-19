@@ -94,6 +94,26 @@ function dedentBlock(text: string): string {
   return dedented.join('\n');
 }
 
+/** Re-indent only the shortcode WRAPPER lines of a built replacement block by
+ *  `indent`, leaving every body line at its current (column-0) position.
+ *
+ *  Approach A for #2820: the OPTION shortcode must stay inside the surrounding
+ *  numbered <li>, so its wrapper lines carry the substep's indentation — but the
+ *  panel body must stay at column 0 so os-panel.html's `{{ .Inner | markdownify }}`
+ *  parses it as markdown rather than a literal indented-code block (#2703).
+ *
+ *  A "wrapper line" is a Hugo shortcode delimiter (`{{< … >}}` / `{{% … %}}`) or
+ *  a VitePress `<OptionTabs>` / `<template>` tag — i.e. the structural lines this
+ *  module itself emits around the (already dedented) body. Blank lines are left
+ *  untouched so no trailing whitespace is introduced. */
+function indentWrapperLines(block: string, indent: string): string {
+  const wrapper = /^(\{\{[<%]\s*\/?\s*(os-options|os-panel|option-tabs|tab)\b|<\/?OptionTabs|<\/?template\b)/;
+  return block
+    .split('\n')
+    .map(line => (wrapper.test(line) ? indent + line : line))
+    .join('\n');
+}
+
 export function convertOptionBlocks(
   content: string,
   target: OptionsTarget = 'vitepress',
@@ -136,14 +156,27 @@ export function convertOptionBlocks(
     const start = firstMatch.index!
     const end = lastMatch.index! + lastMatch[0].length
 
-    // Splice from the START of the first marker's line so any leading
-    // indentation on that line (present when the OPTION block is nested inside
-    // a numbered substep) is dropped. The replacement is emitted flush-left:
-    // the surrounding markdown list closes, but Goldmark re-opens it with
-    // `<ol start="N">` after the block, so substep numbering is preserved,
-    // while os-panel.html's `{{ .Inner | markdownify }}` renders the dedented
-    // body (code fences / images / notes) as proper markdown (#2703).
+    // Splice from the START of the first marker's line. We CAPTURE this line's
+    // leading indentation (present when the OPTION block is nested inside a
+    // numbered substep) and re-apply it to the shortcode WRAPPER lines only.
+    //
+    // #2820: emitting the wrappers flush-left (the old behaviour) closed the
+    // surrounding markdown list, so any figure inside an os-panel — or trailing
+    // the group in the same substep — rendered as a top-level <figure>, a
+    // SIBLING of the list rather than a child of the <li>, losing its list
+    // indentation. Keeping the wrapper lines indented to the substep keeps the
+    // shortcode INSIDE the <li> so the list never closes and substep numbering
+    // is continuous (no `<ol start="N">` reopen needed).
+    //
+    // The panel BODY lines, however, stay at COLUMN 0: os-panel.html runs
+    // `{{ .Inner | markdownify }}`, and a 4-space-indented body is parsed by
+    // that second Goldmark pass as a literal indented-code block (showing the
+    // backticks / raw image markdown) — the #2703 failure mode. So we indent
+    // the wrappers but never the body. (Verified against a real Hugo render:
+    // figure ancestor chain becomes div.os-panel < div.os-options < li < ol.)
     const lineStart = result.lastIndexOf('\n', start - 1) + 1;
+    const indentMatch = result.slice(lineStart, start).match(/^[ \t]*/);
+    const blockIndent = indentMatch ? indentMatch[0] : '';
 
     let replacement: string
 
@@ -200,34 +233,25 @@ export function convertOptionBlocks(
       replacement = `<OptionTabs :tabs="[${tabNames}]">\n${slots}\n</OptionTabs>`
     }
 
+    // Re-apply the substep's indentation to the shortcode WRAPPER lines only
+    // (the `{{< … >}}` / `{{% … %}}` lines), leaving the panel body at column 0.
+    // This keeps the whole shortcode inside the surrounding <li> (#2820) while
+    // the column-0 body still parses as markdown under os-panel.html's
+    // `{{ .Inner | markdownify }}` (#2703). A column-0 OPTION block (blockIndent
+    // === '') is unaffected — it stays flush-left as before.
+    if (blockIndent) {
+      replacement = indentWrapperLines(replacement, blockIndent);
+    }
+
     result = result.slice(0, lineStart) + replacement + result.slice(end)
 
-    // Bug B (#2703 follow-up): content that trails the OPTION group but still
-    // belongs to the same numbered substep (e.g. "Set the install directory…",
-    // an image, a > [!TIP]) was authored indented 4 spaces. Once the group is
-    // emitted flush-left the surrounding list closes, so that still-indented
-    // tail is parsed by Goldmark as a literal indented-code block — detaching
-    // it and the following substep. Dedent the tail (up to the next list
-    // marker, shortcode, or a de-indented line) back to column 0 so it stays
-    // list-item prose and the next substep reopens.
-    const tailStart = lineStart + replacement.length;
-    const after = result.slice(tailStart);
-    const tailLines = after.split('\n');
-    const dedentedTail: string[] = [];
-    let stopped = false;
-    for (const line of tailLines) {
-      if (stopped) { dedentedTail.push(line); continue; }
-      if (line.trim() === '') { dedentedTail.push(line); continue; }
-      // A line indented >= 4 spaces is trailing substep content → dedent it.
-      if (/^ {4}/.test(line)) { dedentedTail.push(line.slice(4)); continue; }
-      // A tab-indented line → strip one leading tab.
-      if (/^\t/.test(line)) { dedentedTail.push(line.replace(/^\t/, '')); continue; }
-      // First line at column 0 (next list marker, shortcode, heading, or the
-      // list's end) — stop; everything from here is outside this substep's tail.
-      stopped = true;
-      dedentedTail.push(line);
-    }
-    result = result.slice(0, tailStart) + dedentedTail.join('\n');
+    // NOTE: the old "Bug B" tail-dedent (which pushed trailing substep content
+    // to column 0) is deliberately gone. It only existed to survive the
+    // flush-left list CLOSURE: once the list closed, still-indented trailing
+    // content became a literal indented-code block. Now that the shortcode
+    // wrappers stay indented the list never closes, so trailing content keeps
+    // its authored substep indentation and remains valid list-item continuation
+    // — dedenting it here would instead EJECT it from the <li> (#2820).
   }
 
   return result
