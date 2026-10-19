@@ -74,6 +74,7 @@ Deep dives (do not duplicate here — read the doc when relevant):
 - [docs/developers/operations/testing-endpoints.md](docs/developers/operations/testing-endpoints.md) — **canonical UI + API endpoint reference** (services, custom endpoints, auth scopes)
 - [docs/developers/operations/mta-deployment.md](docs/developers/operations/mta-deployment.md) — deploy runbook
 - [docs/developers/operations/rebuild-content-workflow.md](docs/developers/operations/rebuild-content-workflow.md) — three rebuild modes, auto-classify
+- [docs/developers/operations/hana-aicore-embeddings.md](docs/developers/operations/hana-aicore-embeddings.md) — connect HANA to AI Core for DB-native `VECTOR_EMBEDDING` (PSE + `sapgenaihub` remote source); built-in NLP vs AI Core tiers; auto-embedding mechanisms (#2810)
 - [docs/developers/operations/qa-channel-bootstrap.md](docs/developers/operations/qa-channel-bootstrap.md) — QA author-preview channel
 - [docs/developers/operations/scheduler-troubleshooting.md](docs/developers/operations/scheduler-troubleshooting.md) — outbox-wedge recovery runbook
 - [docs/developers/reference/tutorials-ims-gotchas.md](docs/developers/reference/tutorials-ims-gotchas.md) — everything else (build pipeline quirks, publish flags, AI features, env vars, migration)
