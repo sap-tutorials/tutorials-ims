@@ -62,7 +62,7 @@ function installSelect() {
   });
 }
 
-const { resolveUser, issuerSubjectFromUser, githubIdentityFromUser } = await import('../../packages/core/resolve-db-user.js');
+const { resolveUser, issuerSubjectFromUser, githubIdentityFromUser, pinResolvedUser } = await import('../../packages/core/resolve-db-user.js');
 
 const iasUser = (over = {}) => ({
   id: 'thomas.jung@sap.com',
@@ -376,6 +376,66 @@ describe('resolveUser — GitHub provider-canonical link (Tier 0)', () => {
     expect(captured.insertVals?.subject).toBe('12159356');
     expect(captured.insertVals?.provider).toBe('github');
     expect(captured.updateVals?.githubLogin).toBe('jung-thomas');
+  });
+});
+
+// #2552 regression: in PROD the @sap/xssec XsuaaToken exposes `userId` as a
+// GETTER-ONLY property. pinResolvedUser must not throw
+// `Cannot set property userId of #<XsuaaToken> which has only a getter`; it
+// caches the resolved sapId on user.attr (always writable) instead.
+describe('pinResolvedUser — getter-only token userId (#2552)', () => {
+  beforeEach(() => { captured = undefined; stub = {}; installSelect(); installInsert(); installUpdate(); });
+  afterEach(() => { delete globalThis.SELECT; delete globalThis.INSERT; delete globalThis.UPDATE; });
+
+  // A user whose authInfo.token.userId is a read-only getter, like the real
+  // production XsuaaToken.
+  const getterOnlyTokenUser = () => {
+    const token = { payload: {
+      iss: 'https://atxgsg7zi.accounts.ondemand.com',
+      sub: 'thomas.jung@sap.com',
+    } };
+    Object.defineProperty(token, 'userId', {
+      get() { return undefined; },        // getter only — no setter
+      enumerable: true,
+      configurable: false,
+    });
+    return { id: 'thomas.jung@sap.com', attr: {}, authInfo: { token } };
+  };
+
+  it('does not throw when userId is a getter-only property', async () => {
+    stub.identityRow = { user_ID: 'u-1' };
+    stub.usersRows = [{ ID: 'u-1', sapId: 'I809764', email: 'thomas.jung@sap.com' }];
+    const user = getterOnlyTokenUser();
+    const row = await pinResolvedUser(user);
+    expect(row?.ID).toBe('u-1');
+    expect(row?.sapId).toBe('I809764');
+  });
+
+  it('caches dbUserId and sapId on user.attr for the getter-only token', async () => {
+    stub.identityRow = { user_ID: 'u-1' };
+    stub.usersRows = [{ ID: 'u-1', sapId: 'I809764', email: 'thomas.jung@sap.com' }];
+    const user = getterOnlyTokenUser();
+    await pinResolvedUser(user);
+    expect(user.attr.dbUserId).toBe('u-1');
+    expect(user.attr.sapId).toBe('I809764');
+  });
+
+  it('idempotent: a second call with a pinned user does not re-resolve or throw', async () => {
+    const user = { id: 'thomas.jung@sap.com', attr: { dbUserId: 'u-1', sapId: 'I809764' } };
+    const row = await pinResolvedUser(user);
+    expect(row).toEqual({ ID: 'u-1', sapId: 'I809764' });
+  });
+
+  it('still mirrors userId onto a writable token (dev/basic-auth path)', async () => {
+    stub.identityRow = { user_ID: 'u-2' };
+    stub.usersRows = [{ ID: 'u-2', sapId: 'I000001', email: 'dev@example.com' }];
+    const user = {
+      id: 'dev@example.com', attr: {},
+      authInfo: { token: { payload: { iss: 'https://atxgsg7zi.accounts.ondemand.com', sub: 'dev@example.com' } } },
+    };
+    await pinResolvedUser(user);
+    expect(user.authInfo.token.userId).toBe('I000001');
+    expect(user.attr.sapId).toBe('I000001');
   });
 });
 
