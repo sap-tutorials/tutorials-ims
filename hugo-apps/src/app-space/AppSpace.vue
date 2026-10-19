@@ -1326,6 +1326,25 @@ const emptyStateMessage = computed(() => {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+   Themed heroes — text colour (#2839)
+   The Joule/Sapphire hero gradients are dark in both light AND dark mode,
+   but the base .hero only inherits --sapShell_TextColor, which resolves to
+   a DARK value in the Horizon light theme → near-illegible banner text on
+   the purple/blue gradient. Pin white here (and on the skeleton) so the
+   themed hero reads correctly regardless of the active Horizon palette.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.app-space[data-theme="joule"] .hero,
+.app-space[data-theme="sapphire"] .hero {
+  color: #fff;
+}
+
+.app-space[data-theme="joule"] .hero-title-skeleton,
+.app-space[data-theme="sapphire"] .hero-title-skeleton {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    Joule Theme — Light Mode
    ═══════════════════════════════════════════════════════════════════ */
 
