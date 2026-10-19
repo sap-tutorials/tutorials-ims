@@ -2,7 +2,8 @@
   "role": {
     "name": "default_access_role",
     "system_privileges": [
-      "CREATE PSE"
+      "TRUST ADMIN",
+      "CERTIFICATE ADMIN"
     ]
   }
 }

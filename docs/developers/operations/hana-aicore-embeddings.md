@@ -15,7 +15,7 @@
 | Tier | What | AI Core needed? | Privilege needed? |
 | --- | --- | --- | --- |
 | **A — built-in NLP** | HANA's own embedding models (`SAP_GXY.20250407`, `SAP_NEB.20240715`) | No | None |
-| **B — AI Core remote source** | AI Core gen-AI hub models (`text-embedding-3-small`, …) via `sapgenaihub` adapter | Yes | `CREATE PSE` (see below) |
+| **B — AI Core remote source** | AI Core gen-AI hub models (`text-embedding-3-small`, …) via `sapgenaihub` adapter | Yes | `TRUST ADMIN` + `CERTIFICATE ADMIN` (see below) |
 
 Tier A works out of the box and is the fastest sanity check. Tier B is
 issue #2810's actual target.
@@ -66,15 +66,15 @@ with `SELECT * FROM NLP_VECTOR_EMBEDDING_MODELS;`.
    > `d2f9fa53543e5c4e` (defaultOrchestrationConfig),
    > `dfad0fa7cd47ab38` (text-embedding-3-small).
 
-### Step B1 — grant `CREATE PSE` via `default_access_role.hdbrole`
+### Step B1 — grant PSE privileges via `default_access_role.hdbrole`
 
 The container runtime user already holds `CREATE REMOTE SOURCE`; it is
-missing only the system privilege `CREATE PSE`. Grant it the **HDI-native
-way**, through the container's own `default_access_role` — **not** via
-`_grants.hdbgrants` (that path needs an external grantor holding the
-privilege `WITH ADMIN OPTION`, which `tutorials-kg-grantor` does not, and
-it emits `GRANT "CREATE PSE" TO …#OO` which HANA rejects as an *invalid
-role name*).
+missing the system privileges needed to create and populate a PSE. The
+`CREATE PSE` **statement** is authorized by the `TRUST ADMIN` system
+privilege (and `ALTER PSE … SET OWN CERTIFICATE` by `CERTIFICATE ADMIN`)
+— `CREATE PSE` is *not itself* a system-privilege name. Grant them the
+**HDI-native way**, through the container's own `default_access_role` —
+**not** via `_grants.hdbgrants`.
 
 Per the [`@sap/hdi-deploy` README](https://www.npmjs.com/package/@sap/hdi-deploy)
 (the definitive HDI reference), a role at `src/defaults/default_access_role.hdbrole`
@@ -88,7 +88,7 @@ grantor service.
 {
   "role": {
     "name": "default_access_role",
-    "system_privileges": [ "CREATE PSE" ]
+    "system_privileges": [ "TRUST ADMIN", "CERTIFICATE ADMIN" ]
   }
 }
 ```
@@ -100,14 +100,20 @@ Notes:
   `db/src` defines a real namespace prefix. This repo has none, so no
   `.hdinamespace` is added.
 - `db/src/.hdiconfig` already maps `.hdbrole`, so the artifact deploys.
-- Do **not** re-add `CREATE PSE` to `_grants.hdbgrants` — that was the
-  failed first attempt (DEV deploy `20261019-105602`,
-  `invalid role name: CREATE PSE`).
+- **Failed attempts (do not repeat):**
+  1. `CREATE PSE` in `_grants.hdbgrants` under `tutorials-kg-grantor`
+     (DEV `20261019-105602`) → `invalid role name: CREATE PSE` (system
+     privileges can't be granted via that SQL-grantor path).
+  2. `"system_privileges": ["CREATE PSE"]` in the role (DEV
+     `20261019-115443`) → `com.sap.hana.di.role: "CREATE PSE": invalid
+     system privilege`. `CREATE PSE` is the statement, not the privilege
+     name; the privilege is `TRUST ADMIN`.
 
-After deploy, confirm the privilege landed:
+After deploy, confirm the privileges landed:
 ```sql
 SELECT PRIVILEGE FROM EFFECTIVE_PRIVILEGES
-  WHERE USER_NAME = CURRENT_USER AND PRIVILEGE = 'CREATE PSE';  -- expect one row
+  WHERE USER_NAME = CURRENT_USER
+    AND PRIVILEGE IN ('TRUST ADMIN','CERTIFICATE ADMIN');  -- expect two rows
 ```
 
 ### Step B2 — create the PSE and remote source
@@ -172,8 +178,9 @@ Same steps, PROD inputs. Confirm `cf target` is PROD before any key read.
 
 - [ ] Create / confirm a dedicated x509 key on the PROD AI Core instance.
 - [ ] Retrieve a PROD orchestration deployment ID.
-- [ ] Add `CREATE PSE` to `_grants.hdbgrants` (already in repo from DEV) —
-      deploy PROD `tutorials-db-deployer`; apply admin fallback if it fails.
+- [ ] `default_access_role.hdbrole` (`TRUST ADMIN` + `CERTIFICATE ADMIN`)
+      already in repo from DEV — deploy PROD `tutorials-db-deployer`, then
+      verify both privileges via `EFFECTIVE_PRIVILEGES`.
 - [ ] Run B2 with PROD `AI_API_URL` / `certurl` / `deploymentId` / `clientId`.
 - [ ] Run B3 proof.
 - [ ] (Before rewrite) convert PSE + remote source to design-time artifacts.
