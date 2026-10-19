@@ -7,7 +7,8 @@
 > [#2810](https://github.com/sap-tutorials/tutorials-ims/issues/2810).
 > Design rationale: [`docs/superpowers/specs/2026-10-19-hana-aicore-embedding-design.md`](../../superpowers/specs/2026-10-19-hana-aicore-embedding-design.md).
 >
-> **Status:** DEV setup. This is the *connection + proof* unit only — no
+> **Status:** DEV + PROD live and verified (2026-10-19). This is the
+> *connection + proof* unit only — no
 > application feature has been moved to DB-side embeddings yet.
 
 ## Two tiers
@@ -15,7 +16,7 @@
 | Tier | What | AI Core needed? | Privilege needed? |
 | --- | --- | --- | --- |
 | **A — built-in NLP** | HANA's own embedding models (`SAP_GXY.20250407`, `SAP_NEB.20240715`) | No | None |
-| **B — AI Core remote source** | AI Core gen-AI hub models (`text-embedding-3-small`, …) via `sapgenaihub` adapter | Yes | admin creates PSE + remote source (one-time); container gets `EXECUTE` only |
+| **B — AI Core remote source** | AI Core gen-AI hub models (`text-embedding-3-small`, …) via `sapgenaihub` adapter | Yes | admin creates PSE + remote source (one-time); container inherits `EXECUTE` via `::external_privileges_role` |
 
 Tier A works out of the box and is the fastest sanity check. Tier B is
 issue #2810's actual target.
@@ -138,27 +139,49 @@ mechanism for privileges the container user *should* own long-term — just
 not for this.
 </details>
 
-### Step B2 — grant the container `EXECUTE` on the remote source
+### Step B2 — grant the container `EXECUTE` via `external_privileges_role`
 
-The **only** container-scoped grant needed. As the admin (or via a
-grantor the container can use), grant the `tutorials-hana` runtime user
-EXECUTE on the shared remote source:
+The **only** container-scoped grant needed. Grant it to the container's
+broker-created **`<schema>::external_privileges_role`** — the role
+purpose-built for "access to objects outside the HDI container". Every
+binding user inherits it automatically and **it survives rebinds/
+redeploys** (the role persists for the life of the container; new binding
+users are auto-assigned it by the broker). The admin owns the remote
+source, so it can grant directly — no grantor service, no `.hdbgrants`,
+no `#OO` intermediary.
 
 ```sql
+-- DEV
 GRANT EXECUTE ON REMOTE SOURCE TUTORIALS_AICORE
-  TO "AC9753D6C4764F5ABE3B3CA4E88233C0_..._RT";  -- the container _RT user
+  TO "AC9753D6C4764F5ABE3B3CA4E88233C0::external_privileges_role";
+-- PROD (different container schema)
+GRANT EXECUTE ON REMOTE SOURCE TUTORIALS_AICORE
+  TO "2FEC6DAB47984DB482E0B3BB80AFFEF7::external_privileges_role";
 ```
 
-This can also be delivered declaratively via `.hdbgrants` (a remote-source
-object privilege a grantor can delegate) if we want it in the container
-lifecycle later — but for the DEV proof the direct admin grant is fine.
+> **Do NOT grant to a specific `_RT` user.** Each CF binding mints a new
+> `_RT` user, so a per-user grant breaks on the next rebind (and granting
+> to a throwaway binding user fails outright once that binding is gone —
+> `invalid user name`). The role is the stable, documented target.
+>
+> **Do NOT use `default_access_role.hdbrole` for this.** When present,
+> that artifact *revokes* the container's default run-time-schema
+> permissions and replaces them — unwanted side effects — and `#OO`
+> cannot grant `EXECUTE` on a remote source it doesn't own anyway. The SAP
+> HDI docs name `external_privileges_role` as the external-object path.
+> (Earlier failed attempts chasing the container-grant angle are recorded
+> in the "Failed approaches" box under B1.)
 
-> **Lifecycle caveat:** a PSE / remote source created imperatively by the
-> runtime user is **not** an HDI-managed artifact and will be orphaned on
-> the next `tutorials-db-deployer` container rebuild. Acceptable for this
-> DEV proof. **Before any feature rewrite, convert these to design-time
-> artifacts** (`.hdbpse` + remote-source artifact) so they survive
-> redeploy — tracked as a follow-up.
+Verify (as admin or any app user):
+```sql
+SELECT PRIVILEGE, GRANTEE FROM GRANTED_PRIVILEGES
+  WHERE OBJECT_NAME = 'TUTORIALS_AICORE';
+-- expect: EXECUTE -> <schema>::external_privileges_role
+```
+
+> **Verified on DEV + PROD (2026-10-19):** a container `_RT` user that only
+> inherits `::external_privileges_role` (no direct grant) returned a
+> 1536-dim `text-embedding-3-small` vector via `TUTORIALS_AICORE`.
 
 ### Step B3 — prove it
 
@@ -174,16 +197,20 @@ Recommended: a thin hybrid test asserting a non-null vector returns.
 
 ---
 
-## PROD repeat checklist
+## PROD status — DONE (2026-10-19)
 
-Same steps, PROD inputs. Confirm `cf target` is PROD before any key read.
+Both tiers are live and verified on PROD (container schema
+`2FEC6DAB47984DB482E0B3BB80AFFEF7`): PSE + remote source created, EXECUTE
+granted to `::external_privileges_role`, and a container `_RT` user
+returned a 1536-dim embedding via `TUTORIALS_AICORE`. The checklist below
+is retained for re-provisioning / a fresh environment.
 
-- [ ] Create / confirm a dedicated x509 key on the PROD AI Core instance.
-- [ ] Retrieve a PROD orchestration deployment ID.
-- [ ] As a PROD HANA admin, run B1 (CREATE PSE + remote source) with PROD
-      `AI_API_URL` / `certurl` / `deploymentId` / `clientId`.
-- [ ] Grant `EXECUTE ON REMOTE SOURCE` to the PROD container `_RT` user (B2).
-- [ ] Run B3 proof.
+- [x] Dedicated x509 key on the PROD AI Core instance (`hana-ai-core`).
+- [x] PROD orchestration deployment ID (`da6d9c5e3fb50c3d`).
+- [x] PROD HANA admin ran B1 (CREATE PSE + remote source).
+- [x] Granted `EXECUTE ON REMOTE SOURCE` to
+      `2FEC6DAB47984DB482E0B3BB80AFFEF7::external_privileges_role` (B2).
+- [x] B3 proof (1536-dim vector as `_RT` user).
 
 ---
 
