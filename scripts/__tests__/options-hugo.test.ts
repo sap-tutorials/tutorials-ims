@@ -285,15 +285,17 @@ ML2
   });
 })
 
-describe('convertOptionBlocks (hugo) — indented OPTION blocks inside list items (#2703)', () => {
+describe('convertOptionBlocks (hugo) — indented OPTION blocks inside list items (#2703, #2820)', () => {
   // When an OPTION block lives inside a numbered substep it is authored
-  // indented 4 spaces. The shortcode is emitted FLUSH-LEFT (dedented): the
-  // markdown list closes and Goldmark re-opens it with <ol start="N"> after
-  // the block, preserving substep numbering, while the panel BODY is dedented
-  // to column 0 so os-panel.html's `{{ .Inner | markdownify }}` parses the
-  // code fences / images / notes as markdown instead of literal indented code.
+  // indented 4 spaces. Approach A (#2820): the shortcode WRAPPER lines keep that
+  // indentation so the block stays inside the surrounding <li> (the list never
+  // closes — this is what keeps figures nested, see
+  // test/unit/option-figure-list-nesting.test.ts for the render-level proof),
+  // while the panel BODY is dedented to column 0 so os-panel.html's
+  // `{{ .Inner | markdownify }}` parses the code fences / images / notes as
+  // markdown instead of literal indented code.
 
-  it('emits the shortcode flush-left and dedents the body for an indented OS group', () => {
+  it('indents the shortcode wrappers to the substep and dedents the body for an indented OS group', () => {
     const input = [
       '3. Start the installer.',
       '',
@@ -319,12 +321,12 @@ describe('convertOptionBlocks (hugo) — indented OPTION blocks inside list item
 
     const out = convertOptionBlocks(input, 'hugo');
 
-    // Shortcode wrappers are flush-left (NOT indented) so Goldmark treats the
-    // block as a sibling of the list; the following `4.` reopens numbering.
-    expect(out).toContain('\n{{< os-options >}}');
-    expect(out).toContain('\n{{< /os-options >}}');
-    expect(out).toContain('{{< os-panel os="Windows" >}}');
-    expect(out).not.toContain('    {{< os-options >}}');
+    // Shortcode wrappers carry the substep's 4-space indent so Goldmark keeps
+    // the block inside the <li> (list stays open; #2820). The body stays at
+    // column 0.
+    expect(out).toContain('\n    {{< os-options >}}');
+    expect(out).toContain('\n    {{< /os-options >}}');
+    expect(out).toContain('    {{< os-panel os="Windows" >}}');
 
     // The code fence inside the panel is dedented to column 0 so markdownify
     // parses it as a fenced block (not a 4-space indented-code block).
@@ -333,8 +335,6 @@ describe('convertOptionBlocks (hugo) — indented OPTION blocks inside list item
 
     // The following substep "4." survives at column 0.
     expect(out).toContain('\n4. Next substep.');
-    // No residual leading indent left on the first wrapper line.
-    expect(out).not.toMatch(/\n {4}\{\{< os-options/);
   });
 
   it('dedents the body of an indented legacy (non-OS) option-tabs group', () => {
@@ -359,7 +359,8 @@ describe('convertOptionBlocks (hugo) — indented OPTION blocks inside list item
 
     const out = convertOptionBlocks(input, 'hugo');
     expect(out).toContain('{{% option-tabs tabs="JSON,XML" %}}');
-    expect(out).not.toContain('    {{% option-tabs');
+    // Approach A (#2820): wrappers carry the substep indent; body at column 0.
+    expect(out).toContain('    {{% option-tabs tabs="JSON,XML" %}}');
     // Body dedented to column 0.
     expect(out).toContain('\njson body\n');
     expect(out).toContain('\n3. Done.');
@@ -421,7 +422,7 @@ describe('convertOptionBlocks (hugo) — real QA substep patterns (#2703 follow-
     expect(out).not.toMatch(/\n {4}```\n/);
   });
 
-  it('dedents substep content that trails the OPTION group within the same list item', () => {
+  it('leaves substep content that trails the OPTION group at its substep indent (stays in the list item)', () => {
     const input = [
       '3. Start the installer.',
       '',
@@ -454,11 +455,15 @@ describe('convertOptionBlocks (hugo) — real QA substep patterns (#2703 follow-
 
     const out = convertOptionBlocks(input, 'hugo');
 
-    // Trailing substep-3 content must be dedented to column 0 so Goldmark keeps
-    // it as list-item prose (not an indented-code block) and substep 4 reopens.
-    expect(out).not.toMatch(/\n {4}Set the install directory/);
-    expect(out).not.toMatch(/\n {4}!\[Client install\]/);
-    expect(out).not.toMatch(/\n {4}> \[!TIP\]/);
+    // Approach A (#2820): the shortcode wrappers stay indented, so the list
+    // never closes. Trailing substep-3 content therefore KEEPS its 4-space
+    // substep indent and remains valid list-item continuation — dedenting it to
+    // column 0 (the old behaviour) would eject it from the <li>, which is the
+    // bug. See test/unit/option-figure-list-nesting.test.ts for the render-level
+    // proof that the trailing figure nests inside <li>/<ol>.
+    expect(out).toMatch(/\n {4}Set the install directory/);
+    expect(out).toMatch(/\n {4}!\[Client install\]/);
+    expect(out).toMatch(/\n {4}> \[!TIP\]/);
     expect(out).toContain('\n4. After installation');
   });
 })
