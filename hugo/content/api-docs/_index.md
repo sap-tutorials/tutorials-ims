@@ -201,4 +201,4 @@ Curated pointers into the developer docs that a curious integrator might find us
 
 Bug or gap? Open an issue on the [tutorials-ims repo](https://github.com/sap-tutorials/tutorials-ims/issues). PRs welcome.
 
-{{< scavenger-hunt >}}
+<!-- #2841 Disabled: hidden Devtoberfest clue removed. Re-enable next year with: {{</* scavenger-hunt */>}} -->
