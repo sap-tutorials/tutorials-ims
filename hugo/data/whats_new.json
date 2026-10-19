@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-17T18:00:00.000Z",
+  "generatedAt": "2026-10-18T19:56:36.553Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,84 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2832",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2832,
+      "title": "fix(#2800): wire YOUTUBE_* secrets into CI rebuild fetch steps",
+      "summary": "Auto-generated video quizzes now populate reliably on published tutorials, because the content-rebuild pipeline now has the YouTube credentials it needs to read official video transcripts.",
+      "category": "Fix",
+      "mergedAt": "2026-10-18T14:05:51Z",
+      "week": "2026-W42",
+      "weekStart": "2026-10-12",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2832"
+    },
+    {
+      "id": "tutorials-ims#2830",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2830,
+      "title": "fix(scheduler): re-seed missing-successor rows the reaper can't reap (#2827)",
+      "summary": "Scheduled background jobs now self-heal within about ten minutes after an unexpected restart, instead of waiting for a manual reboot, so metrics, search indexing, and content watchdogs stay current.",
+      "category": "Fix",
+      "mergedAt": "2026-10-18T13:17:21Z",
+      "week": "2026-W42",
+      "weekStart": "2026-10-12",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2830"
+    },
+    {
+      "id": "tutorials-ims#2831",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2831,
+      "title": "fix(srv-mcp): non-exiting crash safety net + diagnostics (#2828)",
+      "summary": "The MCP service no longer crash-loops when a single background error occurs, keeping the developer tools it exposes continuously available.",
+      "category": "Fix",
+      "mergedAt": "2026-10-18T13:16:57Z",
+      "week": "2026-W42",
+      "weekStart": "2026-10-12",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2831"
+    },
+    {
+      "id": "tutorials-ims#2829",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2829,
+      "title": "Author guide: tutorial variables",
+      "summary": "New author documentation explains how to use tutorial variables to reuse values across steps.",
+      "category": "Docs",
+      "mergedAt": "2026-10-18T12:51:56Z",
+      "week": "2026-W42",
+      "weekStart": "2026-10-12",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2829"
+    },
+    {
+      "id": "tutorials-ims#2826",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2826,
+      "title": "fix(css): left-align figures + reattach OPTION-detached substep tails (#2820)",
+      "summary": "Tutorial figures now left-align with the text column and substeps keep their indentation after an options block, so step layouts read cleanly.",
+      "category": "Fix",
+      "mergedAt": "2026-10-17T22:38:07Z",
+      "week": "2026-W42",
+      "weekStart": "2026-10-12",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2826"
+    },
+    {
+      "id": "tutorials-ims#2825",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2825,
+      "title": "Release 1.40.0",
+      "summary": "Promoted the 1.40.0 release to production.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-17T18:24:17Z",
+      "week": "2026-W42",
+      "weekStart": "2026-10-12",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2825"
+    },
     {
       "id": "tutorials-ims#2824",
       "repo": "tutorials-ims",
@@ -215,6 +293,19 @@
       "week": "2026-W42",
       "weekStart": "2026-10-12",
       "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2798"
+    },
+    {
+      "id": "tutorials-ims#2797",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2797,
+      "title": "Release 1.39.1",
+      "summary": "Promoted the 1.39.1 release to production.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-15T21:18:58Z",
+      "week": "2026-W42",
+      "weekStart": "2026-10-12",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2797"
     },
     {
       "id": "tutorials-ims#2796",
