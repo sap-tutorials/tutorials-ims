@@ -1,9 +1,0 @@
-{
-  "role": {
-    "name": "default_access_role",
-    "system_privileges": [
-      "TRUST ADMIN",
-      "CERTIFICATE ADMIN"
-    ]
-  }
-}

@@ -15,7 +15,7 @@
 | Tier | What | AI Core needed? | Privilege needed? |
 | --- | --- | --- | --- |
 | **A — built-in NLP** | HANA's own embedding models (`SAP_GXY.20250407`, `SAP_NEB.20240715`) | No | None |
-| **B — AI Core remote source** | AI Core gen-AI hub models (`text-embedding-3-small`, …) via `sapgenaihub` adapter | Yes | `TRUST ADMIN` + `CERTIFICATE ADMIN` (see below) |
+| **B — AI Core remote source** | AI Core gen-AI hub models (`text-embedding-3-small`, …) via `sapgenaihub` adapter | Yes | admin creates PSE + remote source (one-time); container gets `EXECUTE` only |
 
 Tier A works out of the box and is the fastest sanity check. Tier B is
 issue #2810's actual target.
@@ -66,65 +66,28 @@ with `SELECT * FROM NLP_VECTOR_EMBEDDING_MODELS;`.
    > `d2f9fa53543e5c4e` (defaultOrchestrationConfig),
    > `dfad0fa7cd47ab38` (text-embedding-3-small).
 
-### Step B1 — grant PSE privileges via `default_access_role.hdbrole`
+### Step B1 — one-time admin setup: PSE + remote source
 
-The container runtime user already holds `CREATE REMOTE SOURCE`; it is
-missing the system privileges needed to create and populate a PSE. The
-`CREATE PSE` **statement** is authorized by the `TRUST ADMIN` system
-privilege (and `ALTER PSE … SET OWN CERTIFICATE` by `CERTIFICATE ADMIN`)
-— `CREATE PSE` is *not itself* a system-privilege name. Grant them the
-**HDI-native way**, through the container's own `default_access_role` —
-**not** via `_grants.hdbgrants`.
+> **This is an instance-level admin action, not a container artifact.** A
+> PSE and a remote source are database-level objects created **once** by a
+> privileged user (DBADMIN or equivalent holding `TRUST ADMIN`). They are
+> shared — one AI Core remote source can serve every container/app on the
+> instance. Do **not** try to grant `TRUST ADMIN`/PSE privileges into an
+> HDI container; the container only needs `EXECUTE` on the finished remote
+> source (Step B2).
+>
+> **Why not the container:** we initially tried to grant the PSE privilege
+> into the `tutorials-hana` container (via `_grants.hdbgrants`, then via
+> `default_access_role.hdbrole`). That is the wrong shape — it would give
+> every app binding user a powerful PKI system privilege permanently for a
+> one-time task, and the container `#OO` can't grant these privileges
+> anyway (`#OO` is not allowed to grant `CERTIFICATE ADMIN`). See the
+> "Failed approaches" box below.
 
-Per the [`@sap/hdi-deploy` README](https://www.npmjs.com/package/@sap/hdi-deploy)
-(the definitive HDI reference), a role at `src/defaults/default_access_role.hdbrole`
-named `default_access_role` is, on deploy, created by the container object
-owner (`#OO`) and granted to the service instance's global access role —
-so a system privilege listed in it is granted by `#OO`, with no external
-grantor service.
-
-```json
-// db/src/defaults/default_access_role.hdbrole
-{
-  "role": {
-    "name": "default_access_role",
-    "system_privileges": [ "TRUST ADMIN", "CERTIFICATE ADMIN" ]
-  }
-}
-```
-
-Notes:
-- The file **must** be at exactly `src/defaults/default_access_role.hdbrole`
-  and not excluded by an include-filter, or the auto-assignment won't fire.
-- `.hdinamespace`: only needed (empty `"name":""` at `src/defaults/`) if
-  `db/src` defines a real namespace prefix. This repo has none, so no
-  `.hdinamespace` is added.
-- `db/src/.hdiconfig` already maps `.hdbrole`, so the artifact deploys.
-- **Failed attempts (do not repeat):**
-  1. `CREATE PSE` in `_grants.hdbgrants` under `tutorials-kg-grantor`
-     (DEV `20261019-105602`) → `invalid role name: CREATE PSE` (system
-     privileges can't be granted via that SQL-grantor path).
-  2. `"system_privileges": ["CREATE PSE"]` in the role (DEV
-     `20261019-115443`) → `com.sap.hana.di.role: "CREATE PSE": invalid
-     system privilege`. `CREATE PSE` is the statement, not the privilege
-     name; the privilege is `TRUST ADMIN`.
-
-After deploy, confirm the privileges landed:
-```sql
-SELECT PRIVILEGE FROM EFFECTIVE_PRIVILEGES
-  WHERE USER_NAME = CURRENT_USER
-    AND PRIVILEGE IN ('TRUST ADMIN','CERTIFICATE ADMIN');  -- expect two rows
-```
-
-### Step B2 — create the PSE and remote source
-
-Run as the container runtime user once `CREATE PSE` is held. For
-`SET OWN CERTIFICATE`, paste the **private key first, then the client
-certificate**, both taken verbatim from the `hana-ai-core` service key
-and unescaped (`\n` → real line breaks). I.e. the service key's `key`
-value (the full `BEGIN/END RSA PRIVATE KEY` block) immediately followed
-by its `certificate` value (the full `BEGIN/END CERTIFICATE` block),
-inside the single-quoted string:
+Run as a **DEV HANA admin**. Paste the **private key then the client
+certificate** from the `hana-ai-core` service key, unescaped (`\n` → real
+line breaks) — the key's `key` value (RSA private key PEM block) directly
+followed by its `certificate` value (certificate PEM block):
 
 ```sql
 CREATE PSE TUTORIALS_AICORE_PSE;
@@ -147,9 +110,48 @@ DEV worked values: `aiApiUrl=https://api.ai.prod.eu-central-1.aws.ml.hana.ondema
 `deploymentId=da6d9c5e3fb50c3d`,
 `clientId=sb-78c0840a-3613-4a19-be4f-5cd52760090e!b676072|aicore!b540`.
 
-> **Secrets:** the cert + private key come only from the live service key
-> — never commit them. Pull at setup via `cf service-key`. Rotate
-> `hana-ai-core` if the key JSON was exposed anywhere shared.
+Privileges the admin needs: `TRUST ADMIN` (for `CREATE PSE`),
+`CREATE REMOTE SOURCE`. `CERTIFICATE ADMIN` is only for *managed* PSEs
+(JWKS-URL), not needed for `SET OWN CERTIFICATE`.
+
+> **Secrets:** cert + private key come only from the live service key —
+> never commit them. Pull at setup via `cf service-key tutorials-aicore
+> hana-ai-core`. Rotate `hana-ai-core` if the key JSON was exposed
+> anywhere shared.
+
+<details><summary><b>Failed approaches (do not repeat)</b></summary>
+
+1. `CREATE PSE` in `_grants.hdbgrants` under `tutorials-kg-grantor` (DEV
+   `20261019-105602`) → `invalid role name: CREATE PSE`. System
+   privileges can't be granted via that SQL-grantor path.
+2. `"system_privileges": ["CREATE PSE"]` in `default_access_role.hdbrole`
+   (DEV `20261019-115443`) → `"CREATE PSE": invalid system privilege`.
+   `CREATE PSE` is the statement; the privilege is `TRUST ADMIN`.
+3. `"system_privileges": ["TRUST ADMIN","CERTIFICATE ADMIN"]` in the role
+   (DEV `20261019-125352`) → `user "…#OO" is not allowed to grant …
+   "CERTIFICATE ADMIN"`. The container `#OO` cannot delegate PKI system
+   privileges — confirming PSE setup does not belong in the container.
+
+Root cause: PSE/remote-source setup is instance-level admin work, not a
+per-container grant. `default_access_role.hdbrole` remains the right
+mechanism for privileges the container user *should* own long-term — just
+not for this.
+</details>
+
+### Step B2 — grant the container `EXECUTE` on the remote source
+
+The **only** container-scoped grant needed. As the admin (or via a
+grantor the container can use), grant the `tutorials-hana` runtime user
+EXECUTE on the shared remote source:
+
+```sql
+GRANT EXECUTE ON REMOTE SOURCE TUTORIALS_AICORE
+  TO "AC9753D6C4764F5ABE3B3CA4E88233C0_..._RT";  -- the container _RT user
+```
+
+This can also be delivered declaratively via `.hdbgrants` (a remote-source
+object privilege a grantor can delegate) if we want it in the container
+lifecycle later — but for the DEV proof the direct admin grant is fine.
 
 > **Lifecycle caveat:** a PSE / remote source created imperatively by the
 > runtime user is **not** an HDI-managed artifact and will be orphaned on
@@ -178,12 +180,10 @@ Same steps, PROD inputs. Confirm `cf target` is PROD before any key read.
 
 - [ ] Create / confirm a dedicated x509 key on the PROD AI Core instance.
 - [ ] Retrieve a PROD orchestration deployment ID.
-- [ ] `default_access_role.hdbrole` (`TRUST ADMIN` + `CERTIFICATE ADMIN`)
-      already in repo from DEV — deploy PROD `tutorials-db-deployer`, then
-      verify both privileges via `EFFECTIVE_PRIVILEGES`.
-- [ ] Run B2 with PROD `AI_API_URL` / `certurl` / `deploymentId` / `clientId`.
+- [ ] As a PROD HANA admin, run B1 (CREATE PSE + remote source) with PROD
+      `AI_API_URL` / `certurl` / `deploymentId` / `clientId`.
+- [ ] Grant `EXECUTE ON REMOTE SOURCE` to the PROD container `_RT` user (B2).
 - [ ] Run B3 proof.
-- [ ] (Before rewrite) convert PSE + remote source to design-time artifacts.
 
 ---
 
