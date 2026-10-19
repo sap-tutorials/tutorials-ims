@@ -182,6 +182,7 @@ export default defineConfig({
           { text: 'Gameboard PROD data troubleshooting', link: '/developers/operations/gameboard-prod-data-troubleshooting' },
           { text: 'GitHub App setup',          link: '/developers/operations/github-app-setup' },
           { text: 'GitHub dispatch PAT rotation', link: '/developers/operations/github-dispatch-pat-rotation' },
+          { text: 'HANA AI Core embeddings',   link: '/developers/operations/hana-aicore-embeddings' },
           { text: 'HDI deploy checklist',      link: '/developers/operations/hdi-deploy-checklist' },
           { text: 'IAS setup',                 link: '/developers/operations/ias-setup' },
           { text: 'Identity dedup reconciliation', link: '/developers/operations/identity-dedup-reconciliation' },
