@@ -614,7 +614,7 @@ export default class DeveloperService extends cds.ApplicationService {
               const record = recordMap.get(`${i.taskType}:${effLegacyId}`);
               return {
                 imsId: effLegacyId,
-                title: task?.title || record?.titleSnapshot || '',
+                title: task?.title || record?.titleSnapshot || i.checkpointTitle || '',
                 type: i.taskType,
                 status: record?.status || '',
                 progress: record?.progress || 0,
@@ -719,7 +719,7 @@ export default class DeveloperService extends cds.ApplicationService {
               const record = recordMap.get(`${i.taskType}:${effLegacyId}`);
               return {
                 imsId: effLegacyId,
-                title: task?.title || record?.titleSnapshot || '',
+                title: task?.title || record?.titleSnapshot || i.checkpointTitle || '',
                 type: i.taskType,
                 status: record?.status || '',
                 progress: record?.progress || 0,
