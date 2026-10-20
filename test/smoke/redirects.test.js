@@ -30,9 +30,9 @@ describe('Migrated AEM redirects (#752)', () => {
     expect(res.headers.get('location')).toBe('https://community.sap.com/topics/leonardo');
   });
 
-  it('GET /abap 301s to the same-origin topic page', async () => {
+  it('GET /abap 301s to the SAP Community ABAP topic page', async () => {
     const res = await fetchWithRetry(`${BASE_URL}/abap`);
     expect(res.status).toBe(301);
-    expect(res.headers.get('location')).toBe('/topics/abap-platform.html');
+    expect(res.headers.get('location')).toBe('https://pages.community.sap.com/topics/abap');
   });
 });

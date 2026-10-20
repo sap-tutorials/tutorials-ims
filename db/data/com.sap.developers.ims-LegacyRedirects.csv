@@ -16,7 +16,7 @@ ID;fromPath;toPath;statusCode;isPattern;isActive
 66333900-1eaa-0001-0001-000000000015;^/(de|es|zh)$;/;301;true;true
 66333900-1eaa-0001-0001-000000000016;^/(de|es|zh)/(.*)$;/$2;301;true;true
 66333900-1eaa-0001-0001-000000000017;/cloud-sdk;/topics/cloud-sdk.html;301;false;true
-66333900-1eaa-0001-0001-000000000018;/abap;/topics/abap-platform.html;301;false;true
+66333900-1eaa-0001-0001-000000000018;/abap;https://pages.community.sap.com/topics/abap;301;false;true
 66333900-1eaa-0001-0001-000000000019;/abapxml;/topics/abap-platform.html;301;false;true
 66333900-1eaa-0001-0001-000000000020;/datahub;/group.datahub-docker.html;301;false;true
 66333900-1eaa-0001-0001-000000000021;/tutorials/ml-fs-sapui5-series-changepoint-detection.html;/group.ml-fs-api-hub.html;301;false;true
