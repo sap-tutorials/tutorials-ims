@@ -2,19 +2,20 @@
 // #2861 follow-up — regression guard for the GET /api/my-prize-barcode 401.
 //
 // The App Space checkpoint barcode is fetched by the browser from this route.
-// Two defects shipped in #2861 made it 401 for EVERY logged-in visitor:
-//   1. The route was a bootstrap `app.get('/api/my-prize-barcode', handler)`
-//      registered directly on Express, BEFORE CAP's protocol middleware chain,
-//      so the auth strategy never ran → cds.context.user/req.user were null.
-//      Fix: mount cds.middlewares.context()/auth() in front of the route
-//      (srv/server.js), matching the /api/alerts/me pattern.
-//   2. The handler resolved identity with the read-only resolveDbUserScoped,
-//      which returns null for a logged-in user with no DB row yet → 401.
-//      Fix: use the canonical tiered getOrProvisionDbUser (prize-barcode-handler.js).
+// It 401'd for logged-in visitors. The operative, production-only defect was
+// that the handler read the authenticated identity from `req.user`, but on a
+// raw Express bootstrap route CAP's auth() middleware populates it on
+// `cds.context.user` — `req.user` is only set in CAP service handlers and in
+// THIS mocked-basic-auth test harness. So a real XSUAA/IAS login resolved to
+// anonymous → provision null → 401, while this very harness stayed green
+// (it DOES set req.user). Fix: resolve from cds.context.user with a req.user
+// fallback and provision via provisionDbUser (prize-barcode-handler.js) — the
+// same idiom the /api/alerts/me and /auth/user routes already use.
 //
-// A pure unit test on the handler cannot catch defect #1 (it calls the handler
-// directly, bypassing the middleware chain). This boots the real server so the
-// full auth wiring is exercised — the only level at which the bug reproduces.
+// This boots the real server to exercise the full middleware + auth wiring.
+// The cds.context.user-vs-req.user distinction that was the real bug is guarded
+// directly in test/unit/prize-barcode-handler.test.js (this harness cannot
+// reproduce it because basic-auth populates req.user).
 
 import { describe, it, expect } from 'vitest';
 import cds from '@sap/cds';
