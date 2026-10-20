@@ -79,8 +79,11 @@ export default class ScannerService extends cds.ApplicationService {
 
       const db = await cds.connect.to('db');
 
-      // Acquire an exclusive lock on the user row so concurrent calls for the
-      // same user serialize.  SQLite silently ignores forUpdate().
+      // ATOMIC CAP: forUpdate locks the Users row for this contestant. The bare
+      // SELECT/INSERT below join the SAME cds.context transaction, so the lock is
+      // held across count-then-insert. Do NOT split these into separate txns —
+      // that reopens the race that lets two simultaneous scans exceed the cap.
+      // (SQLite silently ignores forUpdate(); Node.js single-thread serializes there.)
       const user = await db.run(
         SELECT.one.from(Users).where({ ID: accountNumber }).forUpdate()
       );
