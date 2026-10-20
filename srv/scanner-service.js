@@ -6,16 +6,14 @@ export default class ScannerService extends cds.ApplicationService {
 
   async init() {
     const { Users, TaskRecords, PrizeRecords, Prizes, CompletionPathItems,
-            Tutorials, Missions, CompletionPaths } = cds.entities('com.sap.developers.ims');
+            Tutorials, Missions, CompletionPaths, Events } = cds.entities('com.sap.developers.ims');
 
     this.on('getContestant', async (req) => {
-      const { accountNumber } = req.data;
+      const { accountNumber, eventId } = req.data;
       if (!accountNumber) return req.reject(400, 'accountNumber is required');
 
-      const legacyId = parseInt(accountNumber, 10);
-      if (Number.isNaN(legacyId)) return req.reject(400, `Invalid account number format: ${accountNumber}`);
-
-      const user = await SELECT.one.from(Users).where({ legacyId });
+      // accountNumber now carries the user's UUID (string ID), not a numeric legacyId.
+      const user = await SELECT.one.from(Users).where({ ID: accountNumber });
       if (!user) return req.reject(404, `User not found: ${accountNumber}`);
 
       // "Has-ever-completed" semantic (issue #600): a SUPERSEDED row is a prior
@@ -36,35 +34,22 @@ export default class ScannerService extends cds.ApplicationService {
       const groupsCompleted = seenByType.GROUP.size;
       const missionsCompleted = seenByType.MISSION.size;
 
-      const prizeRecs = await SELECT.from(PrizeRecords).where({
-        user_ID: user.ID,
-        status: 'CLAIMED'
-      });
-
-      let prizeText = 'No prizes claimed yet';
-      if (prizeRecs.length > 0) {
-        const pathItemIds = prizeRecs
-          .map(r => r.completionPathItem_ID)
-          .filter(Boolean);
-
-        if (pathItemIds.length > 0) {
-          const pathItems = await SELECT.from(CompletionPathItems)
-            .where({ ID: { in: pathItemIds } });
-
-          const taskLegacyIds = pathItems.map(i => i.taskLegacyId).filter(Boolean);
-          const tutorials = taskLegacyIds.length > 0
-            ? await SELECT.from(Tutorials).where({ legacyId: { in: taskLegacyIds } })
-            : [];
-
-          const titleMap = new Map(tutorials.map(t => [t.legacyId, t.title]));
-          const titles = pathItems.map(item => titleMap.get(item.taskLegacyId) || 'Unknown task');
-          prizeText = titles.map(t => `Prize claimed for ${t}`).join('\n');
-        } else {
-          prizeText = `${prizeRecs.length} prize(s) claimed`;
-        }
+      // Resolve event by legacyId when provided; use its UUID for the event_ID filter.
+      let eventFilter = null;
+      if (eventId != null) {
+        const event = await SELECT.one.from(Events).where({ legacyId: eventId });
+        if (event) eventFilter = event.ID;
       }
 
-      return { tutorialsCompleted, groupsCompleted, missionsCompleted, prizeRecords: prizeText };
+      // Count CLAIMED PrizeRecords for this user, scoped to the event when resolvable.
+      const prizeFilter = { user_ID: user.ID, status: 'CLAIMED' };
+      if (eventFilter) prizeFilter.event_ID = eventFilter;
+      const prizeRecs = await SELECT.from(PrizeRecords).where(prizeFilter);
+
+      const claimedCount = prizeRecs.length;
+      const prizeRecords = `${claimedCount} of 2 prizes claimed`;
+
+      return { tutorialsCompleted, groupsCompleted, missionsCompleted, claimedCount, prizeRecords };
     });
 
     this.on('claimPrize', async (req) => {

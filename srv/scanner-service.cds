@@ -4,10 +4,11 @@ using { com.sap.developers.ims as ims } from '../db/schema';
 @requires: 'MobileApp'
 service ScannerService {
 
-  function getContestant(accountNumber : String) returns {
+  function getContestant(accountNumber : String, eventId : Integer) returns {
     tutorialsCompleted : Integer;
     groupsCompleted    : Integer;
     missionsCompleted  : Integer;
+    claimedCount       : Integer;
     prizeRecords       : String;
   };
 
