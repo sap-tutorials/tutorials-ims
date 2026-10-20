@@ -15,11 +15,15 @@ export interface TutorialVariableDefault {
 
 export interface TutorialVariable {
   name: string;
-  label: string;
+  label?: string;
   type: 'string' | 'number';
   maxLength?: number;
   required?: boolean;
   placeholder?: string;
+  /** [#2852] Author-fixed literal value; overrides `default`. */
+  value?: string;
+  /** [#2852] Show the input in the reader-facing panel. Absent/true = shown; false = hidden. */
+  display?: boolean;
   default?: TutorialVariableDefault;
 }
 
@@ -173,4 +177,23 @@ export function resolveDefault(
   } catch {
     return null;
   }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// resolveInitial
+//
+// [#2852] The initial substituted value for a variable, by precedence:
+//   1. literal author-fixed `value` (non-empty string) — overrides everything
+//   2. identity-derived regex `default`
+//   3. null (reader fills it in, or it stays empty)
+//
+// Returns the value or null. Never throws (delegates to resolveDefault).
+// ──────────────────────────────────────────────────────────────────────────────
+
+export function resolveInitial(
+  v: TutorialVariable,
+  identity: Record<string, string> | null,
+): string | null {
+  if (typeof v.value === 'string' && v.value !== '') return v.value;
+  return resolveDefault(v, identity);
 }

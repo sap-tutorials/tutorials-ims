@@ -5,7 +5,7 @@
 // These import from ../substitution.ts (no DOM side-effects on import).
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { applyValue, resolveDefault, expandSentinels } from '../substitution';
+import { applyValue, resolveDefault, resolveInitial, expandSentinels } from '../substitution';
 import type { TutorialVariable } from '../substitution';
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -48,6 +48,14 @@ describe('applyValue', () => {
     expect(count).toBeGreaterThanOrEqual(1);
     expect(span.textContent).toBe('new');
     document.body.removeChild(span);
+  });
+
+  it('renders a value containing HTML as literal text, never parsed markup', () => {
+    root.innerHTML = `<span data-tut-var="x"></span>`;
+    applyValue('x', '<b>MyApp</b>', root);
+    const span = root.querySelector('[data-tut-var="x"]')!;
+    expect(span.textContent).toBe('<b>MyApp</b>');
+    expect(span.children.length).toBe(0);
   });
 });
 
@@ -95,6 +103,51 @@ describe('resolveDefault', () => {
   it('returns null when the identity field is missing', () => {
     const result = resolveDefault(varWithDefault, { givenName: 'Tom' });
     expect(result).toBeNull();
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// resolveInitial — [#2852] value overrides default overrides nothing
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('resolveInitial', () => {
+  it('prefers the literal value over a matching default', () => {
+    const v: TutorialVariable = {
+      name: 'prod',
+      type: 'string',
+      value: 'FIXED',
+      default: { from: 'email', pattern: 'da164-(\\d+)@' },
+    };
+    expect(resolveInitial(v, { email: 'da164-007@x.com' })).toBe('FIXED');
+  });
+
+  it('falls back to the regex default when no literal value', () => {
+    const v: TutorialVariable = {
+      name: 'g',
+      type: 'string',
+      default: { from: 'email', pattern: 'da164-(\\d+)@' },
+    };
+    expect(resolveInitial(v, { email: 'da164-007@x.com' })).toBe('007');
+  });
+
+  it('returns the literal value even when identity is null', () => {
+    const v: TutorialVariable = { name: 'prod', type: 'string', value: 'FIXED' };
+    expect(resolveInitial(v, null)).toBe('FIXED');
+  });
+
+  it('returns null when neither a value nor a resolvable default exists', () => {
+    const v: TutorialVariable = { name: 'x', type: 'string' };
+    expect(resolveInitial(v, { email: 'a@b.com' })).toBeNull();
+  });
+
+  it('ignores an empty-string value and falls through to default', () => {
+    const v: TutorialVariable = {
+      name: 'g',
+      type: 'string',
+      value: '',
+      default: { from: 'email', pattern: 'da164-(\\d+)@' },
+    };
+    expect(resolveInitial(v, { email: 'da164-007@x.com' })).toBe('007');
   });
 });
 
