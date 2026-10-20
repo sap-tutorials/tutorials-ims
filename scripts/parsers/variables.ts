@@ -12,6 +12,15 @@
  *
  * And reference them in the body with `{{var:NAME}}` tokens.
  *
+ * [#2852] Two optional fields let an author fix a value once and/or hide it:
+ *   - `value: <string>`  — author-fixed literal, substituted everywhere;
+ *                          overrides a regex `default`.
+ *   - `display: <bool>`  — show the reader-facing input. Absent/`true` = shown
+ *                          (the default); `false` = hidden (no label needed,
+ *                          value still substitutes into the body).
+ * Precedence for the substituted value (resolved client-side): `value` >
+ * `default` (regex) > reader input > empty.
+ *
  * This module:
  *  - Validates the declared block (throws VariablesValidationError on malformed input)
  *  - Wraps tokens for prose/inline code as HTML spans
