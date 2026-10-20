@@ -201,13 +201,24 @@ button (disabled at 2). On tap, call the capped claim endpoint and refresh the c
 
 ## Open Risks
 
-- **Environment data (blocks verification):** DEV HANA has 0 `Checkpoints` rows and 0
-  path items with `checkpointTitle`/`prize_ID` set, and the reported event `10000015`
-  is not in DEV (it's in another space). Each track's mission/path must actually
-  author a CHECKPOINT item (with `checkpointTitle`) as the terminal item for the
-  barcode to show. **Before this can be called done, we need a reachable, data-
-  populated event** to test against (Tom's #1 rule: test the actual thing). The code
-  fix is necessary but not sufficient without authored data in the target env.
+- **Authored data (verify after deploy):** The CX track's CHECKPOINT item renders
+  blank in the live `getAppSpaceProgress` payload (`title:""`, `imsId:null`). Per the
+  resolver logic this is exactly the state when the item's `taskLegacyId` is null AND
+  no `Checkpoints` entity row matches — the authored label lives in
+  `CompletionPathItems.checkpointTitle`, which the resolver never reads (bug §1). The
+  code fix (read `checkpointTitle`) addresses the blank title directly. Whether the
+  checkpoint also needs `checkpointTitle` populated in the admin UI will be confirmed
+  **end-to-end after deploy on the real event** (Tom's call — direct DB verification
+  was blocked, see note below).
+- **Local `cds bind` could not reach the app's HDI container.** During investigation,
+  every `cds bind` path resolved to a **stale, empty HDI container** (schema
+  `2FEC6DAB…`), while the deployed `tutorials-srv` reads a **different** container
+  (schema `AC9753…`) from the same `tutorials-hana` instance — so the event (and its
+  checkpoint rows) could not be inspected directly from the workstation. This is a
+  local-binding staleness issue, NOT evidence the event is missing: the deployed app
+  returns event `10000015` with full CX track data. Verification of this feature must
+  run against the **deployed** DEV app, not a local `cds bind`. (Rebinding the DEV
+  `db` credential to the app's actual container is a separate housekeeping task.)
 - **"Track = one path" confirmed** from code: the App Space renders `paths[]`, a
   track's tutorials are that path's items, and the CHECKPOINT is the terminal item;
   completion gates on `isItemUnlocked` (all prior TUTORIAL items COMPLETED).
