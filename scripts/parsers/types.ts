@@ -22,11 +22,16 @@ export interface TutorialFrontmatter {
    */
   variables?: Array<{
     name: string
-    label: string
+    /** Required when displayed; optional for a hidden (`display:false`) variable. */
+    label?: string
     type: 'string' | 'number'
     maxLength?: number
     required?: boolean
     placeholder?: string
+    /** [#2852] Author-fixed literal value; overrides `default`. */
+    value?: string
+    /** [#2852] Show the input to the reader. Absent/`true` = shown; `false` = hidden. */
+    display?: boolean
     default?: { from: 'email' | 'id' | 'givenName' | 'familyName'; pattern: string }
   }>
   /**

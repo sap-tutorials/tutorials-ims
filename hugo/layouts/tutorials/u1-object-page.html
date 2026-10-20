@@ -526,7 +526,8 @@
 <script type="module" src="{{ partial "island-src.html" "nav-dropdown" }}"></script>
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip-launcher" }}"></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-rating" }}" defer></script>{{ end }}
-{{ if and .Params.variables (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-variables" }}" defer></script>{{ end }}
+{{/* [#2811] tutorial-variables island loads in QA preview too (dropped the qa/previewMode gate) so authors can verify interactive var: fields before promoting; still guarded by .Params.variables so variable-free tutorials ship no extra script. */}}
+{{ if .Params.variables }}<script type="module" src="{{ partial "island-src.html" "tutorial-variables" }}" defer></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "code-check" }}" defer></script>{{ end }}
 <script type="module" src="{{ partial "island-src.html" "validation" }}" defer></script>
 {{/* [#2362] json-render challenge widget island — loaded only when at least

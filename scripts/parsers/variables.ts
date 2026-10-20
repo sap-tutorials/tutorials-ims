@@ -12,6 +12,15 @@
  *
  * And reference them in the body with `{{var:NAME}}` tokens.
  *
+ * [#2852] Two optional fields let an author fix a value once and/or hide it:
+ *   - `value: <string>`  — author-fixed literal, substituted everywhere;
+ *                          overrides a regex `default`.
+ *   - `display: <bool>`  — show the reader-facing input. Absent/`true` = shown
+ *                          (the default); `false` = hidden (no label needed,
+ *                          value still substitutes into the body).
+ * Precedence for the substituted value (resolved client-side): `value` >
+ * `default` (regex) > reader input > empty.
+ *
  * This module:
  *  - Validates the declared block (throws VariablesValidationError on malformed input)
  *  - Wraps tokens for prose/inline code as HTML spans
@@ -30,11 +39,28 @@ import { createFenceTracker } from './fence-tracker.js'
 
 export interface TutorialVariable {
   name: string
-  label: string
+  /**
+   * Human-readable label for the reader-facing input. Required when the
+   * variable is displayed; optional (and unused) when `display: false`.
+   */
+  label?: string
   type: 'string' | 'number'
   maxLength?: number
   required?: boolean
   placeholder?: string
+  /**
+   * [#2852] Author-fixed literal value. When set, this is the substituted
+   * value and overrides any regex `default`. For a hidden variable
+   * (`display: false`) the author uses this to set a value once that
+   * substitutes everywhere without showing an input to the reader.
+   */
+  value?: string
+  /**
+   * [#2852] Whether to show an input for this variable in the reader-facing
+   * "Your values" panel. Absent or `true` → shown (the default). `false` →
+   * hidden; the value still substitutes into the tutorial body.
+   */
+  display?: boolean
   default?: {
     from: 'email' | 'id' | 'givenName' | 'familyName'
     pattern: string
@@ -147,11 +173,35 @@ export function validateVariables(vars: unknown, body: string): TutorialVariable
     }
     seen.add(name)
 
-    // Validate label
+    // Validate display (optional). [#2852] Must be a real boolean when present.
+    // Absent → shown (default). `false` → hidden from the reader-facing panel.
+    const display = raw['display']
+    if (display !== undefined && typeof display !== 'boolean') {
+      throw new VariablesValidationError(
+        `tutorial variables "${name}": display must be a boolean (got "${typeof display}")`
+      )
+    }
+    const isHidden = display === false
+
+    // Validate label. Required for a displayed variable; a hidden variable
+    // (display:false) needs no label because no input is rendered for it.
     const label = raw['label']
-    if (typeof label !== 'string' || !label) {
+    if (!isHidden && (typeof label !== 'string' || !label)) {
       throw new VariablesValidationError(
         `tutorial variables "${name}": missing required field "label"`
+      )
+    }
+    if (label !== undefined && typeof label !== 'string') {
+      throw new VariablesValidationError(
+        `tutorial variables "${name}": label must be a string`
+      )
+    }
+
+    // Validate value (optional). [#2852] Author-fixed literal; must be a string.
+    const value = raw['value']
+    if (value !== undefined && typeof value !== 'string') {
+      throw new VariablesValidationError(
+        `tutorial variables "${name}": value must be a string (got "${typeof value}")`
       )
     }
 
@@ -196,9 +246,11 @@ export function validateVariables(vars: unknown, body: string): TutorialVariable
     // Build validated object
     const validated: TutorialVariable = {
       name,
-      label,
       type: type as 'string' | 'number',
     }
+    if (typeof label === 'string') validated.label = label
+    if (typeof value === 'string') validated.value = value
+    if (typeof display === 'boolean') validated.display = display
     if (typeof raw['maxLength'] === 'number') validated.maxLength = raw['maxLength']
     if (typeof raw['required'] === 'boolean') validated.required = raw['required']
     if (typeof raw['placeholder'] === 'string') validated.placeholder = raw['placeholder']

@@ -422,7 +422,7 @@ describe('convertOptionBlocks (hugo) — real QA substep patterns (#2703 follow-
     expect(out).not.toMatch(/\n {4}```\n/);
   });
 
-  it('leaves substep content that trails the OPTION group at its substep indent (stays in the list item)', () => {
+  it('dedents substep content that trails the OPTION group to column 0 (#2820)', () => {
     const input = [
       '3. Start the installer.',
       '',
@@ -455,15 +455,21 @@ describe('convertOptionBlocks (hugo) — real QA substep patterns (#2703 follow-
 
     const out = convertOptionBlocks(input, 'hugo');
 
-    // Approach A (#2820): the shortcode wrappers stay indented, so the list
-    // never closes. Trailing substep-3 content therefore KEEPS its 4-space
-    // substep indent and remains valid list-item continuation — dedenting it to
-    // column 0 (the old behaviour) would eject it from the <li>, which is the
-    // bug. See test/unit/option-figure-list-nesting.test.ts for the render-level
-    // proof that the trailing figure nests inside <li>/<ol>.
-    expect(out).toMatch(/\n {4}Set the install directory/);
-    expect(out).toMatch(/\n {4}!\[Client install\]/);
-    expect(out).toMatch(/\n {4}> \[!TIP\]/);
+    // #2820: the OPTION shortcode emits a block-level <div> that CLOSES the
+    // surrounding tight list (verified against production-pinned Hugo 0.147.7 —
+    // regardless of wrapper indent). Once the list closes, trailing content at
+    // the authored 4-space indent is measured from column 0 and becomes a literal
+    // indented-code block → the raw-markdown leak. So the trailing substep
+    // content MUST be dedented to column 0 to render as sibling markdown; the
+    // author's `4.` then reopens the list as <ol start="4">. (This reverses the
+    // 19db8d027 regression, which left the tail at 4 spaces.) See
+    // test/unit/option-tail-leak.test.ts for the render-level leak proof.
+    expect(out).toMatch(/\nSet the install directory/);
+    expect(out).toMatch(/\n!\[Client install\]/);
+    expect(out).toMatch(/\n> \[!TIP\]/);
+    // The tail must NOT remain at 4-space indent (that is the leaking shape).
+    expect(out).not.toMatch(/\n {4}Set the install directory/);
+    expect(out).not.toMatch(/\n {4}> \[!TIP\]/);
     expect(out).toContain('\n4. After installation');
   });
 })

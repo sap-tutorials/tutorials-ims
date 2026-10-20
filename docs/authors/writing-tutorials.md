@@ -78,7 +78,7 @@ author_profile: https://github.com/janedoe
 | `auto_validation` | No | Set `true` if the tutorial has quiz rules in the `-Contribution` repo. |
 | `author_name`, `author_profile` | Recommended | Shown on the tutorial page. |
 | `video` | No | Optional intro video shown as a styled player at the top of the steps. See [§3.3 Adding a video](#_3-3-adding-a-video). |
-| `variables` | No | Array of per-reader values (e.g. a workshop group number) the reader fills in once and the platform substitutes live throughout the tutorial. See [§3.7 Personalize with variables](#_3-7-personalize-with-variables). |
+| `variables` | No | Array of substituted values — either per-reader (e.g. a workshop group number the reader fills in) or author-fixed (`value:`, optionally `display: false` to hide). The platform substitutes them live throughout the tutorial. See [§3.7 Personalize with variables](#_3-7-personalize-with-variables). |
 
 A canonical taxonomy of allowed `primary_tag` and `tags` values is maintained in the platform's `Tags` entity. To add a new tag or category, see [Center Admin](center-admin.md) § "Import a new tag".
 
@@ -355,6 +355,22 @@ Optionally pre-fill the value from the reader's identity with a `default` regex 
       from: email                  # one of: email | id | givenName | familyName
       pattern: 'da164-(\d+)@'      # capture group 1 → default value
 ```
+
+#### Author-fixed values and hidden variables
+
+Sometimes the value is the **same for every reader** but repeated throughout the tutorial — a product name, a release version, a service URL. Set it **once** with `value:` and reference `{{var:<name>}}` everywhere; change it in one place and it updates across the whole tutorial. Add `display: false` so the reader never sees an input for it:
+
+```yaml
+variables:
+  - name: productVersion
+    type: string
+    value: "MyApp 2.0"             # author-fixed literal — substituted everywhere
+    display: false                 # hidden: no input shown to the reader
+```
+
+- `display` is **optional and defaults to `true`** (shown). Only `display: false` hides the input. A hidden variable needs no `label`.
+- `value:` overrides a `default:` regex. Precedence for the substituted value is: **`value` → `default` (regex) → what the reader types → empty**.
+- A displayed variable (`display: true` or omitted) with a `value:` is **pre-filled** with that value but the reader can still edit it.
 
 Key behaviors:
 
