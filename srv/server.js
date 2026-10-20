@@ -12,6 +12,7 @@ import { autoPurgeOnce } from './lib/purge-stale-changelog.js';
 import { resolveDeployEnvironment } from './lib/deploy-environment.js';
 import { versionHandler } from './lib/version-handler.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
+import { prizeBarcodeHandler } from './lib/prize-barcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
 import { loadTechEdFeed } from './lib/teched-feed.js';
 import { buildConceptsHandler } from './lib/build-concepts.js';
@@ -316,6 +317,7 @@ cds.on('bootstrap', (app) => {
 
   app.use(basicAuthMiddleware);
   app.get('/api/qrcode', qrcodeHandler);
+  app.get('/api/my-prize-barcode', prizeBarcodeHandler);
   app.get('/api/recommendations', recommendationsHandler);
   app.get('/api/branches/decide', decideHandler);
 

@@ -176,10 +176,10 @@ export async function expandGroupTutorials({ items, entities }) {
  * @param {object} record  user TaskRecord for this task (may be undefined)
  * @param {string} type    output item type ('TUTORIAL' | 'CHECKPOINT' | ...)
  */
-function shapeItem(task, effLegacyId, record, type) {
+function shapeItem(task, effLegacyId, record, type, checkpointTitle) {
   return {
     imsId: effLegacyId,
-    title: task?.title || record?.titleSnapshot || '',
+    title: task?.title || record?.titleSnapshot || checkpointTitle || '',
     type,
     status: record?.status || '',
     progress: record?.progress || 0,
@@ -215,14 +215,14 @@ export function buildPathItems({ pathItems, taskMap, effLegacyByItem, groupTutor
       const children = (i.group_ID && groupTutorials.get(i.group_ID)) || [];
       for (const t of children) {
         const record = t.legacyId != null ? recordMap.get(`TUTORIAL:${t.legacyId}`) : undefined;
-        out.push(shapeItem(t, t.legacyId ?? null, record, 'TUTORIAL'));
+        out.push(shapeItem(t, t.legacyId ?? null, record, 'TUTORIAL', null));
       }
       continue;
     }
     const task = resolveTask(taskMap, i);
     const effLegacyId = effLegacyByItem.get(i);
     const record = recordMap.get(`${i.taskType}:${effLegacyId}`);
-    out.push(shapeItem(task, effLegacyId, record, i.taskType));
+    out.push(shapeItem(task, effLegacyId, record, i.taskType, i.checkpointTitle));
   }
   return out;
 }

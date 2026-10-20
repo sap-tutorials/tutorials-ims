@@ -9,8 +9,8 @@ sap.ui.define([
 
     var CONTESTANT_DEFAULTS = {
         uid: null,
-        recordId: null,
-        status: null,
+        eventId: null,
+        claimedCount: 0,
         tutorialsCompleted: "",
         groupsCompleted: "",
         missionsCompleted: "",
@@ -33,18 +33,20 @@ sap.ui.define([
             this._oContestantModel.setData(Object.assign({}, CONTESTANT_DEFAULTS));
         },
 
-        _getContestant: async function (uid) {
+        _getContestant: async function (uid, eventId) {
             this._oContestantModel.setProperty("/loading", true);
             try {
                 var oModel = this.getView().getModel();
                 var oContext = oModel.bindContext("/getContestant(...)");
                 oContext.setParameter("accountNumber", uid);
+                oContext.setParameter("eventId", eventId);
                 await oContext.execute();
                 var result = oContext.getBoundContext().getObject();
                 this._oContestantModel.setProperty("/tutorialsCompleted", result.tutorialsCompleted || "");
                 this._oContestantModel.setProperty("/groupsCompleted", result.groupsCompleted || "");
                 this._oContestantModel.setProperty("/missionsCompleted", result.missionsCompleted || "");
                 this._oContestantModel.setProperty("/prizeRecords", result.prizeRecords || "");
+                this._oContestantModel.setProperty("/claimedCount", result.claimedCount || 0);
                 this._oContestantModel.setProperty("/loaded", true);
                 this._oContestantModel.setProperty("/loading", false);
             } catch (e) {
@@ -74,12 +76,14 @@ sap.ui.define([
 
             var payload = scanResult.payload || {};
             this._oContestantModel.setProperty("/uid", scanResult.uid || null);
-            this._oContestantModel.setProperty("/recordId", payload.recordId || null);
-            this._oContestantModel.setProperty("/status", payload.status || null);
+            this._oContestantModel.setProperty("/eventId", payload.eventId ? Number(payload.eventId) : null);
             this._oContestantModel.setProperty("/loaded", false);
 
             try {
-                await this._getContestant(this._oContestantModel.getProperty("/uid"));
+                await this._getContestant(
+                    this._oContestantModel.getProperty("/uid"),
+                    this._oContestantModel.getProperty("/eventId")
+                );
             } catch (e) {
                 MessageBox.error("Could not load contestant: " + (e.message || "Unknown error"));
                 this._resetContestantModel();
@@ -118,11 +122,12 @@ sap.ui.define([
 
         onClaimPrize: async function () {
             var oContestantModel = this._oContestantModel;
-            var recordId = oContestantModel.getProperty("/recordId");
             var uid = oContestantModel.getProperty("/uid");
+            var eventId = oContestantModel.getProperty("/eventId");
+            var claimedCount = oContestantModel.getProperty("/claimedCount");
 
-            if (!recordId) {
-                MessageBox.warning("No prize record found. Please re-scan.");
+            if (claimedCount >= 2) {
+                MessageBox.warning("Cap reached (2 of 2). No further prizes can be recorded.");
                 return;
             }
 
@@ -131,16 +136,15 @@ sap.ui.define([
 
             try {
                 var oModel = this.getView().getModel();
-                var oContext = oModel.bindContext("/claimPrize(...)");
-                oContext.setParameter("recordId", recordId);
-                // #889: accountNumber is required so the server can verify
-                // the prize belongs to the scanned contestant.
+                var oContext = oModel.bindContext("/claimPrizeForContestant(...)");
                 oContext.setParameter("accountNumber", uid);
+                oContext.setParameter("eventId", eventId);
                 await oContext.execute();
-                MessageToast.show("Prize claimed!", { duration: 2000 });
+                var result = oContext.getBoundContext().getObject();
+                MessageToast.show(result.message || "Prize recorded!", { duration: 2000 });
 
                 try {
-                    await this._getContestant(uid);
+                    await this._getContestant(uid, eventId);
                 } catch (e) {
                     MessageBox.error("Could not refresh contestant: " + (e.message || "Unknown error"));
                     oContestantModel.setProperty("/loading", false);
