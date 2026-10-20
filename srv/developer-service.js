@@ -17,6 +17,31 @@ import { renderMarkdown } from './lib/markdown.js';
 import { buildTaskMap, resolveTask, effectiveLegacyId } from './lib/path-item-task-resolver.js';
 import { handleRequestAccountMerge, handleConfirmAccountMerge } from './lib/account-merge-request.js';
 
+// #2866 — App Space completion time window.
+// App Space prize credit must reflect work done DURING the event. A COMPLETED
+// TUTORIAL whose completionDate falls outside the event's inclusive
+// [startDate, endDate] window is downgraded to the plain status
+// 'COMPLETED_OUT_OF_WINDOW', which the Vue client (strict === 'COMPLETED'
+// gating) does not count toward the track or prize barcode.
+//
+// FAIL-OPEN: gate only when BOTH event dates are present. If either is
+// null/absent, behave exactly as before (any COMPLETED counts) — this
+// protects non-TechEd / un-dated events. (Do NOT reuse cat-game-award.js's
+// eventIsLive, which tolerates open bounds; our rule is stricter.)
+// Null completionDate on a gated event cannot be proven in-window → downgraded.
+// Only TUTORIAL items are gated; other item types pass through unchanged.
+const COMPLETED_OUT_OF_WINDOW = 'COMPLETED_OUT_OF_WINDOW';
+function effectiveAppSpaceStatus(record, event, taskType) {
+  const status = record?.status || '';
+  if (taskType !== 'TUTORIAL' || status !== 'COMPLETED') return status;
+  const start = event?.startDate ? Date.parse(event.startDate) : NaN;
+  const end = event?.endDate ? Date.parse(event.endDate) : NaN;
+  if (Number.isNaN(start) || Number.isNaN(end)) return status; // fail-open: no usable window
+  const done = record?.completionDate ? Date.parse(record.completionDate) : NaN;
+  if (Number.isNaN(done) || done < start || done > end) return COMPLETED_OUT_OF_WINDOW;
+  return status;
+}
+
 // Per-user rate limit for resetTutorialProgress — same window as the
 // IP-based feedback limiter below (5/hr) but keyed by sapId via a shared
 // sliding-window helper (matches the in-memory Map shape used by
@@ -721,7 +746,10 @@ export default class DeveloperService extends cds.ApplicationService {
                 imsId: effLegacyId,
                 title: task?.title || record?.titleSnapshot || '',
                 type: i.taskType,
-                status: record?.status || '',
+                // #2866: App Space prize credit counts only completions within the event's
+                // [startDate,endDate]; out-of-window COMPLETED tutorials are downgraded so the
+                // track/prize does not unlock (fail-open when the event has no usable window).
+                status: effectiveAppSpaceStatus(record, event, i.taskType) || '',
                 progress: record?.progress || 0,
                 experience: task?.experienceTag || '',
                 timeToComplete: task?.averageTimeToComplete || 0,
