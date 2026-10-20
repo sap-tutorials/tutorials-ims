@@ -134,6 +134,57 @@ describe('validateVariables', () => {
     ]
     expect(() => validateVariables(vars, '')).toThrow(VariablesValidationError)
   })
+
+  // --- [#2852] author-fixed value + display flag -------------------------------
+
+  it('accepts a variable with a literal value', () => {
+    const vars = [
+      { name: 'prod', label: 'Product', type: 'string', value: 'MyApp 2.0' },
+    ]
+    const result = validateVariables(vars, 'Use {{var:prod}} everywhere.')
+    expect(result[0].value).toBe('MyApp 2.0')
+  })
+
+  it('accepts display:false and does not require a label', () => {
+    const vars = [
+      { name: 'prod', type: 'string', value: 'MyApp 2.0', display: false },
+    ]
+    const result = validateVariables(vars, 'Use {{var:prod}} everywhere.')
+    expect(result[0].display).toBe(false)
+    expect(result[0].value).toBe('MyApp 2.0')
+  })
+
+  it('throws when display is not a boolean', () => {
+    const vars = [
+      { name: 'prod', label: 'Product', type: 'string', display: 'false' },
+    ]
+    expect(() => validateVariables(vars, '')).toThrow(VariablesValidationError)
+    expect(() => validateVariables(vars, '')).toThrow(/display/)
+  })
+
+  it('throws when value is not a string', () => {
+    const vars = [
+      { name: 'prod', label: 'Product', type: 'string', value: 123 },
+    ]
+    expect(() => validateVariables(vars, '')).toThrow(VariablesValidationError)
+    expect(() => validateVariables(vars, '')).toThrow(/value/)
+  })
+
+  it('throws when label missing on a displayed variable', () => {
+    const vars = [
+      { name: 'prod', type: 'string' },
+    ]
+    expect(() => validateVariables(vars, '')).toThrow(VariablesValidationError)
+    expect(() => validateVariables(vars, '')).toThrow(/label/)
+  })
+
+  it('leaves display undefined (shown) when the field is absent', () => {
+    const vars = [
+      { name: 'g', label: 'G', type: 'string' },
+    ]
+    const result = validateVariables(vars, 'Use {{var:g}}.')
+    expect(result[0].display).toBeUndefined()
+  })
 })
 
 // ---------------------------------------------------------------------------
