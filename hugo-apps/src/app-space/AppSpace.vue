@@ -209,9 +209,9 @@ watch(realtimeActive, (active) => {
 }, { immediate: true })
 
 // ── Helpers ────────────────────────────────────────────────────────
-function formatTime(seconds: number): string {
-  if (seconds <= 0) return ''
-  const mins = Math.round(seconds / 60)
+function formatTime(minutes: number): string {
+  if (minutes <= 0) return ''
+  const mins = Math.round(minutes)
   if (mins < 60) return `${mins} min`
   const hrs = Math.floor(mins / 60)
   const rem = mins % 60
