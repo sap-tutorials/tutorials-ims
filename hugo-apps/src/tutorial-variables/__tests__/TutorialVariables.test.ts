@@ -70,4 +70,23 @@ describe('TutorialVariables — hidden + fixed values [#2852]', () => {
     await flushPromises();
     expect(wrapper.find('section.tv').exists()).toBe(false);
   });
+
+  it('pre-fills a displayed variable with its literal value yet keeps the input editable', async () => {
+    seedSpans('prod');
+    const variables: TutorialVariable[] = [
+      { name: 'prod', label: 'Product', type: 'string', value: 'MyApp 2.0' },
+    ];
+    const wrapper = mount(TutorialVariables, {
+      props: { variables, slug: 's', missionSlug: '' },
+    });
+    await flushPromises();
+    const input = wrapper.find('input');
+    // rendered (displayed) and pre-filled with the literal value
+    expect(input.exists()).toBe(true);
+    expect((input.element as HTMLInputElement).value).toBe('MyApp 2.0');
+    expect(document.querySelector('[data-tut-var="prod"]')?.textContent).toBe('MyApp 2.0');
+    // still editable: typing overrides the literal value in the page
+    await input.setValue('Other App');
+    expect(document.querySelector('[data-tut-var="prod"]')?.textContent).toBe('Other App');
+  });
 });
