@@ -14,7 +14,7 @@ import { maybeAutoSendCompletion } from './lib/ngds-autosend.js';
 import { stampSubmissionId } from './lib/task-record-submission-id.js';
 import { rollUpParentsForCompletion } from './lib/completion-rollup.js';
 import { renderMarkdown } from './lib/markdown.js';
-import { buildTaskMap, resolveTask, effectiveLegacyId } from './lib/path-item-task-resolver.js';
+import { buildTaskMap, effectiveLegacyId, expandGroupTutorials, buildPathItems, groupChildLegacyIds } from './lib/path-item-task-resolver.js';
 import { handleRequestAccountMerge, handleConfirmAccountMerge } from './lib/account-merge-request.js';
 
 // Per-user rate limit for resetTutorialProgress — same window as the
@@ -84,6 +84,7 @@ export default class DeveloperService extends cds.ApplicationService {
             Users: dbUsers, Events: dbEvents, Missions: dbMissions,
             CompletionPaths: dbPaths, CompletionPathItems: dbPathItems,
             Checkpoints: dbCheckpoints, Petoberfests: dbPetoberfests,
+            GroupPathItems: dbGroupPathItems,
             UserLearningPreferences } = cds.entities('com.sap.developers.ims');
 
     // Auto-assign legacyId on TaskRecord creation
@@ -573,10 +574,21 @@ export default class DeveloperService extends cds.ApplicationService {
         entities: { Tutorials: dbTutorials, Checkpoints: dbCheckpoints, Petoberfests: dbPetoberfests },
       });
 
+      // Expand GROUP path items into their child tutorials (GroupPathItems),
+      // so a path whose item is a GROUP renders its tutorials instead of a
+      // single empty "0 tutorials" card.
+      const groupTutorials = await expandGroupTutorials({
+        items: allItems,
+        entities: { GroupPathItems: dbGroupPathItems, Tutorials: dbTutorials },
+      });
+
       // Effective legacyId per item (own taskLegacyId, else resolved tutorial's)
       // drives both TaskRecord lookups and the output imsId.
       const effLegacyByItem = new Map(allItems.map(i => [i, effectiveLegacyId(taskMap, i)]));
-      const recordLegacyIds = [...new Set([...effLegacyByItem.values()].filter(v => v != null))];
+      const recordLegacyIds = [...new Set([
+        ...[...effLegacyByItem.values()].filter(v => v != null),
+        ...groupChildLegacyIds(groupTutorials),   // child tutorials need their own records too
+      ])];
 
       let userRecords = [];
       // #2730: use the tiered resolver so null-sapId identity-link users are found.
@@ -605,33 +617,15 @@ export default class DeveloperService extends cds.ApplicationService {
         eventId: event?.legacyId ?? 0,
         eventType: event?.eventType ?? 'OTHER',
         type: 'COMPLEX',
-        paths: paths.map(p => {
-          const items = allItems
-            .filter(i => i.path_ID === p.ID)
-            .map(i => {
-              const task = resolveTask(taskMap, i);
-              const effLegacyId = effLegacyByItem.get(i);
-              const record = recordMap.get(`${i.taskType}:${effLegacyId}`);
-              return {
-                imsId: effLegacyId,
-                title: task?.title || record?.titleSnapshot || '',
-                type: i.taskType,
-                status: record?.status || '',
-                progress: record?.progress || 0,
-                experience: task?.experienceTag || '',
-                timeToComplete: task?.averageTimeToComplete || 0,
-                url: task?.slug ? `/tutorials/${task.slug}.html` : '',
-                description: task?.description || '',
-                recordId: record?.legacyId || 0
-              };
-            });
-          return {
-            id: p.legacyId,
-            title: p.name,
-            description: mission.description || '',
-            items
-          };
-        })
+        paths: paths.map(p => ({
+          id: p.legacyId,
+          title: p.name,
+          description: p.description || mission.description || '',
+          items: buildPathItems({
+            pathItems: allItems.filter(i => i.path_ID === p.ID),
+            taskMap, effLegacyByItem, groupTutorials, recordMap,
+          }),
+        })),
       };
 
       return result;
@@ -687,8 +681,19 @@ export default class DeveloperService extends cds.ApplicationService {
         entities: { Tutorials: dbTutorials, Checkpoints: dbCheckpoints, Petoberfests: dbPetoberfests },
       });
 
+      // Expand GROUP path items into their child tutorials (GroupPathItems),
+      // so a path whose item is a GROUP renders its tutorials instead of a
+      // single empty "0 tutorials" card.
+      const groupTutorials = await expandGroupTutorials({
+        items: allItems,
+        entities: { GroupPathItems: dbGroupPathItems, Tutorials: dbTutorials },
+      });
+
       const effLegacyByItem = new Map(allItems.map(i => [i, effectiveLegacyId(taskMap, i)]));
-      const recordLegacyIds = [...new Set([...effLegacyByItem.values()].filter(v => v != null))];
+      const recordLegacyIds = [...new Set([
+        ...[...effLegacyByItem.values()].filter(v => v != null),
+        ...groupChildLegacyIds(groupTutorials),   // child tutorials need their own records too
+      ])];
 
       let userRecords = [];
       // #2730: use the tiered resolver so null-sapId identity-link users are found.
@@ -710,33 +715,15 @@ export default class DeveloperService extends cds.ApplicationService {
         hasLogo: Boolean(event.hasLogo),
         authenticated: Boolean(dbUser),   // #2314/#2730: false only for anonymous callers → client skips the logged-in-only realtime/confetti path. Truthy when user resolves via any tier (sapId, identity link, or pin).
         type: 'COMPLEX',
-        paths: paths.map(p => {
-          const items = allItems
-            .filter(i => i.path_ID === p.ID)
-            .map(i => {
-              const task = resolveTask(taskMap, i);
-              const effLegacyId = effLegacyByItem.get(i);
-              const record = recordMap.get(`${i.taskType}:${effLegacyId}`);
-              return {
-                imsId: effLegacyId,
-                title: task?.title || record?.titleSnapshot || '',
-                type: i.taskType,
-                status: record?.status || '',
-                progress: record?.progress || 0,
-                experience: task?.experienceTag || '',
-                timeToComplete: task?.averageTimeToComplete || 0,
-                url: task?.slug ? `/tutorials/${task.slug}.html` : '',
-                description: task?.description || '',
-                recordId: record?.legacyId || 0
-              };
-            });
-          return {
-            id: p.legacyId,
-            title: p.name,
-            description: mission.description || '',
-            items
-          };
-        })
+        paths: paths.map(p => ({
+          id: p.legacyId,
+          title: p.name,
+          description: p.description || mission.description || '',
+          items: buildPathItems({
+            pathItems: allItems.filter(i => i.path_ID === p.ID),
+            taskMap, effLegacyByItem, groupTutorials, recordMap,
+          }),
+        })),
       };
     });
 

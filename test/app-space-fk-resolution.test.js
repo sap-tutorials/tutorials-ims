@@ -103,3 +103,92 @@ describe('App-Space / event progress: FK-first tutorial resolution (#1866)', () 
     expect(fkItem.imsId).toBe(TUT_FK_ONLY.legacyId);
   });
 });
+
+// App-Space rendering fixes: (1) a path whose item is a GROUP must expand into
+// the group's child tutorials (previously rendered "0 tutorials"); (2) each
+// path must show its OWN CompletionPaths.description, not the mission's.
+const G_EVENT_ID   = 10009209;
+const G_MISSION_ID = '11111111-9209-aaaa-0000-000000000001';
+const G_PATH_GROUP = '22222222-9209-aaaa-0000-000000000001'; // path containing a GROUP item
+const G_PATH_FLAT  = '22222222-9209-aaaa-0000-000000000002'; // path with a direct tutorial
+const G_GROUP_ID   = '33333333-9209-aaaa-0000-000000000001';
+const G_TUT_A = { ID: 'cccccccc-9209-aaaa-0000-000000000001', legacyId: 10009281, slug: 'group-child-a', title: 'Group Child A' };
+const G_TUT_B = { ID: 'cccccccc-9209-aaaa-0000-000000000002', legacyId: 10009282, slug: 'group-child-b', title: 'Group Child B' };
+const G_TUT_FLAT = { ID: 'cccccccc-9209-aaaa-0000-000000000003', legacyId: 10009283, slug: 'flat-tut', title: 'Flat Tutorial' };
+
+describe('App-Space: GROUP expansion + per-path description', () => {
+  beforeAll(async () => {
+    const { Events, Missions, Groups, CompletionPaths, CompletionPathItems, GroupPathItems, Tutorials } =
+      cds.entities('com.sap.developers.ims');
+
+    await INSERT.into(Tutorials).entries([G_TUT_A, G_TUT_B, G_TUT_FLAT]);
+    await INSERT.into(Missions).entries({
+      ID: G_MISSION_ID, legacyId: 10009201, title: 'Garage Mission', slug: 'garage-mission',
+      description: 'Ready to get your hands dirty? Swing by the Developer Garage.', published: true, event_ID: null,
+    });
+    await INSERT.into(Events).entries({
+      ID: 'eeeeeeee-9209-aaaa-0000-000000000001', legacyId: G_EVENT_ID,
+      name: 'Garage Event', eventType: 'OTHER', mission_ID: G_MISSION_ID,
+    });
+    await INSERT.into(Groups).entries({
+      ID: G_GROUP_ID, legacyId: 10009250, title: 'Joule Studio Group', slug: 'joule-studio-group', published: true,
+    });
+    await INSERT.into(CompletionPaths).entries([
+      // Path 1: its own description + a GROUP item (no direct tutorials).
+      { ID: G_PATH_GROUP, legacyId: 10009260, name: 'Joule Studio (web)', mission_ID: G_MISSION_ID,
+        description: 'Joule Studio (web)' },
+      // Path 2: its own description + a direct tutorial.
+      { ID: G_PATH_FLAT, legacyId: 10009261, name: 'Joule Work', mission_ID: G_MISSION_ID,
+        description: 'Joule Work path description' },
+    ]);
+    await INSERT.into(CompletionPathItems).entries([
+      // GROUP item on path 1 — carries group_ID, no tutorial.
+      { ID: 'dddddddd-9209-aaaa-0000-000000000001', path_ID: G_PATH_GROUP, itemOrder: 1,
+        taskType: 'GROUP', taskLegacyId: null, group_ID: G_GROUP_ID },
+      // Direct tutorial on path 2.
+      { ID: 'dddddddd-9209-aaaa-0000-000000000002', path_ID: G_PATH_FLAT, itemOrder: 1,
+        taskType: 'TUTORIAL', taskLegacyId: null, tutorial_ID: G_TUT_FLAT.ID },
+    ]);
+    await INSERT.into(GroupPathItems).entries([
+      { ID: 'ffffffff-9209-aaaa-0000-000000000001', group_ID: G_GROUP_ID, tutorial_ID: G_TUT_A.ID, itemOrder: 1 },
+      { ID: 'ffffffff-9209-aaaa-0000-000000000002', group_ID: G_GROUP_ID, tutorial_ID: G_TUT_B.ID, itemOrder: 2 },
+    ]);
+  });
+
+  afterAll(async () => {
+    const { Events, Missions, Groups, CompletionPaths, CompletionPathItems, GroupPathItems, Tutorials } =
+      cds.entities('com.sap.developers.ims');
+    await DELETE.from(GroupPathItems).where({ group_ID: G_GROUP_ID });
+    await DELETE.from(CompletionPathItems).where({ path_ID: { in: [G_PATH_GROUP, G_PATH_FLAT] } });
+    await DELETE.from(CompletionPaths).where({ ID: { in: [G_PATH_GROUP, G_PATH_FLAT] } });
+    await DELETE.from(Groups).where({ ID: G_GROUP_ID });
+    await DELETE.from(Events).where({ legacyId: G_EVENT_ID });
+    await DELETE.from(Missions).where({ ID: G_MISSION_ID });
+    await DELETE.from(Tutorials).where({ ID: { in: [G_TUT_A.ID, G_TUT_B.ID, G_TUT_FLAT.ID] } });
+  });
+
+  it('expands a GROUP path item into its child tutorials (not "0 tutorials")', async () => {
+    const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${G_EVENT_ID})`);
+
+    const groupPath = data.paths.find(p => p.id === 10009260);
+    expect(groupPath).toBeDefined();
+    const tutorials = groupPath.items.filter(i => i.type === 'TUTORIAL');
+    expect(tutorials.map(t => t.title)).toEqual([G_TUT_A.title, G_TUT_B.title]); // ordered by itemOrder
+    for (const t of tutorials) {
+      expect(t.type).toBe('TUTORIAL'); // not 'GROUP' — the frontend counts only TUTORIAL
+      expect(t.url).not.toBe('');
+    }
+    // No leftover untyped GROUP card.
+    expect(groupPath.items.some(i => i.type === 'GROUP')).toBe(false);
+  });
+
+  it('each path shows its OWN description, not the mission description', async () => {
+    const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${G_EVENT_ID})`);
+    const byId = Object.fromEntries(data.paths.map(p => [p.id, p]));
+    expect(byId[10009260].description).toBe('Joule Studio (web)');
+    expect(byId[10009261].description).toBe('Joule Work path description');
+    // The two descriptions differ (the bug made them identical = mission text).
+    expect(byId[10009260].description).not.toBe(byId[10009261].description);
+    expect(byId[10009260].description).not.toContain('hands dirty');
+  });
+});
