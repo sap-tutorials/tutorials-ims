@@ -253,6 +253,9 @@ function isItemUnlocked(track: AppSpaceTrack, index: number): boolean {
 function itemStatusClass(track: AppSpaceTrack, index: number): string {
   const item = track.items[index]
   if (item.status === 'COMPLETED') return 'step--completed'
+  // #2866: completed before/after the event window — distinct "redo" state.
+  // Does NOT count toward the track or unlock the prize (gating is strict === 'COMPLETED').
+  if (item.status === 'COMPLETED_OUT_OF_WINDOW') return 'step--redo'
   if (item.status === 'EARNED') return 'step--earned'
   if (item.status === 'IN_PROGRESS') return 'step--in-progress'
   if (isItemUnlocked(track, index)) return 'step--available'
@@ -491,7 +494,7 @@ const emptyStateMessage = computed(() => {
             :class="{ clickable: item.type === 'TUTORIAL' && isItemUnlocked(selectedTrack, index) }"
           >
             <!-- Locked icon -->
-            <svg v-if="!isItemUnlocked(selectedTrack, index) && item.status !== 'COMPLETED' && item.status !== 'EARNED'"
+            <svg v-if="!isItemUnlocked(selectedTrack, index) && item.status !== 'COMPLETED' && item.status !== 'EARNED' && item.status !== 'COMPLETED_OUT_OF_WINDOW'"
               width="18" height="18" viewBox="0 0 24 24" fill="none">
               <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/>
               <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -500,6 +503,11 @@ const emptyStateMessage = computed(() => {
             <svg v-else-if="item.status === 'COMPLETED'"
               width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <!-- #2866: completed outside the event window — redo (refresh arrows) -->
+            <svg v-else-if="item.status === 'COMPLETED_OUT_OF_WINDOW'"
+              width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             <!-- Prize/trophy icon -->
             <svg v-else-if="item.type === 'PRIZE' || item.type === 'CHECKPOINT'"
@@ -526,6 +534,10 @@ const emptyStateMessage = computed(() => {
               @click="handleItemClick(selectedTrack, index, item)"
             >{{ item.title }}</h4>
             <p class="timeline-content__desc" v-if="item.description && item.type !== 'PRIZE'">{{ item.description }}</p>
+            <!-- #2866: completed before/after the event — doesn't count; prompt a redo during the event. -->
+            <p class="redo-hint" v-if="item.status === 'COMPLETED_OUT_OF_WINDOW'">
+              Completed before the event — reset your progress and complete it again during the event to earn your prize.
+            </p>
 
             <!-- Prize QR code section -->
             <div v-if="item.type === 'PRIZE' && (item.status === 'EARNED' || isItemUnlocked(selectedTrack, index))" class="prize-section">
@@ -1066,6 +1078,13 @@ const emptyStateMessage = computed(() => {
   color: var(--sapAccentColor1, #e38b16);
 }
 
+/* #2866: completed outside the event window — distinct "redo" state (critical/amber). */
+.step--redo .timeline-bubble {
+  border-color: var(--sapCriticalColor, #e76500);
+  background: var(--sapCriticalBackground, #fef7f1);
+  color: var(--sapCriticalColor, #e76500);
+}
+
 /* Status-specific card borders */
 .step--available .timeline-content {
   border-color: var(--sapBrandColor, #0070f2);
@@ -1082,6 +1101,17 @@ const emptyStateMessage = computed(() => {
 
 .step--earned .timeline-content {
   border-left: 3px solid var(--sapAccentColor1, #e38b16);
+}
+
+.step--redo .timeline-content {
+  border-left: 3px solid var(--sapCriticalColor, #e76500);
+}
+
+.redo-hint {
+  margin: 0.375rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: var(--sapCriticalColor, #e76500);
 }
 
 .step--locked .timeline-content {
