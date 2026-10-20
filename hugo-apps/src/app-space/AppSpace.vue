@@ -290,7 +290,7 @@ function checkpointBarcodeUrl(): string {
 }
 
 function shouldShowCheckpointBarcode(track: AppSpaceTrack, index: number): boolean {
-  return _shouldShowCheckpointBarcode(track, index, authenticated.value)
+  return _shouldShowCheckpointBarcode(track.items[index], isItemUnlocked(track, index), authenticated.value)
 }
 
 // ── Computed ───────────────────────────────────────────────────────

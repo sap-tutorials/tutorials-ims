@@ -21,27 +21,8 @@ function stubFetch(handler: (url: string) => { ok: boolean; status: number; body
 
 // ── Pure helper unit tests ──────────────────────────────────────────────────
 
-const completedTrack = {
-  id: 1,
-  title: 'Track A',
-  description: '',
-  items: [
-    { imsId: 1, title: 'Tut 1', type: 'TUTORIAL' as const, status: 'COMPLETED', progress: 100, experience: '', timeToComplete: 0, url: '', description: '' },
-    { imsId: 2, title: 'Tut 2', type: 'TUTORIAL' as const, status: 'COMPLETED', progress: 100, experience: '', timeToComplete: 0, url: '', description: '' },
-    { imsId: 99, title: 'Checkpoint', type: 'CHECKPOINT' as const, status: '', progress: 0, experience: '', timeToComplete: 0, url: '', description: '' },
-  ]
-}
-
-const incompleteTrack = {
-  id: 2,
-  title: 'Track B',
-  description: '',
-  items: [
-    { imsId: 3, title: 'Tut 3', type: 'TUTORIAL' as const, status: 'COMPLETED', progress: 100, experience: '', timeToComplete: 0, url: '', description: '' },
-    { imsId: 4, title: 'Tut 4', type: 'TUTORIAL' as const, status: '', progress: 0, experience: '', timeToComplete: 0, url: '', description: '' },
-    { imsId: 98, title: 'Checkpoint', type: 'CHECKPOINT' as const, status: '', progress: 0, experience: '', timeToComplete: 0, url: '', description: '' },
-  ]
-}
+const checkpointItem = { type: 'CHECKPOINT' as const, status: '' }
+const tutorialItem   = { type: 'TUTORIAL' as const,   status: 'COMPLETED' }
 
 describe('checkpointBarcodeUrl', () => {
   it('returns the exact prize-barcode URL with the eventId', () => {
@@ -54,24 +35,20 @@ describe('checkpointBarcodeUrl', () => {
 })
 
 describe('shouldShowCheckpointBarcode', () => {
-  it('returns true when item is CHECKPOINT, track is complete, and authenticated', () => {
-    const checkpointIndex = 2
-    expect(shouldShowCheckpointBarcode(completedTrack, checkpointIndex, true)).toBe(true)
+  it('returns true when item is CHECKPOINT, unlocked=true, authenticated=true', () => {
+    expect(shouldShowCheckpointBarcode(checkpointItem, true, true)).toBe(true)
   })
 
-  it('returns false when item is CHECKPOINT and unlocked but NOT authenticated', () => {
-    const checkpointIndex = 2
-    expect(shouldShowCheckpointBarcode(completedTrack, checkpointIndex, false)).toBe(false)
+  it('returns false when CHECKPOINT + unlocked but NOT authenticated', () => {
+    expect(shouldShowCheckpointBarcode(checkpointItem, true, false)).toBe(false)
   })
 
-  it('returns false when item is CHECKPOINT and authenticated but NOT unlocked (incomplete track)', () => {
-    const checkpointIndex = 2
-    expect(shouldShowCheckpointBarcode(incompleteTrack, checkpointIndex, true)).toBe(false)
+  it('returns false when CHECKPOINT + authenticated but NOT unlocked', () => {
+    expect(shouldShowCheckpointBarcode(checkpointItem, false, true)).toBe(false)
   })
 
-  it('returns false when item is TUTORIAL even if unlocked and authenticated', () => {
-    // Index 0 is a TUTORIAL that is unlocked (first item)
-    expect(shouldShowCheckpointBarcode(completedTrack, 0, true)).toBe(false)
+  it('returns false when item is TUTORIAL even if unlocked=true and authenticated=true', () => {
+    expect(shouldShowCheckpointBarcode(tutorialItem, true, true)).toBe(false)
   })
 })
 

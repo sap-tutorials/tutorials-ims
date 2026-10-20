@@ -10,11 +10,6 @@ export interface CheckpointItem {
   [key: string]: unknown
 }
 
-export interface CheckpointTrack {
-  items: CheckpointItem[]
-  [key: string]: unknown
-}
-
 /**
  * Returns the URL for the authenticated prize-barcode endpoint.
  * The endpoint reads the caller's identity from the session cookie — no
@@ -25,22 +20,18 @@ export function checkpointBarcodeUrl(eventId: number | null): string {
 }
 
 /**
- * Returns true when the item at `index` in `track` is:
- *   1. a CHECKPOINT item, AND
- *   2. all preceding TUTORIAL items are COMPLETED (i.e. the checkpoint is
- *      unlocked), AND
- *   3. the current user is authenticated.
+ * Returns true when the checkpoint barcode should be rendered.
  *
- * This is the render gate for the prize-barcode <img>.
+ * Deliberately takes `unlocked` as a pre-computed boolean so the unlock
+ * logic stays in one place — AppSpace.vue's `isItemUnlocked()` — and
+ * is not duplicated here.
+ *
+ *   item.type === 'CHECKPOINT' && unlocked && authenticated
  */
 export function shouldShowCheckpointBarcode(
-  track: CheckpointTrack,
-  index: number,
+  item: CheckpointItem,
+  unlocked: boolean,
   authenticated: boolean
 ): boolean {
-  const item = track.items[index]
-  if (item.type !== 'CHECKPOINT') return false
-  if (!authenticated) return false
-  const prevTuts = track.items.slice(0, index).filter(i => i.type === 'TUTORIAL')
-  return prevTuts.every(i => i.status === 'COMPLETED')
+  return item.type === 'CHECKPOINT' && unlocked && authenticated
 }
