@@ -2875,10 +2875,23 @@ ui5-li .step-badge-row {
  * `.step-content li .tutorial-figure` below.
  */
 .os-panel .tutorial-figure,
-.option-tabs .tutorial-figure,
+.option-tabs .tutorial-figure {
+  margin: 0.5rem 0;
+}
+
+/* A figure that TRAILS an OPTION group is a column-0 sibling of the list (the
+ * OPTION shortcode's block <div> closes the list, #2820), so it needs the same
+ * 1.5rem content-column indent as the trailing prose/alerts above. Set the
+ * vertical rhythm with margin-top/bottom ONLY — using the `margin` shorthand
+ * here would reset margin-left back to 0 and clobber the 1.5rem indent set by
+ * the `~ figure` rule above (equal specificity, later rule wins), leaving the
+ * image jammed at the far-left edge, out of alignment with the surrounding
+ * prose and tips. */
 .step-content > .os-options ~ .tutorial-figure,
 .step-content > .option-tabs ~ .tutorial-figure {
-  margin: 0.5rem 0;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  margin-left: 1.5rem;
 }
 
 

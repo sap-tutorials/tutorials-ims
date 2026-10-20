@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-18T19:56:36.553Z",
+  "generatedAt": "2026-10-19T21:53:00.976Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,136 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2851",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2851,
+      "title": "Docs site builds green again",
+      "summary": "Restored the documentation site build by registering the new HANA AI Core embeddings runbook in the docs sidebar.",
+      "category": "Fix",
+      "mergedAt": "2026-10-19T20:42:24Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2851"
+    },
+    {
+      "id": "tutorials-ims#2849",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2849,
+      "title": "HANA to AI Core embedding setup, now live on both tiers",
+      "summary": "Finalized the setup guide for connecting SAP HANA Cloud to AI Core for vector embeddings, with a rebind-proof grant approach verified live on both development and production.",
+      "category": "Docs",
+      "mergedAt": "2026-10-19T20:03:15Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2849"
+    },
+    {
+      "id": "tutorials-ims#2848",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2848,
+      "title": "Unblocked database deploys for AI Core embeddings",
+      "summary": "Corrected the HANA to AI Core setup to use a one-time admin action instead of a container grant, unblocking database deployments that had been failing.",
+      "category": "Fix",
+      "mergedAt": "2026-10-19T17:29:43Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2848"
+    },
+    {
+      "id": "tutorials-ims#2847",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2847,
+      "title": "Corrected PSE privilege names in embeddings runbook",
+      "summary": "Fixed the privilege names in the HANA AI Core embeddings setup guide so the database security role deploys correctly.",
+      "category": "Docs",
+      "mergedAt": "2026-10-19T16:27:34Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2847"
+    },
+    {
+      "id": "tutorials-ims#2846",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2846,
+      "title": "Corrected the AI Core embeddings grant mechanism",
+      "summary": "Documented the correct mechanism for granting the HANA container the privilege it needs to reach AI Core for embeddings.",
+      "category": "Docs",
+      "mergedAt": "2026-10-19T15:50:12Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2846"
+    },
+    {
+      "id": "tutorials-ims#2844",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2844,
+      "title": "HANA-native AI Core embedding setup guide",
+      "summary": "Added a setup runbook for generating vector embeddings directly from the HANA database layer, proving the built-in natural-language path works today.",
+      "category": "Docs",
+      "mergedAt": "2026-10-19T14:50:30Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2844"
+    },
+    {
+      "id": "tutorials-ims#2842",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2842,
+      "title": "Tutorial option-block images stay indented",
+      "summary": "Fixed images inside tutorial OPTION blocks so they stay properly nested and indented under their step instead of drifting to the left margin.",
+      "category": "Fix",
+      "mergedAt": "2026-10-19T13:15:50Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2842"
+    },
+    {
+      "id": "tutorials-ims#2843",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2843,
+      "title": "Retired this year's Devtoberfest scavenger hunt",
+      "summary": "Removed the hidden Devtoberfest scavenger-hunt clues from the homepage and other pages now that the event has ended; the feature is dormant and ready to re-enable next year.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-19T13:12:44Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2843"
+    },
+    {
+      "id": "tutorials-ims#2840",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2840,
+      "title": "Readable App Space hero text in light mode",
+      "summary": "Fixed hard-to-read dark banner text on the themed App Space hero in light mode by pinning it to white across all theme variants.",
+      "category": "Fix",
+      "mergedAt": "2026-10-19T11:36:20Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2840"
+    },
+    {
+      "id": "tutorials-ims#2838",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2838,
+      "title": "Scheduler and sign-in reliability fixes",
+      "summary": "Fixed two reliability regressions from the identity-pin change: the background scheduler no longer stalls on every tick, and authenticated sign-ins no longer hit a token error.",
+      "category": "Fix",
+      "mergedAt": "2026-10-19T10:37:09Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2838"
+    },
     {
       "id": "tutorials-ims#2832",
       "repo": "tutorials-ims",

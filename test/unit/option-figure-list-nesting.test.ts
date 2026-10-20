@@ -164,27 +164,36 @@ describe('figure nesting inside OPTION-bearing substeps (#2820)', () => {
       rendered = renderThroughPipeline(stepBody);
     }, 140_000);
 
-    it('renders the trailing figure nested inside the list item, not as a sibling of the list', () => {
+    it('renders the trailing figure as a real figure (sibling of the list), dedented to column 0', () => {
       const $ = load(rendered);
       const fig = $('figure.tutorial-figure').filter((_, el) => {
         return ($(el).find('img').attr('src') || '').includes('download-client.png');
       });
       expect(fig.length, 'figure for download-client.png should exist').toBe(1);
-      expect(fig.closest('li').length, 'figure must be inside an <li>').toBe(1);
-      expect(fig.closest('ol').length, 'figure must be inside an <ol>').toBe(1);
+      // #2820 CORRECTED CONTRACT: a Hugo shortcode that emits a block-level <div>
+      // closes the surrounding tight list (verified against Hugo 0.147.7), so the
+      // trailing figure CANNOT be a child of the <li> — it is a sibling of the
+      // list. The three prior fixes chased the impossible "nest it in <li>" goal;
+      // the real fix dedents the tail to column 0 so it renders as a proper
+      // <figure> instead of leaking as raw markdown in a code block. The
+      // authoritative raw-leak + numbering coverage (via the {{% tutorial-step %}}
+      // percent-shortcode path that actually reproduces the leak) is in
+      // test/unit/option-tail-leak.test.ts.
+      expect(fig.find('img').length, 'figure must contain a rendered <img>').toBe(1);
+      expect(fig.find('figcaption').length, 'figure must have a caption').toBe(1);
     });
 
-    it('preserves the following substep as list item 3 (numbering survives)', () => {
+    it('preserves the following substep in an ordered list (numbering survives)', () => {
       const $ = load(rendered);
-      // #2703 invariant: the substep after the OPTION group must stay in the
-      // ordered list (renumbered or continuous), not detach as loose prose.
+      // The substep after the OPTION group must stay in an ordered list
+      // (continuous or reopened via <ol start>), not detach as loose prose or a
+      // leaked code block.
       const text = $('ol li').text();
       expect(text).toContain('Verify the environment variables');
     });
 
     it('does not render the fenced command as a literal indented-code block (#2703)', () => {
-      // Guard the behaviour the flush-left strategy originally protected: the
-      // shell command must be a real code block, not backticks-as-text.
+      // The shell command must be a real code block, not backticks-as-text.
       expect(rendered).not.toContain('```Shell');
     });
   });
