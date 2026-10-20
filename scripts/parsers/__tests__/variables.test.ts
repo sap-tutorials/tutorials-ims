@@ -315,6 +315,36 @@ describe('composeTutorial with variables', () => {
     expect(result.variables![0].name).toBe('groupNumber')
   })
 
+  it('carries value and display through compose', () => {
+    const fm = [
+      '---',
+      'parser: v2',
+      'title: Test Tutorial',
+      'time: 5',
+      'tags: [tutorial>beginner]',
+      'primary_tag: tutorial>beginner',
+      'author_name: Tester',
+      'author_profile: https://example.com',
+      'variables:',
+      '  - name: prod',
+      '    type: string',
+      '    value: MyApp 2.0',
+      '    display: false',
+      '---',
+      '',
+    ].join('\n')
+    const body = [
+      '### Step One',
+      'Install {{var:prod}} now.',
+    ].join('\n')
+    const result = composeTutorial(fm + body, {
+      repo: 'r', branch: 'main', slug: 's', target: 'hugo', rewriteImages: false,
+    })
+    expect(result.variables![0].value).toBe('MyApp 2.0')
+    expect(result.variables![0].display).toBe(false)
+    expect(result.steps[0].content).toContain('data-tut-var="prod"')
+  })
+
   it('wraps prose token in step content as a span', () => {
     const body = [
       '### Step One',
