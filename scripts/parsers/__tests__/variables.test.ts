@@ -134,6 +134,57 @@ describe('validateVariables', () => {
     ]
     expect(() => validateVariables(vars, '')).toThrow(VariablesValidationError)
   })
+
+  // --- [#2852] author-fixed value + display flag -------------------------------
+
+  it('accepts a variable with a literal value', () => {
+    const vars = [
+      { name: 'prod', label: 'Product', type: 'string', value: 'MyApp 2.0' },
+    ]
+    const result = validateVariables(vars, 'Use {{var:prod}} everywhere.')
+    expect(result[0].value).toBe('MyApp 2.0')
+  })
+
+  it('accepts display:false and does not require a label', () => {
+    const vars = [
+      { name: 'prod', type: 'string', value: 'MyApp 2.0', display: false },
+    ]
+    const result = validateVariables(vars, 'Use {{var:prod}} everywhere.')
+    expect(result[0].display).toBe(false)
+    expect(result[0].value).toBe('MyApp 2.0')
+  })
+
+  it('throws when display is not a boolean', () => {
+    const vars = [
+      { name: 'prod', label: 'Product', type: 'string', display: 'false' },
+    ]
+    expect(() => validateVariables(vars, '')).toThrow(VariablesValidationError)
+    expect(() => validateVariables(vars, '')).toThrow(/display/)
+  })
+
+  it('throws when value is not a string', () => {
+    const vars = [
+      { name: 'prod', label: 'Product', type: 'string', value: 123 },
+    ]
+    expect(() => validateVariables(vars, '')).toThrow(VariablesValidationError)
+    expect(() => validateVariables(vars, '')).toThrow(/value/)
+  })
+
+  it('throws when label missing on a displayed variable', () => {
+    const vars = [
+      { name: 'prod', type: 'string' },
+    ]
+    expect(() => validateVariables(vars, '')).toThrow(VariablesValidationError)
+    expect(() => validateVariables(vars, '')).toThrow(/label/)
+  })
+
+  it('leaves display undefined (shown) when the field is absent', () => {
+    const vars = [
+      { name: 'g', label: 'G', type: 'string' },
+    ]
+    const result = validateVariables(vars, 'Use {{var:g}}.')
+    expect(result[0].display).toBeUndefined()
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -262,6 +313,36 @@ describe('composeTutorial with variables', () => {
     expect(result.variables).toBeDefined()
     expect(result.variables).toHaveLength(2)
     expect(result.variables![0].name).toBe('groupNumber')
+  })
+
+  it('carries value and display through compose', () => {
+    const fm = [
+      '---',
+      'parser: v2',
+      'title: Test Tutorial',
+      'time: 5',
+      'tags: [tutorial>beginner]',
+      'primary_tag: tutorial>beginner',
+      'author_name: Tester',
+      'author_profile: https://example.com',
+      'variables:',
+      '  - name: prod',
+      '    type: string',
+      '    value: MyApp 2.0',
+      '    display: false',
+      '---',
+      '',
+    ].join('\n')
+    const body = [
+      '### Step One',
+      'Install {{var:prod}} now.',
+    ].join('\n')
+    const result = composeTutorial(fm + body, {
+      repo: 'r', branch: 'main', slug: 's', target: 'hugo', rewriteImages: false,
+    })
+    expect(result.variables![0].value).toBe('MyApp 2.0')
+    expect(result.variables![0].display).toBe(false)
+    expect(result.steps[0].content).toContain('data-tut-var="prod"')
   })
 
   it('wraps prose token in step content as a span', () => {
