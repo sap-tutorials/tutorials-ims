@@ -1,14 +1,17 @@
 // test/unit/prize-barcode-handler.test.js
 // GET /api/my-prize-barcode?eventId=<legacyId>
 // — mints a QR PNG encoding { uid, payload: { eventId } } for the authenticated visitor.
-// The user's DB UUID is read from the session (resolveDbUserScoped), never from query params.
+// Identity is resolved from the session via the canonical tiered resolver
+// getOrProvisionDbUser (same front door as the Devtoberfest/gameboard write path,
+// #2730/#2651), never from a client-supplied query param.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // --- module-level mocks (hoisted by vitest) ---
 
 vi.mock('../../srv/lib/resolve-db-user.js', () => ({
-  resolveDbUserScoped: vi.fn(),
+  getOrProvisionDbUser: vi.fn(),
+  resolveUserSapId: vi.fn(),
 }));
 
 vi.mock('qrcode', () => ({
@@ -18,7 +21,7 @@ vi.mock('qrcode', () => ({
 }));
 
 import { prizeBarcodeHandler } from '../../srv/lib/prize-barcode-handler.js';
-import { resolveDbUserScoped } from '../../srv/lib/resolve-db-user.js';
+import { getOrProvisionDbUser, resolveUserSapId } from '../../srv/lib/resolve-db-user.js';
 import QRCode from 'qrcode';
 
 // ---------------------------------------------------------------------------
@@ -43,12 +46,13 @@ function makeReq(query = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resolveUserSapId.mockReturnValue('P0001234567');
 });
 
 describe('prizeBarcodeHandler', () => {
   describe('resolved user → 200 image/png', () => {
     it('sets Content-Type image/png and Cache-Control private,no-store', async () => {
-      resolveDbUserScoped.mockResolvedValue({ ID: 'uuid-123' });
+      getOrProvisionDbUser.mockResolvedValue({ ID: 'uuid-123' });
       const fakeBuffer = Buffer.from('PNG_DATA');
       QRCode.toBuffer.mockResolvedValue(fakeBuffer);
 
@@ -64,7 +68,7 @@ describe('prizeBarcodeHandler', () => {
     });
 
     it('encodes payload { uid, payload: { eventId } } as JSON to QRCode.toBuffer', async () => {
-      resolveDbUserScoped.mockResolvedValue({ ID: 'uuid-123' });
+      getOrProvisionDbUser.mockResolvedValue({ ID: 'uuid-123' });
       QRCode.toBuffer.mockResolvedValue(Buffer.from('PNG'));
 
       const req = makeReq({ eventId: '10000015' });
@@ -86,8 +90,14 @@ describe('prizeBarcodeHandler', () => {
       });
     });
 
-    it('calls resolveDbUserScoped with the request and ["ID"]', async () => {
-      resolveDbUserScoped.mockResolvedValue({ ID: 'uuid-abc' });
+    // #2861 follow-up — the handler MUST resolve identity through the canonical
+    // tiered front door getOrProvisionDbUser (not the read-only resolveDbUserScoped),
+    // so a first-time / social / IAS / GitHub / null-sapId visitor is provisioned to
+    // their one canonical Users row rather than 401'd. This is the same resolution
+    // the Devtoberfest/gameboard write path uses (#2730/#2651); the scanner trusts
+    // the uid in the QR verbatim, so the encoded uid must be that canonical ID.
+    it('resolves identity via getOrProvisionDbUser(req, { sapId }, ["ID"]) — canonical tiered front door', async () => {
+      getOrProvisionDbUser.mockResolvedValue({ ID: 'uuid-abc' });
       QRCode.toBuffer.mockResolvedValue(Buffer.from('PNG'));
 
       const req = makeReq({ eventId: '42' });
@@ -95,13 +105,14 @@ describe('prizeBarcodeHandler', () => {
 
       await prizeBarcodeHandler(req, res);
 
-      expect(resolveDbUserScoped).toHaveBeenCalledWith(req, ['ID']);
+      expect(resolveUserSapId).toHaveBeenCalledWith(req.user);
+      expect(getOrProvisionDbUser).toHaveBeenCalledWith(req, { sapId: 'P0001234567' }, ['ID']);
     });
   });
 
   describe('unresolved user → 401', () => {
-    it('returns 401 when resolveDbUserScoped returns null', async () => {
-      resolveDbUserScoped.mockResolvedValue(null);
+    it('returns 401 when getOrProvisionDbUser returns null', async () => {
+      getOrProvisionDbUser.mockResolvedValue(null);
 
       const req = makeReq({ eventId: '10000015' });
       const res = makeRes();
@@ -113,8 +124,8 @@ describe('prizeBarcodeHandler', () => {
       expect(QRCode.toBuffer).not.toHaveBeenCalled();
     });
 
-    it('returns 401 when resolveDbUserScoped returns undefined', async () => {
-      resolveDbUserScoped.mockResolvedValue(undefined);
+    it('returns 401 when getOrProvisionDbUser returns undefined', async () => {
+      getOrProvisionDbUser.mockResolvedValue(undefined);
 
       const req = makeReq({ eventId: '10000015' });
       const res = makeRes();
@@ -128,7 +139,7 @@ describe('prizeBarcodeHandler', () => {
 
   describe('QR generation failure → 500', () => {
     it('returns 500 when QRCode.toBuffer rejects', async () => {
-      resolveDbUserScoped.mockResolvedValue({ ID: 'uuid-123' });
+      getOrProvisionDbUser.mockResolvedValue({ ID: 'uuid-123' });
       QRCode.toBuffer.mockRejectedValue(new Error('qr gen failed'));
 
       const req = makeReq({ eventId: '10000015' });

@@ -1,17 +1,21 @@
 import QRCode from 'qrcode';
-import { resolveDbUserScoped } from './resolve-db-user.js';
+import { getOrProvisionDbUser, resolveUserSapId } from './resolve-db-user.js';
 
 /**
  * GET /api/my-prize-barcode?eventId=<legacyId>
  *
  * Mints a QR PNG encoding { uid: <Users.ID>, payload: { eventId: Number } }
- * for the authenticated visitor. Identity is always read from the session
- * (resolveDbUserScoped) — never from a client-supplied query parameter.
+ * for the authenticated visitor. Identity is always resolved from the session
+ * (getOrProvisionDbUser) — never from a client-supplied query parameter. Uses
+ * the same tiered resolver as the Devtoberfest/gameboard path so social / IAS /
+ * GitHub / null-sapId logins map to their one canonical Users row (#2730/#2651),
+ * and the encoded uid matches what ScannerService.getContestant looks up.
  *
  * Cache-Control: private, no-store — this response is identity-bearing.
  */
 export async function prizeBarcodeHandler(req, res) {
-  const user = await resolveDbUserScoped(req, ['ID']);
+  const sapId = resolveUserSapId(req.user);
+  const user = await getOrProvisionDbUser(req, { sapId }, ['ID']);
 
   if (!user) {
     return res.status(401).json({ error: 'authentication required' });

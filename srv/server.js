@@ -317,7 +317,17 @@ cds.on('bootstrap', (app) => {
 
   app.use(basicAuthMiddleware);
   app.get('/api/qrcode', qrcodeHandler);
-  app.get('/api/my-prize-barcode', prizeBarcodeHandler);
+  // #2861 follow-up — /api/my-prize-barcode reads the authenticated visitor
+  // from the session (getOrProvisionDbUser → cds.context.user/req.user). As a
+  // bootstrap app.get route it bypasses CAP's protocol middleware chain, so
+  // without these the auth strategy never runs and cds.context.user is null →
+  // a hard 401 for EVERY logged-in user. Mount CAP's context+auth middleware in
+  // front of the handler (same lazy pattern as /api/alerts/me and
+  // /admin/analytics/export above/below). Falls back to no-op when the chain is
+  // unavailable (e.g. certain unit-test harnesses).
+  const _barcodeContextMw = cds.middlewares?.context?.() || ((req, res, next) => next());
+  const _barcodeAuthMw    = cds.middlewares?.auth?.()    || ((req, res, next) => next());
+  app.get('/api/my-prize-barcode', _barcodeContextMw, _barcodeAuthMw, prizeBarcodeHandler);
   app.get('/api/recommendations', recommendationsHandler);
   app.get('/api/branches/decide', decideHandler);
 
