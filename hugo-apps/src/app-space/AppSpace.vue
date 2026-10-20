@@ -2,6 +2,7 @@
 import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { useRealtimeProgress } from './useRealtimeProgress'
 import { useConfetti } from '../composables/useConfetti'
+import { checkpointBarcodeUrl as _checkpointBarcodeUrl, shouldShowCheckpointBarcode as _shouldShowCheckpointBarcode } from './checkpoint-barcode'
 
 // ── Configuration ─────────────────────────────────────────────────
 const eventId = ref<number | null>(null)
@@ -67,6 +68,7 @@ interface AppSpaceData {
   eventName: string
   eventDescription?: string
   hasLogo?: boolean
+  authenticated?: boolean
   type: string
   paths: AppSpaceTrack[]
 }
@@ -76,6 +78,7 @@ const tracks = ref<AppSpaceTrack[]>([])
 const selectedTrack = ref<AppSpaceTrack | null>(null)
 const loading = ref(true)
 const isLoggedIn = ref(false)
+const authenticated = ref(false)
 const loadError = ref('')
 
 // ── Real-time celebration ─────────────────────────────────────────
@@ -105,6 +108,7 @@ async function loadData(): Promise<AppSpaceData | null> {
       // login. Trust the server's `authenticated` flag to gate the logged-in-only
       // realtime/confetti path (older payloads without the flag → treated as anon).
       isLoggedIn.value = Boolean(data.authenticated)
+      authenticated.value = Boolean(data.authenticated)
       if (data.eventId) eventId.value = data.eventId
       return data
     }
@@ -281,8 +285,12 @@ function handleItemClick(track: AppSpaceTrack, index: number, item: AppSpaceItem
   }
 }
 
-function qrCodeUrl(item: AppSpaceItem): string {
-  return `/api/qrcode?imsId=${item.imsId}&type=${item.type}&eventId=${eventId.value ?? 0}&recordId=${item.recordId ?? 0}`
+function checkpointBarcodeUrl(): string {
+  return _checkpointBarcodeUrl(eventId.value)
+}
+
+function shouldShowCheckpointBarcode(track: AppSpaceTrack, index: number): boolean {
+  return _shouldShowCheckpointBarcode(track, index, authenticated.value)
 }
 
 // ── Computed ───────────────────────────────────────────────────────
@@ -527,37 +535,25 @@ const emptyStateMessage = computed(() => {
             >{{ item.title }}</h4>
             <p class="timeline-content__desc" v-if="item.description && item.type !== 'PRIZE'">{{ item.description }}</p>
 
-            <!-- Prize QR code section -->
-            <div v-if="item.type === 'PRIZE' && (item.status === 'EARNED' || isItemUnlocked(selectedTrack, index))" class="prize-section">
-              <div class="prize-qr">
-                <div class="qr-placeholder" v-if="item.status !== 'EARNED'">
-                  <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
-                    <rect width="120" height="120" rx="8" fill="currentColor" opacity="0.06"/>
-                    <rect x="15" y="15" width="35" height="35" rx="4" stroke="currentColor" opacity="0.3" stroke-width="2"/>
-                    <rect x="70" y="15" width="35" height="35" rx="4" stroke="currentColor" opacity="0.3" stroke-width="2"/>
-                    <rect x="15" y="70" width="35" height="35" rx="4" stroke="currentColor" opacity="0.3" stroke-width="2"/>
-                    <rect x="22" y="22" width="21" height="21" rx="2" fill="currentColor" opacity="0.15"/>
-                    <rect x="77" y="22" width="21" height="21" rx="2" fill="currentColor" opacity="0.15"/>
-                    <rect x="22" y="77" width="21" height="21" rx="2" fill="currentColor" opacity="0.15"/>
-                    <rect x="70" y="70" width="8" height="8" fill="currentColor" opacity="0.15"/>
-                    <rect x="82" y="70" width="8" height="8" fill="currentColor" opacity="0.15"/>
-                    <rect x="94" y="70" width="8" height="8" fill="currentColor" opacity="0.15"/>
-                    <rect x="70" y="82" width="8" height="8" fill="currentColor" opacity="0.15"/>
-                    <rect x="94" y="82" width="8" height="8" fill="currentColor" opacity="0.15"/>
-                    <rect x="70" y="94" width="8" height="8" fill="currentColor" opacity="0.15"/>
-                    <rect x="82" y="94" width="8" height="8" fill="currentColor" opacity="0.15"/>
-                    <rect x="94" y="94" width="8" height="8" fill="currentColor" opacity="0.15"/>
-                  </svg>
-                </div>
-                <img v-else :src="qrCodeUrl(item)" alt="Prize QR code" class="qr-image" width="150" height="150" />
-                <p class="prize-message" v-if="item.status === 'EARNED'">
-                  {{ item.description || 'Congratulations! You earned a prize. Scan this code then contact an App Space expert to claim it.' }}
-                </p>
-                <p class="prize-message prize-message--locked" v-else>
-                  Complete all tutorials above to unlock this prize.
-                </p>
-              </div>
+            <!-- Checkpoint prize barcode — shown only when track is complete AND authenticated -->
+            <div v-if="shouldShowCheckpointBarcode(selectedTrack, index)" class="checkpoint-barcode">
+              <img
+                :src="checkpointBarcodeUrl()"
+                alt="Prize barcode"
+                class="checkpoint-barcode__img"
+                width="150"
+                height="150"
+              />
+              <p class="checkpoint-barcode__caption">Show this to an instructor to claim your prize.</p>
             </div>
+
+            <!-- Sign-in hint shown when track is complete but user is not authenticated -->
+            <p
+              v-else-if="item.type === 'CHECKPOINT' && isItemUnlocked(selectedTrack, index) && !authenticated"
+              class="checkpoint-signin-hint"
+            >
+              <a href="#" @click.prevent="startLogin">Sign in</a> to get your prize code.
+            </p>
 
             <!-- Locked prize message -->
             <div v-if="item.type === 'PRIZE' && !isItemUnlocked(selectedTrack, index) && item.status !== 'EARNED'" class="prize-locked">
