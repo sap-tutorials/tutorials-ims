@@ -138,7 +138,12 @@ onMounted(async () => {
     activeTheme.value = theme
   }
 
-  const eidParam = params.get('eventId')
+  // Read `eventId` case-insensitively: users land on links like
+  // /app-space/?eventid=... (lowercase) and URLSearchParams.get is case-sensitive.
+  let eidParam: string | null = null
+  for (const [k, v] of params) {
+    if (k.toLowerCase() === 'eventid') { eidParam = v; break }
+  }
   if (eidParam) eventId.value = Number(eidParam)
 
   const data = await loadData()
