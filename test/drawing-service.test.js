@@ -217,6 +217,13 @@ describe('DrawingService', () => {
       expect(status).toBe(404);
     });
 
+    it('draw 404s for unknown event', async () => {
+      const { status } = await project.get('/drawings/draw(eventId=99999)', {
+        ...adminAuth, validateStatus: () => true
+      });
+      expect(status).toBe(404);
+    });
+
     it('draw returns a pool member', async () => {
       const { status, data } = await project.get('/drawings/draw(eventId=7010)', adminAuth);
       expect(status).toBe(200);
