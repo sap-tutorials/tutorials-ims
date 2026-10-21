@@ -637,6 +637,8 @@ type com_sap_developers_ims_CompletionPathItems {
   altGroupKey: String
   altGroupLabel: String
   altCondition: String
+  temporarilyUnavailable: Boolean
+  unavailableReason: String
 }
 
 type com_sap_developers_ims_Prizes {
@@ -656,6 +658,8 @@ input com_sap_developers_ims_CompletionPathItems_filter {
   altGroupKey: [String_filter]
   altGroupLabel: [String_filter]
   altCondition: [String_filter]
+  temporarilyUnavailable: [Boolean_filter]
+  unavailableReason: [String_filter]
 }
 
 input com_sap_developers_ims_CompletionPathItems_orderBy {
@@ -668,6 +672,8 @@ input com_sap_developers_ims_CompletionPathItems_orderBy {
   altGroupKey: SortDirection
   altGroupLabel: SortDirection
   altCondition: SortDirection
+  temporarilyUnavailable: SortDirection
+  unavailableReason: SortDirection
 }
 
 input com_sap_developers_ims_CompletionPaths_filter {
@@ -2664,6 +2670,8 @@ input com_sap_developers_ims_CompletionPathItems_C {
   altGroupKey: String
   altGroupLabel: String
   altCondition: String
+  temporarilyUnavailable: Boolean
+  unavailableReason: String
 }
 
 input com_sap_developers_ims_Prizes_C {
