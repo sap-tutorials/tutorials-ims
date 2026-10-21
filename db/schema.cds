@@ -480,6 +480,9 @@ entity CompletionPathItems : cuid, LegacyKeyed {
   altGroupKey               : String(40);
   altGroupLabel             : String(120);
   altCondition              : String(500);
+  // Issue #2864 — path-item level temporarily-unavailable flag
+  temporarilyUnavailable    : Boolean default false;
+  unavailableReason         : String(500);
 }
 
 entity GroupPathItems : cuid, LegacyKeyed {
