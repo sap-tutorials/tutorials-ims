@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseSlugFilter, targetedSourceErrors } from '../fetch-tutorials'
+import { parseSlugFilter, resolveSlugFilter, targetedSourceErrors } from '../fetch-tutorials'
 
 describe('parseSlugFilter', () => {
   it('returns null when both inputs are empty/undefined', () => {
@@ -93,5 +93,30 @@ describe('targetedSourceErrors', () => {
     const errors = [err('a'), err('b'), err('c')]
     const filter = new Set(['a', 'c'])
     expect(targetedSourceErrors(errors, filter).map(e => e.slug)).toEqual(['a', 'c'])
+  })
+})
+
+describe('resolveSlugFilter', () => {
+  const discovered = new Set(['alpha', 'beta', 'gamma'])
+
+  it('keeps all slugs when every requested slug exists', () => {
+    const r = resolveSlugFilter(new Set(['alpha', 'beta']), discovered)
+    expect(r.fatal).toBe(false)
+    expect([...r.valid].sort()).toEqual(['alpha', 'beta'])
+    expect(r.dropped).toEqual([])
+  })
+
+  it('drops a stale slug but keeps the valid ones (partial unknown is non-fatal)', () => {
+    const r = resolveSlugFilter(new Set(['alpha', 'teched2025-genaihub-basic-trial']), discovered)
+    expect(r.fatal).toBe(false)
+    expect([...r.valid]).toEqual(['alpha'])
+    expect(r.dropped).toEqual(['teched2025-genaihub-basic-trial'])
+  })
+
+  it('is FATAL only when EVERY requested slug is unknown (real typo / empty run)', () => {
+    const r = resolveSlugFilter(new Set(['nope', 'also-nope']), discovered)
+    expect(r.fatal).toBe(true)
+    expect(r.valid.size).toBe(0)
+    expect(r.dropped.sort()).toEqual(['also-nope', 'nope'])
   })
 })
