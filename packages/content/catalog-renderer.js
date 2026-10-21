@@ -185,11 +185,23 @@ export function renderMissionBody(ctx) {
     const fromParam = g.isSynthetic && syntheticCount === 1
       ? ''
       : `?from=${escapeHtml(g.slug)}`;
-    const tuts = g.tutorials.map((t, i) => `
-            <li class="tutorial-item">
+    const tuts = g.tutorials.map((t, i) => {
+      // #2864: when a path item is temporarily unavailable, delink the title,
+      // add a badge, and surface the reason as title/aria-label (if truthy).
+      const unavail = !!t.temporarilyUnavailable;
+      const reasonAttr = (unavail && t.unavailableReason)
+        ? ` title="${escapeHtml(t.unavailableReason)}" aria-label="${escapeHtml(t.unavailableReason)}"`
+        : '';
+      const titleEl = unavail
+        ? `<span class="tutorial-link tutorial-link--unavailable"${reasonAttr}>${escapeHtml(t.title)}</span>`
+          + `<span class="nav-card__unavailable-badge">Temporarily Unavailable</span>`
+        : `<a href="/tutorials/${escapeHtml(t.slug)}${fromParam}" class="tutorial-link">${escapeHtml(t.title)}</a>`;
+      const unavailClass = unavail ? ' tutorial-card--unavailable' : '';
+      return `
+            <li class="tutorial-item${unavailClass}">
               <span class="tutorial-number" data-slug="${escapeHtml(t.slug)}">${i + 1}</span>
               <div class="tutorial-info">
-                <a href="/tutorials/${escapeHtml(t.slug)}${fromParam}" class="tutorial-link">${escapeHtml(t.title)}</a>
+                ${titleEl}
                 <div class="tutorial-meta-row">
                   <span>${escapeHtml(titleCase(t.level || 'beginner'))}</span>
                   <span class="meta-sep">&middot;</span>
@@ -198,7 +210,8 @@ export function renderMissionBody(ctx) {
                   <span>${t.stepCount | 0} steps</span>
                 </div>
               </div>
-            </li>`).join('\n');
+            </li>`;
+    }).join('\n');
 
     // [#382 phase F1] Synthetic groups (paths with direct TUTORIAL items, no
     // wrapping Group entity) render with a plain h3 title and no
