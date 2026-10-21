@@ -9,4 +9,17 @@ service DrawingService {
     name      : String;
     startDate : Timestamp;
   };
+
+  function pool(eventId: Integer) returns {
+    eventId       : Integer;
+    eligibleCount : Integer;
+  };
+
+  function draw(eventId: Integer) returns {
+    winner : {
+      displayName : String;
+      email       : String;
+    };
+    eligibleCount : Integer;
+  };
 }
