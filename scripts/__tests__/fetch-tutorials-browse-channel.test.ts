@@ -163,3 +163,29 @@ describe('buildAllCards — hrefBase parameter (prod byte-identical + QA)', () =
     expect(gCard?.href).toBe('/tutorials-qa/group-cap-setup')
   })
 })
+
+describe('buildAllCards — temporarilyUnavailable flag on mission cards', () => {
+  it('carries temporarilyUnavailable and unavailableReason when flag is set', () => {
+    const mission: Mission = {
+      imsId: 1, slug: 'x', title: 'X', description: '', level: 'beginner',
+      time: 60, icon: '', tasksCount: 1,
+      temporarilyUnavailable: true, unavailableReason: 'maint',
+    }
+    const tut = makeTut({ missionId: 1, missionTitle: 'X' })
+    const cards = buildAllCards([tut], [mission], noHierarchies, noGroups, emptyMetaMap)
+    const mCard = cards.find(c => c.type === 'mission')
+    expect(mCard?.temporarilyUnavailable).toBe(true)
+    expect(mCard?.unavailableReason).toBe('maint')
+  })
+
+  it('does not set temporarilyUnavailable when flag is absent', () => {
+    const mission: Mission = {
+      imsId: 1, slug: 'y', title: 'Y', description: '', level: 'beginner',
+      time: 60, icon: '', tasksCount: 1,
+    }
+    const tut = makeTut({ missionId: 1, missionTitle: 'Y' })
+    const cards = buildAllCards([tut], [mission], noHierarchies, noGroups, emptyMetaMap)
+    const mCard = cards.find(c => c.type === 'mission')
+    expect(mCard?.temporarilyUnavailable).toBeFalsy()
+  })
+})
