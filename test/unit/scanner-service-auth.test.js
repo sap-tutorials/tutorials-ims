@@ -29,7 +29,7 @@ describe('ScannerService — @requires: MobileApp (A2)', () => {
     const srv = await cds.connect.to('ScannerService');
     await expect(
       srv.tx({ user: { id: 'anonymous', roles: {} } }, (tx) =>
-        tx.send({ event: 'getContestant', data: { accountNumber: '8001' } })
+        tx.send({ event: 'getContestant', data: { accountNumber: 'u-alice' } })
       )
     ).rejects.toMatchObject({ code: 403 });
   });
@@ -41,7 +41,7 @@ describe('ScannerService — @requires: MobileApp (A2)', () => {
       srv.tx(
         { user: { id: 'jwt-user', roles: { 'authenticated-user': true } } },
         (tx) =>
-          tx.send({ event: 'getContestant', data: { accountNumber: '8001' } })
+          tx.send({ event: 'getContestant', data: { accountNumber: 'u-alice' } })
       )
     ).rejects.toMatchObject({ code: 403 });
   });
@@ -58,10 +58,11 @@ describe('ScannerService — @requires: MobileApp (A2)', () => {
     // getContestant currently returns an object shape even when the
     // contestant has zero completions; the point of this test is the
     // scope check, not the response shape. Do not assert on fields.
+    // accountNumber is the user UUID (Task 5: resolution by UUID, not legacyId).
     const result = await srv.tx(
       { user: { id: 'scanner-op', roles: { MobileApp: true } } },
       (tx) =>
-        tx.send({ event: 'getContestant', data: { accountNumber: '8001' } })
+        tx.send({ event: 'getContestant', data: { accountNumber: 'u-alice' } })
     );
     expect(result).toBeDefined();
   });

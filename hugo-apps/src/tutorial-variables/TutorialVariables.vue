@@ -11,7 +11,7 @@
 -->
 <template>
   <section
-    v-if="variables.length"
+    v-if="shown.length"
     class="tv"
     aria-label="Tutorial variables"
   >
@@ -21,7 +21,7 @@
     </p>
     <div class="tv__fields">
       <div
-        v-for="v in variables"
+        v-for="v in shown"
         :key="v.name"
         class="tv__field"
       >
@@ -52,8 +52,8 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, onMounted } from 'vue'
-import { applyValue, resolveDefault } from './substitution'
+import { reactive, computed, onMounted } from 'vue'
+import { applyValue, resolveInitial } from './substitution'
 import type { TutorialVariable } from './substitution'
 import { readValue, writeValue } from './storage'
 
@@ -73,6 +73,11 @@ const props = defineProps<{
 
 const fieldValues = reactive<Record<string, string>>({})
 const invalid = reactive<Record<string, boolean>>({})
+
+// [#2852] Only variables that are not explicitly hidden get a reader-facing
+// input. `display` absent or true → shown; false → hidden (value still
+// substitutes into the body via onMounted below).
+const shown = computed(() => props.variables.filter(v => v.display !== false))
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Identity fetch — /auth/user, credentials:'include'
@@ -100,9 +105,26 @@ onMounted(async () => {
     invalid[v.name] = false
   }
 
-  // TASK-6: Restore persisted values before fetching identity defaults.
+  // [#2852] Hidden variables are author-owned: a literal `value` is applied
+  // unconditionally and is NOT read from or written to reader storage. Doing
+  // this first means a stale persisted value can never shadow the author's
+  // fixed value for a hidden variable.
+  const hiddenNames = new Set<string>()
+  for (const v of props.variables) {
+    if (v.display === false) {
+      hiddenNames.add(v.name)
+      if (typeof v.value === 'string') {
+        fieldValues[v.name] = v.value
+        applyValue(v.name, v.value)
+      }
+    }
+  }
+
+  // Restore persisted values before fetching identity defaults — only for
+  // displayed (reader-owned) variables.
   const storageCtx = { missionSlug: props.missionSlug || undefined, tutorialSlug: props.slug }
   for (const v of props.variables) {
+    if (hiddenNames.has(v.name)) continue
     const stored = readValue(v.name, storageCtx)
     if (stored !== null) {
       fieldValues[v.name] = stored
@@ -113,13 +135,14 @@ onMounted(async () => {
   const identity = await fetchIdentity()
 
   for (const v of props.variables) {
-    // Skip if Task 6 has already populated this field from storage
+    // Skip if a hidden literal value or a persisted value already populated it
     if (fieldValues[v.name]) continue
 
-    const def = resolveDefault(v, identity)
-    if (def !== null) {
-      fieldValues[v.name] = def
-      applyValue(v.name, def)
+    // [#2852] Precedence: literal `value` > identity-regex `default` > empty.
+    const init = resolveInitial(v, identity)
+    if (init !== null) {
+      fieldValues[v.name] = init
+      applyValue(v.name, init)
     }
   }
 })

@@ -6,7 +6,7 @@ import type { ScanResult, ContestantData } from './types'
 
 const videoRef = ref<HTMLVideoElement | null>(null)
 const { scan, cancel, isSupported, isScanning, error: scanError } = useBarcodeScanner(videoRef)
-const { loading, getContestant, claimPrize, reset: resetApi } = useScannerApi()
+const { loading, getContestant, claimPrizeForContestant, reset: resetApi } = useScannerApi()
 
 type AppState = 'idle' | 'scanning' | 'loaded' | 'claiming'
 const state = ref<AppState>('idle')
@@ -36,7 +36,8 @@ function parseScanData(text: string): ScanResult {
     uid: String(data.uid),
     payload: {
       recordId: data.payload?.recordId ? String(data.payload.recordId) : '',
-      status: data.payload?.status || ''
+      status: data.payload?.status || '',
+      eventId: Number(data.payload?.eventId ?? 0)
     }
   }
 }
@@ -44,15 +45,17 @@ function parseScanData(text: string): ScanResult {
 async function loadContestant(scanResult: ScanResult) {
   state.value = 'loaded'
   try {
-    const data = await getContestant(scanResult.uid)
+    const data = await getContestant(scanResult.uid, scanResult.payload.eventId)
     contestant.value = {
       uid: scanResult.uid,
+      eventId: scanResult.payload.eventId,
       recordId: scanResult.payload.recordId,
       status: scanResult.payload.status,
       tutorialsCompleted: data.tutorialsCompleted,
       groupsCompleted: data.groupsCompleted,
       missionsCompleted: data.missionsCompleted,
-      prizeRecords: data.prizeRecords
+      prizeRecords: data.prizeRecords,
+      claimedCount: data.claimedCount ?? 0
     }
   } catch (e) {
     errorMessage.value = `Could not load contestant: ${(e as Error).message}`
@@ -106,23 +109,25 @@ async function onScanAgain() {
 }
 
 async function onClaimPrize() {
-  if (!contestant.value?.recordId) {
-    showToast('No prize record available', 'error')
+  if (!contestant.value) {
+    showToast('No contestant loaded', 'error')
     return
   }
 
   state.value = 'claiming'
+  const uid = contestant.value.uid
+  const eventId = contestant.value.eventId
   try {
-    await claimPrize(contestant.value.recordId, contestant.value.uid)
-    showToast('Prize claimed!')
-    // Refresh contestant data
+    const result = await claimPrizeForContestant(uid, eventId)
+    showToast(result.message || 'Prize handover recorded!')
+    // Refresh contestant data so claimedCount updates
     const scanResult: ScanResult = {
-      uid: contestant.value.uid,
-      payload: { recordId: contestant.value.recordId, status: contestant.value.status }
+      uid,
+      payload: { recordId: contestant.value.recordId, status: contestant.value.status, eventId }
     }
     await loadContestant(scanResult)
   } catch (e) {
-    errorMessage.value = `Could not claim prize: ${(e as Error).message}`
+    errorMessage.value = `Could not record handover: ${(e as Error).message}`
     state.value = 'loaded'
   }
 }
@@ -164,7 +169,7 @@ async function onClaimPrize() {
       <div v-if="showManualInput" class="scanner-manual">
         <p class="scanner-manual__label">Camera scanning not available. Paste badge JSON:</p>
         <textarea v-model="manualInput" class="fd-textarea scanner-manual__input"
-                  placeholder='{"uid":"12345","payload":{"recordId":"67890","status":"ELIGIBLE"}}'
+                  placeholder='{"uid":"<uuid>","payload":{"eventId":10000015}}'
                   rows="3"></textarea>
         <button class="fd-button fd-button--emphasized scanner-btn-full" @click="onManualLookup">
           <i class="sap-icon--search"></i>
@@ -207,8 +212,8 @@ async function onClaimPrize() {
 
           <!-- Prizes highlight -->
           <div class="scanner-card__prizes">
-            <span class="scanner-card__prizes-label">Prizes</span>
-            <span class="scanner-card__prizes-value">{{ contestant.prizeRecords }}</span>
+            <span class="scanner-card__prizes-label">Prizes claimed</span>
+            <span class="scanner-card__prizes-value">{{ contestant.claimedCount }} of 2</span>
           </div>
 
           <!-- Stats -->
@@ -240,9 +245,9 @@ async function onClaimPrize() {
           </div>
           <div class="fd-bar__element">
             <button class="fd-button fd-button--emphasized" @click="onClaimPrize"
-                    :disabled="state === 'claiming' || !contestant?.recordId">
+                    :disabled="state === 'claiming' || (contestant?.claimedCount ?? 0) >= 2">
               <i class="sap-icon--gift"></i>
-              <span>Claim Prize</span>
+              <span>Record prize handover</span>
             </button>
           </div>
         </div>

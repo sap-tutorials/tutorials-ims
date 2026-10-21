@@ -624,7 +624,7 @@ describe.runIf(writesEnabled && isSafeForWrites())(
       const { ScannerService } = cds.services;
       const result = await ScannerService.send({
         event: 'getContestant',
-        data: { accountNumber: String(seed.userLegacyId) },
+        data: { accountNumber: seed.userId },
       });
 
       // The seed adds one TUTORIAL completion (SUPERSEDED) and 3 STEP rows

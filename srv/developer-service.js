@@ -14,33 +14,8 @@ import { maybeAutoSendCompletion } from './lib/ngds-autosend.js';
 import { stampSubmissionId } from './lib/task-record-submission-id.js';
 import { rollUpParentsForCompletion } from './lib/completion-rollup.js';
 import { renderMarkdown } from './lib/markdown.js';
-import { buildTaskMap, resolveTask, effectiveLegacyId } from './lib/path-item-task-resolver.js';
+import { buildTaskMap, effectiveLegacyId, expandGroupTutorials, buildPathItems, groupChildLegacyIds } from './lib/path-item-task-resolver.js';
 import { handleRequestAccountMerge, handleConfirmAccountMerge } from './lib/account-merge-request.js';
-
-// #2866 — App Space completion time window.
-// App Space prize credit must reflect work done DURING the event. A COMPLETED
-// TUTORIAL whose completionDate falls outside the event's inclusive
-// [startDate, endDate] window is downgraded to the plain status
-// 'COMPLETED_OUT_OF_WINDOW', which the Vue client (strict === 'COMPLETED'
-// gating) does not count toward the track or prize barcode.
-//
-// FAIL-OPEN: gate only when BOTH event dates are present. If either is
-// null/absent, behave exactly as before (any COMPLETED counts) — this
-// protects non-TechEd / un-dated events. (Do NOT reuse cat-game-award.js's
-// eventIsLive, which tolerates open bounds; our rule is stricter.)
-// Null completionDate on a gated event cannot be proven in-window → downgraded.
-// Only TUTORIAL items are gated; other item types pass through unchanged.
-const COMPLETED_OUT_OF_WINDOW = 'COMPLETED_OUT_OF_WINDOW';
-function effectiveAppSpaceStatus(record, event, taskType) {
-  const status = record?.status || '';
-  if (taskType !== 'TUTORIAL' || status !== 'COMPLETED') return status;
-  const start = event?.startDate ? Date.parse(event.startDate) : NaN;
-  const end = event?.endDate ? Date.parse(event.endDate) : NaN;
-  if (Number.isNaN(start) || Number.isNaN(end)) return status; // fail-open: no usable window
-  const done = record?.completionDate ? Date.parse(record.completionDate) : NaN;
-  if (Number.isNaN(done) || done < start || done > end) return COMPLETED_OUT_OF_WINDOW;
-  return status;
-}
 
 // Per-user rate limit for resetTutorialProgress — same window as the
 // IP-based feedback limiter below (5/hr) but keyed by sapId via a shared
@@ -109,6 +84,7 @@ export default class DeveloperService extends cds.ApplicationService {
             Users: dbUsers, Events: dbEvents, Missions: dbMissions,
             CompletionPaths: dbPaths, CompletionPathItems: dbPathItems,
             Checkpoints: dbCheckpoints, Petoberfests: dbPetoberfests,
+            GroupPathItems: dbGroupPathItems,
             UserLearningPreferences } = cds.entities('com.sap.developers.ims');
 
     // Auto-assign legacyId on TaskRecord creation
@@ -598,10 +574,21 @@ export default class DeveloperService extends cds.ApplicationService {
         entities: { Tutorials: dbTutorials, Checkpoints: dbCheckpoints, Petoberfests: dbPetoberfests },
       });
 
+      // Expand GROUP path items into their child tutorials (GroupPathItems),
+      // so a path whose item is a GROUP renders its tutorials instead of a
+      // single empty "0 tutorials" card.
+      const groupTutorials = await expandGroupTutorials({
+        items: allItems,
+        entities: { GroupPathItems: dbGroupPathItems, Tutorials: dbTutorials },
+      });
+
       // Effective legacyId per item (own taskLegacyId, else resolved tutorial's)
       // drives both TaskRecord lookups and the output imsId.
       const effLegacyByItem = new Map(allItems.map(i => [i, effectiveLegacyId(taskMap, i)]));
-      const recordLegacyIds = [...new Set([...effLegacyByItem.values()].filter(v => v != null))];
+      const recordLegacyIds = [...new Set([
+        ...[...effLegacyByItem.values()].filter(v => v != null),
+        ...groupChildLegacyIds(groupTutorials),   // child tutorials need their own records too
+      ])];
 
       let userRecords = [];
       // #2730: use the tiered resolver so null-sapId identity-link users are found.
@@ -630,33 +617,15 @@ export default class DeveloperService extends cds.ApplicationService {
         eventId: event?.legacyId ?? 0,
         eventType: event?.eventType ?? 'OTHER',
         type: 'COMPLEX',
-        paths: paths.map(p => {
-          const items = allItems
-            .filter(i => i.path_ID === p.ID)
-            .map(i => {
-              const task = resolveTask(taskMap, i);
-              const effLegacyId = effLegacyByItem.get(i);
-              const record = recordMap.get(`${i.taskType}:${effLegacyId}`);
-              return {
-                imsId: effLegacyId,
-                title: task?.title || record?.titleSnapshot || '',
-                type: i.taskType,
-                status: record?.status || '',
-                progress: record?.progress || 0,
-                experience: task?.experienceTag || '',
-                timeToComplete: task?.averageTimeToComplete || 0,
-                url: task?.slug ? `/tutorials/${task.slug}.html` : '',
-                description: task?.description || '',
-                recordId: record?.legacyId || 0
-              };
-            });
-          return {
-            id: p.legacyId,
-            title: p.name,
-            description: mission.description || '',
-            items
-          };
-        })
+        paths: paths.map(p => ({
+          id: p.legacyId,
+          title: p.name,
+          description: p.description || mission.description || '',
+          items: buildPathItems({
+            pathItems: allItems.filter(i => i.path_ID === p.ID),
+            taskMap, effLegacyByItem, groupTutorials, recordMap,
+          }),
+        })),
       };
 
       return result;
@@ -712,8 +681,19 @@ export default class DeveloperService extends cds.ApplicationService {
         entities: { Tutorials: dbTutorials, Checkpoints: dbCheckpoints, Petoberfests: dbPetoberfests },
       });
 
+      // Expand GROUP path items into their child tutorials (GroupPathItems),
+      // so a path whose item is a GROUP renders its tutorials instead of a
+      // single empty "0 tutorials" card.
+      const groupTutorials = await expandGroupTutorials({
+        items: allItems,
+        entities: { GroupPathItems: dbGroupPathItems, Tutorials: dbTutorials },
+      });
+
       const effLegacyByItem = new Map(allItems.map(i => [i, effectiveLegacyId(taskMap, i)]));
-      const recordLegacyIds = [...new Set([...effLegacyByItem.values()].filter(v => v != null))];
+      const recordLegacyIds = [...new Set([
+        ...[...effLegacyByItem.values()].filter(v => v != null),
+        ...groupChildLegacyIds(groupTutorials),   // child tutorials need their own records too
+      ])];
 
       let userRecords = [];
       // #2730: use the tiered resolver so null-sapId identity-link users are found.
@@ -735,36 +715,21 @@ export default class DeveloperService extends cds.ApplicationService {
         hasLogo: Boolean(event.hasLogo),
         authenticated: Boolean(dbUser),   // #2314/#2730: false only for anonymous callers → client skips the logged-in-only realtime/confetti path. Truthy when user resolves via any tier (sapId, identity link, or pin).
         type: 'COMPLEX',
-        paths: paths.map(p => {
-          const items = allItems
-            .filter(i => i.path_ID === p.ID)
-            .map(i => {
-              const task = resolveTask(taskMap, i);
-              const effLegacyId = effLegacyByItem.get(i);
-              const record = recordMap.get(`${i.taskType}:${effLegacyId}`);
-              return {
-                imsId: effLegacyId,
-                title: task?.title || record?.titleSnapshot || '',
-                type: i.taskType,
-                // #2866: App Space prize credit counts only completions within the event's
-                // [startDate,endDate]; out-of-window COMPLETED tutorials are downgraded so the
-                // track/prize does not unlock (fail-open when the event has no usable window).
-                status: effectiveAppSpaceStatus(record, event, i.taskType) || '',
-                progress: record?.progress || 0,
-                experience: task?.experienceTag || '',
-                timeToComplete: task?.averageTimeToComplete || 0,
-                url: task?.slug ? `/tutorials/${task.slug}.html` : '',
-                description: task?.description || '',
-                recordId: record?.legacyId || 0
-              };
-            });
-          return {
-            id: p.legacyId,
-            title: p.name,
-            description: mission.description || '',
-            items
-          };
-        })
+        paths: paths.map(p => ({
+          id: p.legacyId,
+          title: p.name,
+          description: p.description || mission.description || '',
+          items: buildPathItems({
+            pathItems: allItems.filter(i => i.path_ID === p.ID),
+            taskMap, effLegacyByItem, groupTutorials, recordMap,
+            // #2866: App Space prize credit counts only completions within the
+            // event's [startDate,endDate]; passing `event` makes shapeItem
+            // downgrade out-of-window COMPLETED tutorials to
+            // COMPLETED_OUT_OF_WINDOW. getEventProgress omits `event`, so it
+            // stays time-agnostic. Fail-open when the window is not set.
+            event,
+          }),
+        })),
       };
     });
 

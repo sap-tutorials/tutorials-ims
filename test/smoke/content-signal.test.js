@@ -13,7 +13,7 @@ describe('AI bot signal headers', () => {
   });
 
   it('tutorial page (HANA-served) has the same headers', async () => {
-    const res = await fetchWithRetry(`${BASE_URL}/tutorials/`);
+    const res = await fetchWithRetry(`${BASE_URL}/tutorials/abap-dev-create-table/`);
     expect(res.headers.get('content-signal')).toBeTruthy();
     expect(res.headers.get('x-robots-tag')).toBeTruthy();
   });

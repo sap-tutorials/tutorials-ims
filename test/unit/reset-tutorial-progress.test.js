@@ -473,7 +473,7 @@ describe('Task 10 — ScannerService.getContestant counts SUPERSEDED as complete
 
     const scanner = await cds.connect.to('ScannerService');
     const result = await scanner.tx({ user: new cds.User.Privileged() }, tx =>
-      tx.send({ event: 'getContestant', data: { accountNumber: '10001' } })
+      tx.send({ event: 'getContestant', data: { accountNumber: 'u10' } })
     );
     // SUPERSEDED counts as a completion (historical truth). DISTINCT prevents
     // double-count if there were also a fresh COMPLETED row.
@@ -494,7 +494,7 @@ describe('Task 10 — ScannerService.getContestant counts SUPERSEDED as complete
 
     const scanner = await cds.connect.to('ScannerService');
     const result = await scanner.tx({ user: new cds.User.Privileged() }, tx =>
-      tx.send({ event: 'getContestant', data: { accountNumber: '10002' } })
+      tx.send({ event: 'getContestant', data: { accountNumber: 'u10b' } })
     );
     // 1 logical completion, NOT 2 (DISTINCT by user+taskLegacyId).
     expect(result.tutorialsCompleted).toBe(1);

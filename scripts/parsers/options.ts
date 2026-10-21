@@ -245,13 +245,41 @@ export function convertOptionBlocks(
 
     result = result.slice(0, lineStart) + replacement + result.slice(end)
 
-    // NOTE: the old "Bug B" tail-dedent (which pushed trailing substep content
-    // to column 0) is deliberately gone. It only existed to survive the
-    // flush-left list CLOSURE: once the list closed, still-indented trailing
-    // content became a literal indented-code block. Now that the shortcode
-    // wrappers stay indented the list never closes, so trailing content keeps
-    // its authored substep indentation and remains valid list-item continuation
-    // — dedenting it here would instead EJECT it from the <li> (#2820).
+    // Bug B (#2820): content that trails the OPTION group but still belongs to
+    // the same numbered substep (e.g. "Set the install directory…", an image, a
+    // `> [!TIP]`) is authored indented 4 spaces. A Hugo shortcode that emits a
+    // block-level <div> CLOSES the surrounding tight list regardless of the
+    // wrapper indent (verified against production-pinned Hugo 0.147.7 — the
+    // os-options/os-panel div interrupts list continuation). Once the list has
+    // closed, Goldmark measures the still-4-space-indented tail from column 0,
+    // where the >=4-space rule turns it into a literal indented-code block — the
+    // exact raw-markdown leak of #2820. So dedent the tail to column 0 (up to the
+    // next list marker / shortcode / de-indented line) so it renders as sibling
+    // markdown; the author's own `N.` ordinal then reopens the list as
+    // <ol start="N"> and numbering continues.
+    //
+    // Commit 19db8d027 DELETED this loop on the false premise that "with the
+    // wrappers indented the list never closes" — the Hugo renders disprove that;
+    // the list always closes, so the dedent is mandatory. See
+    // docs/superpowers/specs/2026-10-20-option-block-rendering-design.md.
+    const tailStart = lineStart + replacement.length
+    const after = result.slice(tailStart)
+    const tailLines = after.split('\n')
+    const dedentedTail: string[] = []
+    let stopped = false
+    for (const line of tailLines) {
+      if (stopped) { dedentedTail.push(line); continue }
+      if (line.trim() === '') { dedentedTail.push(line); continue }
+      // A line indented >= 4 spaces is trailing substep content → dedent it.
+      if (/^ {4}/.test(line)) { dedentedTail.push(line.slice(4)); continue }
+      // A tab-indented line → strip one leading tab.
+      if (/^\t/.test(line)) { dedentedTail.push(line.replace(/^\t/, '')); continue }
+      // First line at column 0 (next list marker, shortcode, heading, or the
+      // list's end) — stop; everything from here is outside this substep's tail.
+      stopped = true
+      dedentedTail.push(line)
+    }
+    result = result.slice(0, tailStart) + dedentedTail.join('\n')
   }
 
   return result

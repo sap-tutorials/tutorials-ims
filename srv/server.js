@@ -12,6 +12,7 @@ import { autoPurgeOnce } from './lib/purge-stale-changelog.js';
 import { resolveDeployEnvironment } from './lib/deploy-environment.js';
 import { versionHandler } from './lib/version-handler.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
+import { prizeBarcodeHandler } from './lib/prize-barcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
 import { loadTechEdFeed } from './lib/teched-feed.js';
 import { buildConceptsHandler } from './lib/build-concepts.js';
@@ -316,6 +317,16 @@ cds.on('bootstrap', (app) => {
 
   app.use(basicAuthMiddleware);
   app.get('/api/qrcode', qrcodeHandler);
+  // #2861 follow-up — /api/my-prize-barcode mints an identity-bearing QR for the
+  // authenticated visitor. Mount CAP's context+auth middleware in front of the
+  // handler (same pattern as /api/alerts/me and /admin/analytics/export) so the
+  // XSUAA/IAS auth strategy runs and populates cds.context.user — the handler
+  // resolves identity from cds.context.user (NOT req.user, which is unset on a
+  // raw Express route). The `|| no-op` fallback only applies in unit harnesses
+  // where cds.middlewares is unavailable.
+  const _barcodeContextMw = cds.middlewares?.context?.() || ((req, res, next) => next());
+  const _barcodeAuthMw    = cds.middlewares?.auth?.()    || ((req, res, next) => next());
+  app.get('/api/my-prize-barcode', _barcodeContextMw, _barcodeAuthMw, prizeBarcodeHandler);
   app.get('/api/recommendations', recommendationsHandler);
   app.get('/api/branches/decide', decideHandler);
 
