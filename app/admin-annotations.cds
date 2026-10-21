@@ -264,6 +264,8 @@ annotate AdminService.CompletionPathItems with {
   showTutorial    @UI.Hidden;
   showGroup       @UI.Hidden;
   showCheckpoint  @UI.Hidden;
+  temporarilyUnavailable @Common.Label: 'Temporarily Unavailable';
+  unavailableReason      @Common.Label: 'Unavailable Reason'  @UI.MultiLineText;
 };
 
 annotate AdminService.CompletionPathItems with {
@@ -321,7 +323,9 @@ annotate AdminService.CompletionPathItems with @UI: {
       { Value: prize_ID },
       { Value: altGroupKey },
       { Value: altGroupLabel },
-      { Value: altCondition }
+      { Value: altCondition },
+      { Value: temporarilyUnavailable },
+      { Value: unavailableReason }
     ]
   },
   PresentationVariant: { SortOrder: [ { Property: itemOrder } ] },
