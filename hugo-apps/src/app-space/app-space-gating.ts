@@ -48,6 +48,10 @@ export function isItemUnlocked(items: GatingItem[], index: number): boolean {
 export function isTutorialOpenable(items: GatingItem[], index: number): boolean {
   const item = items[index]
   if (!item || item.type !== 'TUTORIAL') return false
+  // #2864: a temporarily-unavailable item is never openable — this single
+  // chokepoint both blocks the click handler and strips the `clickable` class
+  // in AppSpace.vue, so the card renders greyed and delinked.
+  if (item.temporarilyUnavailable === true) return false
   if (item.status === 'COMPLETED_OUT_OF_WINDOW') return true
   return isItemUnlocked(items, index)
 }
