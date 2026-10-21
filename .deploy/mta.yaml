@@ -283,6 +283,12 @@ modules:
         - npm --prefix ../app/display-app run build
         - mkdir -p static/display-app
         - cp -r ../app/display-app/dist/. static/display-app/
+        # Drawings UI (#2865) — Vue 3 + Vite, Admin scope, base '/drawings-ui/'.
+        # Served from static/drawings-ui via the /drawings-ui/ approuter route.
+        - npm --prefix ../app/display-app-drawings install
+        - npm --prefix ../app/display-app-drawings run build
+        - mkdir -p static/drawings-ui
+        - cp -r ../app/display-app-drawings/dist/. static/drawings-ui/
         # Data Inspector UI (#999) — bundled inside @cap-js/data-inspector's
         # node_modules. Rewrite the UI5 bootstrap CDN in index.html from
         # sapui5.hana.ondemand.com (plugin default) to ui5.sap.com — the
