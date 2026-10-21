@@ -45,7 +45,7 @@ layout: ${kind}
 ---
 MD
   cat > "$TEMP_HUGO/layouts/${kind}.html" <<HTML
-{{- partial "browse/_partials/card-${kind}.html" (index .Site.Data.cards "${kind}") -}}
+{{- partial "browse/_partials/card-${kind}.html" (dict "item" (index .Site.Data.cards "${kind}")) -}}
 HTML
 done
 

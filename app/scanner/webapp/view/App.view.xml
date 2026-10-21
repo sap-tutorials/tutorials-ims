@@ -44,10 +44,6 @@
                         <VBox id="vboxIdentity" class="sapUiSmallMarginBeginEnd sapUiSmallMarginTopBottom">
                             <Title id="resultUid" text="{contestant>uid}" level="H5"
                                 class="sapUiTinyMarginBottom" />
-                            <Text id="resultIdentitySub"
-                                text="{= ${contestant>recordId} + ' · ' + ${contestant>status} }"
-                                wrapping="false"
-                                class="sapUiTinyMarginBottom" />
                         </VBox>
 
                         <!-- Prizes Claimed — highlighted row -->
@@ -56,7 +52,7 @@
                             justifyContent="SpaceBetween"
                             alignItems="Center">
                             <Label id="lblPrizesClaimed" text="Prizes Claimed" design="Bold" />
-                            <Text id="prizeRecords" text="{contestant>prizeRecords}" />
+                            <Text id="prizeCount" text="{= ${contestant>claimedCount} + ' of 2' }" />
                         </HBox>
 
                         <!-- Remaining stats as a list -->
@@ -89,11 +85,11 @@
                     <ToolbarSpacer id="footerSpacer" />
                     <Button
                         id="btnClaimPrize"
-                        text="Claim Prize"
+                        text="Record prize handover"
                         icon="sap-icon://gift"
                         type="Emphasized"
                         press="onClaimPrize"
-                        enabled="{contestant>loaded}" />
+                        enabled="{= ${contestant>loaded} &amp;&amp; ${contestant>claimedCount} &lt; 2 }" />
                 </OverflowToolbar>
             </footer>
 

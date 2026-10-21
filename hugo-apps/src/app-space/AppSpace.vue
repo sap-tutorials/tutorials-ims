@@ -2,6 +2,7 @@
 import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { useRealtimeProgress } from './useRealtimeProgress'
 import { useConfetti } from '../composables/useConfetti'
+import { checkpointBarcodeUrl as _checkpointBarcodeUrl, shouldShowCheckpointBarcode as _shouldShowCheckpointBarcode } from './checkpoint-barcode'
 
 // ── Configuration ─────────────────────────────────────────────────
 const eventId = ref<number | null>(null)
@@ -67,6 +68,7 @@ interface AppSpaceData {
   eventName: string
   eventDescription?: string
   hasLogo?: boolean
+  authenticated?: boolean
   type: string
   paths: AppSpaceTrack[]
 }
@@ -76,6 +78,7 @@ const tracks = ref<AppSpaceTrack[]>([])
 const selectedTrack = ref<AppSpaceTrack | null>(null)
 const loading = ref(true)
 const isLoggedIn = ref(false)
+const authenticated = ref(false)
 const loadError = ref('')
 
 // ── Real-time celebration ─────────────────────────────────────────
@@ -105,6 +108,7 @@ async function loadData(): Promise<AppSpaceData | null> {
       // login. Trust the server's `authenticated` flag to gate the logged-in-only
       // realtime/confetti path (older payloads without the flag → treated as anon).
       isLoggedIn.value = Boolean(data.authenticated)
+      authenticated.value = Boolean(data.authenticated)
       if (data.eventId) eventId.value = data.eventId
       return data
     }
@@ -138,7 +142,12 @@ onMounted(async () => {
     activeTheme.value = theme
   }
 
-  const eidParam = params.get('eventId')
+  // Read `eventId` case-insensitively: users land on links like
+  // /app-space/?eventid=... (lowercase) and URLSearchParams.get is case-sensitive.
+  let eidParam: string | null = null
+  for (const [k, v] of params) {
+    if (k.toLowerCase() === 'eventid') { eidParam = v; break }
+  }
   if (eidParam) eventId.value = Number(eidParam)
 
   const data = await loadData()
@@ -200,9 +209,9 @@ watch(realtimeActive, (active) => {
 }, { immediate: true })
 
 // ── Helpers ────────────────────────────────────────────────────────
-function formatTime(seconds: number): string {
-  if (seconds <= 0) return ''
-  const mins = Math.round(seconds / 60)
+function formatTime(minutes: number): string {
+  if (minutes <= 0) return ''
+  const mins = Math.round(minutes)
   if (mins < 60) return `${mins} min`
   const hrs = Math.floor(mins / 60)
   const rem = mins % 60
@@ -253,6 +262,9 @@ function isItemUnlocked(track: AppSpaceTrack, index: number): boolean {
 function itemStatusClass(track: AppSpaceTrack, index: number): string {
   const item = track.items[index]
   if (item.status === 'COMPLETED') return 'step--completed'
+  // #2866: completed before/after the event window — distinct "redo" state.
+  // Does NOT count toward the track or unlock the prize (gating is strict === 'COMPLETED').
+  if (item.status === 'COMPLETED_OUT_OF_WINDOW') return 'step--redo'
   if (item.status === 'EARNED') return 'step--earned'
   if (item.status === 'IN_PROGRESS') return 'step--in-progress'
   if (isItemUnlocked(track, index)) return 'step--available'
@@ -281,8 +293,12 @@ function handleItemClick(track: AppSpaceTrack, index: number, item: AppSpaceItem
   }
 }
 
-function qrCodeUrl(item: AppSpaceItem): string {
-  return `/api/qrcode?imsId=${item.imsId}&type=${item.type}&eventId=${eventId.value ?? 0}&recordId=${item.recordId ?? 0}`
+function checkpointBarcodeUrl(): string {
+  return _checkpointBarcodeUrl(eventId.value)
+}
+
+function shouldShowCheckpointBarcode(track: AppSpaceTrack, index: number): boolean {
+  return _shouldShowCheckpointBarcode(track.items[index], isItemUnlocked(track, index), authenticated.value)
 }
 
 // ── Computed ───────────────────────────────────────────────────────
@@ -491,7 +507,7 @@ const emptyStateMessage = computed(() => {
             :class="{ clickable: item.type === 'TUTORIAL' && isItemUnlocked(selectedTrack, index) }"
           >
             <!-- Locked icon -->
-            <svg v-if="!isItemUnlocked(selectedTrack, index) && item.status !== 'COMPLETED' && item.status !== 'EARNED'"
+            <svg v-if="!isItemUnlocked(selectedTrack, index) && item.status !== 'COMPLETED' && item.status !== 'EARNED' && item.status !== 'COMPLETED_OUT_OF_WINDOW'"
               width="18" height="18" viewBox="0 0 24 24" fill="none">
               <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/>
               <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -500,6 +516,11 @@ const emptyStateMessage = computed(() => {
             <svg v-else-if="item.status === 'COMPLETED'"
               width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <!-- #2866: completed outside the event window — redo (refresh arrows) -->
+            <svg v-else-if="item.status === 'COMPLETED_OUT_OF_WINDOW'"
+              width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             <!-- Prize/trophy icon -->
             <svg v-else-if="item.type === 'PRIZE' || item.type === 'CHECKPOINT'"
@@ -526,38 +547,30 @@ const emptyStateMessage = computed(() => {
               @click="handleItemClick(selectedTrack, index, item)"
             >{{ item.title }}</h4>
             <p class="timeline-content__desc" v-if="item.description && item.type !== 'PRIZE'">{{ item.description }}</p>
+            <!-- #2866: completed before/after the event — doesn't count; prompt a redo during the event. -->
+            <p class="redo-hint" v-if="item.status === 'COMPLETED_OUT_OF_WINDOW'">
+              Completed before the event — reset your progress and complete it again during the event to earn your prize.
+            </p>
 
-            <!-- Prize QR code section -->
-            <div v-if="item.type === 'PRIZE' && (item.status === 'EARNED' || isItemUnlocked(selectedTrack, index))" class="prize-section">
-              <div class="prize-qr">
-                <div class="qr-placeholder" v-if="item.status !== 'EARNED'">
-                  <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
-                    <rect width="120" height="120" rx="8" fill="currentColor" opacity="0.06"/>
-                    <rect x="15" y="15" width="35" height="35" rx="4" stroke="currentColor" opacity="0.3" stroke-width="2"/>
-                    <rect x="70" y="15" width="35" height="35" rx="4" stroke="currentColor" opacity="0.3" stroke-width="2"/>
-                    <rect x="15" y="70" width="35" height="35" rx="4" stroke="currentColor" opacity="0.3" stroke-width="2"/>
-                    <rect x="22" y="22" width="21" height="21" rx="2" fill="currentColor" opacity="0.15"/>
-                    <rect x="77" y="22" width="21" height="21" rx="2" fill="currentColor" opacity="0.15"/>
-                    <rect x="22" y="77" width="21" height="21" rx="2" fill="currentColor" opacity="0.15"/>
-                    <rect x="70" y="70" width="8" height="8" fill="currentColor" opacity="0.15"/>
-                    <rect x="82" y="70" width="8" height="8" fill="currentColor" opacity="0.15"/>
-                    <rect x="94" y="70" width="8" height="8" fill="currentColor" opacity="0.15"/>
-                    <rect x="70" y="82" width="8" height="8" fill="currentColor" opacity="0.15"/>
-                    <rect x="94" y="82" width="8" height="8" fill="currentColor" opacity="0.15"/>
-                    <rect x="70" y="94" width="8" height="8" fill="currentColor" opacity="0.15"/>
-                    <rect x="82" y="94" width="8" height="8" fill="currentColor" opacity="0.15"/>
-                    <rect x="94" y="94" width="8" height="8" fill="currentColor" opacity="0.15"/>
-                  </svg>
-                </div>
-                <img v-else :src="qrCodeUrl(item)" alt="Prize QR code" class="qr-image" width="150" height="150" />
-                <p class="prize-message" v-if="item.status === 'EARNED'">
-                  {{ item.description || 'Congratulations! You earned a prize. Scan this code then contact an App Space expert to claim it.' }}
-                </p>
-                <p class="prize-message prize-message--locked" v-else>
-                  Complete all tutorials above to unlock this prize.
-                </p>
-              </div>
+            <!-- Checkpoint prize barcode — shown only when track is complete AND authenticated -->
+            <div v-if="shouldShowCheckpointBarcode(selectedTrack, index)" class="checkpoint-barcode">
+              <img
+                :src="checkpointBarcodeUrl()"
+                alt="Prize barcode"
+                class="checkpoint-barcode__img"
+                width="150"
+                height="150"
+              />
+              <p class="checkpoint-barcode__caption">Show this to an instructor to claim your prize.</p>
             </div>
+
+            <!-- Sign-in hint shown when track is complete but user is not authenticated -->
+            <p
+              v-else-if="item.type === 'CHECKPOINT' && isItemUnlocked(selectedTrack, index) && !authenticated"
+              class="checkpoint-signin-hint"
+            >
+              <a href="#" @click.prevent="startLogin">Sign in</a> to get your prize code.
+            </p>
 
             <!-- Locked prize message -->
             <div v-if="item.type === 'PRIZE' && !isItemUnlocked(selectedTrack, index) && item.status !== 'EARNED'" class="prize-locked">
@@ -1066,6 +1079,13 @@ const emptyStateMessage = computed(() => {
   color: var(--sapAccentColor1, #e38b16);
 }
 
+/* #2866: completed outside the event window — distinct "redo" state (critical/amber). */
+.step--redo .timeline-bubble {
+  border-color: var(--sapCriticalColor, #e76500);
+  background: var(--sapCriticalBackground, #fef7f1);
+  color: var(--sapCriticalColor, #e76500);
+}
+
 /* Status-specific card borders */
 .step--available .timeline-content {
   border-color: var(--sapBrandColor, #0070f2);
@@ -1082,6 +1102,17 @@ const emptyStateMessage = computed(() => {
 
 .step--earned .timeline-content {
   border-left: 3px solid var(--sapAccentColor1, #e38b16);
+}
+
+.step--redo .timeline-content {
+  border-left: 3px solid var(--sapCriticalColor, #e76500);
+}
+
+.redo-hint {
+  margin: 0.375rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: var(--sapCriticalColor, #e76500);
 }
 
 .step--locked .timeline-content {

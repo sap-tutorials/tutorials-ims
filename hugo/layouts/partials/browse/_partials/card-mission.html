@@ -28,6 +28,7 @@
 {{- if $catSlug -}}{{- $catLabel = index $catMap $catSlug -}}{{- end -}}
 <a href="{{ $item.href }}" class="nav-card" data-vt-card="navigator">
 <div class="nav-card__type nav-card__type--mission">MISSION</div>
+{{- if $item.temporarilyUnavailable }}<div class="nav-card__unavailable-badge">Temporarily Unavailable</div>{{ end -}}
 <h3 class="nav-card__title">{{ $item.title }}</h3>
 <p class="nav-card__desc">{{ $item.description }}</p>
 <div class="nav-card__meta">

@@ -86,6 +86,8 @@ entity Missions : TaskBase, LinkHealth {
   // toggles published to true. Replaces AEM's role of curating which missions
   // surface on the website. Write-guard at admin-service.js:788. Issue #348.
   published                 : Boolean default false;
+  temporarilyUnavailable    : Boolean default false;
+  unavailableReason         : String(500);
   primaryTagRef             : Association to Tags;
   group                     : Association to Groups;
   event                     : Association to Events;

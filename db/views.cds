@@ -92,7 +92,9 @@ view NavigatorCatalog as
     item.itemOrder,
     item.taskType
   }
-  where item.taskType = 'TUTORIAL' and tut.slug is not null and mission.published = true;
+  where item.taskType = 'TUTORIAL' and tut.slug is not null
+    and mission.published = true
+    and (mission.temporarilyUnavailable is null or mission.temporarilyUnavailable = false);
 
 view SearchableItems as
   SELECT from ims.Tutorials as t

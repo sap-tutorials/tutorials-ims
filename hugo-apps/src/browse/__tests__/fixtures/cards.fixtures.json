@@ -26,7 +26,8 @@
     "displayTags": ["CAP"],
     "displayTagSlugs": ["software-product>sap-cloud-application-programming-model"],
     "href": "/tutorials/mission-build-with-cap",
-    "stepCount": 40
+    "stepCount": 40,
+    "temporarilyUnavailable": true
   },
   "group": {
     "type": "group",
