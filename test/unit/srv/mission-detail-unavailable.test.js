@@ -42,8 +42,17 @@ describe('missionDetailHandler — temporarilyUnavailable guard (#2864)', () => 
 
     const { Missions, CompletionPaths, CompletionPathItems, Tutorials } = cds.entities(NS);
 
-    // Disabled mission — has no paths seeded intentionally (guard fires before path query)
-    const disabledId = cds.utils.uuid();
+    // Shared tutorial used by both missions
+    const tutId = cds.utils.uuid();
+    await INSERT.into(Tutorials).entries([
+      { ID: tutId, slug: 'some-tutorial-2864', title: 'Some Tutorial' },
+    ]);
+
+    // Disabled mission — seeded WITH a path + item so that items:[] in the
+    // assertion genuinely proves the guard suppressed real links (not just an
+    // empty-paths coincidence via the paths.length===0 early-return).
+    const disabledId     = cds.utils.uuid();
+    const disabledPathId = cds.utils.uuid();
     await INSERT.into(Missions).entries([
       {
         ID: disabledId,
@@ -55,11 +64,16 @@ describe('missionDetailHandler — temporarilyUnavailable guard (#2864)', () => 
         unavailableReason: 'maintenance',
       },
     ]);
+    await INSERT.into(CompletionPaths).entries([
+      { ID: disabledPathId, mission_ID: disabledId, label: 'Default' },
+    ]);
+    await INSERT.into(CompletionPathItems).entries([
+      { ID: cds.utils.uuid(), path_ID: disabledPathId, tutorial_ID: tutId, itemOrder: 1 },
+    ]);
 
     // Normal mission — has one completion path with one tutorial item
     const normalId  = cds.utils.uuid();
     const pathId    = cds.utils.uuid();
-    const tutId     = cds.utils.uuid();
     await INSERT.into(Missions).entries([
       {
         ID: normalId,
@@ -69,9 +83,6 @@ describe('missionDetailHandler — temporarilyUnavailable guard (#2864)', () => 
         published: true,
         temporarilyUnavailable: false,
       },
-    ]);
-    await INSERT.into(Tutorials).entries([
-      { ID: tutId, slug: 'some-tutorial-2864', title: 'Some Tutorial' },
     ]);
     await INSERT.into(CompletionPaths).entries([
       { ID: pathId, mission_ID: normalId, label: 'Default' },
