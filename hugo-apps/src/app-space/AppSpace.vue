@@ -3,6 +3,7 @@ import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { useRealtimeProgress } from './useRealtimeProgress'
 import { useConfetti } from '../composables/useConfetti'
 import { checkpointBarcodeUrl as _checkpointBarcodeUrl, shouldShowCheckpointBarcode as _shouldShowCheckpointBarcode } from './checkpoint-barcode'
+import { isItemUnlocked as _isItemUnlocked, isTutorialOpenable as _isTutorialOpenable } from './app-space-gating'
 
 // ── Configuration ─────────────────────────────────────────────────
 const eventId = ref<number | null>(null)
@@ -242,21 +243,14 @@ function progressPercent(track: AppSpaceTrack): number {
 }
 
 function isItemUnlocked(track: AppSpaceTrack, index: number): boolean {
-  const item = track.items[index]
-  if (item.type === 'TUTORIAL') {
-    if (index === 0) return true
-    const prev = track.items[index - 1]
-    return prev.status === 'COMPLETED'
-  }
-  if (item.type === 'CHECKPOINT') {
-    const prevTuts = track.items.slice(0, index).filter(i => i.type === 'TUTORIAL')
-    return prevTuts.every(i => i.status === 'COMPLETED')
-  }
-  if (item.type === 'PRIZE') {
-    const allTuts = track.items.filter(i => i.type === 'TUTORIAL')
-    return allTuts.every(i => i.status === 'COMPLETED')
-  }
-  return false
+  return _isItemUnlocked(track.items, index)
+}
+
+// #2866: thin wrapper over the extracted gating helper; keeps a redo
+// (COMPLETED_OUT_OF_WINDOW) tutorial's link live without letting it advance the
+// track or unlock the prize. See app-space-gating.ts.
+function isTutorialOpenable(track: AppSpaceTrack, index: number): boolean {
+  return _isTutorialOpenable(track.items, index)
 }
 
 function itemStatusClass(track: AppSpaceTrack, index: number): string {
@@ -288,7 +282,7 @@ function startLogin() {
 }
 
 function handleItemClick(track: AppSpaceTrack, index: number, item: AppSpaceItem) {
-  if (item.type === 'TUTORIAL' && isItemUnlocked(track, index) && item.url) {
+  if (item.type === 'TUTORIAL' && isTutorialOpenable(track, index) && item.url) {
     window.open(item.url, '_blank')
   }
 }
@@ -504,7 +498,7 @@ const emptyStateMessage = computed(() => {
           <div
             class="timeline-bubble"
             @click="handleItemClick(selectedTrack, index, item)"
-            :class="{ clickable: item.type === 'TUTORIAL' && isItemUnlocked(selectedTrack, index) }"
+            :class="{ clickable: item.type === 'TUTORIAL' && isTutorialOpenable(selectedTrack, index) }"
           >
             <!-- Locked icon -->
             <svg v-if="!isItemUnlocked(selectedTrack, index) && item.status !== 'COMPLETED' && item.status !== 'EARNED' && item.status !== 'COMPLETED_OUT_OF_WINDOW'"
@@ -543,7 +537,7 @@ const emptyStateMessage = computed(() => {
               <span v-if="item.timeToComplete > 0" class="item-time">{{ formatTime(item.timeToComplete) }}</span>
             </div>
             <h4 class="timeline-content__title"
-              :class="{ clickable: item.type === 'TUTORIAL' && isItemUnlocked(selectedTrack, index) }"
+              :class="{ clickable: item.type === 'TUTORIAL' && isTutorialOpenable(selectedTrack, index) }"
               @click="handleItemClick(selectedTrack, index, item)"
             >{{ item.title }}</h4>
             <p class="timeline-content__desc" v-if="item.description && item.type !== 'PRIZE'">{{ item.description }}</p>
