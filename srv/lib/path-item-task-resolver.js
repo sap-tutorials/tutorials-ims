@@ -176,12 +176,38 @@ export async function expandGroupTutorials({ items, entities }) {
  * @param {object} record  user TaskRecord for this task (may be undefined)
  * @param {string} type    output item type ('TUTORIAL' | 'CHECKPOINT' | ...)
  */
-function shapeItem(task, effLegacyId, record, type, checkpointTitle) {
+// #2866 — App Space completion time window.
+// App Space prize credit must reflect work done DURING the event. A COMPLETED
+// TUTORIAL whose completionDate falls outside the event's inclusive
+// [startDate, endDate] window is downgraded to the plain status
+// 'COMPLETED_OUT_OF_WINDOW', which the Vue client (strict === 'COMPLETED'
+// gating) does not count toward the track or prize barcode.
+//
+// FAIL-OPEN: gate only when BOTH event dates are present. If either is
+// null/absent (or `event` is omitted, as getEventProgress does), behave
+// exactly as before (any COMPLETED counts) — this protects non-TechEd /
+// un-dated events and keeps getEventProgress time-agnostic. (Do NOT reuse
+// cat-game-award.js's eventIsLive, which tolerates open bounds; our rule is
+// stricter.) Null completionDate on a gated event cannot be proven in-window
+// → downgraded. Only TUTORIAL items are gated.
+const COMPLETED_OUT_OF_WINDOW = 'COMPLETED_OUT_OF_WINDOW';
+function effectiveStatus(record, type, event) {
+  const status = record?.status || '';
+  if (!event || type !== 'TUTORIAL' || status !== 'COMPLETED') return status;
+  const start = event.startDate ? Date.parse(event.startDate) : NaN;
+  const end = event.endDate ? Date.parse(event.endDate) : NaN;
+  if (Number.isNaN(start) || Number.isNaN(end)) return status; // fail-open: no usable window
+  const done = record?.completionDate ? Date.parse(record.completionDate) : NaN;
+  if (Number.isNaN(done) || done < start || done > end) return COMPLETED_OUT_OF_WINDOW;
+  return status;
+}
+
+function shapeItem(task, effLegacyId, record, type, checkpointTitle, event) {
   return {
     imsId: effLegacyId,
     title: task?.title || record?.titleSnapshot || checkpointTitle || '',
     type,
-    status: record?.status || '',
+    status: effectiveStatus(record, type, event),
     progress: record?.progress || 0,
     experience: task?.experienceTag || '',
     timeToComplete: task?.averageTimeToComplete || 0,
@@ -206,23 +232,26 @@ function shapeItem(task, effLegacyId, record, type, checkpointTitle) {
  * @param {Map}    opts.effLegacyByItem item → effective legacyId (direct items).
  * @param {Map}    opts.groupTutorials  group_ID → child tutorial rows (expandGroupTutorials).
  * @param {Map}    opts.recordMap       `${taskType}:${legacyId}` → user TaskRecord.
+ * @param {object} [opts.event]         #2866: when provided (App Space only),
+ *   gates COMPLETED tutorials to the event's [startDate,endDate] window — see
+ *   effectiveStatus. Omit (getEventProgress) to keep status time-agnostic.
  * @returns {Array} output items
  */
-export function buildPathItems({ pathItems, taskMap, effLegacyByItem, groupTutorials, recordMap }) {
+export function buildPathItems({ pathItems, taskMap, effLegacyByItem, groupTutorials, recordMap, event }) {
   const out = [];
   for (const i of pathItems) {
     if (i.taskType === 'GROUP') {
       const children = (i.group_ID && groupTutorials.get(i.group_ID)) || [];
       for (const t of children) {
         const record = t.legacyId != null ? recordMap.get(`TUTORIAL:${t.legacyId}`) : undefined;
-        out.push(shapeItem(t, t.legacyId ?? null, record, 'TUTORIAL', null));
+        out.push(shapeItem(t, t.legacyId ?? null, record, 'TUTORIAL', null, event));
       }
       continue;
     }
     const task = resolveTask(taskMap, i);
     const effLegacyId = effLegacyByItem.get(i);
     const record = recordMap.get(`${i.taskType}:${effLegacyId}`);
-    out.push(shapeItem(task, effLegacyId, record, i.taskType, i.checkpointTitle));
+    out.push(shapeItem(task, effLegacyId, record, i.taskType, i.checkpointTitle, event));
   }
   return out;
 }

@@ -722,6 +722,12 @@ export default class DeveloperService extends cds.ApplicationService {
           items: buildPathItems({
             pathItems: allItems.filter(i => i.path_ID === p.ID),
             taskMap, effLegacyByItem, groupTutorials, recordMap,
+            // #2866: App Space prize credit counts only completions within the
+            // event's [startDate,endDate]; passing `event` makes shapeItem
+            // downgrade out-of-window COMPLETED tutorials to
+            // COMPLETED_OUT_OF_WINDOW. getEventProgress omits `event`, so it
+            // stays time-agnostic. Fail-open when the window is not set.
+            event,
           }),
         })),
       };
