@@ -188,10 +188,13 @@ export async function loadMissionContext(slug) {
   // [#382 phase F1] Fetch BOTH taskType variants. Direct TUTORIAL items
   // become synthetic path-as-group cards; nested GROUP items resolve through
   // the Groups table. Mirrors srv/lib/build-catalog.js:91-117 exactly.
+  // [#2864] Also fetch temporarilyUnavailable + unavailableReason so the SSR
+  // renderer can grey out unavailable tutorial links (Task 5).
   const items = pathIds.length
     ? await SELECT.from(CompletionPathItems)
         .where({ path_ID: { in: pathIds } })
-        .columns('group_ID', 'tutorial_ID', 'taskType', 'itemOrder', 'path_ID')
+        .columns('group_ID', 'tutorial_ID', 'taskType', 'itemOrder', 'path_ID',
+                 'temporarilyUnavailable', 'unavailableReason')
         .orderBy('path_ID', 'itemOrder')
     : [];
 
@@ -199,6 +202,19 @@ export async function loadMissionContext(slug) {
   const directItems = items.filter(i => i.taskType === 'TUTORIAL' && i.tutorial_ID);
   // Nested GROUP items per path (taskType='GROUP', existing behavior).
   const groupItems = items.filter(i => i.taskType === 'GROUP' && i.group_ID);
+
+  // [#2864] Composite-key map for the per-path-item unavailable flag.
+  // Keyed `${path_ID}:${tutorial_ID}` — a tutorial_ID-only key is WRONG
+  // because the same tutorial can appear in multiple paths with different
+  // flag values; the composite key correctly isolates each path-item slot.
+  // Only TUTORIAL items carry these flags (GROUP items have tutorial_ID: null).
+  const unavailByPathAndTutorial = new Map(
+    directItems.map(i => [
+      `${i.path_ID}:${i.tutorial_ID}`,
+      { temporarilyUnavailable: i.temporarilyUnavailable ?? false,
+        unavailableReason: i.unavailableReason || undefined },
+    ]),
+  );
 
   const groupIds = [...new Set(groupItems.map(i => i.group_ID))];
   const groups = groupIds.length
@@ -265,7 +281,17 @@ export async function loadMissionContext(slug) {
     const pathDirect = pathDirectIds
       .map(id => tutById.get(id))
       .filter(Boolean)
-      .map(t => projectTutorial(t, tagLabelMap));
+      .map(t => {
+        const base = projectTutorial(t, tagLabelMap);
+        // [#2864] Stamp per-path-item unavailability using composite key.
+        // `path_ID` comes from the current path p.ID; tutorial_ID is t.ID.
+        const unavail = unavailByPathAndTutorial.get(`${p.ID}:${t.ID}`);
+        return {
+          ...base,
+          temporarilyUnavailable: unavail?.temporarilyUnavailable ?? false,
+          ...(unavail?.unavailableReason ? { unavailableReason: unavail.unavailableReason } : {}),
+        };
+      });
     if (pathDirect.length > 0) {
       cards.push({
         ID: p.ID,
@@ -280,11 +306,14 @@ export async function loadMissionContext(slug) {
     // Nested-Group cards (existing behavior). The helper has already
     // filtered group-items to those with a published+ACTIVE group in
     // groupById; here we just project to the SSR shape.
+    // [#2864] Nested-GROUP tutorials don't have their own CompletionPathItems
+    // row — they come from GroupPathItems. Stamp temporarilyUnavailable:false
+    // so Task 5's renderer has a consistent boolean to check.
     for (const { group: g, tutorialIds: nestedIds } of nestedGroups) {
       const groupTuts = nestedIds
         .map(id => tutById.get(id))
         .filter(Boolean)
-        .map(t => projectTutorial(t, tagLabelMap));
+        .map(t => ({ ...projectTutorial(t, tagLabelMap), temporarilyUnavailable: false }));
       cards.push({ ...g, tutorials: groupTuts });
     }
 
