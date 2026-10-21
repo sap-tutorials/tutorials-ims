@@ -60,8 +60,6 @@ export async function buildCatalogHandler(req, res) {
       icon: '',
       tasksCount: 0,
       categorySlugs: categorySlugsFor(m.ID, missionAssign, 'mission_ID', catByID),
-      temporarilyUnavailable: m.temporarilyUnavailable === true,
-      unavailableReason: m.unavailableReason || undefined,
     }));
 
     const hierarchies = missions.map(m => {

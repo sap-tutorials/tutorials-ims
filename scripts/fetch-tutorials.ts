@@ -2076,8 +2076,6 @@ export interface BrowseCardItem {
   isNew?: boolean
   createdAt?: string
   updatedAt?: string
-  temporarilyUnavailable?: boolean
-  unavailableReason?: string
 }
 
 interface BrowseData {
@@ -2269,8 +2267,6 @@ export function buildAllCards(
       href: mMeta ? `${hrefBase}/mission-${mMeta.slug}` : `${hrefBase}/${mTuts[0].slug}`,
       stepCount: mTuts.reduce((sum, t) => sum + t.stepCount, 0),
       categorySlugs: mMeta?.categorySlugs ?? [],
-      temporarilyUnavailable: mMeta?.temporarilyUnavailable === true,
-      unavailableReason: mMeta?.unavailableReason,
     })
   }
 

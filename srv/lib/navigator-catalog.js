@@ -220,7 +220,7 @@ export async function navigatorCatalogHandler(req, res) {
 
     const missionIds = [...new Set(paths.map(p => p.mission_ID).filter(Boolean))];
     const missions = missionIds.length
-      ? await SELECT.from(Missions).columns('ID', 'legacyId', 'title', 'slug', 'published', 'temporarilyUnavailable').where({ ID: { in: missionIds }, published: true, temporarilyUnavailable: { '!=': true } })
+      ? await SELECT.from(Missions).columns('ID', 'legacyId', 'title', 'slug', 'published').where({ ID: { in: missionIds }, published: true })
       : [];
     const missionById = new Map(missions.map(m => [m.ID, m]));
 
