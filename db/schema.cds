@@ -86,8 +86,6 @@ entity Missions : TaskBase, LinkHealth {
   // toggles published to true. Replaces AEM's role of curating which missions
   // surface on the website. Write-guard at admin-service.js:788. Issue #348.
   published                 : Boolean default false;
-  temporarilyUnavailable    : Boolean default false;
-  unavailableReason         : String(500);
   primaryTagRef             : Association to Tags;
   group                     : Association to Groups;
   event                     : Association to Events;
@@ -482,6 +480,9 @@ entity CompletionPathItems : cuid, LegacyKeyed {
   altGroupKey               : String(40);
   altGroupLabel             : String(120);
   altCondition              : String(500);
+  // Issue #2864 — path-item level temporarily-unavailable flag
+  temporarilyUnavailable    : Boolean default false;
+  unavailableReason         : String(500);
 }
 
 entity GroupPathItems : cuid, LegacyKeyed {

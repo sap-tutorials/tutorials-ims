@@ -2849,11 +2849,19 @@ ui5-li .step-badge-row {
 .step-content > .os-options ~ p,
 .step-content > .os-options ~ figure,
 .step-content > .os-options ~ pre,
+.step-content > .os-options ~ .code-block,
 .step-content > .os-options ~ blockquote,
 .step-content > .option-tabs ~ p,
 .step-content > .option-tabs ~ figure,
 .step-content > .option-tabs ~ pre,
+.step-content > .option-tabs ~ .code-block,
 .step-content > .option-tabs ~ blockquote {
+  /* #2820 — tutorial code fences render as `<div class="code-block">` (the
+   * `<pre>` is nested inside, so the `~ pre` entry above never matches them);
+   * a code box that TRAILS an OPTION group within the same substep must get
+   * the same content-column indent as the trailing prose/figures, otherwise it
+   * sits flush-left (0px) while the surrounding blocks sit at 1.5rem — the
+   * stair-stepped indentation reported in #2820 (hdbsql step 5 substep 2). */
   margin-left: 1.5rem;
 }
 
@@ -3835,6 +3843,34 @@ html.dark .tutorial-main img:hover {
 }
 .tutorial-link:hover {
   text-decoration: underline;
+}
+/* #2864 — temporarily-unavailable path item: delinked, dimmed, cursor-default */
+.tutorial-link--unavailable {
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  cursor: default;
+  text-decoration: none;
+}
+.tutorial-card--unavailable {
+  opacity: 0.6;
+  cursor: default;
+}
+/* Temporarily Unavailable badge (path-item level; mirrors .nav-card__unavailable-badge) */
+.nav-card__unavailable-badge {
+  display: inline-block;
+  margin-top: 0.375rem;
+  margin-left: 0.375rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+  background: var(--sapCriticalColor, #e9730c);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  vertical-align: middle;
 }
 .tutorial-meta-row {
   display: flex;

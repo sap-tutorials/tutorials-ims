@@ -239,6 +239,38 @@ export function parseSlugFilter(slug?: string, slugs?: string): Set<string> | nu
 }
 
 /**
+ * Resolve a requested slug filter against the set of slugs discovery actually
+ * returned, tolerating stale/retired slugs.
+ *
+ * The old guard (#433) hard-failed if ANY requested slug was unknown — correct
+ * for an interactive author typo, but wrong for an AUTO-DISPATCHED rebuild whose
+ * `TUTORIAL_SLUGS` payload still names a tutorial that has since been retired
+ * from source (e.g. `teched2025-genaihub-basic-trial`). One stale slug would nuke
+ * the whole QA rebuild on every run until the external dispatch was corrected.
+ *
+ * Rule: drop unknown slugs with a warning and proceed with the valid ones.
+ * Only when EVERY requested slug is unknown (real typo, or the whole batch is
+ * stale → nothing to do) is it `fatal` — the caller exits non-zero as before.
+ *
+ * @param filter — the requested slugs (non-null `Set`)
+ * @param discoveredSlugs — slugs discovery returned this run
+ * @returns `valid` (requested ∩ discovered), `dropped` (requested − discovered),
+ *          and `fatal` (true iff `valid` is empty)
+ */
+export function resolveSlugFilter(
+  filter: Set<string>,
+  discoveredSlugs: Set<string>,
+): { valid: Set<string>; dropped: string[]; fatal: boolean } {
+  const valid = new Set<string>()
+  const dropped: string[] = []
+  for (const slug of filter) {
+    if (discoveredSlugs.has(slug)) valid.add(slug)
+    else dropped.push(slug)
+  }
+  return { valid, dropped, fatal: valid.size === 0 }
+}
+
+/**
  * Plan the Phase 2 GitHub metadata prefetch — one task per repo, with the
  * per-repo slug list narrowed to `tutorialSlugFilter` when set.
  *
@@ -723,7 +755,7 @@ async function main() {
   const totalStart = performance.now()
   const regenerateMode = process.argv.includes('--regenerate')
   const discoverOnly = process.argv.includes('--discover-only')
-  const tutorialSlugFilter = parseSlugFilter(process.env.TUTORIAL_SLUG, process.env.TUTORIAL_SLUGS)
+  let tutorialSlugFilter = parseSlugFilter(process.env.TUTORIAL_SLUG, process.env.TUTORIAL_SLUGS)
   const target = parseTarget(process.argv)
   const channel = parseChannel(process.argv)
   // QA channel: discover only -Contribution repos via inverse filter in github.ts.
@@ -892,15 +924,24 @@ async function main() {
     // Validate slug filter and bust its markdown cache so it gets re-fetched.
     // Other tutorials will be regenerated from cached markdown (see Phase 3).
     if (tutorialSlugFilter) {
-      // Validate every requested slug exists; fail-fast and list ALL unknowns
-      // so the author fixes typos in one rerun (per #433 spec).
+      // Resolve the requested slugs against what discovery actually returned.
+      // A stale/retired slug in an auto-dispatched TUTORIAL_SLUGS payload is
+      // dropped with a warning so the rest of the rebuild proceeds (#2873);
+      // only an ALL-unknown filter (real typo / fully-stale batch) is fatal,
+      // preserving the #433 fail-fast for author typos.
       const discoveredSlugs = new Set(allTutorials.map(t => t.slug))
-      const unknown = [...tutorialSlugFilter].filter(s => !discoveredSlugs.has(s))
-      if (unknown.length > 0) {
-        console.error(`ERROR: ${unknown.length} unknown slug(s) in filter: ${unknown.join(', ')}`)
+      const { valid, dropped, fatal } = resolveSlugFilter(tutorialSlugFilter, discoveredSlugs)
+      if (dropped.length > 0) {
+        console.warn(`WARNING: dropping ${dropped.length} unknown slug(s) from filter: ${dropped.join(', ')}`)
+        console.warn(`  Discovery returned ${allTutorials.length} slugs from source: ${discovery.source}`)
+      }
+      if (fatal) {
+        console.error(`ERROR: no known slug(s) in filter (all ${tutorialSlugFilter.size} unknown): ${[...tutorialSlugFilter].join(', ')}`)
         console.error(`  Discovery returned ${allTutorials.length} slugs from source: ${discovery.source}`)
         process.exit(1)
       }
+      // Narrow the filter to the valid slugs for all downstream use.
+      tutorialSlugFilter = valid
       // Source-attributed log line so authors can see how their inputs combined.
       const fromSlug = (process.env.TUTORIAL_SLUG ?? '').trim()
       const fromSlugs = (process.env.TUTORIAL_SLUGS ?? '')
@@ -2035,8 +2076,6 @@ export interface BrowseCardItem {
   isNew?: boolean
   createdAt?: string
   updatedAt?: string
-  temporarilyUnavailable?: boolean
-  unavailableReason?: string
 }
 
 interface BrowseData {
@@ -2228,8 +2267,6 @@ export function buildAllCards(
       href: mMeta ? `${hrefBase}/mission-${mMeta.slug}` : `${hrefBase}/${mTuts[0].slug}`,
       stepCount: mTuts.reduce((sum, t) => sum + t.stepCount, 0),
       categorySlugs: mMeta?.categorySlugs ?? [],
-      temporarilyUnavailable: mMeta?.temporarilyUnavailable === true,
-      unavailableReason: mMeta?.unavailableReason,
     })
   }
 

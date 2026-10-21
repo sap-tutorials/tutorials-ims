@@ -34,8 +34,6 @@ export interface CardItem {
   isNew?: boolean
   createdAt?: string
   updatedAt?: string
-  temporarilyUnavailable?: boolean
-  unavailableReason?: string
 }
 
 export interface MissionRef {

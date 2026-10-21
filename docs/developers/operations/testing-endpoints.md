@@ -66,6 +66,18 @@ All admin routes require the **`Admin`** XSUAA scope.
 
 ---
 
+## Drawings UI (Vue 3 — Prize Drawing)
+
+All drawings routes require the **`Admin`** XSUAA scope.
+
+| URL | Description | Auth |
+|-----|-------------|------|
+| `/drawings-ui/` | Standalone event drawing app — operator selects event, draws random winner from eligible prize claimants, reveals winner name and email | XSUAA + `Admin` |
+
+> The drawings-ui is a Vue 3 application deployed as static files at `approuter/static/drawings-ui/`. It calls the `DrawingService` at `/drawings` to list events with claimed prizes, query the eligible winner pool, and perform the random winner selection. Winner contact information (displayName, email) is returned directly and gated by the Admin scope due to PII exposure.
+
+---
+
 ## Analytics Explorer (Vue 3 + Monaco — Ad-hoc Analytics)
 
 | URL | Description | Auth |
@@ -148,6 +160,8 @@ When `EXPOSE_CAP_UI=true` is set on the CAP srv app, these are accessible throug
 | `/admin/exports/` | ExportsService — `exportLegacyData(format)` action | XSUAA + `Admin` |
 | `/display/$metadata` | DisplayService OData metadata | XSUAA |
 | `/display/` | DisplayService — read-only data for event dashboards | XSUAA |
+| `/drawings/$metadata` | DrawingService OData metadata | XSUAA + `Admin` |
+| `/drawings/` | DrawingService — prize drawing functions (events, winner pool, random selection) | XSUAA + `Admin` |
 | `/api/v1/$metadata` | ConsolidationService (v1 compat) OData metadata | XSUAA |
 | `/api/v1/` | ConsolidationService — legacy API compatibility | XSUAA |
 | `/search/$metadata` | SearchService OData metadata | None |
@@ -187,6 +201,9 @@ When `EXPOSE_CAP_UI=true` is set on the CAP srv app, these are accessible throug
 | `/api/codecheck` | POST | AI code-check spike (issue #171, gated on `ChatSettings.codeCheckEnabled`). Body: `{ tutorialSlug, stepNumber, submittedCode, language? }`. Returns `{ verdict: 'pass'\|'partial'\|'fail', summary, suggestions[], correctAspects[] }`. 503 when flag off; 429 with `Retry-After` on per-user 30/hr or per-(user,slug,step) 5/5min cap. | XSUAA |
 | `/author/generateOsVariants` | POST | AI-assisted OS variant generation for the VS Code authoring plugin (issue #173). Body: `{ sourceMarkdown, sourceOS, targetOSes[], context? }`. Returns `{ variants[], model, tokensUsed, requestId }`. 60/hr per author. See spec [#173](../../superpowers/specs/2026-06-09-173-os-conditional-content-design.md) §5. | XSUAA + `Tutorial.Author` |
 | `/admin/embeddings/stats` | GET | Tutorial embedding coverage / drift statistics | XSUAA + `Admin` |
+| `/drawings/listEvents()` | GET | OData function — events with ≥1 claimed prize (newest-first). Returns `{ legacyId, name, startDate }`. | XSUAA + `Admin` |
+| `/drawings/pool(eventId=<legacyId>)` | GET | OData function — eligible winner pool statistics for an event. Returns `{ eventId, eligibleCount }` (count of distinct non-anonymized users with CLAIMED prize claims, excludes PII). | XSUAA + `Admin` |
+| `/drawings/draw(eventId=<legacyId>)` | GET | OData function — select one random winner and return their contact info. Returns `{ winner: { displayName, email } \| null, eligibleCount }`. Server-side winner selection; returns PII. | XSUAA + `Admin` |
 | `/api/alerts` | GET | Active alerts with audience=ALL. 60 s cache. | None |
 | `/api/alerts/me` | GET | ALL + AUTHENTICATED + ADMIN (if admin). 30 s private cache. | XSUAA |
 | `/api/homepage/events` | GET | 3-4 upcoming events (merged from DB + events calendar). 60 s cache. | None |

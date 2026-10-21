@@ -77,6 +77,13 @@
       "scope": "$XSAPPNAME.DisplayApp"
     },
     {
+      "source": "^/drawings-ui/(.*)$",
+      "target": "/drawings-ui/$1",
+      "localDir": "static",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Admin"
+    },
+    {
       "source": "^/analytics-ui/(.*)$",
       "target": "/analytics-ui/$1",
       "localDir": "static",
@@ -352,6 +359,13 @@
       "destination": "srv-api",
       "authenticationType": "xsuaa",
       "scope": "$XSAPPNAME.DisplayApp"
+    },
+    {
+      "source": "^/drawings/(.*)$",
+      "target": "/drawings/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/api/v1/(.*)$",

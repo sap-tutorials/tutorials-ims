@@ -280,8 +280,6 @@ export interface Mission {
   icon: string
   tasksCount: number
   categorySlugs?: string[]
-  temporarilyUnavailable?: boolean
-  unavailableReason?: string
 }
 
 export interface HierarchyGroup {
