@@ -37,6 +37,11 @@ export async function missionDetailHandler(req, res) {
     const mission = await SELECT.one.from(Missions).where({ slug });
     if (!mission) return res.status(404).json({ error: 'mission_not_found' });
 
+    if (mission.temporarilyUnavailable) {
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({ missionSlug: slug, items: [] });
+    }
+
     const paths = await SELECT.from(CompletionPaths).where({ mission_ID: mission.ID });
     if (paths.length === 0) return res.json({ missionSlug: slug, items: [] });
 
