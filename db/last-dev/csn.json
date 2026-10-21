@@ -481,18 +481,6 @@
           },
           "@cds.persistence.name": "PUBLISHED"
         },
-        "temporarilyUnavailable": {
-          "type": "cds.Boolean",
-          "default": {
-            "val": false
-          },
-          "@cds.persistence.name": "TEMPORARILYUNAVAILABLE"
-        },
-        "unavailableReason": {
-          "type": "cds.String",
-          "length": 500,
-          "@cds.persistence.name": "UNAVAILABLEREASON"
-        },
         "group_ID": {
           "type": "cds.String",
           "length": 36,

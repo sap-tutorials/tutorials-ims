@@ -41,7 +41,6 @@ const primaryCategoryLabel = computed(() => {
   >
     <ProgressOverlay :item="item" :progress="progress" />
     <div class="nav-card__type nav-card__type--mission">{{ TYPE_LABEL }}</div>
-    <div v-if="item.temporarilyUnavailable" class="nav-card__unavailable-badge">Temporarily Unavailable</div>
 
     <h3 class="nav-card__title">{{ item.title }}</h3>
 

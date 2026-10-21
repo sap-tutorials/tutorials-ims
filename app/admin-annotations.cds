@@ -127,8 +127,6 @@ annotate AdminService.Missions with {
   missionType        @Common.Label: 'Type'  @Common.ValueListWithFixedValues;
   event              @Common.Label: 'Event';
   published          @Common.Label: 'Published';
-  temporarilyUnavailable @Common.Label: 'Temporarily Unavailable';
-  unavailableReason      @Common.Label: 'Unavailable Reason'  @UI.MultiLineText;
   status             @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
   averageTimeToComplete @Common.Label: 'Avg Time (min)';
   qaPreviewUrl     @Common.Label: 'QA Preview'    @Common.FieldControl: #ReadOnly;
@@ -151,7 +149,6 @@ annotate AdminService.Missions with @UI: {
     { Value: experienceTag },
     { Value: primaryTagRef.name, Label: 'Primary Tag' },
     { Value: published, @UI.Importance: #High },
-    { Value: temporarilyUnavailable },
     { Value: status }
   ],
   Facets: [
@@ -169,8 +166,6 @@ annotate AdminService.Missions with @UI: {
     { Value: experienceTag },
     { Value: missionType },
     { Value: published, @UI.FieldControl: publishedFieldControl },
-    { Value: temporarilyUnavailable },
-    { Value: unavailableReason },
     { Value: status },
     { $Type: 'UI.DataFieldWithUrl', Value: qaPreviewLabel,   Url: qaPreviewUrl,   Label: 'QA Preview' },
     { $Type: 'UI.DataFieldWithUrl', Value: mainPreviewLabel, Url: mainPreviewUrl, Label: 'Live Mission' }
