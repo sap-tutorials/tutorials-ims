@@ -234,6 +234,52 @@ describe('annotateUnlocked — #2864 temporarilyUnavailable never counts as comp
   });
 });
 
+describe('annotateUnlocked — fork with prizes does NOT block downstream join', () => {
+  // Regression guard for the isLaneComplete bug: prize items were included in the
+  // gate check (status: '' → never COMPLETED) which made the fork permanently
+  // unsatisfied and locked every downstream segment.
+
+  it('(positive) fork lanes with tutorials+checkpoint+prize all done → downstream unlocked', () => {
+    const segs = [
+      {
+        order: 1,
+        kind: 'fork',
+        lanes: [
+          lane([tut('COMPLETED'), checkpoint('COMPLETED'), prize('prize-a')]),
+          lane([tut('COMPLETED'), checkpoint('COMPLETED'), prize('prize-b')]),
+        ],
+      },
+      { order: 2, kind: 'linear', items: [tut('AVAILABLE')] },
+    ];
+    const result = annotateUnlocked(segs);
+    // Both lane prizes should be unlocked (their tutorials complete).
+    expect(result[0].lanes[0].items[2].unlocked).toBe(true);
+    expect(result[0].lanes[1].items[2].unlocked).toBe(true);
+    // Downstream segment must be unlocked — the fork IS satisfied (prizes are not gates).
+    expect(result[1].items[0].unlocked).toBe(true);
+  });
+
+  it('(negative) fork with one lane tutorial incomplete → downstream still locked', () => {
+    const segs = [
+      {
+        order: 1,
+        kind: 'fork',
+        lanes: [
+          lane([tut('COMPLETED'), checkpoint('COMPLETED'), prize('prize-a')]),
+          lane([tut('AVAILABLE'), checkpoint(),            prize('prize-b')]),  // lane 2 not done
+        ],
+      },
+      { order: 2, kind: 'linear', items: [tut('LOCKED')] },
+    ];
+    const result = annotateUnlocked(segs);
+    // Lane 1 prize unlocked; lane 2 prize NOT unlocked.
+    expect(result[0].lanes[0].items[2].unlocked).toBe(true);
+    expect(result[0].lanes[1].items[2].unlocked).toBe(false);
+    // Downstream remains locked because lane 2 is not satisfied.
+    expect(result[1].items[0].unlocked).toBe(false);
+  });
+});
+
 describe('annotateUnlocked — return value', () => {
   it('returns the same segments array (mutate-and-return)', () => {
     const segs = [{ order: 1, kind: 'linear', items: [tut('AVAILABLE')] }];

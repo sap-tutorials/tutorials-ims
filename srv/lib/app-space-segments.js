@@ -15,13 +15,16 @@ function isComplete(item) {
 
 /**
  * Returns true when a lane (array of items) is "complete" for fork-join purposes.
- * A lane is complete when every item (tutorials + synthetic checkpoint prize) is complete.
+ * Prize items (identified by `prizeId`) are EXCLUDED — they are rewards, not gates.
+ * A lane is complete when every non-prize item is complete (mirrors isLaneTutorialsComplete).
+ * An all-prize lane (no tutorials) evaluates to true via [].every() — treated as satisfied
+ * because there is no required work to gate on.
  *
  * @param {Array<object>} items - Lane items.
  * @returns {boolean}
  */
 function isLaneComplete(items) {
-  return items.every(item => isComplete(item));
+  return items.filter(item => !item.prizeId).every(item => isComplete(item));
 }
 
 /**
