@@ -14,7 +14,7 @@ import { maybeAutoSendCompletion } from './lib/ngds-autosend.js';
 import { stampSubmissionId } from './lib/task-record-submission-id.js';
 import { rollUpParentsForCompletion } from './lib/completion-rollup.js';
 import { renderMarkdown } from './lib/markdown.js';
-import { buildTaskMap, effectiveLegacyId, expandGroupTutorials, buildPathItems, groupChildLegacyIds } from './lib/path-item-task-resolver.js';
+import { buildTaskMap, effectiveLegacyId, expandGroupTutorials, buildPathItems, buildPathSegments, fetchGroupTitles, groupChildLegacyIds } from './lib/path-item-task-resolver.js';
 import { handleRequestAccountMerge, handleConfirmAccountMerge } from './lib/account-merge-request.js';
 
 // Per-user rate limit for resetTutorialProgress — same window as the
@@ -84,7 +84,7 @@ export default class DeveloperService extends cds.ApplicationService {
             Users: dbUsers, Events: dbEvents, Missions: dbMissions,
             CompletionPaths: dbPaths, CompletionPathItems: dbPathItems,
             Checkpoints: dbCheckpoints, Petoberfests: dbPetoberfests,
-            GroupPathItems: dbGroupPathItems,
+            GroupPathItems: dbGroupPathItems, Groups: dbGroups,
             UserLearningPreferences } = cds.entities('com.sap.developers.ims');
 
     // Auto-assign legacyId on TaskRecord creation
@@ -689,6 +689,12 @@ export default class DeveloperService extends cds.ApplicationService {
         entities: { GroupPathItems: dbGroupPathItems, Tutorials: dbTutorials },
       });
 
+      // #2887: Batch-fetch Group titles for fork lane labels.
+      const groupTitles = await fetchGroupTitles({
+        items: allItems,
+        entities: { Groups: dbGroups },
+      });
+
       const effLegacyByItem = new Map(allItems.map(i => [i, effectiveLegacyId(taskMap, i)]));
       const recordLegacyIds = [...new Set([
         ...[...effLegacyByItem.values()].filter(v => v != null),
@@ -715,21 +721,31 @@ export default class DeveloperService extends cds.ApplicationService {
         hasLogo: Boolean(event.hasLogo),
         authenticated: Boolean(dbUser),   // #2314/#2730: false only for anonymous callers → client skips the logged-in-only realtime/confetti path. Truthy when user resolves via any tier (sapId, identity link, or pin).
         type: 'COMPLEX',
-        paths: paths.map(p => ({
-          id: p.legacyId,
-          title: p.name,
-          description: p.description || mission.description || '',
-          items: buildPathItems({
-            pathItems: allItems.filter(i => i.path_ID === p.ID),
-            taskMap, effLegacyByItem, groupTutorials, recordMap,
-            // #2866: App Space prize credit counts only completions within the
-            // event's [startDate,endDate]; passing `event` makes shapeItem
-            // downgrade out-of-window COMPLETED tutorials to
-            // COMPLETED_OUT_OF_WINDOW. getEventProgress omits `event`, so it
-            // stays time-agnostic. Fail-open when the window is not set.
-            event,
-          }),
-        })),
+        paths: paths.map(p => {
+          const pathItems = allItems.filter(i => i.path_ID === p.ID);
+          return {
+            id: p.legacyId,
+            title: p.name,
+            description: p.description || mission.description || '',
+            items: buildPathItems({
+              pathItems,
+              taskMap, effLegacyByItem, groupTutorials, recordMap,
+              // #2866: App Space prize credit counts only completions within the
+              // event's [startDate,endDate]; passing `event` makes shapeItem
+              // downgrade out-of-window COMPLETED tutorials to
+              // COMPLETED_OUT_OF_WINDOW. getEventProgress omits `event`, so it
+              // stays time-agnostic. Fail-open when the window is not set.
+              event,
+            }),
+            // #2887: nested segment structure for the new parallel-paths UI.
+            // Kept alongside flat `items` — Task 4 will migrate the Vue off items.
+            segments: buildPathSegments({
+              pathItems,
+              taskMap, effLegacyByItem, groupTutorials, groupTitles, recordMap,
+              event,
+            }),
+          };
+        }),
       };
     });
 
