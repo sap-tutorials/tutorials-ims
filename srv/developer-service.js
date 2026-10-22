@@ -15,6 +15,7 @@ import { stampSubmissionId } from './lib/task-record-submission-id.js';
 import { rollUpParentsForCompletion } from './lib/completion-rollup.js';
 import { renderMarkdown } from './lib/markdown.js';
 import { buildTaskMap, effectiveLegacyId, expandGroupTutorials, buildPathItems, buildPathSegments, fetchGroupTitles, groupChildLegacyIds } from './lib/path-item-task-resolver.js';
+import { annotateUnlocked } from './lib/app-space-segments.js';
 import { handleRequestAccountMerge, handleConfirmAccountMerge } from './lib/account-merge-request.js';
 
 // Per-user rate limit for resetTutorialProgress — same window as the
@@ -739,11 +740,13 @@ export default class DeveloperService extends cds.ApplicationService {
             }),
             // #2887: nested segment structure for the new parallel-paths UI.
             // Kept alongside flat `items` — Task 4 will migrate the Vue off items.
-            segments: buildPathSegments({
+            // annotateUnlocked sets `unlocked` per item using segment-aware rules
+            // (composes with #2866 COMPLETED_OUT_OF_WINDOW and #2864 temporarilyUnavailable).
+            segments: annotateUnlocked(buildPathSegments({
               pathItems,
               taskMap, effLegacyByItem, groupTutorials, groupTitles, recordMap,
               event,
-            }),
+            })),
           };
         }),
       };
