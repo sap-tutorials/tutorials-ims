@@ -4,6 +4,7 @@ import { useRealtimeProgress } from './useRealtimeProgress'
 import { useConfetti } from '../composables/useConfetti'
 import { checkpointBarcodeUrl as _checkpointBarcodeUrl, shouldShowCheckpointBarcode as _shouldShowCheckpointBarcode } from './checkpoint-barcode'
 import { isItemUnlocked as _isItemUnlocked, isTutorialOpenable as _isTutorialOpenable } from './app-space-gating'
+import type { GatingItem } from './app-space-gating'
 
 // ── Configuration ─────────────────────────────────────────────────
 const eventId = ref<number | null>(null)
@@ -45,7 +46,7 @@ const logoUrl = computed(() =>
 
 // ── Interfaces ─────────────────────────────────────────────────────
 interface AppSpaceItem {
-  imsId: number
+  imsId: number | null
   title: string
   type: 'TUTORIAL' | 'CHECKPOINT' | 'PRIZE'
   status: string
@@ -55,13 +56,49 @@ interface AppSpaceItem {
   url: string
   description: string
   recordId?: number
+  // #2887: server-computed per-item unlock flag (Task 3). Preferred by
+  // app-space-gating's isItemUnlocked over the legacy index-adjacency fallback.
+  unlocked?: boolean
+  // #2864: a path item flagged temporarily unavailable upstream.
+  temporarilyUnavailable?: boolean
+  // #2887: synthetic lane-end prize checkpoints carry the prize legacyId. The
+  // item still has type==='CHECKPOINT' so it flows through the normal barcode
+  // path (shouldShowCheckpointBarcode keys only on type/unlocked/authenticated).
+  prizeId?: number | null
 }
+
+// #2887: nested segment structure produced by srv/lib/path-item-task-resolver.js
+// (buildPathSegments) and annotated with per-item `unlocked` by
+// srv/lib/app-space-segments.js (annotateUnlocked). The detail view renders
+// from these; the legacy flat `items[]` is kept for back-compat (overview grid
+// counts) and older payloads that predate segments.
+interface ForkLane {
+  label: string
+  items: AppSpaceItem[]
+}
+interface LinearSegment {
+  order: number
+  kind: 'linear'
+  items: AppSpaceItem[]
+}
+interface ClusterSegment {
+  order: number
+  kind: 'parallel-any'
+  items: AppSpaceItem[]
+}
+interface ForkSegment {
+  order: number
+  kind: 'fork'
+  lanes: ForkLane[]
+}
+type AppSpaceSegment = LinearSegment | ClusterSegment | ForkSegment
 
 interface AppSpaceTrack {
   id: number
   title: string
   description: string
   items: AppSpaceItem[]
+  segments?: AppSpaceSegment[]
 }
 
 interface AppSpaceData {
@@ -223,23 +260,147 @@ function tutorialItems(track: AppSpaceTrack): AppSpaceItem[] {
   return track.items.filter(i => i.type === 'TUTORIAL')
 }
 
+// Tutorial count that works for both segment and legacy flat tracks.
+function trackTutorialCount(track: AppSpaceTrack): number {
+  return hasSegments(track) ? segmentTutorials(track).length : tutorialItems(track).length
+}
+
+// ── Segment helpers (#2887) ────────────────────────────────────────
+// The detail view renders from `track.segments`. Aggregates (counts, percent,
+// complete, barcode eligibility) are computed over segments when present so the
+// AUTHORED completion rule is honored — a per-lane prize means that lane
+// completing can satisfy the track's reward, while a downstream checkpoint
+// after the fork requires all lanes. We do NOT define "complete" as "every flat
+// tutorial COMPLETED" — that would contradict a prize already earned on one lane.
+
+function trackSegments(track: AppSpaceTrack): AppSpaceSegment[] {
+  return track.segments ?? []
+}
+
+function hasSegments(track: AppSpaceTrack): boolean {
+  return Array.isArray(track.segments) && track.segments.length > 0
+}
+
+// Flatten every item a segment contains (cluster/linear items, or all lane items
+// for a fork). Used for progress math and "all tutorials" totals.
+function segmentItems(seg: AppSpaceSegment): AppSpaceItem[] {
+  if (seg.kind === 'fork') return seg.lanes.flatMap(l => l.items)
+  return seg.items
+}
+
+// All items across a track's segments (flattened). Synthetic lane prizes
+// (CHECKPOINT with prizeId) are included — they render and claim like any
+// checkpoint.
+function allSegmentItems(track: AppSpaceTrack): AppSpaceItem[] {
+  return trackSegments(track).flatMap(segmentItems)
+}
+
+// TUTORIAL items across all segments — the denominator for progress.
+function segmentTutorials(track: AppSpaceTrack): AppSpaceItem[] {
+  return allSegmentItems(track).filter(i => i.type === 'TUTORIAL')
+}
+
+// An item counts as "done" only on a strict COMPLETED (mirrors the server's
+// isComplete in app-space-segments.js; #2866 COMPLETED_OUT_OF_WINDOW and #2864
+// temporarilyUnavailable never count).
+function itemDone(item: AppSpaceItem): boolean {
+  if (item.temporarilyUnavailable) return false
+  return item.status === 'COMPLETED'
+}
+
+// A lane is complete when all its non-prize items are done (the server uses the
+// same rule to unlock the lane's synthetic prize + any downstream join).
+function laneTutorialsDone(lane: ForkLane): boolean {
+  const work = lane.items.filter(i => !i.prizeId)
+  return work.length > 0 && work.every(itemDone)
+}
+
+// #2887 cross-task note: a GROUP's temporarilyUnavailable is NOT propagated to
+// its expanded child tutorials upstream (hardcoded false in buildPathSegments).
+// With only per-item flags available, we surface lane-level unavailability when
+// ANY item in a lane is temporarilyUnavailable. Documented UI-only treatment:
+// the lane column gets a visibly-unavailable state (dimmed + a notice). If a
+// future payload adds a lane-level flag, prefer it here.
+function laneUnavailable(lane: ForkLane): boolean {
+  return lane.items.some(i => i.temporarilyUnavailable)
+}
+
 function completedCount(track: AppSpaceTrack): number {
+  if (hasSegments(track)) return segmentTutorials(track).filter(itemDone).length
   return tutorialItems(track).filter(i => i.status === 'COMPLETED').length
 }
 
 function trackTotalTime(track: AppSpaceTrack): number {
+  if (hasSegments(track)) return segmentTutorials(track).reduce((sum, i) => sum + i.timeToComplete, 0)
   return tutorialItems(track).reduce((sum, i) => sum + i.timeToComplete, 0)
 }
 
+// #2887 authored completion rule: a track is complete when its reward is
+// satisfiable. A segment carrying a synthetic lane prize (CHECKPOINT+prizeId)
+// completes the track's reward as soon as THAT lane's tutorials are done; a
+// downstream CHECKPOINT (no prizeId) requires all preceding work. We model this
+// as: the track is complete when every REQUIRED checkpoint/prize in it is
+// unlocked, OR (no checkpoints authored) when all tutorials are done.
 function isTrackComplete(track: AppSpaceTrack): boolean {
-  const tuts = tutorialItems(track)
-  return tuts.length > 0 && tuts.every(i => i.status === 'COMPLETED')
+  if (!hasSegments(track)) {
+    const tuts = tutorialItems(track)
+    return tuts.length > 0 && tuts.every(i => i.status === 'COMPLETED')
+  }
+  const items = allSegmentItems(track)
+  const checkpoints = items.filter(i => i.type === 'CHECKPOINT')
+  if (checkpoints.length > 0) {
+    // Any earnable checkpoint (lane prize OR downstream) being unlocked means a
+    // reward is claimable → the track's goal is met. A lane-prize checkpoint
+    // unlocks per-lane (the authored "this branch alone earns it" case);
+    // a downstream checkpoint unlocks only when all lanes finish.
+    return checkpoints.some(c => isSegmentItemUnlocked(c))
+  }
+  const tuts = segmentTutorials(track)
+  return tuts.length > 0 && tuts.every(itemDone)
 }
 
 function progressPercent(track: AppSpaceTrack): number {
-  const tuts = tutorialItems(track)
+  const tuts = hasSegments(track) ? segmentTutorials(track) : tutorialItems(track)
   if (tuts.length === 0) return 0
   return Math.round((completedCount(track) / tuts.length) * 100)
+}
+
+// Per-item unlock. Prefers the server flag (set on every segment item by
+// annotateUnlocked). Segment items always carry `unlocked`; fall back to the
+// shared gating helper (single-item array) only for the defensive case where
+// the flag is missing.
+function isSegmentItemUnlocked(item: AppSpaceItem): boolean {
+  if (typeof item.unlocked === 'boolean') return item.unlocked
+  return _isItemUnlocked([item as unknown as GatingItem], 0)
+}
+
+// A TUTORIAL's link stays live if it's a redo (#2866) or unlocked.
+function isSegmentTutorialOpenable(item: AppSpaceItem): boolean {
+  if (item.type !== 'TUTORIAL') return false
+  if (item.status === 'COMPLETED_OUT_OF_WINDOW') return true
+  return isSegmentItemUnlocked(item)
+}
+
+function segmentItemStatusClass(item: AppSpaceItem): string {
+  if (item.status === 'COMPLETED') return 'step--completed'
+  if (item.status === 'COMPLETED_OUT_OF_WINDOW') return 'step--redo'
+  if (item.status === 'EARNED') return 'step--earned'
+  if (item.status === 'IN_PROGRESS') return 'step--in-progress'
+  if (isSegmentItemUnlocked(item)) return 'step--available'
+  return 'step--locked'
+}
+
+function handleSegmentItemClick(item: AppSpaceItem) {
+  if (item.type === 'TUTORIAL' && isSegmentTutorialOpenable(item) && item.url) {
+    window.open(item.url, '_blank')
+  }
+}
+
+// Barcode parity (#2887): the synthetic lane-end CHECKPOINT (prizeId) and a
+// normal downstream CHECKPOINT flow through the exact same predicate — it keys
+// only on type==='CHECKPOINT' && unlocked && authenticated.
+function shouldShowSegmentBarcode(item: AppSpaceItem): boolean {
+  return _shouldShowCheckpointBarcode(item, isSegmentItemUnlocked(item), authenticated.value)
 }
 
 function isItemUnlocked(track: AppSpaceTrack, index: number): boolean {
@@ -297,7 +458,7 @@ function shouldShowCheckpointBarcode(track: AppSpaceTrack, index: number): boole
 
 // ── Computed ───────────────────────────────────────────────────────
 const totalTutorials = computed(() =>
-  tracks.value.reduce((sum, t) => sum + tutorialItems(t).length, 0)
+  tracks.value.reduce((sum, t) => sum + (hasSegments(t) ? segmentTutorials(t).length : tutorialItems(t).length), 0)
 )
 
 const totalCompleted = computed(() =>
@@ -455,7 +616,7 @@ const emptyStateMessage = computed(() => {
           <h3 class="track-card__title">{{ track.title }}</h3>
           <p class="track-card__desc">{{ track.description }}</p>
           <div class="track-card__meta">
-            <span class="track-card__count">{{ tutorialItems(track).length }} tutorials</span>
+            <span class="track-card__count">{{ trackTutorialCount(track) }} tutorials</span>
             <span class="track-card__time">{{ formatTime(trackTotalTime(track)) }}</span>
           </div>
           <div class="track-card__progress-bar">
@@ -476,15 +637,252 @@ const emptyStateMessage = computed(() => {
         </button>
         <div class="detail-title-row">
           <h2 class="detail-title">{{ selectedTrack.title }}</h2>
-          <span class="detail-progress">{{ completedCount(selectedTrack) }} / {{ tutorialItems(selectedTrack).length }} completed</span>
+          <span class="detail-progress">{{ completedCount(selectedTrack) }} / {{ trackTutorialCount(selectedTrack) }} completed</span>
         </div>
         <p class="detail-desc">{{ selectedTrack.description }}</p>
       </div>
 
-      <div class="timeline">
+      <!-- ── Segment timeline (#2887) ──────────────────────────────
+           Renders from selectedTrack.segments: linear nodes, side-by-side fork
+           lanes with fork/join connectors, and any-order clusters. Falls back
+           to the legacy flat timeline for payloads without segments. -->
+      <div class="timeline" v-if="hasSegments(selectedTrack)">
+        <template v-for="(seg, segIndex) in trackSegments(selectedTrack)" :key="seg.order">
+
+          <!-- Linear segment: one node per item (as today) -->
+          <template v-if="seg.kind === 'linear'">
+            <div
+              v-for="item in seg.items"
+              :key="item.imsId ?? item.title"
+              class="timeline-item"
+              :class="[segmentItemStatusClass(item), `timeline-item--${item.type.toLowerCase()}`]"
+            >
+              <div class="timeline-line" v-if="segIndex < trackSegments(selectedTrack).length - 1"></div>
+              <div
+                class="timeline-bubble"
+                @click="handleSegmentItemClick(item)"
+                :class="{ clickable: item.type === 'TUTORIAL' && isSegmentTutorialOpenable(item) }"
+              >
+                <svg v-if="!isSegmentItemUnlocked(item) && item.status !== 'COMPLETED' && item.status !== 'EARNED' && item.status !== 'COMPLETED_OUT_OF_WINDOW'"
+                  width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <svg v-else-if="item.status === 'COMPLETED'" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <svg v-else-if="item.status === 'COMPLETED_OUT_OF_WINDOW'" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <svg v-else-if="item.type === 'PRIZE' || item.type === 'CHECKPOINT'" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M8 21h8M12 17v4M7 4h10M7 4V3h10v1M7 4H5a2 2 0 0 0 0 4h2M17 4h2a2 2 0 0 1 0 4h-2M7 8c0 3 2 5 5 5s5-2 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span v-else-if="item.status === 'IN_PROGRESS'" class="bubble-progress">{{ item.progress }}%</span>
+                <span v-else class="bubble-number">{{ segIndex + 1 }}</span>
+              </div>
+              <div class="timeline-content">
+                <div class="timeline-content__header">
+                  <span class="item-type-label" :class="`item-type--${item.type.toLowerCase()}`">
+                    {{ item.type === 'TUTORIAL' ? 'Tutorial' : item.type === 'CHECKPOINT' ? 'Checkpoint' : 'Prize' }}
+                  </span>
+                  <span v-if="item.experience" class="item-experience">{{ item.experience }}</span>
+                  <span v-if="item.timeToComplete > 0" class="item-time">{{ formatTime(item.timeToComplete) }}</span>
+                </div>
+                <h4 class="timeline-content__title"
+                  :class="{ clickable: item.type === 'TUTORIAL' && isSegmentTutorialOpenable(item) }"
+                  @click="handleSegmentItemClick(item)"
+                >{{ item.title }}</h4>
+                <p class="timeline-content__desc" v-if="item.description && item.type !== 'PRIZE'">{{ item.description }}</p>
+                <p class="redo-hint" v-if="item.status === 'COMPLETED_OUT_OF_WINDOW'">
+                  Completed before the event — reset your progress and complete it again during the event to earn your prize.
+                </p>
+                <div v-if="shouldShowSegmentBarcode(item)" class="checkpoint-barcode">
+                  <img :src="checkpointBarcodeUrl()" alt="Prize barcode" class="checkpoint-barcode__img" width="150" height="150" />
+                  <p class="checkpoint-barcode__caption">Show this to an instructor to claim your prize.</p>
+                </div>
+                <p v-else-if="item.type === 'CHECKPOINT' && isSegmentItemUnlocked(item) && !authenticated" class="checkpoint-signin-hint">
+                  <a href="#" @click.prevent="startLogin">Sign in</a> to get your prize code.
+                </p>
+                <div v-if="(item.type === 'PRIZE' || item.type === 'CHECKPOINT') && !isSegmentItemUnlocked(item) && item.status !== 'EARNED'" class="prize-locked">
+                  <p class="prize-locked__text">Complete the required tutorials to unlock your prize.</p>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- parallel-any cluster: grid of cards, all available once unlocked -->
+          <template v-else-if="seg.kind === 'parallel-any'">
+            <div class="cluster-wrap">
+              <div class="cluster-header">Complete these in any order</div>
+              <div class="cluster">
+                <div
+                  v-for="item in seg.items"
+                  :key="item.imsId ?? item.title"
+                  class="timeline-item timeline-item--cluster"
+                  :class="[segmentItemStatusClass(item), `timeline-item--${item.type.toLowerCase()}`]"
+                >
+                  <div
+                    class="timeline-bubble"
+                    @click="handleSegmentItemClick(item)"
+                    :class="{ clickable: item.type === 'TUTORIAL' && isSegmentTutorialOpenable(item) }"
+                  >
+                    <svg v-if="!isSegmentItemUnlocked(item) && item.status !== 'COMPLETED' && item.status !== 'EARNED' && item.status !== 'COMPLETED_OUT_OF_WINDOW'"
+                      width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    <svg v-else-if="item.status === 'COMPLETED'" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <svg v-else-if="item.status === 'COMPLETED_OUT_OF_WINDOW'" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <svg v-else-if="item.type === 'PRIZE' || item.type === 'CHECKPOINT'" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path d="M8 21h8M12 17v4M7 4h10M7 4V3h10v1M7 4H5a2 2 0 0 0 0 4h2M17 4h2a2 2 0 0 1 0 4h-2M7 8c0 3 2 5 5 5s5-2 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span v-else-if="item.status === 'IN_PROGRESS'" class="bubble-progress">{{ item.progress }}%</span>
+                    <span v-else class="bubble-dot">&bull;</span>
+                  </div>
+                  <div class="timeline-content">
+                    <div class="timeline-content__header">
+                      <span class="item-type-label" :class="`item-type--${item.type.toLowerCase()}`">
+                        {{ item.type === 'TUTORIAL' ? 'Tutorial' : item.type === 'CHECKPOINT' ? 'Checkpoint' : 'Prize' }}
+                      </span>
+                      <span v-if="item.experience" class="item-experience">{{ item.experience }}</span>
+                      <span v-if="item.timeToComplete > 0" class="item-time">{{ formatTime(item.timeToComplete) }}</span>
+                    </div>
+                    <h4 class="timeline-content__title"
+                      :class="{ clickable: item.type === 'TUTORIAL' && isSegmentTutorialOpenable(item) }"
+                      @click="handleSegmentItemClick(item)"
+                    >{{ item.title }}</h4>
+                    <p class="timeline-content__desc" v-if="item.description && item.type !== 'PRIZE'">{{ item.description }}</p>
+                    <p class="redo-hint" v-if="item.status === 'COMPLETED_OUT_OF_WINDOW'">
+                      Completed before the event — reset your progress and complete it again during the event to earn your prize.
+                    </p>
+                    <div v-if="shouldShowSegmentBarcode(item)" class="checkpoint-barcode">
+                      <img :src="checkpointBarcodeUrl()" alt="Prize barcode" class="checkpoint-barcode__img" width="150" height="150" />
+                      <p class="checkpoint-barcode__caption">Show this to an instructor to claim your prize.</p>
+                    </div>
+                    <p v-else-if="item.type === 'CHECKPOINT' && isSegmentItemUnlocked(item) && !authenticated" class="checkpoint-signin-hint">
+                      <a href="#" @click.prevent="startLogin">Sign in</a> to get your prize code.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- fork: side-by-side labeled lanes with fork/join connectors -->
+          <template v-else>
+            <div class="fork-connector" aria-hidden="true">
+              <span class="fork-connector__stem"></span>
+              <span class="fork-connector__bar"></span>
+              <span
+                v-for="(lane, li) in seg.lanes"
+                :key="'fd-' + li"
+                class="fork-connector__drop"
+                :style="{ left: ((li + 0.5) / seg.lanes.length * 100) + '%' }"
+              ></span>
+            </div>
+            <div class="lanes" :style="{ '--lane-count': seg.lanes.length }">
+              <div
+                v-for="(lane, li) in seg.lanes"
+                :key="'lane-' + li"
+                class="lane"
+                :class="{ 'lane--unavailable': laneUnavailable(lane), 'lane--complete': laneTutorialsDone(lane) }"
+              >
+                <div class="lane__label">
+                  <span class="lane__name">{{ lane.label }}</span>
+                  <span class="lane__badge">Branch</span>
+                </div>
+                <p v-if="laneUnavailable(lane)" class="lane__unavailable-note">
+                  Temporarily unavailable — check back soon.
+                </p>
+                <div
+                  v-for="(item, ii) in lane.items"
+                  :key="item.imsId ?? (item.prizeId != null ? 'prize-' + item.prizeId : item.title)"
+                  class="timeline-item lane__step"
+                  :class="[segmentItemStatusClass(item), `timeline-item--${item.type.toLowerCase()}`]"
+                >
+                  <div class="timeline-line" v-if="ii < lane.items.length - 1"></div>
+                  <div
+                    class="timeline-bubble"
+                    @click="handleSegmentItemClick(item)"
+                    :class="{ clickable: item.type === 'TUTORIAL' && isSegmentTutorialOpenable(item) }"
+                  >
+                    <svg v-if="!isSegmentItemUnlocked(item) && item.status !== 'COMPLETED' && item.status !== 'EARNED' && item.status !== 'COMPLETED_OUT_OF_WINDOW'"
+                      width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    <svg v-else-if="item.status === 'COMPLETED'" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <svg v-else-if="item.status === 'COMPLETED_OUT_OF_WINDOW'" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <svg v-else-if="item.type === 'PRIZE' || item.type === 'CHECKPOINT'" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path d="M8 21h8M12 17v4M7 4h10M7 4V3h10v1M7 4H5a2 2 0 0 0 0 4h2M17 4h2a2 2 0 0 1 0 4h-2M7 8c0 3 2 5 5 5s5-2 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span v-else-if="item.status === 'IN_PROGRESS'" class="bubble-progress">{{ item.progress }}%</span>
+                    <span v-else class="bubble-number">{{ ii + 1 }}</span>
+                  </div>
+                  <div class="timeline-content">
+                    <div class="timeline-content__header">
+                      <span class="item-type-label" :class="`item-type--${item.type.toLowerCase()}`">
+                        {{ item.type === 'TUTORIAL' ? 'Tutorial' : item.type === 'CHECKPOINT' ? 'Checkpoint' : 'Prize' }}
+                      </span>
+                      <span v-if="item.experience" class="item-experience">{{ item.experience }}</span>
+                      <span v-if="item.timeToComplete > 0" class="item-time">{{ formatTime(item.timeToComplete) }}</span>
+                    </div>
+                    <h4 class="timeline-content__title"
+                      :class="{ clickable: item.type === 'TUTORIAL' && isSegmentTutorialOpenable(item) }"
+                      @click="handleSegmentItemClick(item)"
+                    >{{ item.title }}</h4>
+                    <p class="timeline-content__desc" v-if="item.description && item.type !== 'PRIZE'">{{ item.description }}</p>
+                    <p class="redo-hint" v-if="item.status === 'COMPLETED_OUT_OF_WINDOW'">
+                      Completed before the event — reset your progress and complete it again during the event to earn your prize.
+                    </p>
+                    <div v-if="shouldShowSegmentBarcode(item)" class="checkpoint-barcode">
+                      <img :src="checkpointBarcodeUrl()" alt="Prize barcode" class="checkpoint-barcode__img" width="150" height="150" />
+                      <p class="checkpoint-barcode__caption">Show this to an instructor to claim your prize.</p>
+                    </div>
+                    <p v-else-if="item.type === 'CHECKPOINT' && isSegmentItemUnlocked(item) && !authenticated" class="checkpoint-signin-hint">
+                      <a href="#" @click.prevent="startLogin">Sign in</a> to get your prize code.
+                    </p>
+                    <div v-if="(item.type === 'PRIZE' || item.type === 'CHECKPOINT') && !isSegmentItemUnlocked(item) && item.status !== 'EARNED'" class="prize-locked">
+                      <p class="prize-locked__text">Complete this branch's tutorials to unlock your prize.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- join connector into the next segment, if one exists -->
+            <div
+              class="join-connector"
+              aria-hidden="true"
+              v-if="segIndex < trackSegments(selectedTrack).length - 1"
+              :style="{ '--lane-count': seg.lanes.length }"
+            >
+              <span
+                v-for="(lane, li) in seg.lanes"
+                :key="'ju-' + li"
+                class="join-connector__up"
+                :style="{ left: ((li + 0.5) / seg.lanes.length * 100) + '%' }"
+              ></span>
+              <span class="join-connector__bar"></span>
+              <span class="join-connector__down"></span>
+            </div>
+          </template>
+
+        </template>
+      </div>
+
+      <!-- ── Legacy flat timeline (payloads without segments) ────── -->
+      <div class="timeline" v-else>
         <div
           v-for="(item, index) in selectedTrack.items"
-          :key="item.imsId"
+          :key="item.imsId ?? index"
           class="timeline-item"
           :class="[
             itemStatusClass(selectedTrack, index),
@@ -1248,6 +1646,185 @@ const emptyStateMessage = computed(() => {
   color: var(--sapContent_DisabledTextColor, #bcc3ca);
   margin: 0;
   font-style: italic;
+}
+
+/* ── Segment renderer: fork lanes + any-order clusters (#2887) ───────── */
+
+/* Any-order cluster: grid of cards, all available at once. */
+.cluster-wrap {
+  margin: 0 0 0.75rem;
+}
+
+.cluster-header {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--sapContent_LabelColor, #556b82);
+  margin: 0.25rem 0 0.4rem 0.79rem;
+}
+
+.cluster {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.6rem;
+  border: 1px dashed var(--sapGroup_ContentBorderColor, #c5cfda);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(16, 126, 62, 0.02);
+}
+
+/* Cluster cards drop the vertical connecting stem — they're parallel. */
+.timeline-item--cluster {
+  padding-bottom: 0;
+}
+
+/* Fork lanes: side-by-side columns. */
+.lanes {
+  display: grid;
+  grid-template-columns: repeat(var(--lane-count, 2), 1fr);
+  gap: 1rem;
+  margin-bottom: 0.2rem;
+}
+
+.lane {
+  border: 1px dashed var(--sapGroup_ContentBorderColor, #c5cfda);
+  border-radius: 0.5rem;
+  padding: 0.6rem;
+  background: rgba(0, 112, 242, 0.015);
+  min-width: 0;
+}
+
+.lane--complete {
+  border-color: var(--sapPositiveColor, #107e3e);
+  background: rgba(16, 126, 62, 0.03);
+}
+
+/* #2887 cross-task note — temporarily-unavailable branch surfacing (UI-only). */
+.lane--unavailable {
+  opacity: 0.6;
+  filter: grayscale(0.4);
+}
+
+.lane__label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--sapTextColor, #32363a);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.lane__badge {
+  font-size: 0.6rem;
+  color: var(--sapAccentColor8, #6c32a9);
+  background: rgba(108, 50, 169, 0.08);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.lane__unavailable-note {
+  font-size: 0.72rem;
+  color: var(--sapCriticalColor, #e76500);
+  margin: 0 0 0.5rem;
+}
+
+.lane__step {
+  padding-bottom: 0.5rem;
+}
+
+.lane__step:last-child {
+  padding-bottom: 0;
+}
+
+/* Fork connector: stem from the backbone, a horizontal bar, drops to each lane. */
+.fork-connector {
+  position: relative;
+  height: 1.6rem;
+  margin: 0.2rem 0 0.2rem 0.79rem;
+}
+.fork-connector__stem {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 0.8rem;
+  background: var(--sapNeutralBorderColor, #d9d9d9);
+}
+.fork-connector__bar {
+  position: absolute;
+  top: 0.8rem;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--sapNeutralBorderColor, #d9d9d9);
+}
+.fork-connector__drop {
+  position: absolute;
+  top: 0.8rem;
+  width: 2px;
+  height: 0.8rem;
+  background: var(--sapNeutralBorderColor, #d9d9d9);
+}
+
+/* Join connector: drops up from each lane into a bar, then a single stem down
+   into the next segment. */
+.join-connector {
+  position: relative;
+  height: 1.4rem;
+  margin: 0.2rem 0;
+}
+.join-connector__up {
+  position: absolute;
+  bottom: 0.6rem;
+  width: 2px;
+  height: 0.8rem;
+  background: var(--sapNeutralBorderColor, #d9d9d9);
+}
+.join-connector__bar {
+  position: absolute;
+  bottom: 0.6rem;
+  left: calc(50% / var(--lane-count, 2));
+  right: calc(50% / var(--lane-count, 2));
+  height: 2px;
+  background: var(--sapNeutralBorderColor, #d9d9d9);
+}
+.join-connector__down {
+  position: absolute;
+  bottom: 0;
+  left: 0.79rem;
+  width: 2px;
+  height: 0.6rem;
+  background: var(--sapNeutralBorderColor, #d9d9d9);
+}
+
+/* Dot bubble for any-order cluster cards (no sequential number). */
+.bubble-dot {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* Responsive: collapse lanes to stacked labeled blocks + cluster to 1 col. */
+@media (max-width: 680px) {
+  .lanes {
+    grid-template-columns: 1fr;
+  }
+  .cluster {
+    grid-template-columns: 1fr;
+  }
+  /* Connectors are a desktop affordance; hide the horizontal split on stacked
+     lanes where columns no longer sit side by side. */
+  .fork-connector__bar,
+  .fork-connector__drop,
+  .join-connector__up,
+  .join-connector__bar {
+    display: none;
+  }
 }
 
 /* ── Skeleton Loading ──────────────────────────────────── */
