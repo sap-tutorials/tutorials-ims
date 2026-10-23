@@ -341,8 +341,19 @@ function trackTotalTime(track: AppSpaceTrack): number {
 // satisfiable. A segment carrying a synthetic lane prize (CHECKPOINT+prizeId)
 // completes the track's reward as soon as THAT lane's tutorials are done; a
 // downstream CHECKPOINT (no prizeId) requires all preceding work. We model this
-// as: the track is complete when every REQUIRED checkpoint/prize in it is
-// unlocked, OR (no checkpoints authored) when all tutorials are done.
+// as: the track is complete when a reward is claimable, OR (no checkpoints
+// authored) when all tutorials are done.
+//
+// #2889: prize-aware restriction of the old `checkpoints.some(unlocked)` rule.
+// Two checkpoint kinds, by authoring intent:
+//   • lane-prize (prizeId set) — authored to earn the reward the moment ITS lane
+//     finishes, so ANY unlocked lane-prize completes the track (keeps `some`).
+//   • plain downstream (no prizeId) — a join that requires preceding work; only
+//     the TERMINAL one marks the whole track done. Keying off *any* unlocked
+//     plain checkpoint would falsely complete a track whose authored checkpoint
+//     sits at a non-terminal order while later tutorials remain. `allSegmentItems`
+//     flattens segments in authored (ascending `order`) order, so the LAST
+//     non-prize checkpoint is the highest-order one.
 function isTrackComplete(track: AppSpaceTrack): boolean {
   if (!hasSegments(track)) {
     const tuts = tutorialItems(track)
@@ -351,11 +362,14 @@ function isTrackComplete(track: AppSpaceTrack): boolean {
   const items = allSegmentItems(track)
   const checkpoints = items.filter(i => i.type === 'CHECKPOINT')
   if (checkpoints.length > 0) {
-    // Any earnable checkpoint (lane prize OR downstream) being unlocked means a
-    // reward is claimable → the track's goal is met. A lane-prize checkpoint
-    // unlocks per-lane (the authored "this branch alone earns it" case);
-    // a downstream checkpoint unlocks only when all lanes finish.
-    return checkpoints.some(c => isSegmentItemUnlocked(c))
+    // Any lane-prize checkpoint being unlocked earns the reward on its own.
+    const lanePrizeUnlocked = checkpoints.some(c => c.prizeId != null && isSegmentItemUnlocked(c))
+    // Otherwise, only the highest-order plain (non-prize) checkpoint counts —
+    // the terminal join. Lower-order plain checkpoints never complete the track.
+    const plainCheckpoints = checkpoints.filter(c => c.prizeId == null)
+    const terminalPlain = plainCheckpoints[plainCheckpoints.length - 1]
+    const terminalPlainUnlocked = terminalPlain != null && isSegmentItemUnlocked(terminalPlain)
+    return lanePrizeUnlocked || terminalPlainUnlocked
   }
   const tuts = segmentTutorials(track)
   return tuts.length > 0 && tuts.every(itemDone)
