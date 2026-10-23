@@ -19,14 +19,25 @@ export default class ScannerService extends cds.ApplicationService {
       const lastName = user.lastName || '';
       const firstInitial = (user.firstName || '').trim().charAt(0).toUpperCase();
 
+      // Resolve event by legacyId when provided; use its UUID for the event_ID filter.
+      let eventFilter = null;
+      if (eventId != null) {
+        const event = await SELECT.one.from(Events).where({ legacyId: eventId });
+        if (event) eventFilter = event.ID;
+      }
+
       // "Has-ever-completed" semantic (issue #600): a SUPERSEDED row is a prior
       // completion that was reset, so it still counts. DISTINCT by
       // (user_ID, taskLegacyId) so a user who reset + re-completed the same
-      // task is counted once, not twice.
-      const taskRecords = await SELECT.from(TaskRecords).where({
+      // task is counted once, not twice. Scoped to the scanned event (#badge-v2)
+      // so the card's counts match the event-stats panel; falls back to all
+      // events when the eventId is absent/unresolvable.
+      const taskFilter = {
         user_ID: user.ID,
         status: { in: ['COMPLETED', 'SUPERSEDED'] }
-      });
+      };
+      if (eventFilter) taskFilter.event_ID = eventFilter;
+      const taskRecords = await SELECT.from(TaskRecords).where(taskFilter);
 
       const seenByType = { TUTORIAL: new Set(), GROUP: new Set(), MISSION: new Set() };
       for (const r of taskRecords) {
@@ -36,13 +47,6 @@ export default class ScannerService extends cds.ApplicationService {
       const tutorialsCompleted = seenByType.TUTORIAL.size;
       const groupsCompleted = seenByType.GROUP.size;
       const missionsCompleted = seenByType.MISSION.size;
-
-      // Resolve event by legacyId when provided; use its UUID for the event_ID filter.
-      let eventFilter = null;
-      if (eventId != null) {
-        const event = await SELECT.one.from(Events).where({ legacyId: eventId });
-        if (event) eventFilter = event.ID;
-      }
 
       // Count CLAIMED PrizeRecords for this user, scoped to the event when resolvable.
       const prizeFilter = { user_ID: user.ID, status: 'CLAIMED' };

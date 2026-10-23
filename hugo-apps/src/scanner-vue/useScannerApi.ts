@@ -25,6 +25,16 @@ export function normalizeContestant(raw: Partial<ContestantData> & Record<string
   }
 }
 
+// claimPrizeForContestant is an OData v4 `action` → POST with params in the body.
+// (A function-style GET with params in the URL is not served by an action.)
+export function claimRequest(uid: string, eventId: number): { url: string; method: 'POST'; body: { accountNumber: string; eventId: number } } {
+  return {
+    url: '/scanner/claimPrizeForContestant',
+    method: 'POST',
+    body: { accountNumber: uid, eventId },
+  }
+}
+
 export function useScannerApi() {
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -60,12 +70,15 @@ export function useScannerApi() {
     loading.value = true
     error.value = null
     try {
-      const res = await fetch(
-        `/scanner/claimPrizeForContestant(accountNumber='${encodeURIComponent(uid)}',eventId=${eventId})`
-      )
+      const { url, method, body } = claimRequest(uid, eventId)
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.error?.message || `HTTP ${res.status}`)
+        const errBody = await res.json().catch(() => ({}))
+        throw new Error(errBody.error?.message || `HTTP ${res.status}`)
       }
       const json = await res.json()
       return json.value ?? json

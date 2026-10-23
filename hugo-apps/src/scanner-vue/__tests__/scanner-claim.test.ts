@@ -54,7 +54,7 @@ describe('useScannerApi', () => {
   })
 
   describe('claimPrizeForContestant(uid, eventId)', () => {
-    it('builds URL with accountNumber and eventId', async () => {
+    it('POSTs to the action with params in the body (#badge-v2)', async () => {
       const fetchSpy = vi.fn(async () =>
         jsonResponse({ claimedCount: 1, message: 'Prize recorded!' })
       )
@@ -64,8 +64,10 @@ describe('useScannerApi', () => {
       await claimPrizeForContestant('test-uuid-456', 10000015)
 
       expect(fetchSpy).toHaveBeenCalledOnce()
-      const url: string = fetchSpy.mock.calls[0][0]
-      expect(url).toBe("/scanner/claimPrizeForContestant(accountNumber='test-uuid-456',eventId=10000015)")
+      const [url, init]: [string, RequestInit] = fetchSpy.mock.calls[0] as any
+      expect(url).toBe('/scanner/claimPrizeForContestant')
+      expect(init.method).toBe('POST')
+      expect(JSON.parse(init.body as string)).toEqual({ accountNumber: 'test-uuid-456', eventId: 10000015 })
     })
 
     it('returns claimedCount and message from the response', async () => {
