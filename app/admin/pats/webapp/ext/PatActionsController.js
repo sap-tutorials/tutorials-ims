@@ -34,6 +34,9 @@ sap.ui.define([
   let _resolvedView = null;
   let _mintDialog = null;
   let _mintedDialog = null;
+  // #2857: cache the admin-scope capability so repeated Mint presses don't
+  // re-probe the backend. null = not yet resolved.
+  let _adminScopeAvailable = null;
 
   function _initialMintState() {
     return { name: "", scopes: ["read"], ttlDays: 90 };
@@ -115,6 +118,31 @@ sap.ui.define([
     if (lr && lr.getBinding("items")) lr.getBinding("items").refresh();
   }
 
+  // #2857: resolve whether the caller may mint an admin-scoped PAT, via the
+  // unbound PatService.patCapabilities function. Cached across presses. On any
+  // error, fail CLOSED (treat as unavailable) so the admin item stays hidden.
+  function _resolveAdminScope(view) {
+    if (_adminScopeAvailable !== null) return Promise.resolve(_adminScopeAvailable);
+    const op = view.getModel().bindContext("/patCapabilities(...)");
+    return op.execute().then(function () {
+      const result = op.getBoundContext().getObject() || {};
+      _adminScopeAvailable = !!result.adminScopeAvailable;
+      return _adminScopeAvailable;
+    }).catch(function () {
+      _adminScopeAvailable = false;
+      return false;
+    });
+  }
+
+  // Show/hide the `admin` MultiComboBox item. The item is declared in the
+  // fragment (visible=false), so it is scoped under the fragment's owner id.
+  function _applyAdminScopeVisibility(view, available) {
+    const item = Fragment.byId(view.getId(), "patMintScopeAdmin");
+    if (item) item.setVisible(!!available);
+    const hint = Fragment.byId(view.getId(), "patMintAdminHint");
+    if (hint) hint.setVisible(!!available);
+  }
+
   const handlers = {
 
     // Toolbar button press. `arg` is a UI5 Event (sap.m.Button) or a context
@@ -132,18 +160,23 @@ sap.ui.define([
       } else {
         model.setData(_initialMintState());
       }
-      if (_mintDialog) {
-        _mintDialog.open();
-        return;
-      }
-      Fragment.load({
-        id: view.getId(),
-        name: "sap.tutorials.admin.pats.ext.MintDialog",
-        controller: handlers
-      }).then(function (dlg) {
-        _mintDialog = dlg;
-        view.addDependent(dlg);
-        dlg.open();
+      // #2857: probe admin-scope capability, then show/hide the admin item.
+      _resolveAdminScope(view).then(function (available) {
+        if (_mintDialog) {
+          _applyAdminScopeVisibility(view, available);
+          _mintDialog.open();
+          return;
+        }
+        Fragment.load({
+          id: view.getId(),
+          name: "sap.tutorials.admin.pats.ext.MintDialog",
+          controller: handlers
+        }).then(function (dlg) {
+          _mintDialog = dlg;
+          view.addDependent(dlg);
+          _applyAdminScopeVisibility(view, available);
+          dlg.open();
+        });
       });
     },
 

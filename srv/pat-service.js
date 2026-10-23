@@ -1,5 +1,6 @@
 import cds from '@sap/cds';
 import { handleMintPAT, handleRevokePAT } from './lib/mcp-pat-actions.js';
+import { isFlagEnabled } from './lib/feature-flags/db-flags.js';
 
 // #1132: Criticality enum for the FE status column.
 //   1 = Error (red), 3 = Success (green) — per @com.sap.vocabularies.UI.v1.CriticalityType.
@@ -20,6 +21,13 @@ function decorateStatus(rows) {
 export default class PatService extends cds.ApplicationService {
   async init() {
     this.on('mintPAT', handleMintPAT);
+    // #2857: capability probe for the mint UI — offer the `admin` scope only
+    // when the caller could actually mint one (flag ON AND live XSUAA Admin),
+    // mirroring the handleMintPAT gate. Safe even on a PAT session: req.user.is
+    // returns false for 'Admin' there, so headless callers get false.
+    this.on('patCapabilities', (req) => ({
+      adminScopeAvailable: isFlagEnabled('PAT_ADMIN_SCOPE_ENABLED') && req.user.is('Admin'),
+    }));
     // #1132: revokePAT is now bound to MyPATs (FE line-item action).
     this.on('revokePAT', 'MyPATs', handleRevokePAT);
     // #1132: decorate each row with the virtual status/revocable fields the
