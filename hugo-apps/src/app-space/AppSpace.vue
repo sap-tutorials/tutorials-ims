@@ -800,9 +800,12 @@ const emptyStateMessage = computed(() => {
           <template v-else>
             <div class="fork-connector" aria-hidden="true">
               <span class="fork-connector__stem"></span>
+              <!-- #2896 follow-up: bar starts at the STEM (backbone bubble center,
+                   1.175rem) not at lane-0's bubble, so the vertical stem and the
+                   horizontal bar connect instead of leaving a ~10px jog. -->
               <span
                 class="fork-connector__bar"
-                :style="{ left: laneBubbleLeft(0, seg.lanes.length), right: `calc(100% - (${laneBubbleLeft(seg.lanes.length - 1, seg.lanes.length)}))` }"
+                :style="{ left: '1.175rem', right: `calc(100% - (${laneBubbleLeft(seg.lanes.length - 1, seg.lanes.length)}))` }"
               ></span>
               <span
                 v-for="(lane, li) in seg.lanes"
@@ -897,9 +900,11 @@ const emptyStateMessage = computed(() => {
                 class="join-connector__up"
                 :style="{ left: laneBubbleLeft(li, seg.lanes.length) }"
               ></span>
+              <!-- #2896 follow-up: bar reaches the down-stem (1.175rem) so the
+                   join bar and the single stem into the next segment connect. -->
               <span
                 class="join-connector__bar"
-                :style="{ left: laneBubbleLeft(0, seg.lanes.length), right: `calc(100% - (${laneBubbleLeft(seg.lanes.length - 1, seg.lanes.length)}))` }"
+                :style="{ left: '1.175rem', right: `calc(100% - (${laneBubbleLeft(seg.lanes.length - 1, seg.lanes.length)}))` }"
               ></span>
               <span class="join-connector__down"></span>
             </div>
