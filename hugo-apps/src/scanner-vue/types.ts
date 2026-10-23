@@ -12,9 +12,24 @@ export interface ContestantData {
   eventId: number
   recordId: string
   status: string
+  lastName: string
+  firstInitial: string
   tutorialsCompleted: number
   groupsCompleted: number
   missionsCompleted: number
   prizeRecords: string
   claimedCount: number
+  claimedPrizeNames: string[]
+}
+
+export interface EventStats {
+  eventName: string | null
+  prizesClaimed: number
+  prizesAvailable: number
+  earnedAwaitingHandover: number
+  participants: number
+  participantsClaimed: number
+  tutorialsCompleted: number
+  groupsCompleted: number
+  missionsCompleted: number
 }
