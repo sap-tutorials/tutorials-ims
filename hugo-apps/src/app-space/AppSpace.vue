@@ -317,12 +317,11 @@ function laneTutorialsDone(lane: ForkLane): boolean {
   return work.length > 0 && work.every(itemDone)
 }
 
-// #2887 cross-task note: a GROUP's temporarilyUnavailable is NOT propagated to
-// its expanded child tutorials upstream (hardcoded false in buildPathSegments).
-// With only per-item flags available, we surface lane-level unavailability when
-// ANY item in a lane is temporarilyUnavailable. Documented UI-only treatment:
-// the lane column gets a visibly-unavailable state (dimmed + a notice). If a
-// future payload adds a lane-level flag, prefer it here.
+// #2890: a GROUP's temporarilyUnavailable/unavailableReason now DOES propagate
+// onto its expanded child tutorials server-side (buildPathSegments stamps the
+// GROUP path-item onto each child). A lane is unavailable when any of its items
+// carries the flag — which, post-propagation, covers a GROUP-level toggle too.
+// The lane column gets a visibly-unavailable state (dimmed + a notice).
 function laneUnavailable(lane: ForkLane): boolean {
   return lane.items.some(i => i.temporarilyUnavailable)
 }

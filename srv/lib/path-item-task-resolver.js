@@ -215,10 +215,13 @@ function shapeItem(task, effLegacyId, record, type, checkpointTitle, event, unav
     url: task?.slug ? `/tutorials/${task.slug}.html` : '',
     description: task?.description || '',
     recordId: record?.legacyId || 0,
-    // #2864: per-path-item temporarily-unavailable flag. Carried only for
-    // direct items; GROUP-expanded children are stamped false by the caller
-    // (not inherited from the parent GROUP item), matching the mission page
-    // (packages/content/catalog-data.js). unavailableReason omitted when empty.
+    // #2864: per-path-item temporarily-unavailable flag, carried on the
+    // `unavail` source row. #2890: buildPathSegments now passes the parent GROUP
+    // path-item here for GROUP-expanded children, so a GROUP-level toggle
+    // propagates onto each child (render dim + never-counted-complete).
+    // buildPathItems (getEventProgress, linear tracks) still passes null for
+    // GROUP children, keeping them non-inherited there. unavailableReason
+    // omitted when empty.
     temporarilyUnavailable: unavail?.temporarilyUnavailable === true,
     ...(unavail?.unavailableReason ? { unavailableReason: unavail.unavailableReason } : {}),
   };
@@ -348,13 +351,13 @@ export function buildPathSegments({
       const [item] = members;
       if (item.taskType === 'GROUP') {
         // Lone GROUP: expand inline to child tutorials (same as buildPathItems).
+        // #2890: the GROUP path-item's temporarilyUnavailable/unavailableReason
+        // propagate onto each expanded child so an unavailable branch dims and
+        // cannot be counted complete.
         const children = (item.group_ID && groupTutorials.get(item.group_ID)) || [];
         const items = children.map(t => {
           const record = t.legacyId != null ? recordMap.get(`TUTORIAL:${t.legacyId}`) : undefined;
-          return {
-            ...shapeItem(t, t.legacyId ?? null, record, 'TUTORIAL', null, event),
-            temporarilyUnavailable: false,
-          };
+          return shapeItem(t, t.legacyId ?? null, record, 'TUTORIAL', null, event, item);
         });
         segments.push({ order, kind: 'linear', items });
       } else {
@@ -392,10 +395,10 @@ export function buildPathSegments({
           const children = (item.group_ID && groupTutorials.get(item.group_ID)) || [];
           const laneItems = children.map(t => {
             const record = t.legacyId != null ? recordMap.get(`TUTORIAL:${t.legacyId}`) : undefined;
-            return {
-              ...shapeItem(t, t.legacyId ?? null, record, 'TUTORIAL', null, event),
-              temporarilyUnavailable: false,
-            };
+            // #2890: propagate this GROUP lane's temporarilyUnavailable/
+            // unavailableReason onto each child so the lane dims (laneUnavailable)
+            // and its tutorials can't be counted complete (isLaneComplete).
+            return shapeItem(t, t.legacyId ?? null, record, 'TUTORIAL', null, event, item);
           });
           // Synthetic prize CHECKPOINT: appended only when prize_ID is set.
           if (item.prize_ID) {
