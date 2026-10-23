@@ -114,6 +114,109 @@ const clusterPayload = () => ({
   }],
 })
 
+// #2889: a track with a NON-TERMINAL plain checkpoint (no prizeId) at a lower
+// order than later tutorials — the latent shape the highest-order rule guards.
+// `earlyUnlocked` toggles whether the mid-track checkpoint is unlocked while the
+// downstream tutorial (and terminal checkpoint) remain incomplete. Only the
+// TERMINAL checkpoint (order 40) should be able to complete the track.
+const nonTerminalCheckpointPayload = (earlyUnlocked: boolean, terminalUnlocked: boolean) => ({
+  eventId: 10000008,
+  eventName: 'TechEd 2026',
+  eventType: 'TECHED',
+  authenticated: true,
+  type: 'COMPLEX',
+  paths: [{
+    id: 3,
+    title: 'Two-stage track with a mid checkpoint',
+    description: 'Checkpoint before more work',
+    items: [],
+    segments: [
+      {
+        order: 10, kind: 'linear', items: [
+          tutorial({ imsId: 20, title: 'Stage one tutorial', status: 'COMPLETED', unlocked: true }),
+        ],
+      },
+      {
+        // Non-terminal plain checkpoint: authored mid-track, no prizeId.
+        order: 20, kind: 'linear', items: [
+          {
+            imsId: 21, title: 'Mid checkpoint', type: 'CHECKPOINT', status: '', progress: 0,
+            experience: '', timeToComplete: 0, url: '', description: '',
+            recordId: 0, temporarilyUnavailable: false, unlocked: earlyUnlocked,
+          },
+        ],
+      },
+      {
+        order: 30, kind: 'linear', items: [
+          tutorial({ imsId: 22, title: 'Stage two tutorial', status: terminalUnlocked ? 'COMPLETED' : '', unlocked: earlyUnlocked }),
+        ],
+      },
+      {
+        // Terminal plain checkpoint (highest order): the real completion gate.
+        order: 40, kind: 'linear', items: [
+          {
+            imsId: 23, title: 'Final checkpoint', type: 'CHECKPOINT', status: '', progress: 0,
+            experience: '', timeToComplete: 0, url: '', description: '',
+            recordId: 0, temporarilyUnavailable: false, unlocked: terminalUnlocked,
+          },
+        ],
+      },
+    ],
+  }],
+})
+
+// #2889: a fork track where the lane-prize checkpoint (prizeId) is unlocked
+// because its lane finished, but the DOWNSTREAM join checkpoint is still locked.
+// Discriminates the prize-aware rule: the unlocked lane prize alone completes
+// the track even though the terminal (highest-order) plain checkpoint is locked.
+const lanePrizeOnlyPayload = () => ({
+  eventId: 10000009,
+  eventName: 'TechEd 2026',
+  eventType: 'TECHED',
+  authenticated: true,
+  type: 'COMPLEX',
+  paths: [{
+    id: 4,
+    title: 'Lane prize earns the reward',
+    description: 'One branch suffices',
+    items: [],
+    segments: [
+      {
+        order: 10, kind: 'fork', lanes: [
+          {
+            label: 'MCP',
+            items: [
+              tutorial({ imsId: 30, title: 'Finish the MCP lane', status: 'COMPLETED', unlocked: true }),
+              {
+                imsId: null, title: 'MCP prize', type: 'CHECKPOINT', status: '', progress: 0,
+                experience: '', timeToComplete: 0, url: '', description: '',
+                recordId: 0, temporarilyUnavailable: false, prizeId: 700,
+                unlocked: true, // this lane is done → lane prize unlocked
+              },
+            ],
+          },
+          {
+            label: 'Agents',
+            items: [
+              tutorial({ imsId: 31, title: 'Agents lane still going', status: '', unlocked: true }),
+            ],
+          },
+        ],
+      },
+      {
+        // Downstream join: needs ALL lanes → still locked while Agents is open.
+        order: 20, kind: 'linear', items: [
+          {
+            imsId: 32, title: 'Grand finale checkpoint', type: 'CHECKPOINT', status: '', progress: 0,
+            experience: '', timeToComplete: 0, url: '', description: '',
+            recordId: 0, temporarilyUnavailable: false, unlocked: false,
+          },
+        ],
+      },
+    ],
+  }],
+})
+
 async function openTrack(wrapper: ReturnType<typeof mount>) {
   const card = wrapper.find('.track-card')
   expect(card.exists()).toBe(true)
@@ -207,5 +310,64 @@ describe('AppSpace segment rendering', () => {
     expect(clusterItems.length).toBe(4)
     const locked = cluster.findAll('.step--locked')
     expect(locked.length).toBe(0)
+  })
+})
+
+// #2889: isTrackComplete / progressPercent over segment payloads. These
+// aggregates drive the overview grid (completion badge + progress ring); the
+// functions aren't exported, so we assert through the rendered card.
+describe('AppSpace track completion aggregate (#2889)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function mountFor(eventId: number, body: unknown) {
+    stubFetch((url) => {
+      if (url.includes('getAppSpaceProgress')) return { ok: true, status: 200, body }
+      return { ok: false, status: 404, body: {} }
+    })
+    window.history.replaceState({}, '', `/app-space/?eventId=${eventId}`)
+    return mount(AppSpace)
+  }
+
+  it('does NOT complete the track when only a non-terminal plain checkpoint is unlocked', async () => {
+    // Mid checkpoint (order 20) unlocked, but downstream tutorial + terminal
+    // checkpoint (order 40) are not → track must read incomplete. This is the
+    // exact latent bug the old `checkpoints.some(unlocked)` rule hit.
+    const wrapper = mountFor(10000008, nonTerminalCheckpointPayload(true, false))
+    await flushPromises()
+    expect(wrapper.find('.track-card--complete').exists()).toBe(false)
+    expect(wrapper.find('.track-card__badge').exists()).toBe(false)
+    // 1 of 2 tutorials done → 50%.
+    expect(wrapper.find('.progress-ring-text').text()).toBe('50%')
+  })
+
+  it('completes the track when the terminal (highest-order) checkpoint unlocks', async () => {
+    const wrapper = mountFor(10000008, nonTerminalCheckpointPayload(true, true))
+    await flushPromises()
+    expect(wrapper.find('.track-card--complete').exists()).toBe(true)
+    expect(wrapper.find('.track-card__badge').exists()).toBe(true)
+    expect(wrapper.find('.progress-ring-text').text()).toBe('100%')
+  })
+
+  it('completes the track when a lane-prize checkpoint unlocks, even with a locked downstream checkpoint', async () => {
+    // Lane prize (prizeId) unlocked because its lane finished; the downstream
+    // join checkpoint is still LOCKED. Prize-aware rule → complete. Reverting to
+    // the old `checkpoints.some(unlocked)` would also pass here, but reverting to
+    // a naive highest-order-only rule would (wrongly) fail — this guards both.
+    const wrapper = mountFor(10000009, lanePrizeOnlyPayload())
+    await flushPromises()
+    expect(wrapper.find('.track-card--complete').exists()).toBe(true)
+    expect(wrapper.find('.track-card__badge').exists()).toBe(true)
+    // MCP lane tutorial done, Agents lane not → 1 of 2 = 50%.
+    expect(wrapper.find('.progress-ring-text').text()).toBe('50%')
+  })
+
+  it('does NOT complete the fork track while every checkpoint is locked', async () => {
+    const wrapper = mountFor(10000006, forkPayload(true, false))
+    await flushPromises()
+    expect(wrapper.find('.track-card--complete').exists()).toBe(false)
+    // Setup tutorial done, both lane tutorials incomplete → 1 of 3 = 33%.
+    expect(wrapper.find('.progress-ring-text').text()).toBe('33%')
   })
 })
