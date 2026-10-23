@@ -513,6 +513,10 @@ jobs:
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
           TUTORIAL_SLUG: ${{ inputs.slug || steps.mode.outputs.dispatch_slug }}
           TUTORIAL_SLUGS: ${{ inputs.slugs || steps.mode.outputs.dispatch_slugs }}
+          # [retired-slug-noop] Lets fetch-tutorials distinguish a human manual
+          # dispatch (typo → fail-fast) from an auto-dispatched admin-write /
+          # scheduled run (a retired-slug filter is "nothing to publish", exit 0).
+          TRIGGER_SOURCE: ${{ inputs.trigger-source }}
           # [#208/#275/#312] AI-quiz authoring. Always-on post-#312
           # (2026-06-27 — soak window completed clean). fetch-tutorials.ts
           # wakes the AI generator on tutorials carrying [AUTOAUTHOR_*]
