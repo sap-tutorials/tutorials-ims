@@ -1357,6 +1357,19 @@ async function main() {
 
   log(`Found ${tutorials.size} tutorials`);
 
+  // [#2885] Pre-flight approuter asset gate — block before any BLOB write if
+  // the deployed approuter doesn't serve the CSS/JS hashes baked into the HTML.
+  // Skips loudly when APPROUTER_URL is unset (local dev / cds watch has no
+  // approuter). Set SKIP_APPROUTER_GATE=1 to bypass in a genuine emergency.
+  const gateCode = runApprouterGate(
+    { hugoDir: opts.hugoDir, slug: opts.slug ?? '', slugs: opts.slugs ?? '' },
+    process.env,
+  );
+  if (gateCode !== 0) {
+    console.error('[publish-content] approuter asset gate failed — aborting before any BLOB write.');
+    process.exit(gateCode);
+  }
+
   const violations = validateProductionBuild(tutorials);
   if (violations.length > 0) {
     console.error('Error: Hugo output contains dev-build artifacts. Refusing to publish.');
