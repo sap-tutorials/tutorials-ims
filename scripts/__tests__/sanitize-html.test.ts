@@ -238,6 +238,31 @@ describe('stripDangerousHtml', () => {
     expect(stripDangerousHtml('Tenant: <TENANT>my-tenant</TENANT>')).toBe('Tenant: &lt;TENANT&gt;my-tenant&lt;/TENANT&gt;')
   })
 
+  it('preserves pseudo-tags inside inline code spans verbatim (#2362 double-escape)', () => {
+    // A `<MyApp />` inside a backtick code span is NOT a pseudo-tag to escape:
+    // the backticks already make it literal, and Goldmark renders the span as
+    // `<code>`. Pre-escaping it to `&lt;MyApp /&gt;` here means Goldmark then
+    // re-escapes the `&` (code-span content is HTML-escaped) and the published
+    // page shows the literal text `&lt;MyApp /&gt;`. The code span must pass
+    // through untouched so Goldmark gets raw `<MyApp />`.
+    expect(stripDangerousHtml('Note that `<MyApp />` is self-closing')).toBe('Note that `<MyApp />` is self-closing')
+    expect(stripDangerousHtml('equivalent to `<MyApp></MyApp>`')).toBe('equivalent to `<MyApp></MyApp>`')
+  })
+
+  it('still escapes pseudo-tags OUTSIDE code spans on a line that also has a span (#2362)', () => {
+    // The span is protected; a bare pseudo-tag elsewhere on the same line is
+    // still escaped as before.
+    expect(stripDangerousHtml('Use `<MyApp />` not a bare <your_id> here'))
+      .toBe('Use `<MyApp />` not a bare &lt;your_id&gt; here')
+  })
+
+  it('preserves pseudo-tags inside double-backtick code spans (#2362)', () => {
+    // CommonMark allows ``code with a ` backtick`` — the delimiter is a run of
+    // N backticks closed by the next run of exactly N. Content stays verbatim.
+    expect(stripDangerousHtml('render ``<MyApp attr="x" />`` literally'))
+      .toBe('render ``<MyApp attr="x" />`` literally')
+  })
+
   it('safely entity-encodes pseudo-tags carrying attributes (#140)', () => {
     // If an author smuggles attributes onto a placeholder tag, the whole
     // token is entity-encoded — the angle brackets become &lt;/&gt; so the
