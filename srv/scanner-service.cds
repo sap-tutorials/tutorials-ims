@@ -26,4 +26,19 @@ service ScannerService {
   // Returns the resulting claimedCount and a message.
   action claimPrizeForContestant(accountNumber : String, eventId : Integer)
     returns { claimedCount : Integer; message : String };
+
+  // #badge-v2: per-event aggregate for the badge scanner's event-stats panel.
+  // Scoped on TaskRecords.event_ID (badge/app-space path). Unresolvable eventId
+  // returns a zeroed shape (eventName null), never rejects.
+  function getEventStats(eventId : Integer) returns {
+    eventName              : String;
+    prizesClaimed          : Integer;
+    prizesAvailable        : Integer;
+    earnedAwaitingHandover : Integer;
+    participants           : Integer;
+    participantsClaimed    : Integer;
+    tutorialsCompleted     : Integer;
+    groupsCompleted        : Integer;
+    missionsCompleted      : Integer;
+  };
 }

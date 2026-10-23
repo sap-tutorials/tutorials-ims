@@ -66,6 +66,59 @@ export default class ScannerService extends cds.ApplicationService {
       return { lastName, firstInitial, tutorialsCompleted, groupsCompleted, missionsCompleted, claimedCount, claimedPrizeNames, prizeRecords };
     });
 
+    // #badge-v2 — per-event aggregate for the scanner's event-stats panel.
+    // Event scoping = TaskRecords.event_ID (badge/app-space path), NOT the
+    // Devtoberfest date-window. Completion totals use the same has-ever-completed
+    // DISTINCT-by-(user_ID, taskLegacyId) semantic as getContestant. CQL only.
+    this.on('getEventStats', async (req) => {
+      const { eventId } = req.data;
+      const zero = {
+        eventName: null, prizesClaimed: 0, prizesAvailable: 0, earnedAwaitingHandover: 0,
+        participants: 0, participantsClaimed: 0,
+        tutorialsCompleted: 0, groupsCompleted: 0, missionsCompleted: 0,
+      };
+      if (eventId == null) return zero;
+
+      const event = await SELECT.one.from(Events).columns('ID', 'name').where({ legacyId: eventId });
+      if (!event) return zero;
+
+      const prizeRecs = await SELECT.from(PrizeRecords)
+        .columns('user_ID', 'status')
+        .where({ event_ID: event.ID });
+      let prizesClaimed = 0, earnedAwaitingHandover = 0;
+      const claimers = new Set();
+      for (const r of prizeRecs) {
+        if (r.status === 'CLAIMED') { prizesClaimed++; claimers.add(r.user_ID); }
+        else if (r.status === 'EARNED') { earnedAwaitingHandover++; }
+      }
+
+      const prizesAvailable = (await SELECT.from(Prizes).columns('ID').where({ event_ID: event.ID })).length;
+
+      // Completions scoped to the event; DISTINCT by (user_ID, taskLegacyId).
+      const taskRecords = await SELECT.from(TaskRecords)
+        .columns('user_ID', 'taskType', 'taskLegacyId')
+        .where({ event_ID: event.ID, status: { in: ['COMPLETED', 'SUPERSEDED'] } });
+      const seenByType = { TUTORIAL: new Set(), GROUP: new Set(), MISSION: new Set() };
+      const participantSet = new Set();
+      for (const r of taskRecords) {
+        participantSet.add(r.user_ID);
+        const set = seenByType[r.taskType];
+        if (set) set.add(`${r.user_ID}|${r.taskLegacyId}`);
+      }
+
+      return {
+        eventName: event.name,
+        prizesClaimed,
+        prizesAvailable,
+        earnedAwaitingHandover,
+        participants: participantSet.size,
+        participantsClaimed: claimers.size,
+        tutorialsCompleted: seenByType.TUTORIAL.size,
+        groupsCompleted: seenByType.GROUP.size,
+        missionsCompleted: seenByType.MISSION.size,
+      };
+    });
+
     // Task 6 — atomic capped handover (max 2 CLAIMED per user+event).
     //
     // Atomicity mechanism (Node.js + HANA):
