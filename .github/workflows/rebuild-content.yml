@@ -813,6 +813,21 @@ jobs:
         env:
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
 
+      # Generated CSS (#2896 follow-up). sap-fundamental.css (build:css, postcss)
+      # and fundamental-styles-icon.css (build:icon-subset) are build outputs, no
+      # longer committed — they are .gitignored. This workflow drives /tmp/hugo
+      # directly rather than `npm run build:all`, so — exactly like the feed
+      # fetchers above — it must regenerate them explicitly BEFORE the Hugo build,
+      # or Hugo fingerprints a missing/stale file and the published content
+      # references a /css/<hash>.css the deployed approuter doesn't serve (the
+      # approuter-asset guard then blocks publish). build:css + build:icon-subset
+      # produce byte-identical output to the deploy's build:all, so both publish
+      # paths agree on the fingerprint.
+      - name: Build fingerprinted CSS (sap-fundamental + icon subset)
+        run: |
+          npm run build:icon-subset
+          npm run build:css
+
       - name: Build Hugo site
         run: /tmp/hugo --source hugo --minify
 
