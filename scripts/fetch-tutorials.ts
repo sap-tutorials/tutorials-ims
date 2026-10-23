@@ -271,6 +271,30 @@ export function resolveSlugFilter(
 }
 
 /**
+ * Decide how an all-unknown (fatal) slug-targeted filter should be handled,
+ * based on who triggered the run.
+ *
+ * A human `manual` dispatch with an all-unknown filter is a typo → fail-fast
+ * (#433). An AUTO-dispatched run (admin-write / scheduled / admin-action — e.g.
+ * saving an Admin-UI edit to a tutorial whose slug was retired from the source
+ * repos) legitimately resolves to a now-absent slug; that is "nothing to
+ * publish", not an error, so it should exit cleanly instead of hard-failing the
+ * whole rebuild and firing a false #1373 channel alert.
+ *
+ * @param triggerSource — the `trigger-source` workflow input (defaults to
+ *   'manual' when unset, i.e. an interactive local/CLI run).
+ * @returns true to no-op (exit 0); false to keep the fail-fast (exit 1).
+ */
+export function isAutoDispatchedTrigger(triggerSource: string | undefined): boolean {
+  const normalized = (triggerSource ?? '').trim()
+  // Empty/unset (including whitespace-only) means an interactive local/CLI run —
+  // treat as manual so the #433 fail-fast is preserved. Only an explicit
+  // non-manual source (admin-write / scheduled / admin-action:*) is auto-dispatched.
+  if (normalized === '' || normalized === 'manual') return false
+  return true
+}
+
+/**
  * Plan the Phase 2 GitHub metadata prefetch — one task per repo, with the
  * per-repo slug list narrowed to `tutorialSlugFilter` when set.
  *
@@ -936,7 +960,21 @@ async function main() {
         console.warn(`  Discovery returned ${allTutorials.length} slugs from source: ${discovery.source}`)
       }
       if (fatal) {
-        console.error(`ERROR: no known slug(s) in filter (all ${tutorialSlugFilter.size} unknown): ${[...tutorialSlugFilter].join(', ')}`)
+        // An all-unknown filter means every requested slug is gone from source
+        // discovery. For a HUMAN-authored manual dispatch this is a typo — keep
+        // the #433 fail-fast. But an AUTO-dispatched run (admin-write / scheduled /
+        // admin-action — e.g. saving an edit to a tutorial whose slug was retired
+        // from the source repos) legitimately resolves to a now-absent slug; that
+        // is "nothing to publish", not an error. Exit 0 so it doesn't hard-fail the
+        // whole rebuild and fire a false #1373 channel alert.
+        const triggerSource = process.env.TRIGGER_SOURCE
+        const slugList = [...tutorialSlugFilter].join(', ')
+        if (isAutoDispatchedTrigger(triggerSource)) {
+          console.warn(`NOTE: auto-dispatched (${(triggerSource ?? '').trim() || 'unknown'}) slug-targeted run resolved only retired slug(s): ${slugList}`)
+          console.warn(`  Discovery returned ${allTutorials.length} slugs from source: ${discovery.source}. Nothing to publish — exiting cleanly.`)
+          process.exit(0)
+        }
+        console.error(`ERROR: no known slug(s) in filter (all ${tutorialSlugFilter.size} unknown): ${slugList}`)
         console.error(`  Discovery returned ${allTutorials.length} slugs from source: ${discovery.source}`)
         process.exit(1)
       }
