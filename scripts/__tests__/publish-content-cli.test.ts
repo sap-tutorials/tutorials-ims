@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { applySourceHashShortCircuit, computePublishPlan, validateFlagCombo } from '../publish-content.js';
+import { describe, it, expect, vi } from 'vitest';
+import { applySourceHashShortCircuit, computePublishPlan, validateFlagCombo, approuterGateDecision, buildApprouterGateArgs, runApprouterGate } from '../publish-content.js';
 
 describe('validateFlagCombo', () => {
   it('rejects --force + --heal', () => {
@@ -148,5 +148,51 @@ describe('applySourceHashShortCircuit', () => {
       serverHtml: { a: 'OTHER_a', b: 'OTHER_b' },
     });
     expect(out.sort()).toEqual(['a', 'b']);
+  });
+});
+
+describe('approuterGateDecision', () => {
+  it('skips gate when APPROUTER_URL unset', () => {
+    expect(approuterGateDecision({}).run).toBe(false);
+    expect(approuterGateDecision({ APPROUTER_URL: '' }).run).toBe(false);
+    expect(approuterGateDecision({}).reason).toBe('no-approuter');
+  });
+  it('skips gate when SKIP_APPROUTER_GATE set', () => {
+    const d = approuterGateDecision({ APPROUTER_URL: 'https://x', SKIP_APPROUTER_GATE: '1' });
+    expect(d.run).toBe(false);
+    expect(d.reason).toBe('skip-flag');
+  });
+  it('runs gate when APPROUTER_URL set and no skip', () => {
+    expect(approuterGateDecision({ APPROUTER_URL: 'https://x' }).run).toBe(true);
+  });
+});
+
+describe('buildApprouterGateArgs', () => {
+  it('base args: no --slugs when slugs empty', () => {
+    expect(buildApprouterGateArgs({ hugoDir: 'hugo/public', slugs: '' }, 'https://x'))
+      .toEqual(['scripts/check-approuter-assets.cjs', '--approuter-url', 'https://x', '--hugo-dir', 'hugo/public', '--check-islands']);
+  });
+  it('builds --slugs arg for multi-slug publish', () => {
+    expect(buildApprouterGateArgs({ hugoDir: 'hugo/public-qa', slugs: 'a,b' }, 'https://x'))
+      .toContain('--slugs');
+    expect(buildApprouterGateArgs({ hugoDir: 'hugo/public-qa', slugs: 'a,b' }, 'https://x').at(-1)).toBe('a,b');
+  });
+});
+
+describe('runApprouterGate', () => {
+  it('skips (returns 0) when APPROUTER_URL unset', () => {
+    const spy = vi.fn();
+    expect(runApprouterGate({ hugoDir: 'hugo/public', slug: '', slugs: '' }, {}, spy as any)).toBe(0);
+    expect(spy).not.toHaveBeenCalled();
+  });
+  it('propagates non-zero gate exit', () => {
+    const spawn = vi.fn().mockReturnValue({ status: 1 });
+    expect(runApprouterGate({ hugoDir: 'hugo/public', slug: '', slugs: '' }, { APPROUTER_URL: 'https://x' }, spawn as any)).toBe(1);
+  });
+  it('passes PUBLISH_SLUG in child env for a scoped publish', () => {
+    const spawn = vi.fn().mockReturnValue({ status: 0 });
+    runApprouterGate({ hugoDir: 'hugo/public', slug: 'foo', slugs: '' }, { APPROUTER_URL: 'https://x' }, spawn as any);
+    const callEnv = spawn.mock.calls[0][2].env;
+    expect(callEnv.PUBLISH_SLUG).toBe('foo');
   });
 });

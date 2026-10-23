@@ -397,6 +397,39 @@ jobs:
       - name: Highlight CDS code blocks (Shiki)
         run: npm run build:highlight -- --dir hugo/public-qa
 
+      # [#2885] Pre-flight asset gate — the same guard rebuild-content.yml
+      # already runs (its "Guard - approuter serves referenced CSS + islands"
+      # step), now on the QA path — the surface stranded on 2026-10-22. Probes
+      # every /css + hashed island /js the rendered QA HTML references against
+      # the deployed QA approuter and FAILS before the HANA publish on any 404,
+      # so QA BLOBs are never poisoned with HTML the approuter can't dress. QA
+      # refreshes ONLY on its own tutorial-qa-updated dispatch (it does not
+      # self-heal like prod), so this gate is the only thing standing between a
+      # fingerprint-skewed deploy and unstyled /tutorials-qa/* pages.
+      - name: Guard - approuter serves referenced CSS + islands (QA)
+        # Share the publish step's skip condition (line ~405): an author
+        # source-error (#2384) leaves no rendered page for the slug, and
+        # check-approuter-assets.cjs resolvePages() die()s (exit 1) on a missing
+        # page — without this `if:`, a benign author typo would become a red
+        # infra run and file a false failure issue.
+        if: ${{ steps.source_errors.outputs.bad_slug == '' }}
+        env:
+          APPROUTER_URL: ${{ secrets.APPROUTER_URL_QA }}
+          # Match the publish step's PUBLISH_SLUG / PUBLISH_SLUGS expressions
+          # EXACTLY (lines 424/431) so the probe scope tracks the publish scope:
+          # a force-publish run ships the WHOLE catalog, so it must NOT pin the
+          # guard to one slug (that would gate 1 and strand ~1400 — the inverse
+          # of the bug this closes). check-approuter-assets.cjs reads both.
+          PUBLISH_SLUG: ${{ ((! inputs.force-publish) || inputs.allow-revert) && (github.event.client_payload.slug || inputs.slug) || '' }}
+          PUBLISH_SLUGS: ${{ (! inputs.force-publish) && github.event.client_payload.slugs || '' }}
+        run: |
+          SLUGS_ARG=""
+          [ -n "$PUBLISH_SLUGS" ] && SLUGS_ARG="--slugs $PUBLISH_SLUGS"
+          node scripts/check-approuter-assets.cjs \
+            --approuter-url "$APPROUTER_URL" \
+            --hugo-dir hugo/public-qa \
+            --check-islands $SLUGS_ARG
+
       - name: Publish QA content to HANA
         # Skip when the ONLY targeted slug failed to fetch (author source error,
         # #2384): nothing rendered for it, so a slug-scoped publish would throw

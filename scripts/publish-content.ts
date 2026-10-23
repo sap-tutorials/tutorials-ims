@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync, statSync, existsSync, appendFileSync } from 'node:fs';
+import { spawnSync as _spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
@@ -813,6 +814,52 @@ export function filterToSlugs(tutorials: Map<string, string>, slugs: string[]): 
   return true;
 }
 
+// [#2885] Approuter asset gate — mirrors the check-approuter-assets.cjs step
+// that rebuild-content.yml already runs. Reuses the .cjs as a subprocess to
+// avoid re-implementing probe/inconclusive logic.
+
+/** Decide whether to run the approuter asset gate based on env vars. */
+export function approuterGateDecision(env: { APPROUTER_URL?: string; SKIP_APPROUTER_GATE?: string }): { run: boolean; reason: string } {
+  if (!env.APPROUTER_URL) return { run: false, reason: 'no-approuter' };
+  if (env.SKIP_APPROUTER_GATE) return { run: false, reason: 'skip-flag' };
+  return { run: true, reason: 'ok' };
+}
+
+/** Build the argv array for the check-approuter-assets.cjs subprocess. */
+export function buildApprouterGateArgs(opts: { hugoDir: string; slugs: string }, approuterUrl: string): string[] {
+  const args = [
+    'scripts/check-approuter-assets.cjs',
+    '--approuter-url', approuterUrl,
+    '--hugo-dir', opts.hugoDir,
+    '--check-islands',
+  ];
+  if (opts.slugs.trim()) args.push('--slugs', opts.slugs.trim());
+  return args;
+}
+
+/** Run the approuter asset gate. Returns 0 when skipped or passed; non-zero on gate failure. */
+export function runApprouterGate(
+  opts: { hugoDir: string; slug: string; slugs: string },
+  env: NodeJS.ProcessEnv,
+  spawn: typeof _spawnSync = _spawnSync,
+): number {
+  const decision = approuterGateDecision(env);
+  if (!decision.run) {
+    if (decision.reason === 'skip-flag') {
+      console.warn('[publish-content] SKIP_APPROUTER_GATE=1 — skipping approuter asset gate (bypass mode).');
+    } else {
+      console.warn('[publish-content] APPROUTER_URL not set — skipping approuter asset gate (local dev mode).');
+    }
+    return 0;
+  }
+  const args = buildApprouterGateArgs(opts, env.APPROUTER_URL!);
+  const result = spawn('node', args, {
+    stdio: 'inherit',
+    env: { ...env, PUBLISH_SLUG: opts.slug },
+  });
+  return result.status ?? 0;
+}
+
 async function collectSidecars(hugoDir: string, payload: Record<string, string>, log: (s: string) => void, channel: Channel = "prod"): Promise<string[]> {
   const keys: string[] = [];
   const navJsonPath = join(hugoDir, 'tutorials', '_nav.json');
@@ -1309,6 +1356,19 @@ async function main() {
   }
 
   log(`Found ${tutorials.size} tutorials`);
+
+  // [#2885] Pre-flight approuter asset gate — block before any BLOB write if
+  // the deployed approuter doesn't serve the CSS/JS hashes baked into the HTML.
+  // Skips loudly when APPROUTER_URL is unset (local dev / cds watch has no
+  // approuter). Set SKIP_APPROUTER_GATE=1 to bypass in a genuine emergency.
+  const gateCode = runApprouterGate(
+    { hugoDir: opts.hugoDir, slug: opts.slug ?? '', slugs: opts.slugs ?? '' },
+    process.env,
+  );
+  if (gateCode !== 0) {
+    console.error('[publish-content] approuter asset gate failed — aborting before any BLOB write.');
+    process.exit(gateCode);
+  }
 
   const violations = validateProductionBuild(tutorials);
   if (violations.length > 0) {

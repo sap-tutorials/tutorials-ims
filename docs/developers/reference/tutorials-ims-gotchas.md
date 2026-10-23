@@ -44,7 +44,22 @@ Cross-references:
 - **`hugo.qa.toml`** — sibling Hugo config for QA. Strips Joule FAB, rating, completion buttons, progress UI when `site.Params.qa = true`.
 - **QA bootstrap runbook** — [docs/developers/operations/qa-channel-bootstrap.md](../operations/qa-channel-bootstrap.md).
 
-## Rebuild workflow & admin writes
+## Stranded CSS/JS after a fingerprint-changing deploy (issue #2885)
+
+A deploy that changes a CSS/JS fingerprint (any `hugo-apps` island rebuild or SAP Fundamental Styles CSS bump) ships new hashes to the approuter but leaves HANA BLOBs pointing at the **old** hash. Every tutorial page renders unstyled until content is republished with the new hash. Both surfaces are stranded independently:
+
+- **`/tutorials/*` (PROD/main)** — re-publish via `gh workflow run rebuild-content.yml --ref main -f mode=full`
+- **`/tutorials-qa/*` (QA author-preview)** — re-publish via `gh workflow run rebuild-content-qa.yml --ref main`. **QA does NOT self-heal** — it only refreshes on its own `tutorial-qa-updated` dispatch; the post-deploy QA rebuild is the step most often skipped.
+
+The `check-approuter-assets.cjs` gate now blocks a publish that references an unshipped CSS/JS hash on **all three paths**:
+
+1. `rebuild-content.yml` (PROD — was already gated)
+2. `rebuild-content-qa.yml` (QA — added by #2885)
+3. `publish-content.ts` CLI (emergency path — added by #2885)
+
+If the gate fires, the approuter hasn't shipped the new hashes yet — redeploy first, then re-publish. CLI emergency bypass: `SKIP_APPROUTER_GATE=1 npm run publish-content` (loud, logged; CLI-only — workflow guards have no bypass input by design). See [mta-deployment.md §"Mandatory post-deploy content publish"](../operations/mta-deployment.md#mandatory-post-deploy-content-publish-after-a-fingerprint-changing-deploy-2885).
+
+
 
 - **`rebuild-content.yml` mode auto-infer** — `gh workflow run rebuild-content.yml -f slug=X` auto-infers `mode=slug-targeted` when `inputs.mode` is default `full` AND a slug input is set. Don't pass `-f mode=slug-targeted`. Only `workflow_dispatch` auto-infers; `repository_dispatch` (admin auto-trigger) uses `srv/lib/_classify-rebuild-mode.js`. Wall-clock: `catalog-only` ~5min, `slug-targeted` ~2min, `full` ~10min. Runbook: [rebuild-content-workflow.md](../operations/rebuild-content-workflow.md).
 - **`GITHUB_DISPATCH_TOKEN` env var** — Read by `srv/lib/rebuild-trigger.js`; admin saves debounce-dispatch `rebuild-content.yml` after 60s. Sourced from `DISPATCH_TOKEN` GitHub Actions secret (**not** `GITHUB_DISPATCH_TOKEN` — GH reserves `GITHUB_` prefix). All four mtaext placeholders resolve at deploy time via `envsubst` writing `deploy/<env>.resolved.mtaext`. Rotation: [github-dispatch-pat-rotation.md](../operations/github-dispatch-pat-rotation.md).
