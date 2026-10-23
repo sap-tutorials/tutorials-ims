@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-21T11:40:02.281Z",
+  "generatedAt": "2026-10-21T21:12:04.476Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,97 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2880",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2880,
+      "title": "Mark individual tutorials temporarily unavailable",
+      "summary": "The \"Temporarily Unavailable\" switch now applies to a single tutorial within a mission's path rather than the whole mission, so one step can be taken offline without hiding the entire mission.",
+      "category": "Fix",
+      "mergedAt": "2026-10-21T20:12:41Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2880"
+    },
+    {
+      "id": "tutorials-ims#2879",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2879,
+      "title": "Kasimir mascot on the drawings winner reveal",
+      "summary": "The daily prize-drawing screen now shows the real Kasimir tuxedo mascot when a winner is revealed.",
+      "category": "Feature",
+      "mergedAt": "2026-10-21T19:44:11Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2879"
+    },
+    {
+      "id": "tutorials-ims#2878",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2878,
+      "title": "docs: daily-drawings design spec + plan (#2865)",
+      "summary": "Added the design spec and implementation plan documenting how the daily drawings feature works.",
+      "category": "Docs",
+      "mergedAt": "2026-10-21T19:36:29Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2878"
+    },
+    {
+      "id": "tutorials-ims#2877",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2877,
+      "title": "Daily prize drawings for events",
+      "summary": "A new projector-friendly screen lets event operators pick an event and draw a random winner from everyone who scanned a prize claim, revealing the winner on screen.",
+      "category": "Feature",
+      "mergedAt": "2026-10-21T19:29:55Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2877"
+    },
+    {
+      "id": "tutorials-ims#2876",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2876,
+      "title": "Consistent code-box indentation after OPTION blocks",
+      "summary": "Code boxes that follow an OPTION block in a tutorial step now line up at a consistent left indentation instead of drifting out of alignment.",
+      "category": "Fix",
+      "mergedAt": "2026-10-21T18:58:59Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2876"
+    },
+    {
+      "id": "tutorials-ims#2875",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2875,
+      "title": "Keep the tutorial reachable for out-of-window completions",
+      "summary": "When someone completed a tutorial before an event's window, the tutorial link now stays active so they can reopen it, reset their progress, and redo it during the event.",
+      "category": "Fix",
+      "mergedAt": "2026-10-21T17:52:29Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2875"
+    },
+    {
+      "id": "tutorials-ims#2874",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2874,
+      "title": "Automatic rebuilds tolerate retired tutorial slugs",
+      "summary": "An automatic content rebuild no longer fails outright when its list includes a tutorial that has since been retired; it skips the stale entry and rebuilds the rest.",
+      "category": "Fix",
+      "mergedAt": "2026-10-21T16:35:09Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2874"
+    },
     {
       "id": "tutorials-ims#2869",
       "repo": "tutorials-ims",
