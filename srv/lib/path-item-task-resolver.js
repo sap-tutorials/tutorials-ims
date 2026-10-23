@@ -203,7 +203,7 @@ function effectiveStatus(record, type, event) {
   return status;
 }
 
-function shapeItem(task, effLegacyId, record, type, checkpointTitle, event) {
+function shapeItem(task, effLegacyId, record, type, checkpointTitle, event, unavail) {
   return {
     imsId: effLegacyId,
     title: task?.title || record?.titleSnapshot || checkpointTitle || '',
@@ -215,6 +215,12 @@ function shapeItem(task, effLegacyId, record, type, checkpointTitle, event) {
     url: task?.slug ? `/tutorials/${task.slug}.html` : '',
     description: task?.description || '',
     recordId: record?.legacyId || 0,
+    // #2864: per-path-item temporarily-unavailable flag. Carried only for
+    // direct items; GROUP-expanded children are stamped false by the caller
+    // (not inherited from the parent GROUP item), matching the mission page
+    // (packages/content/catalog-data.js). unavailableReason omitted when empty.
+    temporarilyUnavailable: unavail?.temporarilyUnavailable === true,
+    ...(unavail?.unavailableReason ? { unavailableReason: unavail.unavailableReason } : {}),
   };
 }
 
@@ -245,14 +251,15 @@ export function buildPathItems({ pathItems, taskMap, effLegacyByItem, groupTutor
       const children = (i.group_ID && groupTutorials.get(i.group_ID)) || [];
       for (const t of children) {
         const record = t.legacyId != null ? recordMap.get(`TUTORIAL:${t.legacyId}`) : undefined;
-        out.push(shapeItem(t, t.legacyId ?? null, record, 'TUTORIAL', null, event));
+        // #2864: group children are NOT inherited-unavailable — stamp false.
+        out.push(shapeItem(t, t.legacyId ?? null, record, 'TUTORIAL', null, event, null));
       }
       continue;
     }
     const task = resolveTask(taskMap, i);
     const effLegacyId = effLegacyByItem.get(i);
     const record = recordMap.get(`${i.taskType}:${effLegacyId}`);
-    out.push(shapeItem(task, effLegacyId, record, i.taskType, i.checkpointTitle, event));
+    out.push(shapeItem(task, effLegacyId, record, i.taskType, i.checkpointTitle, event, i));
   }
   return out;
 }

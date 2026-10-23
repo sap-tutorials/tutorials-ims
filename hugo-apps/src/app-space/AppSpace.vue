@@ -59,8 +59,10 @@ interface AppSpaceItem {
   // #2887: server-computed per-item unlock flag (Task 3). Preferred by
   // app-space-gating's isItemUnlocked over the legacy index-adjacency fallback.
   unlocked?: boolean
-  // #2864: a path item flagged temporarily unavailable upstream.
+  // #2864: a path item flagged temporarily unavailable upstream (admin-toggled),
+  // with an optional human-readable reason.
   temporarilyUnavailable?: boolean
+  unavailableReason?: string
   // #2887: synthetic lane-end prize checkpoints carry the prize legacyId. The
   // item still has type==='CHECKPOINT' so it flows through the normal barcode
   // path (shouldShowCheckpointBarcode keys only on type/unlocked/authenticated).
@@ -886,7 +888,8 @@ const emptyStateMessage = computed(() => {
           class="timeline-item"
           :class="[
             itemStatusClass(selectedTrack, index),
-            `timeline-item--${item.type.toLowerCase()}`
+            `timeline-item--${item.type.toLowerCase()}`,
+            { 'timeline-item--unavailable': item.temporarilyUnavailable }
           ]"
         >
           <!-- Connecting line -->
@@ -938,6 +941,13 @@ const emptyStateMessage = computed(() => {
               :class="{ clickable: item.type === 'TUTORIAL' && isTutorialOpenable(selectedTrack, index) }"
               @click="handleItemClick(selectedTrack, index, item)"
             >{{ item.title }}</h4>
+            <!-- #2864: path item temporarily disabled by an admin — badge it,
+                 and (via isTutorialOpenable) the title/bubble are no longer
+                 clickable. Reason, when authored, shows below the badge. -->
+            <div class="item-unavailable" v-if="item.temporarilyUnavailable">
+              <span class="item-unavailable__badge">Temporarily Unavailable</span>
+              <span class="item-unavailable__reason" v-if="item.unavailableReason">{{ item.unavailableReason }}</span>
+            </div>
             <p class="timeline-content__desc" v-if="item.description && item.type !== 'PRIZE'">{{ item.description }}</p>
             <!-- #2866: completed before/after the event — doesn't count; prompt a redo during the event. -->
             <p class="redo-hint" v-if="item.status === 'COMPLETED_OUT_OF_WINDOW'">
@@ -1505,6 +1515,39 @@ const emptyStateMessage = computed(() => {
   font-size: 0.8125rem;
   line-height: 1.35;
   color: var(--sapCriticalColor, #e76500);
+}
+
+/* #2864: path item temporarily disabled by an admin. Greyed + delinked (the
+   title/bubble lose their .clickable via isTutorialOpenable), with a badge
+   mirroring the mission-page "Temporarily Unavailable" treatment. */
+.timeline-item--unavailable .timeline-content {
+  opacity: 0.6;
+}
+.timeline-item--unavailable .timeline-content__title {
+  cursor: default;
+  text-decoration: none;
+}
+.item-unavailable {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0.375rem 0 0;
+}
+.item-unavailable__badge {
+  align-self: flex-start;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--sapNeutralTextColor, #5b738b);
+  background: var(--sapNeutralBackground, #eaecee);
+  border: 1px solid var(--sapNeutralBorderColor, #a9b4be);
+}
+.item-unavailable__reason {
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: var(--sapContent_LabelColor, #556b82);
 }
 
 .step--locked .timeline-content {
