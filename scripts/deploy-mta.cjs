@@ -208,6 +208,60 @@ function guardPrimaryTreeBranch(cfg, envName) {
   ok(`fresh ${expected} checkout @ ${head.slice(0, 8)}${inWorktree ? ' (worktree)' : ''}`);
 }
 
+// ---------------------------------------------------------------------------
+// #2886 dirty-build-inputs gate (pure parser).
+//
+// Parse `git status --porcelain -- hugo/assets hugo/layouts` and return the
+// TRACKED, modified build-input paths. These are Hugo's fingerprint-bearing
+// inputs: hugo/assets/** is fingerprinted into /css|/js/<hash> artifacts and
+// hugo/layouts/** emits the HTML that references them. A dirty tracked file
+// here means the approuter would ship a fingerprint derived from UNCOMMITTED
+// source — which the content pipeline (built from clean origin/main) never
+// bakes → the 2026-10-21 PROD-down 404.
+//
+// We IGNORE untracked entries (`??`): build:all generates untracked artifacts
+// and scratch files under these dirs are not fingerprint inputs until tracked.
+// Tracked changes in either porcelain column (index or worktree: M/A/D/R/C)
+// block. Renames/copies report the destination path (after the `-> `) — that
+// is the path Hugo fingerprints.
+// ---------------------------------------------------------------------------
+function dirtyBuildInputs(porcelain) {
+  const out = [];
+  for (const raw of (porcelain || '').split('\n')) {
+    const line = raw.replace(/\r$/, '');
+    if (!line) continue;
+    const xy = line.slice(0, 2);
+    const rest = line.slice(3);
+    if (xy === '??') continue; // untracked — not a committed-source fingerprint input
+    // Rename/copy: "R  old -> new" / "C  old -> new". Fingerprint follows the dest.
+    const arrow = rest.indexOf(' -> ');
+    out.push(arrow === -1 ? rest : rest.slice(arrow + 4));
+  }
+  return out;
+}
+
+// Step 0.5 guard: refuse any deploy when Hugo's fingerprint-bearing inputs have
+// uncommitted TRACKED changes, for ALL envs. Runs BEFORE build:all so the
+// approuter can only ship fingerprints derived from committed source. Scoped to
+// hugo/assets + hugo/layouts (NOT hugo/data — build:all regenerates untracked
+// hugo/data/*.json, which would false-positive). Read-only, so it runs under
+// --dry-run and --skip-build too (a reused mtar may have been built dirty).
+function guardCleanBuildInputs() {
+  const r = shCapture('git', ['status', '--porcelain', '--', 'hugo/assets', 'hugo/layouts']);
+  if (r.status !== 0) {
+    die(1, `\`git status --porcelain\` failed — cannot verify build inputs are committed.\n${r.stderr}`);
+  }
+  const dirty = dirtyBuildInputs(r.stdout);
+  if (dirty.length) {
+    die(1, `uncommitted changes to Hugo fingerprint inputs — the approuter would ship a CSS/JS\n` +
+           `             fingerprint the content pipeline (built from committed origin/main) never bakes,\n` +
+           `             404-ing every tutorial page (the 2026-10-21 PROD-down incident, #2886):\n` +
+           dirty.map(f => `                 ${f}`).join('\n') + '\n' +
+           `             Fix: commit the change, or set it aside with \`git stash push -- <file>\`, then redeploy.`);
+  }
+  ok('Hugo build inputs (hugo/assets, hugo/layouts) are committed — no fingerprint skew');
+}
+
 function guardCfTarget(cfg, envName) {
   const t = shCapture('cf', ['target']);
   if (t.status !== 0) {
@@ -378,6 +432,16 @@ async function main() {
   // ---- Step 0: preconditions -------------------------------------------
   step(0, 'Preconditions');
   guardPrimaryTreeBranch(cfg, envName);
+
+  // ---- Step 0.5: clean build inputs (#2886) ----------------------------
+  // The branch/SHA guard above does NOT catch a dirty working tree (a dirty
+  // file has the same HEAD SHA). On 2026-10-21 an uncommitted edit to
+  // hugo/assets/css/sap-fundamental.css made Hugo fingerprint the dirty CSS, so
+  // the approuter served a hash the committed-source content pipeline never
+  // baked → 404 on every tutorial (PROD-down). Fail fast on local state before
+  // touching CF or building. Read-only, so it runs even under --dry-run/--skip-build.
+  step('0.5', 'Hugo fingerprint inputs are committed (no dirty-tree skew)');
+  guardCleanBuildInputs();
 
   // ---- Step 1: cf target guard -----------------------------------------
   step(1, `cf target must be region "${cfg.region}", space "${cfg.space}"`);
@@ -748,4 +812,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { notifyDeploy };
+module.exports = { notifyDeploy, dirtyBuildInputs };
