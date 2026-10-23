@@ -257,7 +257,7 @@ function guardCleanBuildInputs() {
            `             fingerprint the content pipeline (built from committed origin/main) never bakes,\n` +
            `             404-ing every tutorial page (the 2026-10-21 PROD-down incident, #2886):\n` +
            dirty.map(f => `                 ${f}`).join('\n') + '\n' +
-           `             Fix: commit the change, or set it aside with \`git stash -u\`, then redeploy.`);
+           `             Fix: commit the change, or set it aside with \`git stash push -- <file>\`, then redeploy.`);
   }
   ok('Hugo build inputs (hugo/assets, hugo/layouts) are committed — no fingerprint skew');
 }
