@@ -147,7 +147,27 @@ CAP_BASE_URL="https://<srv-url>" npm run publish-content
 
 Use `--dry-run` to preview, `--force` to skip delta detection, `--verbose` for extra logging.
 
-## Step 4: XSUAA Role Collections
+### Mandatory post-deploy content publish after a fingerprint-changing deploy (#2885)
+
+When a deploy changes a CSS/JS fingerprint (any `hugo-apps` island rebuild or SAP Fundamental Styles CSS bump), the HANA BLOBs still hard-reference the **old** hash until a new publish overwrites them. Every tutorial page renders unstyled in the gap. **Both surfaces must be re-published** — PROD does not self-heal QA, and QA does not self-heal on its own.
+
+After any deploy that touches `hugo/static/js/` or `hugo/static/css/`:
+
+1. **PROD/main** — trigger a full rebuild and confirm green:
+   ```bash
+   gh workflow run rebuild-content.yml --repo sap-tutorials/tutorials-ims --ref main -f mode=full
+   ```
+2. **QA author-preview** — trigger `Rebuild Content (QA)` and confirm green:
+   ```bash
+   gh workflow run rebuild-content-qa.yml --repo sap-tutorials/tutorials-ims --ref main
+   ```
+   > **QA does NOT self-heal.** It only refreshes on its own `tutorial-qa-updated` dispatch or a manual `rebuild-content-qa.yml` run. The post-deploy QA publish is the step most often skipped — do not skip it.
+
+The `check-approuter-assets.cjs` gate (now on all three publish paths: `rebuild-content.yml`, `rebuild-content-qa.yml`, and the `publish-content.ts` CLI) will hard-fail any publish that references an unshipped hash, so a skipped post-deploy publish surfaces as a gate failure on the *next* publish rather than silently stranding content. If the gate fires, redeploy to ship the correct hashes, then re-publish.
+
+CLI emergency bypass: `SKIP_APPROUTER_GATE=1 npm run publish-content` (loud, logged; CLI-only — the workflow guards have no bypass input by design).
+
+
 
 Role collections are defined in `xs-security.json` and created automatically when the XSUAA service instance is created via MTA deploy. **Any subsequent change to `xs-security.json` (scope add/remove, role template edit, or authorities-array change) requires a manual `cf update-service` to reconcile the deployed instance.** The MTA `cf deploy` command alone does NOT re-read `xs-security.json`.
 
