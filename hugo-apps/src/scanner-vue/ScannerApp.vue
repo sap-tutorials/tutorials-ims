@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { useBarcodeScanner } from './useBarcodeScanner'
 import { useScannerApi } from './useScannerApi'
+import { beginScan } from './scan-order'
 import type { ScanResult, ContestantData } from './types'
 
 const videoRef = ref<HTMLVideoElement | null>(null)
@@ -65,9 +66,10 @@ async function loadContestant(scanResult: ScanResult) {
 
 async function onScan() {
   errorMessage.value = null
-  state.value = 'scanning'
 
-  const result = await scan()
+  // Await nextTick after switching to the scanning state so the <video> ref is
+  // mounted before the camera scanner reads it (see scan-order.ts).
+  const result = await beginScan((s) => { state.value = s }, nextTick, scan)
   if (!result) {
     if (scanError.value) {
       errorMessage.value = scanError.value
