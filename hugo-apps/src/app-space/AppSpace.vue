@@ -297,6 +297,15 @@ function allSegmentItems(track: AppSpaceTrack): AppSpaceItem[] {
   return trackSegments(track).flatMap(segmentItems)
 }
 
+// #2896: horizontal position of lane `li`'s bubble center within a fork/join
+// connector whose width spans the `.lanes` grid (N equal 1fr columns, 1rem gap).
+// = lane left edge + the bubble's fixed inset from its lane's left edge
+// (1px border + 0.6rem lane padding + 1.125rem half-bubble ≈ 1.8rem). Keeps the
+// drop/up stubs aligned to each lane's lock bubble at any lane count / width.
+function laneBubbleLeft(li: number, laneCount: number): string {
+  return `calc((100% - ${laneCount - 1}rem) / ${laneCount} * ${li} + ${li}rem + 1.8rem)`
+}
+
 // TUTORIAL items across all segments — the denominator for progress.
 function segmentTutorials(track: AppSpaceTrack): AppSpaceItem[] {
   return allSegmentItems(track).filter(i => i.type === 'TUTORIAL')
@@ -791,12 +800,15 @@ const emptyStateMessage = computed(() => {
           <template v-else>
             <div class="fork-connector" aria-hidden="true">
               <span class="fork-connector__stem"></span>
-              <span class="fork-connector__bar"></span>
+              <span
+                class="fork-connector__bar"
+                :style="{ left: laneBubbleLeft(0, seg.lanes.length), right: `calc(100% - (${laneBubbleLeft(seg.lanes.length - 1, seg.lanes.length)}))` }"
+              ></span>
               <span
                 v-for="(lane, li) in seg.lanes"
                 :key="'fd-' + li"
                 class="fork-connector__drop"
-                :style="{ left: ((li + 0.5) / seg.lanes.length * 100) + '%' }"
+                :style="{ left: laneBubbleLeft(li, seg.lanes.length) }"
               ></span>
             </div>
             <div class="lanes" :style="{ '--lane-count': seg.lanes.length }">
@@ -883,9 +895,12 @@ const emptyStateMessage = computed(() => {
                 v-for="(lane, li) in seg.lanes"
                 :key="'ju-' + li"
                 class="join-connector__up"
-                :style="{ left: ((li + 0.5) / seg.lanes.length * 100) + '%' }"
+                :style="{ left: laneBubbleLeft(li, seg.lanes.length) }"
               ></span>
-              <span class="join-connector__bar"></span>
+              <span
+                class="join-connector__bar"
+                :style="{ left: laneBubbleLeft(0, seg.lanes.length), right: `calc(100% - (${laneBubbleLeft(seg.lanes.length - 1, seg.lanes.length)}))` }"
+              ></span>
               <span class="join-connector__down"></span>
             </div>
           </template>
@@ -1798,16 +1813,18 @@ const emptyStateMessage = computed(() => {
   padding-bottom: 0;
 }
 
-/* Fork connector: stem from the backbone, a horizontal bar, drops to each lane. */
+/* Fork connector: stem from the backbone, a horizontal bar, drops to each lane.
+   #2896: origin matches .lanes (no left margin) so per-lane drop offsets computed
+   from the grid line up with each lane's bubble center. */
 .fork-connector {
   position: relative;
   height: 1.6rem;
-  margin: 0.2rem 0 0.2rem 0.79rem;
+  margin: 0.2rem 0;
 }
 .fork-connector__stem {
   position: absolute;
   top: 0;
-  left: 0;
+  left: 1.175rem;
   width: 2px;
   height: 0.8rem;
   background: var(--sapNeutralBorderColor, #d9d9d9);
@@ -1815,8 +1832,6 @@ const emptyStateMessage = computed(() => {
 .fork-connector__bar {
   position: absolute;
   top: 0.8rem;
-  left: 0;
-  right: 0;
   height: 2px;
   background: var(--sapNeutralBorderColor, #d9d9d9);
 }
@@ -1845,15 +1860,13 @@ const emptyStateMessage = computed(() => {
 .join-connector__bar {
   position: absolute;
   bottom: 0.6rem;
-  left: calc(50% / var(--lane-count, 2));
-  right: calc(50% / var(--lane-count, 2));
   height: 2px;
   background: var(--sapNeutralBorderColor, #d9d9d9);
 }
 .join-connector__down {
   position: absolute;
   bottom: 0;
-  left: 0.79rem;
+  left: 1.175rem;
   width: 2px;
   height: 0.6rem;
   background: var(--sapNeutralBorderColor, #d9d9d9);
