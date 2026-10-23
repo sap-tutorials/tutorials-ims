@@ -31,4 +31,12 @@ service PatService {
   /** Mint a new Personal Access Token. Returns the plaintext ONCE. */
   action mintPAT(name: String(80), scopes: array of String, ttlDays: Integer)
     returns { ID: UUID; token: String; prefix: String; expiresAt: Timestamp };
+
+  // #2857: UI capability probe. The mint dialog calls this to decide whether to
+  // offer the `admin` scope — it is shown ONLY when the caller may actually mint
+  // an admin PAT, mirroring the backend mint gate (handleMintPAT: flag ON AND a
+  // live XSUAA Admin role). Returning false keeps non-admins from selecting a
+  // scope that would 403 at mint time (and strands them per #2857).
+  /** May the caller mint an admin-scoped PAT right now? */
+  function patCapabilities() returns { adminScopeAvailable: Boolean };
 }
