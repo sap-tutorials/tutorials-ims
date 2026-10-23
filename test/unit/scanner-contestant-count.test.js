@@ -84,3 +84,61 @@ describe('ScannerService.getContestant — UUID lookup + event-scoped count', ()
     ).rejects.toThrow(/User not found/);
   });
 });
+
+describe('ScannerService.getContestant — identity + claimed prize names (#badge-v2)', () => {
+  const USER_UUID    = 'uuid-id-1';
+  const BLANK_UUID   = 'uuid-id-blank';
+  const EVENT_LEGACY = 9911;
+
+  beforeEach(async () => {
+    const { Users, Events, Prizes, PrizeRecords } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(PrizeRecords);
+    await DELETE.from(Prizes);
+    await DELETE.from(Events);
+    await DELETE.from(Users);
+
+    await INSERT.into(Users).entries([
+      { ID: USER_UUID,  uuid: USER_UUID,  sapId: 'sap-i1', firstName: 'Thomas', lastName: 'Jung' },
+      { ID: BLANK_UUID, uuid: BLANK_UUID, sapId: 'sap-i2', firstName: '',       lastName: 'Solo' },
+    ]);
+
+    await INSERT.into(Events).entries([
+      { ID: 'evt-id-main', legacyId: EVENT_LEGACY, name: 'Identity Event' },
+    ]);
+
+    await INSERT.into(Prizes).entries([
+      { ID: 'prize-sticker', name: 'Sticker Pack', event_ID: 'evt-id-main' },
+    ]);
+
+    // 1 CLAIMED prize with a real prize association → name must resolve.
+    await INSERT.into(PrizeRecords).entries([
+      { ID: 'pr-id-1', user_ID: USER_UUID, event_ID: 'evt-id-main', prize_ID: 'prize-sticker', status: 'CLAIMED', legacyId: 89001 },
+    ]);
+  });
+
+  it('returns lastName and a single first initial', async () => {
+    const scanner = await cds.connect.to('ScannerService');
+    const result = await scanner.tx({ user: new cds.User.Privileged() }, tx =>
+      tx.send({ event: 'getContestant', data: { accountNumber: USER_UUID, eventId: EVENT_LEGACY } })
+    );
+    expect(result.lastName).toBe('Jung');
+    expect(result.firstInitial).toBe('T');
+  });
+
+  it('returns an empty firstInitial when firstName is blank (no throw)', async () => {
+    const scanner = await cds.connect.to('ScannerService');
+    const result = await scanner.tx({ user: new cds.User.Privileged() }, tx =>
+      tx.send({ event: 'getContestant', data: { accountNumber: BLANK_UUID, eventId: EVENT_LEGACY } })
+    );
+    expect(result.lastName).toBe('Solo');
+    expect(result.firstInitial).toBe('');
+  });
+
+  it('resolves claimed prize names for the scoped event', async () => {
+    const scanner = await cds.connect.to('ScannerService');
+    const result = await scanner.tx({ user: new cds.User.Privileged() }, tx =>
+      tx.send({ event: 'getContestant', data: { accountNumber: USER_UUID, eventId: EVENT_LEGACY } })
+    );
+    expect(result.claimedPrizeNames).toEqual(['Sticker Pack']);
+  });
+});

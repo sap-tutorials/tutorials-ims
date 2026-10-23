@@ -5,10 +5,13 @@ using { com.sap.developers.ims as ims } from '../db/schema';
 service ScannerService {
 
   function getContestant(accountNumber : String, eventId : Integer) returns {
+    lastName           : String;
+    firstInitial       : String;
     tutorialsCompleted : Integer;
     groupsCompleted    : Integer;
     missionsCompleted  : Integer;
     claimedCount       : Integer;
+    claimedPrizeNames  : array of String;
     prizeRecords       : String;
   };
 

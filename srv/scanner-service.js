@@ -13,8 +13,11 @@ export default class ScannerService extends cds.ApplicationService {
       if (!accountNumber) return req.reject(400, 'accountNumber is required');
 
       // accountNumber now carries the user's UUID (string ID), not a numeric legacyId.
-      const user = await SELECT.one.from(Users).where({ ID: accountNumber });
+      const user = await SELECT.one.from(Users).columns('ID', 'firstName', 'lastName').where({ ID: accountNumber });
       if (!user) return req.reject(404, `User not found: ${accountNumber}`);
+
+      const lastName = user.lastName || '';
+      const firstInitial = (user.firstName || '').trim().charAt(0).toUpperCase();
 
       // "Has-ever-completed" semantic (issue #600): a SUPERSEDED row is a prior
       // completion that was reset, so it still counts. DISTINCT by
@@ -44,12 +47,23 @@ export default class ScannerService extends cds.ApplicationService {
       // Count CLAIMED PrizeRecords for this user, scoped to the event when resolvable.
       const prizeFilter = { user_ID: user.ID, status: 'CLAIMED' };
       if (eventFilter) prizeFilter.event_ID = eventFilter;
-      const prizeRecs = await SELECT.from(PrizeRecords).where(prizeFilter);
+      const prizeRecs = await SELECT.from(PrizeRecords).columns('ID', 'prize_ID').where(prizeFilter);
 
       const claimedCount = prizeRecs.length;
       const prizeRecords = `${claimedCount} of 2 prizes claimed`;
 
-      return { tutorialsCompleted, groupsCompleted, missionsCompleted, claimedCount, prizeRecords };
+      // Resolve names of the claimed prizes. Rows with a real prize association
+      // yield the prize name; null-prize rows (new-flow handovers) fall back to
+      // a generic label so the list length always tracks claimedCount.
+      const prizeIds = prizeRecs.map(r => r.prize_ID).filter(Boolean);
+      const nameById = {};
+      if (prizeIds.length) {
+        const prizes = await SELECT.from(Prizes).columns('ID', 'name').where({ ID: { in: prizeIds } });
+        for (const p of prizes) nameById[p.ID] = p.name;
+      }
+      const claimedPrizeNames = prizeRecs.map(r => (r.prize_ID && nameById[r.prize_ID]) || 'Prize');
+
+      return { lastName, firstInitial, tutorialsCompleted, groupsCompleted, missionsCompleted, claimedCount, claimedPrizeNames, prizeRecords };
     });
 
     // Task 6 — atomic capped handover (max 2 CLAIMED per user+event).
