@@ -208,4 +208,78 @@ describe('ApiTokens.vue', () => {
     expect(revokeUrl).toContain('/pats/MyPATs(aaaa-1111)/PatService.revokePAT');
     expect(listCalls).toBeGreaterThanOrEqual(2);
   });
+
+  // #2574: the end-user mint page must offer the `admin` scope ONLY when the
+  // backend patCapabilities() probe reports adminScopeAvailable (flag ON AND
+  // the caller holds a live Admin role). Non-eligible users never see it, and
+  // a probe error fails closed. This is the /me/tokens/ Vue island — a
+  // different app from the Fiori admin PATs list that earlier work touched.
+  const CAP_YES = () => ({ body: { value: { adminScopeAvailable: true } } });
+  const CAP_NO = () => ({ body: { value: { adminScopeAvailable: false } } });
+
+  it('does NOT offer the admin scope when patCapabilities says unavailable', async () => {
+    const fetchMock = mockFetch({
+      '/auth/user': USER_OK,
+      '/pats/MyPATs': () => ({ body: { value: [] } }),
+      '/pats/patCapabilities()': CAP_NO,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = mount(ApiTokens);
+    await flushPromises();
+    const optionValues = wrapper.findAll('#tok-scope option').map(o => o.attributes('value'));
+    expect(optionValues).toEqual(['read', 'readwrite']);
+    expect(wrapper.text()).not.toMatch(/admin/i);
+  });
+
+  it('offers the admin scope when patCapabilities reports it available', async () => {
+    const fetchMock = mockFetch({
+      '/auth/user': USER_OK,
+      '/pats/MyPATs': () => ({ body: { value: [] } }),
+      '/pats/patCapabilities()': CAP_YES,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = mount(ApiTokens);
+    await flushPromises();
+    const optionValues = wrapper.findAll('#tok-scope option').map(o => o.attributes('value'));
+    expect(optionValues).toContain('admin');
+  });
+
+  it('fails closed (no admin option) when the patCapabilities probe errors', async () => {
+    const fetchMock = mockFetch({
+      '/auth/user': USER_OK,
+      '/pats/MyPATs': () => ({ body: { value: [] } }),
+      '/pats/patCapabilities()': () => ({ ok: false, status: 500, body: {} }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = mount(ApiTokens);
+    await flushPromises();
+    const optionValues = wrapper.findAll('#tok-scope option').map(o => o.attributes('value'));
+    expect(optionValues).not.toContain('admin');
+  });
+
+  it('mints with scopes:[admin] when the admin scope is selected', async () => {
+    let sentBody: any = null;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const jsonHeaders = { get: (h: string) => (h.toLowerCase() === 'content-type' ? 'application/json' : null) };
+      if (url === '/auth/user') return { ok: true, status: 200, headers: jsonHeaders, json: async () => ({ authenticated: true, name: 'Tom' }) };
+      if (url === '/pats/MyPATs') return { ok: true, status: 200, headers: jsonHeaders, json: async () => ({ value: [] }) };
+      if (url === '/pats/patCapabilities()') return { ok: true, status: 200, headers: jsonHeaders, json: async () => ({ value: { adminScopeAvailable: true } }) };
+      if (url === '/pats/mintPAT') {
+        sentBody = JSON.parse(String(init?.body));
+        return { ok: true, status: 200, headers: jsonHeaders, json: async () => ({ ID: 'x', token: 'pat_x', prefix: 'pat_x', expiresAt: null }) };
+      }
+      throw new Error(`unmocked: ${init?.method || 'GET'} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = mount(ApiTokens);
+    await flushPromises();
+    const vm = wrapper.vm as any;
+    vm.form.name = 'admin-pat';
+    vm.form.scope = 'admin';
+    vm.form.ttlDays = 30;
+    await vm.onMint();
+    await flushPromises();
+    expect(sentBody.scopes).toEqual(['admin']);
+    expect(sentBody.name).toBe('admin-pat');
+  });
 });

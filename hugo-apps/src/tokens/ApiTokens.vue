@@ -43,6 +43,11 @@
           <select id="tok-scope" v-model="form.scope">
             <option value="read">Read only</option>
             <option value="readwrite">Read &amp; write (mark steps done, reset progress)</option>
+            <!-- #2574: admin scope is offered ONLY when the backend
+                 patCapabilities() probe reports it (flag ON AND a live Admin
+                 role). Non-admins never see it, so they can't mint a PAT that
+                 would 403 at mint time. -->
+            <option v-if="adminScopeAvailable" value="admin">Admin (headless admin OData / GraphQL)</option>
           </select>
         </div>
         <div class="api-tokens__field">
@@ -112,8 +117,10 @@ const error = ref('');
 const minting = ref(false);
 const minted = ref<{ token: string; prefix: string; expiresAt: string | null } | null>(null);
 const copied = ref(false);
+// #2574: whether the `admin` scope may be offered (backend patCapabilities()).
+const adminScopeAvailable = ref(false);
 
-const form = reactive<{ name: string; scope: 'read' | 'readwrite'; ttlDays: number }>({
+const form = reactive<{ name: string; scope: 'read' | 'readwrite' | 'admin'; ttlDays: number }>({
   name: '', scope: 'read', ttlDays: 90,
 });
 
@@ -176,7 +183,9 @@ async function onMint() {
   minting.value = true;
   error.value = '';
   try {
-    const scopes = form.scope === 'readwrite' ? ['read', 'write'] : ['read'];
+    const scopes = form.scope === 'admin'
+      ? ['admin']
+      : form.scope === 'readwrite' ? ['read', 'write'] : ['read'];
     // ttlDays 0 → no expiry (null); the CDS default is 90 days.
     const ttlDays = form.ttlDays > 0 ? form.ttlDays : null;
     const resp = await csrfFetch('/pats/mintPAT', {
@@ -231,17 +240,37 @@ async function copyToken() {
   }
 }
 
+// #2574: probe whether the `admin` scope may be offered. Unbound CAP V4
+// function → GET /pats/patCapabilities(); the structured result arrives as
+// `{ value: { adminScopeAvailable } }`. Shape-tolerant (object, value-wrapped,
+// or single-element array) to survive adapter differences. Fails CLOSED: any
+// error or non-JSON leaves adminScopeAvailable=false so the option stays hidden.
+async function probeCapabilities() {
+  try {
+    const resp = await fetch('/pats/patCapabilities()', {
+      headers: { Accept: 'application/json' }, credentials: 'include',
+    });
+    if (!resp.ok) return;
+    if (!(resp.headers.get('content-type') || '').includes('json')) return;
+    const data = await resp.json();
+    const r = Array.isArray(data?.value) ? data.value[0] : (data?.value ?? data);
+    adminScopeAvailable.value = !!r?.adminScopeAvailable;
+  } catch {
+    adminScopeAvailable.value = false;
+  }
+}
+
 onMounted(async () => {
   // Gate on session like the other /me islands. A lapsed session yields a 200
   // login-redirect HTML page (not 401), so check the parsed identity, not ok.
   if (!(await isSignedIn())) {
     needsLogin.value = true; loading.value = false; return;
   }
-  await loadTokens();
+  await Promise.all([loadTokens(), probeCapabilities()]);
 });
 
 // Exposed for the Vue test harness (mirrors the /me islands' defineExpose).
-defineExpose({ needsLogin, loading, tokens, form, minted, error, minting, onMint, onRevoke, dismissMinted, loadTokens });
+defineExpose({ needsLogin, loading, tokens, form, minted, error, minting, adminScopeAvailable, onMint, onRevoke, dismissMinted, loadTokens });
 </script>
 
 <style scoped>
