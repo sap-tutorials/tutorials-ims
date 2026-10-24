@@ -1,5 +1,5 @@
 import cds from '@sap/cds';
-import { handleMintPAT, handleRevokePAT } from './lib/mcp-pat-actions.js';
+import { handleMintPAT, handleRevokePAT, handleMintPolicy } from './lib/mcp-pat-actions.js';
 
 // #1132: Criticality enum for the FE status column.
 //   1 = Error (red), 3 = Success (green) — per @com.sap.vocabularies.UI.v1.CriticalityType.
@@ -20,6 +20,8 @@ function decorateStatus(rows) {
 export default class PatService extends cds.ApplicationService {
   async init() {
     this.on('mintPAT', handleMintPAT);
+    // #2574: scope-offer policy for the mint dialog (flag + live grant).
+    this.on('mintPolicy', handleMintPolicy);
     // #1132: revokePAT is now bound to MyPATs (FE line-item action).
     this.on('revokePAT', 'MyPATs', handleRevokePAT);
     // #1132: decorate each row with the virtual status/revocable fields the

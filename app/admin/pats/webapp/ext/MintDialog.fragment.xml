@@ -15,6 +15,11 @@
       <Input value="{mint>/name}" placeholder="{i18n>mint.fieldNamePlaceholder}" maxLength="80" />
 
       <Label text="{i18n>mint.fieldScopes}" required="true" />
+      <!-- #2574: items are managed in PatActionsController.onMintToken. read +
+           write are always present; the `admin` item is added only when
+           mintPolicy reports the flag ON and a live admin grant. sap.ui.core.Item
+           has no `visible` property, so gating is done by add/removeItem, not a
+           binding. -->
       <MultiComboBox
         id="patMintScopes"
         selectedKeys="{mint>/scopes}"

@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { __test } from '../srv/lib/mcp-pat-actions.js';
 import { __test as mwTest } from '../srv/lib/mcp-pat-middleware.js';
 import cds from '@sap/cds';
 import { resolveAdminGrant, upsertAdminGrant, revokeAdminGrant } from '../srv/lib/admin-grant.js';
 import { FEATURE_FLAGS } from '../packages/core/feature-flags/registry.js';
+import { handleMintPolicy } from '../srv/lib/mcp-pat-actions.js';
+import { __setFlagForTest, __resetFlagsForTest } from '../srv/lib/feature-flags/db-flags.js';
 
 const { SELECT, INSERT } = cds.ql;
 
@@ -196,5 +198,61 @@ describe('AdminService.revokeAdminGrant', () => {
     // Assert
     expect(res.revoked).toBeGreaterThanOrEqual(1);
     expect(await resolveAdminGrant(uid)).toBe(false);
+  });
+});
+
+describe('PatService.mintPolicy (#2574 scope-offer gate)', () => {
+  cds.test('serve', '--project', '.', '--in-memory');
+
+  let uid;
+  const SAPID = 'P000POLICY';
+
+  beforeAll(async () => {
+    const db = await cds.connect.to('db');
+    const { Users } = cds.entities('com.sap.developers.ims');
+    uid = cds.utils.uuid();
+    await db.run(INSERT.into(Users).entries({
+      ID: uid, email: 'policy-test@example.com', name: 'Policy Test', sapId: SAPID
+    }));
+  });
+
+  afterEach(() => __resetFlagsForTest());
+
+  // Thin req shim: handleMintPolicy reads req.user.is() and resolves the db
+  // user via resolveDbUser → resolveUserSapId, which falls back to user.id as
+  // the SAP ID when no JWT authInfo is present (test/basic-auth path). So the
+  // shim's id must equal the seeded Users.sapId for the grant lookup to hit.
+  const reqFor = (user) => ({ user });
+  const adminUser = { id: SAPID, is: (r) => r === 'Admin' };
+  const plainUser = { id: SAPID, is: () => false };
+
+  it('flag OFF → adminScopeEnabled false, canMintAdmin false (even for a live admin)', async () => {
+    __setFlagForTest('PAT_ADMIN_SCOPE_ENABLED', false);
+    const res = await handleMintPolicy(reqFor(adminUser));
+    expect(res.adminScopeEnabled).toBe(false);
+    expect(res.canMintAdmin).toBe(false);
+  });
+
+  it('flag ON + live Admin role → canMintAdmin true', async () => {
+    __setFlagForTest('PAT_ADMIN_SCOPE_ENABLED', true);
+    const res = await handleMintPolicy(reqFor(adminUser));
+    expect(res.adminScopeEnabled).toBe(true);
+    expect(res.canMintAdmin).toBe(true);
+  });
+
+  it('flag ON + non-admin + no grant → canMintAdmin false', async () => {
+    __setFlagForTest('PAT_ADMIN_SCOPE_ENABLED', true);
+    await revokeAdminGrant(uid);
+    const res = await handleMintPolicy(reqFor(plainUser));
+    expect(res.adminScopeEnabled).toBe(true);
+    expect(res.canMintAdmin).toBe(false);
+  });
+
+  it('flag ON + non-admin BUT holds a live grant → canMintAdmin true', async () => {
+    __setFlagForTest('PAT_ADMIN_SCOPE_ENABLED', true);
+    await upsertAdminGrant(uid, 'tom@sap.com', 30);
+    const res = await handleMintPolicy(reqFor(plainUser));
+    expect(res.canMintAdmin).toBe(true);
+    await revokeAdminGrant(uid);
   });
 });

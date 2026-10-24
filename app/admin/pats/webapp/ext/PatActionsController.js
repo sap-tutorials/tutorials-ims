@@ -25,8 +25,9 @@ sap.ui.define([
   "sap/ui/core/Fragment",
   "sap/ui/model/json/JSONModel",
   "sap/m/MessageBox",
-  "sap/m/MessageToast"
-], function (Fragment, JSONModel, MessageBox, MessageToast) {
+  "sap/m/MessageToast",
+  "sap/ui/core/Item"
+], function (Fragment, JSONModel, MessageBox, MessageToast, Item) {
   "use strict";
 
   // Module-level state — the List Report view is a singleton, so caching the
@@ -115,6 +116,33 @@ sap.ui.define([
     if (lr && lr.getBinding("items")) lr.getBinding("items").refresh();
   }
 
+  // #2574: Resolve the mint-scope policy (admin flag + live grant) and
+  // add/remove the `admin` item on the scopes MultiComboBox accordingly.
+  // Fail-safe: any error leaves the control at read/write only (admin never
+  // offered), matching the backend's fail-closed mint gate. `view.byId` works
+  // because the fragment was loaded with `id: view.getId()`.
+  function _applyScopePolicy(view) {
+    const mcb = view.byId("patMintScopes");
+    if (!mcb) return;
+    const hasAdmin = function () {
+      return mcb.getItems().some(function (it) { return it.getKey() === "admin"; });
+    };
+    const removeAdmin = function () {
+      const existing = mcb.getItems().find(function (it) { return it.getKey() === "admin"; });
+      if (existing) { mcb.removeItem(existing); existing.destroy(); }
+    };
+    // Default to hidden until the policy call resolves so the item can never
+    // flash in for a non-eligible user.
+    removeAdmin();
+    const ctx = view.getModel().bindContext("/mintPolicy(...)");
+    ctx.execute().then(function () {
+      const res = ctx.getBoundContext() && ctx.getBoundContext().getObject();
+      if (res && res.adminScopeEnabled && res.canMintAdmin && !hasAdmin()) {
+        mcb.addItem(new Item({ key: "admin", text: "admin" }));
+      }
+    }).catch(function () { /* fail-safe: leave admin hidden */ });
+  }
+
   const handlers = {
 
     // Toolbar button press. `arg` is a UI5 Event (sap.m.Button) or a context
@@ -134,6 +162,7 @@ sap.ui.define([
       }
       if (_mintDialog) {
         _mintDialog.open();
+        _applyScopePolicy(view);
         return;
       }
       Fragment.load({
@@ -144,6 +173,7 @@ sap.ui.define([
         _mintDialog = dlg;
         view.addDependent(dlg);
         dlg.open();
+        _applyScopePolicy(view);
       });
     },
 

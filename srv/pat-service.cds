@@ -31,4 +31,10 @@ service PatService {
   /** Mint a new Personal Access Token. Returns the plaintext ONCE. */
   action mintPAT(name: String(80), scopes: array of String, ttlDays: Integer)
     returns { ID: UUID; token: String; prefix: String; expiresAt: Timestamp };
+
+  /**
+   * #2574: Scope-offer policy for the mint UI. Lets the dialog decide whether
+   * to show the `admin` scope item without the UI having to read DB flags.
+   */
+  function mintPolicy() returns { adminScopeEnabled: Boolean; canMintAdmin: Boolean };
 }

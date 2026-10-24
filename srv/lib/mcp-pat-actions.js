@@ -15,7 +15,7 @@ import { resolveDbUser } from './resolve-db-user.js';
 import { invalidateCacheByPatId } from './mcp-pat-middleware.js';
 import * as metrics from './metrics.js';
 import { isFlagEnabled } from './feature-flags/db-flags.js';
-import { upsertAdminGrant } from './admin-grant.js';
+import { upsertAdminGrant, resolveAdminGrant } from './admin-grant.js';
 
 const VALID_SCOPES = new Set(['read', 'write', 'admin']);
 const MIN_TTL = 1;
@@ -83,6 +83,33 @@ export async function handleMintPAT(req) {
 
   metrics.counter('mcp.pat.mint');
   return { ID, token, prefix, expiresAt };
+}
+
+/**
+ * #2574: Tell the mint UI which scopes it may offer. The `admin` scope item is
+ * shown only when BOTH the feature flag is ON and the caller currently holds a
+ * live AdminGrant (matching the mint-time gate: admin mint also requires the
+ * live XSUAA Admin role, but the grant presence is the visible proxy the UI can
+ * query without a JWT role lookup). Fail-closed: any resolution error → admin
+ * not offered. Read-only; never throws into the pipeline.
+ */
+export async function handleMintPolicy(req) {
+  const adminScopeEnabled = isFlagEnabled('PAT_ADMIN_SCOPE_ENABLED');
+  let canMintAdmin = false;
+  if (adminScopeEnabled) {
+    try {
+      const dbUser = await resolveDbUser(req.user);
+      // The live XSUAA Admin role is the authoritative mint-time gate; the
+      // grant is affirmed at mint. Offer the scope when the caller is a live
+      // admin OR already holds a non-expired grant.
+      canMintAdmin = !!(req.user?.is?.('Admin')) ||
+        (dbUser ? await resolveAdminGrant(dbUser.ID) : false);
+    } catch (e) {
+      cds.log('mcp-pat').warn('mintPolicy admin resolution failed, fail-closed:', e.message);
+      canMintAdmin = false;
+    }
+  }
+  return { adminScopeEnabled, canMintAdmin };
 }
 
 export async function handleRevokePAT(req) {
