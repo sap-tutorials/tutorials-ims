@@ -283,6 +283,17 @@ function hasSegments(track: AppSpaceTrack): boolean {
   return Array.isArray(track.segments) && track.segments.length > 0
 }
 
+// Widest fork in the track (max lanes across all fork segments; 1 if none).
+// Drives the timeline's max-width so multi-lane forks get the horizontal room
+// they need instead of being squished into the single-column 740px cap — a
+// 3-4 lane fork at 740px wraps titles to one word per line (#2887 follow-up).
+function maxLaneCount(track: AppSpaceTrack): number {
+  return trackSegments(track).reduce(
+    (max, seg) => (seg.kind === 'fork' ? Math.max(max, seg.lanes.length) : max),
+    1,
+  )
+}
+
 // Flatten every item a segment contains (cluster/linear items, or all lane items
 // for a fork). Used for progress math and "all tutorials" totals.
 function segmentItems(seg: AppSpaceSegment): AppSpaceItem[] {
@@ -670,7 +681,7 @@ const emptyStateMessage = computed(() => {
            Renders from selectedTrack.segments: linear nodes, side-by-side fork
            lanes with fork/join connectors, and any-order clusters. Falls back
            to the legacy flat timeline for payloads without segments. -->
-      <div class="timeline" v-if="hasSegments(selectedTrack)">
+      <div class="timeline" v-if="hasSegments(selectedTrack)" :style="{ '--max-lanes': maxLaneCount(selectedTrack) }">
         <template v-for="(seg, segIndex) in trackSegments(selectedTrack)" :key="seg.order">
 
           <!-- Linear segment: one node per item (as today) -->
@@ -1412,7 +1423,10 @@ const emptyStateMessage = computed(() => {
 /* ── Timeline ──────────────────────────────────────────── */
 .timeline {
   position: relative;
-  max-width: 740px;
+  /* Single-column (linear/cluster) tracks stay at the readable 740px cap.
+     Multi-lane forks widen to ~280px per lane so lane cards don't squish
+     (#2887 follow-up) — clamped by the 1200px .content-area parent. */
+  max-width: max(740px, calc(var(--max-lanes, 1) * 280px));
 }
 
 .timeline-item {
