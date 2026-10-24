@@ -40,10 +40,14 @@
                     busy="{contestant>/loading}"
                     class="sapUiTinyMarginTop">
                     <content>
-                        <!-- Identity header -->
+                        <!-- Identity header — "LastName, F." for eyeball match against
+                             the badge; the scanned UID shown small underneath. -->
                         <VBox id="vboxIdentity" class="sapUiSmallMarginBeginEnd sapUiSmallMarginTopBottom">
-                            <Title id="resultUid" text="{contestant>/uid}" level="H5"
-                                class="sapUiTinyMarginBottom" />
+                            <Title id="resultName"
+                                text="{= ${contestant>/lastName} ? (${contestant>/lastName} + ', ' + ${contestant>/firstInitial} + '.') : ${contestant>/uid} }"
+                                level="H5" class="sapUiTinyMarginBottom" />
+                            <Text id="resultUid" text="{contestant>/uid}"
+                                visible="{= !!${contestant>/lastName} }" />
                         </VBox>
 
                         <!-- Prizes Claimed — highlighted row -->
