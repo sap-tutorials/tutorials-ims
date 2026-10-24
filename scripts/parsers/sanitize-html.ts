@@ -88,6 +88,21 @@ const KNOWN_HTML_TAGS = new Set([
 const AUTOLINK_RE = /<([a-zA-Z][a-zA-Z0-9+.-]*:[^\s<>]+)>/g
 const AUTOLINK_TOKEN = 'AUTOLINK'
 
+// Inline code spans (`...`, ``...``) are literal: the backticks already stop
+// the content from being HTML, and Goldmark renders the span as `<code>`,
+// HTML-escaping whatever is inside. If we pseudo-tag-escape a `<MyApp />`
+// inside a span to `&lt;MyApp /&gt;`, Goldmark then escapes the `&` again and
+// the page shows the literal text `&lt;MyApp /&gt;` (#2362). So we stash code
+// spans aside BEFORE pseudo-tag/sanitize processing and restore them verbatim
+// at the very end. CommonMark code-span rule: a run of N backticks opens the
+// span and the next run of exactly N backticks closes it; `\1` + the trailing
+// (?!`) enforces the exact-length match. Scanned left-to-right so the earliest
+// span wins, matching CommonMark. The token has leading/trailing spaces like
+// AUTOLINK so it reads as plain text to sanitize-html.
+const CODE_SPAN_RE = /(`+)(.+?)\1(?!`)/g
+const CODE_SPAN_TOKEN = 'CODESPAN'
+
+
 // Pre-escape any tag-like token whose name is unknown (= author placeholder).
 // `<your_id>`, `<your_id attr="x">`, `</your_id>`, `<saml:NameID>` all get
 // fully entity-escaped so sanitize-html doesn't drop them and any author-
@@ -337,9 +352,17 @@ export function stripDangerousHtml(content: string, options: StripDangerousHtmlO
 
 function sanitizeLine(line: string, opts: sanitizeHtml.IOptions): string {
   if (!TAG_LIKE_RE.test(line)) return line
+  // Stash inline code spans FIRST — their content is literal and must not be
+  // pseudo-tag-escaped (#2362). Must precede autolink extraction so a `<url>`
+  // inside a span isn't mistaken for a markdown autolink.
+  const codeSpans: string[] = []
+  let working = line.replace(CODE_SPAN_RE, (match) => {
+    codeSpans.push(match)
+    return ` ${CODE_SPAN_TOKEN}${codeSpans.length - 1} `
+  })
   // Pull markdown autolinks aside before sanitize-html sees them.
   const autolinks: string[] = []
-  const stashed = line.replace(AUTOLINK_RE, (_match, url: string) => {
+  const stashed = working.replace(AUTOLINK_RE, (_match, url: string) => {
     autolinks.push(url)
     return ` ${AUTOLINK_TOKEN}${autolinks.length - 1} `
   })
@@ -358,5 +381,10 @@ function sanitizeLine(line: string, opts: sanitizeHtml.IOptions): string {
   sanitized = sanitized.replace(/&gt;/g, '>')
   // Convert pseudo-tag sentinels to their entity form for final output.
   sanitized = sanitized.split(PSEUDO_LT).join('&lt;').split(PSEUDO_GT).join('&gt;')
+  // Restore code spans verbatim — their raw backtick source reaches Goldmark,
+  // which renders the `<code>` and does its own (single) HTML-escape (#2362).
+  sanitized = sanitized.replace(new RegExp(` ${CODE_SPAN_TOKEN}(\\d+) `, 'g'), (_match, idx: string) => {
+    return codeSpans[Number(idx)]
+  })
   return sanitized
 }

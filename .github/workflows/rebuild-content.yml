@@ -513,6 +513,10 @@ jobs:
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
           TUTORIAL_SLUG: ${{ inputs.slug || steps.mode.outputs.dispatch_slug }}
           TUTORIAL_SLUGS: ${{ inputs.slugs || steps.mode.outputs.dispatch_slugs }}
+          # [retired-slug-noop] Lets fetch-tutorials distinguish a human manual
+          # dispatch (typo → fail-fast) from an auto-dispatched admin-write /
+          # scheduled run (a retired-slug filter is "nothing to publish", exit 0).
+          TRIGGER_SOURCE: ${{ inputs.trigger-source }}
           # [#208/#275/#312] AI-quiz authoring. Always-on post-#312
           # (2026-06-27 — soak window completed clean). fetch-tutorials.ts
           # wakes the AI generator on tutorials carrying [AUTOAUTHOR_*]
@@ -808,6 +812,21 @@ jobs:
         run: npm run fetch-teched
         env:
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
+
+      # Generated CSS (#2896 follow-up). sap-fundamental.css (build:css, postcss)
+      # and fundamental-styles-icon.css (build:icon-subset) are build outputs, no
+      # longer committed — they are .gitignored. This workflow drives /tmp/hugo
+      # directly rather than `npm run build:all`, so — exactly like the feed
+      # fetchers above — it must regenerate them explicitly BEFORE the Hugo build,
+      # or Hugo fingerprints a missing/stale file and the published content
+      # references a /css/<hash>.css the deployed approuter doesn't serve (the
+      # approuter-asset guard then blocks publish). build:css + build:icon-subset
+      # produce byte-identical output to the deploy's build:all, so both publish
+      # paths agree on the fingerprint.
+      - name: Build fingerprinted CSS (sap-fundamental + icon subset)
+        run: |
+          npm run build:icon-subset
+          npm run build:css
 
       - name: Build Hugo site
         run: /tmp/hugo --source hugo --minify

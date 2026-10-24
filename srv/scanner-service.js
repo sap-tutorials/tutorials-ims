@@ -13,17 +13,31 @@ export default class ScannerService extends cds.ApplicationService {
       if (!accountNumber) return req.reject(400, 'accountNumber is required');
 
       // accountNumber now carries the user's UUID (string ID), not a numeric legacyId.
-      const user = await SELECT.one.from(Users).where({ ID: accountNumber });
+      const user = await SELECT.one.from(Users).columns('ID', 'firstName', 'lastName').where({ ID: accountNumber });
       if (!user) return req.reject(404, `User not found: ${accountNumber}`);
+
+      const lastName = user.lastName || '';
+      const firstInitial = (user.firstName || '').trim().charAt(0).toUpperCase();
+
+      // Resolve event by legacyId when provided; use its UUID for the event_ID filter.
+      let eventFilter = null;
+      if (eventId != null) {
+        const event = await SELECT.one.from(Events).where({ legacyId: eventId });
+        if (event) eventFilter = event.ID;
+      }
 
       // "Has-ever-completed" semantic (issue #600): a SUPERSEDED row is a prior
       // completion that was reset, so it still counts. DISTINCT by
       // (user_ID, taskLegacyId) so a user who reset + re-completed the same
-      // task is counted once, not twice.
-      const taskRecords = await SELECT.from(TaskRecords).where({
+      // task is counted once, not twice. Scoped to the scanned event (#badge-v2)
+      // so the card's counts match the event-stats panel; falls back to all
+      // events when the eventId is absent/unresolvable.
+      const taskFilter = {
         user_ID: user.ID,
         status: { in: ['COMPLETED', 'SUPERSEDED'] }
-      });
+      };
+      if (eventFilter) taskFilter.event_ID = eventFilter;
+      const taskRecords = await SELECT.from(TaskRecords).where(taskFilter);
 
       const seenByType = { TUTORIAL: new Set(), GROUP: new Set(), MISSION: new Set() };
       for (const r of taskRecords) {
@@ -34,22 +48,79 @@ export default class ScannerService extends cds.ApplicationService {
       const groupsCompleted = seenByType.GROUP.size;
       const missionsCompleted = seenByType.MISSION.size;
 
-      // Resolve event by legacyId when provided; use its UUID for the event_ID filter.
-      let eventFilter = null;
-      if (eventId != null) {
-        const event = await SELECT.one.from(Events).where({ legacyId: eventId });
-        if (event) eventFilter = event.ID;
-      }
-
       // Count CLAIMED PrizeRecords for this user, scoped to the event when resolvable.
       const prizeFilter = { user_ID: user.ID, status: 'CLAIMED' };
       if (eventFilter) prizeFilter.event_ID = eventFilter;
-      const prizeRecs = await SELECT.from(PrizeRecords).where(prizeFilter);
+      const prizeRecs = await SELECT.from(PrizeRecords).columns('ID', 'prize_ID').where(prizeFilter);
 
       const claimedCount = prizeRecs.length;
       const prizeRecords = `${claimedCount} of 2 prizes claimed`;
 
-      return { tutorialsCompleted, groupsCompleted, missionsCompleted, claimedCount, prizeRecords };
+      // Resolve names of the claimed prizes. Rows with a real prize association
+      // yield the prize name; null-prize rows (new-flow handovers) fall back to
+      // a generic label so the list length always tracks claimedCount.
+      const prizeIds = prizeRecs.map(r => r.prize_ID).filter(Boolean);
+      const nameById = {};
+      if (prizeIds.length) {
+        const prizes = await SELECT.from(Prizes).columns('ID', 'name').where({ ID: { in: prizeIds } });
+        for (const p of prizes) nameById[p.ID] = p.name;
+      }
+      const claimedPrizeNames = prizeRecs.map(r => (r.prize_ID && nameById[r.prize_ID]) || 'Prize');
+
+      return { lastName, firstInitial, tutorialsCompleted, groupsCompleted, missionsCompleted, claimedCount, claimedPrizeNames, prizeRecords };
+    });
+
+    // #badge-v2 — per-event aggregate for the scanner's event-stats panel.
+    // Event scoping = TaskRecords.event_ID (badge/app-space path), NOT the
+    // Devtoberfest date-window. Completion totals use the same has-ever-completed
+    // DISTINCT-by-(user_ID, taskLegacyId) semantic as getContestant. CQL only.
+    this.on('getEventStats', async (req) => {
+      const { eventId } = req.data;
+      const zero = {
+        eventName: null, prizesClaimed: 0, prizesAvailable: 0, earnedAwaitingHandover: 0,
+        participants: 0, participantsClaimed: 0,
+        tutorialsCompleted: 0, groupsCompleted: 0, missionsCompleted: 0,
+      };
+      if (eventId == null) return zero;
+
+      const event = await SELECT.one.from(Events).columns('ID', 'name').where({ legacyId: eventId });
+      if (!event) return zero;
+
+      const prizeRecs = await SELECT.from(PrizeRecords)
+        .columns('user_ID', 'status')
+        .where({ event_ID: event.ID });
+      let prizesClaimed = 0, earnedAwaitingHandover = 0;
+      const claimers = new Set();
+      for (const r of prizeRecs) {
+        if (r.status === 'CLAIMED') { prizesClaimed++; claimers.add(r.user_ID); }
+        else if (r.status === 'EARNED') { earnedAwaitingHandover++; }
+      }
+
+      const prizesAvailable = (await SELECT.from(Prizes).columns('ID').where({ event_ID: event.ID })).length;
+
+      // Completions scoped to the event; DISTINCT by (user_ID, taskLegacyId).
+      const taskRecords = await SELECT.from(TaskRecords)
+        .columns('user_ID', 'taskType', 'taskLegacyId')
+        .where({ event_ID: event.ID, status: { in: ['COMPLETED', 'SUPERSEDED'] } });
+      const seenByType = { TUTORIAL: new Set(), GROUP: new Set(), MISSION: new Set() };
+      const participantSet = new Set();
+      for (const r of taskRecords) {
+        participantSet.add(r.user_ID);
+        const set = seenByType[r.taskType];
+        if (set) set.add(`${r.user_ID}|${r.taskLegacyId}`);
+      }
+
+      return {
+        eventName: event.name,
+        prizesClaimed,
+        prizesAvailable,
+        earnedAwaitingHandover,
+        participants: participantSet.size,
+        participantsClaimed: claimers.size,
+        tutorialsCompleted: seenByType.TUTORIAL.size,
+        groupsCompleted: seenByType.GROUP.size,
+        missionsCompleted: seenByType.MISSION.size,
+      };
     });
 
     // Task 6 — atomic capped handover (max 2 CLAIMED per user+event).

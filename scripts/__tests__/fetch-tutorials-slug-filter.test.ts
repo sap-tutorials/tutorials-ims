@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseSlugFilter, resolveSlugFilter, targetedSourceErrors } from '../fetch-tutorials'
+import { parseSlugFilter, resolveSlugFilter, targetedSourceErrors, isAutoDispatchedTrigger } from '../fetch-tutorials'
 
 describe('parseSlugFilter', () => {
   it('returns null when both inputs are empty/undefined', () => {
@@ -118,5 +118,28 @@ describe('resolveSlugFilter', () => {
     expect(r.fatal).toBe(true)
     expect(r.valid.size).toBe(0)
     expect(r.dropped.sort()).toEqual(['also-nope', 'nope'])
+  })
+})
+
+describe('isAutoDispatchedTrigger', () => {
+  // On an all-unknown (fatal) slug filter, auto-dispatched runs no-op (exit 0)
+  // while manual runs keep the #433 fail-fast.
+  it('treats admin-write as auto-dispatched (no-op on retired slug)', () => {
+    expect(isAutoDispatchedTrigger('admin-write')).toBe(true)
+  })
+
+  it('treats scheduled and admin-action as auto-dispatched', () => {
+    expect(isAutoDispatchedTrigger('scheduled')).toBe(true)
+    expect(isAutoDispatchedTrigger('admin-action:cleanupUnusedTags')).toBe(true)
+  })
+
+  it('treats manual as NOT auto-dispatched (keeps fail-fast)', () => {
+    expect(isAutoDispatchedTrigger('manual')).toBe(false)
+  })
+
+  it('defaults an unset/empty trigger-source to manual (fail-fast)', () => {
+    expect(isAutoDispatchedTrigger(undefined)).toBe(false)
+    expect(isAutoDispatchedTrigger('')).toBe(false)
+    expect(isAutoDispatchedTrigger('   ')).toBe(false)
   })
 })

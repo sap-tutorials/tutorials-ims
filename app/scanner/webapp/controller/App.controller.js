@@ -10,6 +10,8 @@ sap.ui.define([
     var CONTESTANT_DEFAULTS = {
         uid: null,
         eventId: null,
+        lastName: "",
+        firstInitial: "",
         claimedCount: 0,
         tutorialsCompleted: "",
         groupsCompleted: "",
@@ -42,6 +44,8 @@ sap.ui.define([
                 oContext.setParameter("eventId", eventId);
                 await oContext.execute();
                 var result = oContext.getBoundContext().getObject();
+                this._oContestantModel.setProperty("/lastName", result.lastName || "");
+                this._oContestantModel.setProperty("/firstInitial", result.firstInitial || "");
                 this._oContestantModel.setProperty("/tutorialsCompleted", result.tutorialsCompleted || "");
                 this._oContestantModel.setProperty("/groupsCompleted", result.groupsCompleted || "");
                 this._oContestantModel.setProperty("/missionsCompleted", result.missionsCompleted || "");

@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { __test } from '../srv/lib/mcp-pat-actions.js';
 import { __test as mwTest } from '../srv/lib/mcp-pat-middleware.js';
 import cds from '@sap/cds';
 import { resolveAdminGrant, upsertAdminGrant, revokeAdminGrant } from '../srv/lib/admin-grant.js';
 import { FEATURE_FLAGS } from '../packages/core/feature-flags/registry.js';
+import { __setFlagForTest, __resetFlagsForTest } from '../srv/lib/feature-flags/db-flags.js';
 
 const { SELECT, INSERT } = cds.ql;
 
@@ -165,6 +166,42 @@ describe('PAT_ADMIN_SCOPE_ENABLED flag', () => {
     const flag = FEATURE_FLAGS.find(f => f.key === 'PAT_ADMIN_SCOPE_ENABLED');
     expect(flag).toBeDefined();
     expect(flag.default).toBe(false);
+  });
+});
+
+describe('PatService.patCapabilities (#2857 — mint-UI admin-scope gate)', () => {
+  cds.test('serve', '--project', '.', '--in-memory');
+
+  afterEach(() => { __resetFlagsForTest(); });
+
+  it('true only when flag ON AND caller holds Admin', async () => {
+    __setFlagForTest('PAT_ADMIN_SCOPE_ENABLED', true);
+    const pats = await cds.connect.to('PatService');
+    const res = await pats.tx(
+      { user: { id: 'admin@sap.com', roles: ['Admin', 'authenticated-user'] } },
+      tx => tx.send({ event: 'patCapabilities' })
+    );
+    expect(res.adminScopeAvailable).toBe(true);
+  });
+
+  it('false when the caller lacks the Admin role (flag ON)', async () => {
+    __setFlagForTest('PAT_ADMIN_SCOPE_ENABLED', true);
+    const pats = await cds.connect.to('PatService');
+    const res = await pats.tx(
+      { user: { id: 'user@sap.com', roles: ['authenticated-user'] } },
+      tx => tx.send({ event: 'patCapabilities' })
+    );
+    expect(res.adminScopeAvailable).toBe(false);
+  });
+
+  it('false when the flag is OFF even for an Admin', async () => {
+    __setFlagForTest('PAT_ADMIN_SCOPE_ENABLED', false);
+    const pats = await cds.connect.to('PatService');
+    const res = await pats.tx(
+      { user: { id: 'admin@sap.com', roles: ['Admin', 'authenticated-user'] } },
+      tx => tx.send({ event: 'patCapabilities' })
+    );
+    expect(res.adminScopeAvailable).toBe(false);
   });
 });
 

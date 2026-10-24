@@ -8,7 +8,7 @@
             <content>
                 <!-- Idle state: shown when no scan result is present -->
                 <VBox id="vboxIdle"
-                    visible="{= !${contestant>loaded} &amp;&amp; !${contestant>loading} }"
+                    visible="{= !${contestant>/loaded} &amp;&amp; !${contestant>/loading} }"
                     class="sapUiLargeMarginTop sapUiMediumMarginBottom">
                     <VBox id="vboxIdleContent" alignItems="Center" class="sapUiMediumMarginBottom">
                         <core:Icon
@@ -36,14 +36,18 @@
                 <!-- Data panel: shown while loading and after load -->
                 <Panel
                     id="contestantCard"
-                    visible="{= ${contestant>loaded} || ${contestant>loading} }"
-                    busy="{contestant>loading}"
+                    visible="{= ${contestant>/loaded} || ${contestant>/loading} }"
+                    busy="{contestant>/loading}"
                     class="sapUiTinyMarginTop">
                     <content>
-                        <!-- Identity header -->
+                        <!-- Identity header — "LastName, F." for eyeball match against
+                             the badge; the scanned UID shown small underneath. -->
                         <VBox id="vboxIdentity" class="sapUiSmallMarginBeginEnd sapUiSmallMarginTopBottom">
-                            <Title id="resultUid" text="{contestant>uid}" level="H5"
-                                class="sapUiTinyMarginBottom" />
+                            <Title id="resultName"
+                                text="{= ${contestant>/lastName} ? (${contestant>/lastName} + ', ' + ${contestant>/firstInitial} + '.') : ${contestant>/uid} }"
+                                level="H5" class="sapUiTinyMarginBottom" />
+                            <Text id="resultUid" text="{contestant>/uid}"
+                                visible="{= !!${contestant>/lastName} }" />
                         </VBox>
 
                         <!-- Prizes Claimed — highlighted row -->
@@ -52,7 +56,7 @@
                             justifyContent="SpaceBetween"
                             alignItems="Center">
                             <Label id="lblPrizesClaimed" text="Prizes Claimed" design="Bold" />
-                            <Text id="prizeCount" text="{= ${contestant>claimedCount} + ' of 2' }" />
+                            <Text id="prizeCount" text="{= ${contestant>/claimedCount} + ' of 2' }" />
                         </HBox>
 
                         <!-- Remaining stats as a list -->
@@ -60,15 +64,15 @@
                             <DisplayListItem
                                 id="statTutorials"
                                 label="Tutorials Completed"
-                                value="{contestant>tutorialsCompleted}" />
+                                value="{contestant>/tutorialsCompleted}" />
                             <DisplayListItem
                                 id="statGroups"
                                 label="Groups Completed"
-                                value="{contestant>groupsCompleted}" />
+                                value="{contestant>/groupsCompleted}" />
                             <DisplayListItem
                                 id="statMissions"
                                 label="Missions Completed"
-                                value="{contestant>missionsCompleted}" />
+                                value="{contestant>/missionsCompleted}" />
                         </List>
                     </content>
                 </Panel>
@@ -76,7 +80,7 @@
 
             <footer>
                 <OverflowToolbar id="footerToolbar"
-                    visible="{contestant>loaded}">
+                    visible="{contestant>/loaded}">
                     <Button
                         id="btnScanAgain"
                         text="Scan Again"
@@ -89,7 +93,7 @@
                         icon="sap-icon://gift"
                         type="Emphasized"
                         press="onClaimPrize"
-                        enabled="{= ${contestant>loaded} &amp;&amp; ${contestant>claimedCount} &lt; 2 }" />
+                        enabled="{= ${contestant>/loaded} &amp;&amp; ${contestant>/claimedCount} &lt; 2 }" />
                 </OverflowToolbar>
             </footer>
 

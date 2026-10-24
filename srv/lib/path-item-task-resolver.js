@@ -1,4 +1,5 @@
 import cds from '@sap/cds';
+import { classifyPathSegments } from './app-space-segments.js';
 
 // Shared task resolution for CompletionPathItems in the event / app-space
 // progress handlers (srv/developer-service.js: getEventProgress,
@@ -202,7 +203,7 @@ function effectiveStatus(record, type, event) {
   return status;
 }
 
-function shapeItem(task, effLegacyId, record, type, checkpointTitle, event) {
+function shapeItem(task, effLegacyId, record, type, checkpointTitle, event, unavail) {
   return {
     imsId: effLegacyId,
     title: task?.title || record?.titleSnapshot || checkpointTitle || '',
@@ -214,6 +215,15 @@ function shapeItem(task, effLegacyId, record, type, checkpointTitle, event) {
     url: task?.slug ? `/tutorials/${task.slug}.html` : '',
     description: task?.description || '',
     recordId: record?.legacyId || 0,
+    // #2864: per-path-item temporarily-unavailable flag, carried on the
+    // `unavail` source row. #2890: buildPathSegments now passes the parent GROUP
+    // path-item here for GROUP-expanded children, so a GROUP-level toggle
+    // propagates onto each child (render dim + never-counted-complete).
+    // buildPathItems (getEventProgress, linear tracks) still passes null for
+    // GROUP children, keeping them non-inherited there. unavailableReason
+    // omitted when empty.
+    temporarilyUnavailable: unavail?.temporarilyUnavailable === true,
+    ...(unavail?.unavailableReason ? { unavailableReason: unavail.unavailableReason } : {}),
   };
 }
 
@@ -244,14 +254,15 @@ export function buildPathItems({ pathItems, taskMap, effLegacyByItem, groupTutor
       const children = (i.group_ID && groupTutorials.get(i.group_ID)) || [];
       for (const t of children) {
         const record = t.legacyId != null ? recordMap.get(`TUTORIAL:${t.legacyId}`) : undefined;
-        out.push(shapeItem(t, t.legacyId ?? null, record, 'TUTORIAL', null, event));
+        // #2864: group children are NOT inherited-unavailable — stamp false.
+        out.push(shapeItem(t, t.legacyId ?? null, record, 'TUTORIAL', null, event, null));
       }
       continue;
     }
     const task = resolveTask(taskMap, i);
     const effLegacyId = effLegacyByItem.get(i);
     const record = recordMap.get(`${i.taskType}:${effLegacyId}`);
-    out.push(shapeItem(task, effLegacyId, record, i.taskType, i.checkpointTitle, event));
+    out.push(shapeItem(task, effLegacyId, record, i.taskType, i.checkpointTitle, event, i));
   }
   return out;
 }
@@ -268,4 +279,165 @@ export function groupChildLegacyIds(groupTutorials) {
     for (const t of children) if (t.legacyId != null) ids.add(t.legacyId);
   }
   return [...ids];
+}
+
+/**
+ * Batch-fetch the titles for Groups referenced by path items (for fork lane
+ * labels). Returns an empty Map when there are no GROUP items.
+ *
+ * @param {object} opts
+ * @param {Array}  opts.items    CompletionPathItems rows (taskType, group_ID).
+ * @param {object} opts.entities { Groups } CDS entity.
+ * @returns {Promise<Map<string,string>>}  group_ID → title
+ */
+export async function fetchGroupTitles({ items, entities }) {
+  const { Groups } = entities;
+  const groupIds = [...new Set(
+    items
+      .filter(i => i.taskType === 'GROUP' && i.group_ID)
+      .map(i => i.group_ID)
+  )];
+  const titleMap = new Map();
+  if (groupIds.length === 0) return titleMap;
+  const rows = await SELECT.from(Groups).columns('ID', 'title').where({ ID: { in: groupIds } });
+  for (const r of rows) titleMap.set(r.ID, r.title || '');
+  return titleMap;
+}
+
+/**
+ * Build a nested segment structure for a single App Space path.
+ *
+ * Uses `classifyPathSegments` (Task 1) to group path items by `itemOrder` and
+ * classify each group as 'linear' / 'parallel-any' / 'fork', then shapes each
+ * segment accordingly:
+ *
+ *  - LinearSegment  `{ order, kind:'linear', items }`
+ *    A lone GROUP at an order expands inline to its child tutorials exactly as
+ *    `buildPathItems` does today — no lane wrapper.
+ *
+ *  - ClusterSegment `{ order, kind:'parallel-any', items }`
+ *    All members are TUTORIAL items; each becomes one output item.
+ *
+ *  - ForkSegment    `{ order, kind:'fork', lanes:[{ label, items }] }`
+ *    Each GROUP member → one lane (label = Groups.title from groupTitles);
+ *    items = expanded child tutorials + optional synthetic CHECKPOINT when the
+ *    path item's prize_ID is set. Non-GROUP members → a single-item lane
+ *    (label = item title from the resolved task).
+ *
+ * Does NOT modify `buildPathItems` — `getEventProgress` continues to use that.
+ *
+ * #2866: pass `event` through so out-of-window COMPLETED tutorials are
+ * downgraded to COMPLETED_OUT_OF_WINDOW exactly as today.
+ * #2864: `temporarilyUnavailable` is threaded into each output item.
+ *
+ * @param {object} opts
+ * @param {Array}  opts.pathItems       CompletionPathItems for this path (itemOrder-sorted).
+ * @param {Map}    opts.taskMap         from buildTaskMap.
+ * @param {Map}    opts.effLegacyByItem item → effective legacyId.
+ * @param {Map}    opts.groupTutorials  group_ID → child tutorial rows (expandGroupTutorials).
+ * @param {Map}    opts.groupTitles     group_ID → title (fetchGroupTitles).
+ * @param {Map}    opts.recordMap       `${taskType}:${legacyId}` → user TaskRecord.
+ * @param {object} [opts.event]         #2866: event row for window-gating.
+ * @returns {Array<LinearSegment|ClusterSegment|ForkSegment>}
+ */
+export function buildPathSegments({
+  pathItems, taskMap, effLegacyByItem, groupTutorials, groupTitles, recordMap, event,
+}) {
+  const classified = classifyPathSegments(pathItems);
+  const segments = [];
+
+  for (const { order, kind, members } of classified) {
+    if (kind === 'linear') {
+      const [item] = members;
+      if (item.taskType === 'GROUP') {
+        // Lone GROUP: expand inline to child tutorials (same as buildPathItems).
+        // #2890: the GROUP path-item's temporarilyUnavailable/unavailableReason
+        // propagate onto each expanded child so an unavailable branch dims and
+        // cannot be counted complete.
+        const children = (item.group_ID && groupTutorials.get(item.group_ID)) || [];
+        const items = children.map(t => {
+          const record = t.legacyId != null ? recordMap.get(`TUTORIAL:${t.legacyId}`) : undefined;
+          return shapeItem(t, t.legacyId ?? null, record, 'TUTORIAL', null, event, item);
+        });
+        segments.push({ order, kind: 'linear', items });
+      } else {
+        // Regular linear: single direct item.
+        const task = resolveTask(taskMap, item);
+        const effLegacyId = effLegacyByItem.get(item);
+        const record = recordMap.get(`${item.taskType}:${effLegacyId}`);
+        const shaped = shapeItem(task, effLegacyId, record, item.taskType, item.checkpointTitle, event);
+        segments.push({
+          order,
+          kind: 'linear',
+          items: [{
+            ...shaped,
+            temporarilyUnavailable: Boolean(item.temporarilyUnavailable),
+          }],
+        });
+      }
+    } else if (kind === 'parallel-any') {
+      // All TUTORIAL members, no GROUP. Each becomes one output item.
+      const items = members.map(item => {
+        const task = resolveTask(taskMap, item);
+        const effLegacyId = effLegacyByItem.get(item);
+        const record = recordMap.get(`${item.taskType}:${effLegacyId}`);
+        return {
+          ...shapeItem(task, effLegacyId, record, item.taskType, item.checkpointTitle, event),
+          temporarilyUnavailable: Boolean(item.temporarilyUnavailable),
+        };
+      });
+      segments.push({ order, kind: 'parallel-any', items });
+    } else {
+      // kind === 'fork': one or more GROUP members (possibly mixed with TUTORIAL members).
+      const lanes = members.map(item => {
+        if (item.taskType === 'GROUP') {
+          const label = (item.group_ID && groupTitles.get(item.group_ID)) || '';
+          const children = (item.group_ID && groupTutorials.get(item.group_ID)) || [];
+          const laneItems = children.map(t => {
+            const record = t.legacyId != null ? recordMap.get(`TUTORIAL:${t.legacyId}`) : undefined;
+            // #2890: propagate this GROUP lane's temporarilyUnavailable/
+            // unavailableReason onto each child so the lane dims (laneUnavailable)
+            // and its tutorials can't be counted complete (isLaneComplete).
+            return shapeItem(t, t.legacyId ?? null, record, 'TUTORIAL', null, event, item);
+          });
+          // Synthetic prize CHECKPOINT: appended only when prize_ID is set.
+          if (item.prize_ID) {
+            const prizeTitle = label || 'Prize';
+            laneItems.push({
+              imsId: null,
+              title: prizeTitle,
+              type: 'CHECKPOINT',
+              status: '',
+              progress: 0,
+              experience: '',
+              timeToComplete: 0,
+              url: '',
+              description: '',
+              recordId: 0,
+              temporarilyUnavailable: false,
+              prizeId: item.prize_ID,
+            });
+          }
+          return { label, items: laneItems };
+        } else {
+          // Non-GROUP member in a fork → single-item lane.
+          const task = resolveTask(taskMap, item);
+          const effLegacyId = effLegacyByItem.get(item);
+          const record = recordMap.get(`${item.taskType}:${effLegacyId}`);
+          const shaped = shapeItem(task, effLegacyId, record, item.taskType, item.checkpointTitle, event);
+          const label = shaped.title || '';
+          return {
+            label,
+            items: [{
+              ...shaped,
+              temporarilyUnavailable: Boolean(item.temporarilyUnavailable),
+            }],
+          };
+        }
+      });
+      segments.push({ order, kind: 'fork', lanes });
+    }
+  }
+
+  return segments;
 }

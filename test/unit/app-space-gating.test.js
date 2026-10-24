@@ -50,6 +50,42 @@ describe('isItemUnlocked — progress/prize gating (strict COMPLETED)', () => {
   });
 });
 
+describe('isItemUnlocked — server unlocked flag (#2887)', () => {
+  it('unlocked:true on an item whose predecessor is incomplete returns true (flag wins)', () => {
+    // Task 3 set unlocked=true server-side, bypassing adjacency logic.
+    const items = [tut('AVAILABLE'), { type: 'TUTORIAL', status: 'LOCKED', unlocked: true }];
+    expect(isItemUnlocked(items, 1)).toBe(true);
+  });
+
+  it('unlocked:false with a COMPLETED predecessor returns false (flag wins)', () => {
+    // Even though the predecessor is COMPLETED, the flag says don't unlock.
+    const items = [tut('COMPLETED'), { type: 'TUTORIAL', status: 'AVAILABLE', unlocked: false }];
+    expect(isItemUnlocked(items, 1)).toBe(false);
+  });
+
+  it('item with NO unlocked property falls back to adjacency behavior', () => {
+    // Legacy payloads or existing linear tracks without the flag use the old logic.
+    const items = [tut('COMPLETED'), tut('AVAILABLE')];
+    expect(isItemUnlocked(items, 1)).toBe(true); // predecessor COMPLETED → unlock
+  });
+
+  it('unlocked flag on a checkpoint works the same way', () => {
+    const items = [tut('AVAILABLE'), { type: 'CHECKPOINT', status: 'LOCKED', unlocked: true }];
+    expect(isItemUnlocked(items, 1)).toBe(true);
+
+    const items2 = [tut('COMPLETED'), { type: 'CHECKPOINT', status: 'AVAILABLE', unlocked: false }];
+    expect(isItemUnlocked(items2, 1)).toBe(false);
+  });
+
+  it('unlocked flag on a prize works the same way', () => {
+    const items = [tut('AVAILABLE'), { type: 'PRIZE', status: 'LOCKED', unlocked: true }];
+    expect(isItemUnlocked(items, 1)).toBe(true);
+
+    const items2 = [tut('COMPLETED'), { type: 'PRIZE', status: 'AVAILABLE', unlocked: false }];
+    expect(isItemUnlocked(items2, 1)).toBe(false);
+  });
+});
+
 describe('isTutorialOpenable — keeps the tutorial link live (#2866)', () => {
   it('an out-of-window completed tutorial stays openable (the bug fix)', () => {
     // Even though it is NOT unlocked for gating, its URL must stay reachable so

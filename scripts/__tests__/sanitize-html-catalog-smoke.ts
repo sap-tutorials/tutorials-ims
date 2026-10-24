@@ -102,7 +102,8 @@ function classify(oldOut: string, newOut: string): string {
     normalised = selfClosingTransform(normalised)
   }
 
-  // 2. Entity-encode pseudo-tags (unknown HTML elements).
+  // 2. Entity-encode pseudo-tags (unknown HTML elements) — but NOT inside
+  //    inline code spans, which the sanitizer now preserves verbatim (#2362).
   const KNOWN = new Set([
     'a', 'abbr', 'b', 'blockquote', 'br', 'code', 'dd', 'del', 'details',
     'div', 'dl', 'dt', 'em', 'figcaption', 'figure',
@@ -112,13 +113,23 @@ function classify(oldOut: string, newOut: string): string {
     'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr',
     'u', 'ul', 'var',
   ])
+  // Mask inline code spans before the pseudo-tag transform so `<Tag>` inside
+  // backticks is left alone, matching stripDangerousHtml's code-span stash.
+  const codeSpanMask: string[] = []
+  const maskCodeSpans = (s: string) =>
+    s.replace(/(`+)(.+?)\1(?!`)/g, (m) => {
+      codeSpanMask.push(m)
+      return `\u0000CS${codeSpanMask.length - 1}\u0000`
+    })
+  const unmaskCodeSpans = (s: string) =>
+    s.replace(/\u0000CS(\d+)\u0000/g, (_m, i) => codeSpanMask[Number(i)])
   const pseudoTransform = (s: string) =>
-    s.replace(/<\/?[a-zA-Z][a-zA-Z0-9_-]*(?:\s[^>]*)?>/g, (match) => {
+    unmaskCodeSpans(maskCodeSpans(s).replace(/<\/?[a-zA-Z][a-zA-Z0-9_-]*(?:\s[^>]*)?>/g, (match) => {
       const m = match.match(/^<\/?([a-zA-Z][a-zA-Z0-9_-]*)/)
       if (!m) return match
       if (KNOWN.has(m[1].toLowerCase())) return match
       return match.replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    })
+    }))
   const pseudoApplied = pseudoTransform(normalised)
   if (pseudoApplied !== normalised) {
     categoriesApplied.push('pseudo-tag-encoded')

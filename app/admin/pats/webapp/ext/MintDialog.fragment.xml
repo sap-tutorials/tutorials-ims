@@ -21,7 +21,15 @@
         placeholder="{i18n>mint.fieldScopesPlaceholder}">
         <core:Item key="read" text="read" />
         <core:Item key="write" text="write" />
+        <!-- #2857: `admin` scope — hidden by default; onMintToken makes it
+             visible ONLY when PatService.patCapabilities().adminScopeAvailable
+             is true (flag ON AND caller holds the Tutorials Admin role). A
+             non-admin never sees it, so can't mint a PAT that would 403. -->
+        <core:Item id="patMintScopeAdmin" key="admin" text="admin" visible="false" />
       </MultiComboBox>
+      <!-- #2857: explains the admin scope; shown only when the admin item is. -->
+      <Label text="" />
+      <Text id="patMintAdminHint" text="{i18n>mint.adminScopeHint}" visible="false" />
 
       <Label text="{i18n>mint.fieldTtl}" />
       <StepInput

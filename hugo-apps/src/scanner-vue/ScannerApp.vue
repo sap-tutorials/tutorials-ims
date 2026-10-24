@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { useBarcodeScanner } from './useBarcodeScanner'
 import { useScannerApi } from './useScannerApi'
-import type { ScanResult, ContestantData } from './types'
+import { beginScan } from './scan-order'
+import type { ScanResult, ContestantData, EventStats } from './types'
 
 const videoRef = ref<HTMLVideoElement | null>(null)
 const { scan, cancel, isSupported, isScanning, error: scanError } = useBarcodeScanner(videoRef)
-const { loading, getContestant, claimPrizeForContestant, reset: resetApi } = useScannerApi()
+const { loading, getContestant, getEventStats, claimPrizeForContestant, reset: resetApi } = useScannerApi()
 
 type AppState = 'idle' | 'scanning' | 'loaded' | 'claiming'
 const state = ref<AppState>('idle')
 const contestant = ref<ContestantData | null>(null)
+const eventStats = ref<EventStats | null>(null)
 const toast = ref<{ message: string; type: 'success' | 'error' } | null>(null)
 const manualInput = ref('')
 const errorMessage = ref<string | null>(null)
@@ -24,6 +26,7 @@ function showToast(message: string, type: 'success' | 'error' = 'success') {
 
 function resetState() {
   contestant.value = null
+  eventStats.value = null
   errorMessage.value = null
   state.value = 'idle'
   resetApi()
@@ -47,15 +50,21 @@ async function loadContestant(scanResult: ScanResult) {
   try {
     const data = await getContestant(scanResult.uid, scanResult.payload.eventId)
     contestant.value = {
+      ...data,
       uid: scanResult.uid,
       eventId: scanResult.payload.eventId,
       recordId: scanResult.payload.recordId,
       status: scanResult.payload.status,
-      tutorialsCompleted: data.tutorialsCompleted,
-      groupsCompleted: data.groupsCompleted,
-      missionsCompleted: data.missionsCompleted,
-      prizeRecords: data.prizeRecords,
-      claimedCount: data.claimedCount ?? 0
+    }
+    // Event stats panel is fail-soft: no/unresolvable event or a failed stats
+    // fetch leaves eventStats null and the panel simply hides.
+    eventStats.value = null
+    if (scanResult.payload.eventId) {
+      try {
+        eventStats.value = await getEventStats(scanResult.payload.eventId)
+      } catch {
+        eventStats.value = null
+      }
     }
   } catch (e) {
     errorMessage.value = `Could not load contestant: ${(e as Error).message}`
@@ -65,9 +74,10 @@ async function loadContestant(scanResult: ScanResult) {
 
 async function onScan() {
   errorMessage.value = null
-  state.value = 'scanning'
 
-  const result = await scan()
+  // Await nextTick after switching to the scanning state so the <video> ref is
+  // mounted before the camera scanner reads it (see scan-order.ts).
+  const result = await beginScan((s) => { state.value = s }, nextTick, scan)
   if (!result) {
     if (scanError.value) {
       errorMessage.value = scanError.value
@@ -204,9 +214,9 @@ async function onClaimPrize() {
         </div>
 
         <template v-if="contestant">
-          <!-- Identity -->
+          <!-- Identity — LastName, F. for eyeball match against the badge -->
           <div class="scanner-card__header">
-            <h3 class="scanner-card__uid">{{ contestant.uid }}</h3>
+            <h3 class="scanner-card__uid">{{ contestant.lastName }}, {{ contestant.firstInitial }}.</h3>
             <p class="scanner-card__meta">{{ contestant.recordId }} &middot; {{ contestant.status }}</p>
           </div>
 
@@ -215,6 +225,17 @@ async function onClaimPrize() {
             <span class="scanner-card__prizes-label">Prizes claimed</span>
             <span class="scanner-card__prizes-value">{{ contestant.claimedCount }} of 2</span>
           </div>
+
+          <!-- Claimed prize names -->
+          <ul class="fd-list scanner-card__prizelist" role="list">
+            <li v-if="contestant.claimedPrizeNames.length === 0" class="fd-list__item" role="listitem">
+              <span class="fd-list__title scanner-card__prizelist-empty">None yet</span>
+            </li>
+            <li v-for="(name, i) in contestant.claimedPrizeNames" :key="i" class="fd-list__item" role="listitem">
+              <i class="sap-icon--gift"></i>
+              <span class="fd-list__title">{{ name }}</span>
+            </li>
+          </ul>
 
           <!-- Stats -->
           <ul class="fd-list scanner-card__stats" role="list">
@@ -232,6 +253,32 @@ async function onClaimPrize() {
             </li>
           </ul>
         </template>
+      </div>
+
+      <!-- Event stats panel (per scan; hidden when no event resolved) -->
+      <div v-if="eventStats && eventStats.eventName" class="scanner-card scanner-event">
+        <div class="scanner-card__header">
+          <h3 class="scanner-card__uid">{{ eventStats.eventName }}</h3>
+          <p class="scanner-card__meta">Event totals</p>
+        </div>
+        <ul class="fd-list scanner-card__stats" role="list">
+          <li class="fd-list__item" role="listitem">
+            <span class="fd-list__title">Prizes handed over</span>
+            <span class="fd-list__secondary">{{ eventStats.prizesClaimed }} / {{ eventStats.prizesAvailable }} in catalog</span>
+          </li>
+          <li class="fd-list__item" role="listitem">
+            <span class="fd-list__title">Earned, awaiting handover</span>
+            <span class="fd-list__secondary">{{ eventStats.earnedAwaitingHandover }}</span>
+          </li>
+          <li class="fd-list__item" role="listitem">
+            <span class="fd-list__title">Participants (claimed)</span>
+            <span class="fd-list__secondary">{{ eventStats.participants }} ({{ eventStats.participantsClaimed }})</span>
+          </li>
+          <li class="fd-list__item" role="listitem">
+            <span class="fd-list__title">Completions (tut / grp / mis)</span>
+            <span class="fd-list__secondary">{{ eventStats.tutorialsCompleted }} / {{ eventStats.groupsCompleted }} / {{ eventStats.missionsCompleted }}</span>
+          </li>
+        </ul>
       </div>
 
       <!-- Footer bar -->
@@ -494,4 +541,26 @@ async function onClaimPrize() {
   align-items: center;
   gap: 0.5rem;
 }
+
+/* Claimed prize names list */
+.scanner-card__prizelist {
+  margin: 0;
+  border-top: 1px solid var(--sapList_BorderColor, #e5e5e5);
+}
+.scanner-card__prizelist .fd-list__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+}
+.scanner-card__prizelist-empty {
+  color: var(--sapContent_LabelColor, #6a6d70);
+  font-style: italic;
+}
+
+/* Event stats panel */
+.scanner-event {
+  margin-top: 0.5rem;
+}
 </style>
+

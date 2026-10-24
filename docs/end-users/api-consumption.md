@@ -48,7 +48,10 @@ GET /admin-pat/Tutorials?$filter=owner eq 'me@sap.com'
 ### How to authenticate
 
 1. Sign in to the admin UI and open `/me/tokens/`. Mint a PAT with the **admin** scope
-   (only offered if you hold the *Tutorials Admin* role). Copy the token — shown once.
+   — the `admin` option in the scope picker appears **only when you already hold the
+   *Tutorials Admin* role** (minting records a server-side admin grant tied to that role;
+   a `read`/`write` PAT can never reach the admin surfaces). If you don't see an `admin`
+   option, you lack the role — request it before continuing. Copy the token — shown once.
 2. Call the OData surface headlessly via the `/admin-pat/*` prefix:
 
 ```bash
