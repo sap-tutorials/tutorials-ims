@@ -54,31 +54,6 @@
                 }
             ]
         },
-        "routing": {
-            "config": {
-                "routerClass": "sap.m.routing.Router",
-                "viewType": "XML",
-                "async": true,
-                "viewPath": "sap.tutorials.scanner.view",
-                "controlAggregation": "pages",
-                "controlId": "app",
-                "clearControlAggregation": false
-            },
-            "routes": [
-                {
-                    "name": "main",
-                    "pattern": ":?query:",
-                    "target": ["main"]
-                }
-            ],
-            "targets": {
-                "main": {
-                    "viewType": "XML",
-                    "viewId": "App",
-                    "viewName": "App"
-                }
-            }
-        },
         "rootView": {
             "viewName": "sap.tutorials.scanner.view.App",
             "type": "XML",
