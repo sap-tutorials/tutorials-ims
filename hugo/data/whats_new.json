@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-24T10:33:13.644Z",
+  "generatedAt": "2026-10-25T12:02:19.765Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,97 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2918",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2918,
+      "title": "docs: record QA/PROD rebuild-workflow parity rule (follow-up to #2917)",
+      "summary": "Documented the parity rule that keeps the QA and production content-rebuild pipelines generating identical CSS, preventing a class of build break.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-25T11:59:44Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2918"
+    },
+    {
+      "id": "tutorials-ims#2917",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2917,
+      "title": "QA tutorial previews build and style correctly again",
+      "summary": "The QA author-preview channel now regenerates its icon and base CSS before building, so author previews render with full styling instead of failing the build.",
+      "category": "Fix",
+      "mergedAt": "2026-10-25T11:53:50Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2917"
+    },
+    {
+      "id": "tutorials-ims#2916",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2916,
+      "title": "release v1.41.1 DEV to main promotion",
+      "summary": "Release 1.41.1 promoted the prior window of fixes from DEV to the production branch.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-25T11:44:57Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2916"
+    },
+    {
+      "id": "tutorials-ims#2915",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2915,
+      "title": "Prize-drawing winner cards show the winner's email again",
+      "summary": "Prize-drawing winner cards now show the winner's email by falling back to their verified sign-in identity when no address is on their main profile, so operators can reach winners instead of seeing \"No Email on File\".",
+      "category": "Fix",
+      "mergedAt": "2026-10-25T08:20:00Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2915"
+    },
+    {
+      "id": "tutorials-ims#2914",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2914,
+      "title": "Badge scanner shows the contestant name in dark mode",
+      "summary": "The badge scanner's contestant name is now legible in dark mode instead of rendering dark-on-dark, and the underlying theme fix also corrects icon and card-border colors across every page island.",
+      "category": "Fix",
+      "mergedAt": "2026-10-25T08:08:40Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2914"
+    },
+    {
+      "id": "tutorials-ims#2913",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2913,
+      "title": "App Space parallel-path timelines use the full width",
+      "summary": "App Space tracks with multiple parallel lanes now widen to fill the available space so card titles stop wrapping one word per line, while single-path tracks keep their comfortable reading width.",
+      "category": "Fix",
+      "mergedAt": "2026-10-24T14:02:14Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2913"
+    },
+    {
+      "id": "tutorials-ims#2911",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2911,
+      "title": "release v1.41.0 DEV to main promotion",
+      "summary": "Release 1.41.0 promoted the prior window of fixes and features from DEV to the production branch.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-24T10:35:54Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2911"
+    },
     {
       "id": "tutorials-ims#2910",
       "repo": "tutorials-ims",
