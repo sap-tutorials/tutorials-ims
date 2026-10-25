@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-25T11:43:41.582Z",
+  "generatedAt": "2026-10-25T12:04:13.836Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,45 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2918",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2918,
+      "title": "docs: record QA/PROD rebuild-workflow parity rule (follow-up to #2917)",
+      "summary": "Documented the parity rule that keeps the QA and production content-rebuild pipelines generating identical CSS, preventing a class of build break.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-25T11:59:44Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2918"
+    },
+    {
+      "id": "tutorials-ims#2917",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2917,
+      "title": "QA tutorial previews build and style correctly again",
+      "summary": "The QA author-preview channel now regenerates its icon and base CSS before building, so author previews render with full styling instead of failing the build.",
+      "category": "Fix",
+      "mergedAt": "2026-10-25T11:53:50Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2917"
+    },
+    {
+      "id": "tutorials-ims#2916",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2916,
+      "title": "release v1.41.1 DEV to main promotion",
+      "summary": "Release 1.41.1 promoted the prior window of fixes from DEV to the production branch.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-25T11:44:57Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2916"
+    },
     {
       "id": "tutorials-ims#2915",
       "repo": "tutorials-ims",
