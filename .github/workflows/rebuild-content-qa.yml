@@ -381,6 +381,22 @@ jobs:
       - name: Build island fingerprint manifest
         run: npm run build:island-manifest
 
+      # Generated CSS (#2896 follow-up, mirrors rebuild-content.yml). Commit
+      # ac6b7e39f stopped committing sap-fundamental.css (build:css, postcss)
+      # and fundamental-styles-icon.css (build:icon-subset) — both are now
+      # .gitignored build outputs. head.html does `resources.Get | minify` on
+      # the icon subset, so on a clean CI checkout where the file is absent the
+      # QA Hugo build fails at head.html:27 ("wrong type ...; got
+      # resource.Resource"). This workflow drives /tmp/hugo directly rather than
+      # `npm run build:all`, so — like the feed fetchers above — it must
+      # regenerate them BEFORE the Hugo build. build:css + build:icon-subset
+      # produce byte-identical output to the deploy's build:all, so QA and prod
+      # agree on the fingerprint. (QA regression #2912.)
+      - name: Build fingerprinted CSS (sap-fundamental + icon subset)
+        run: |
+          npm run build:icon-subset
+          npm run build:css
+
       - name: Build QA Hugo site
         # Hugo was downloaded to /tmp/hugo (line 44). The build:qa npm script
         # invokes 'hugo' (bare binary name) — works locally where hugo is
