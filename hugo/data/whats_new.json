@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-25T12:04:13.836Z",
+  "generatedAt": "2026-10-25T13:42:26.548Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,58 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2923",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2923,
+      "title": "fix(ci): QA asset guard probes PROD approuter (QA is a feature of prod)",
+      "summary": "Fixed the QA author-preview rebuild so its asset check targets the correct approuter, unblocking QA content refreshes.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-25T13:37:15Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2923"
+    },
+    {
+      "id": "tutorials-ims#2922",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2922,
+      "title": "fix(ci): regenerate gitignored CSS before unit-test Hugo build",
+      "summary": "Unit-test build now regenerates its CSS first, so the test suite runs reliably on a clean checkout.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-25T12:48:25Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2922"
+    },
+    {
+      "id": "tutorials-ims#2921",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2921,
+      "title": "TypeScript glossary entry corrected",
+      "summary": "Corrected the glossary definition for TypeScript so the term reads accurately for learners.",
+      "category": "Fix",
+      "mergedAt": "2026-10-25T12:23:58Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2921"
+    },
+    {
+      "id": "tutorials-ims#2919",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2919,
+      "title": "release v1.41.2 DEV to main promotion",
+      "summary": "Release 1.41.2 promoted the QA content-pipeline fix from DEV to the production branch.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-25T12:05:49Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2919"
+    },
     {
       "id": "tutorials-ims#2918",
       "repo": "tutorials-ims",
