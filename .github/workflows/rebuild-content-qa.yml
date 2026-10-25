@@ -432,7 +432,6 @@ jobs:
         # infra run and file a false failure issue.
         if: ${{ steps.source_errors.outputs.bad_slug == '' }}
         env:
-        env:
           # QA is a feature of PRODUCTION, not a separate environment: /tutorials-qa/*
           # is routed by the MAIN (prod) approuter (approuter/xs-app.json → srv-qa-api
           # destination), so the QA HTML is dressed by the PROD approuter. The asset
