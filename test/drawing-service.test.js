@@ -110,7 +110,7 @@ describe('DrawingService', () => {
   // ---------------------------------------------------------------------------
   describe('pool and draw', () => {
     beforeAll(async () => {
-      const { Events, Users, PrizeRecords } = cds.entities('com.sap.developers.ims');
+      const { Events, Users, PrizeRecords, UserIdentities } = cds.entities('com.sap.developers.ims');
 
       // Dedicated events for pool/draw tests
       await INSERT.into(Events).entries([
@@ -134,6 +134,13 @@ describe('DrawingService', () => {
           startDate: '2026-09-07T00:00:00Z',
           endDate: '2026-09-09T23:59:59Z',
           legacyId: 7012
+        },
+        {
+          ID: 'bbbbbbbb-2222-0000-0000-000000000040',
+          name: 'Pool Draw Event D (E only, no email anywhere)',
+          startDate: '2026-09-10T00:00:00Z',
+          endDate: '2026-09-12T23:59:59Z',
+          legacyId: 7013
         }
       ]);
 
@@ -142,7 +149,9 @@ describe('DrawingService', () => {
         { ID: 'bbbbbbbb-2222-0000-0000-000000000031', uuid: 'draw-pool-u1', legacyId: 8031, displayName: 'UserA', email: 'a@test.com' },
         { ID: 'bbbbbbbb-2222-0000-0000-000000000032', uuid: 'draw-pool-u2', legacyId: 8032, displayName: 'UserB', email: null },
         { ID: 'bbbbbbbb-2222-0000-0000-000000000033', uuid: 'draw-pool-u3', legacyId: 8033, displayName: 'ANONYMIZED', email: null },
-        { ID: 'bbbbbbbb-2222-0000-0000-000000000034', uuid: 'draw-pool-u4', legacyId: 8034, displayName: 'UserD', email: 'd@test.com' }
+        { ID: 'bbbbbbbb-2222-0000-0000-000000000034', uuid: 'draw-pool-u4', legacyId: 8034, displayName: 'UserD', email: 'd@test.com' },
+        // UserE: blank Users.email AND no UserIdentities → stays null ("no email on file")
+        { ID: 'bbbbbbbb-2222-0000-0000-000000000035', uuid: 'draw-pool-u5', legacyId: 8035, displayName: 'UserE', email: null }
       ]);
 
       await INSERT.into(PrizeRecords).entries([
@@ -192,6 +201,42 @@ describe('DrawingService', () => {
           event_ID: 'bbbbbbbb-2222-0000-0000-000000000030',
           status: 'CLAIMED',
           legacyId: 8046
+        },
+        // Event 7013 — only UserE (null email, no identities) — stays null
+        {
+          ID: 'bbbbbbbb-2222-0000-0000-000000000047',
+          user_ID: 'bbbbbbbb-2222-0000-0000-000000000035',
+          event_ID: 'bbbbbbbb-2222-0000-0000-000000000040',
+          status: 'CLAIMED',
+          legacyId: 8047
+        }
+      ]);
+
+      // UserB has a blank Users.email but DOES have UserIdentities links (#2552
+      // two-source model). Seed three: a verified SAP-ID email, a newer but
+      // UNVERIFIED github email, and a noreply-github synthetic. The fallback
+      // must pick the verified sap-id address and ignore the other two.
+      await INSERT.into(UserIdentities).entries([
+        {
+          ID: 'bbbbbbbb-2222-0000-0000-000000000051',
+          user_ID: 'bbbbbbbb-2222-0000-0000-000000000032',
+          issuer: 'https://accounts.sap.com', subject: 'userb-sap',
+          provider: 'sap-id', email: 'userb@sap.com', emailVerified: true,
+          linkedAt: '2026-01-01T00:00:00Z'
+        },
+        {
+          ID: 'bbbbbbbb-2222-0000-0000-000000000052',
+          user_ID: 'bbbbbbbb-2222-0000-0000-000000000032',
+          issuer: 'https://github.com', subject: 'userb-gh',
+          provider: 'github', email: 'userb-personal@gmail.com', emailVerified: false,
+          linkedAt: '2026-09-01T00:00:00Z'
+        },
+        {
+          ID: 'bbbbbbbb-2222-0000-0000-000000000053',
+          user_ID: 'bbbbbbbb-2222-0000-0000-000000000032',
+          issuer: 'https://github.com', subject: 'userb-gh2',
+          provider: 'github', email: 'userb@users.noreply.github.com', emailVerified: true,
+          linkedAt: '2026-10-01T00:00:00Z'
         }
       ]);
     });
@@ -238,11 +283,23 @@ describe('DrawingService', () => {
       expect(data.eligibleCount).toBe(0);
     });
 
-    it('draw can return a winner with null email', async () => {
-      // Event 7012 has only UserB (email:null) as eligible claimer
+    it('draw falls back to a verified UserIdentities email when Users.email is blank', async () => {
+      // Event 7012 has only UserB (Users.email:null) as eligible claimer. UserB
+      // has three UserIdentities links: the fallback must pick the VERIFIED
+      // sap-id address, not the newer unverified gmail or the noreply synthetic.
       const { status, data } = await project.get('/drawings/draw(eventId=7012)', adminAuth);
       expect(status).toBe(200);
       expect(data.winner.displayName).toBe('UserB');
+      expect(data.winner.email).toBe('userb@sap.com');
+      expect(data.eligibleCount).toBe(1);
+    });
+
+    it('draw returns null email when neither Users.email nor any UserIdentities email exists', async () => {
+      // Event 7013 has only UserE (Users.email:null, no UserIdentities rows) →
+      // "no email on file" still surfaces correctly.
+      const { status, data } = await project.get('/drawings/draw(eventId=7013)', adminAuth);
+      expect(status).toBe(200);
+      expect(data.winner.displayName).toBe('UserE');
       expect(data.winner.email).toBeNull();
       expect(data.eligibleCount).toBe(1);
     });
