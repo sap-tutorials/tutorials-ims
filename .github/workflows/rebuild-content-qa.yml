@@ -381,6 +381,21 @@ jobs:
       - name: Build island fingerprint manifest
         run: npm run build:island-manifest
 
+      # [#2896 follow-up] Generated CSS parity with rebuild-content.yml (its
+      # "Build fingerprinted CSS (sap-fundamental + icon subset)" step). Both
+      # sap-fundamental.css (build:css, postcss) and fundamental-styles-icon.css
+      # (build:icon-subset) are build outputs — no longer committed, they are
+      # .gitignored. This workflow drives /tmp/hugo directly rather than
+      # `npm run build:all`, so — exactly like the island manifest above — these
+      # must be generated explicitly before the QA Hugo build. Without them a
+      # clean QA checkout has no hugo/assets/css/fundamental-styles-icon.css and
+      # Hugo's `resources.Get` fails at head.html:27 (the 2026-10-25 QA-head
+      # build break). Layouts are shared prod/QA, so QA needs the same two outputs.
+      - name: Build fingerprinted CSS (sap-fundamental + icon subset)
+        run: |
+          npm run build:icon-subset
+          npm run build:css
+
       - name: Build QA Hugo site
         # Hugo was downloaded to /tmp/hugo (line 44). The build:qa npm script
         # invokes 'hugo' (bare binary name) — works locally where hugo is
