@@ -430,7 +430,14 @@ jobs:
         # infra run and file a false failure issue.
         if: ${{ steps.source_errors.outputs.bad_slug == '' }}
         env:
-          APPROUTER_URL: ${{ secrets.APPROUTER_URL_QA }}
+          # QA is a feature of PRODUCTION, not a separate environment: /tutorials-qa/*
+          # is routed by the MAIN (prod) approuter (approuter/xs-app.json → srv-qa-api
+          # destination), so the QA HTML is dressed by the PROD approuter. The asset
+          # guard must probe that same approuter. There is no APPROUTER_URL_QA secret
+          # (only _DEV / _PROD); referencing it resolved to an empty string and the
+          # guard die()d with "missing --approuter-url" on every full QA rebuild
+          # (2026-10-25).
+          APPROUTER_URL: ${{ secrets.APPROUTER_URL_PROD }}
           # Match the publish step's PUBLISH_SLUG / PUBLISH_SLUGS expressions
           # EXACTLY (lines 424/431) so the probe scope tracks the publish scope:
           # a force-publish run ships the WHOLE catalog, so it must NOT pin the
