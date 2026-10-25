@@ -54,5 +54,19 @@ jobs:
         # available to all workers unconditionally, matching what the MTA
         # before-all and local dev do.
         run: node scripts/bundle-shared.cjs
+      - name: Generate fingerprinted CSS (sap-fundamental + icon subset) required by the Hugo build test
+        # test/unit/hugo-homepage-partials.test.ts spawns a real Hugo build, and
+        # hugo/layouts/partials/head.html:27 does
+        #   resources.Get "css/fundamental-styles-icon.css" | minify | fingerprint
+        # Since ac6b7e39f ("stop committing generated CSS so deploy & rebuild
+        # agree on fingerprint") both sap-fundamental.css and
+        # fundamental-styles-icon.css are gitignored build outputs — absent on a
+        # fresh checkout. Without them `resources.Get` misses the asset, `minify`
+        # receives a non-transformable resource.Resource, and the Hugo build exits
+        # 1 → 7 test files fail. rebuild-content.yml already regenerates these
+        # before its Hugo build; mirror that here so the unit suite does too.
+        run: |
+          npm run build:icon-subset
+          npm run build:css
       - name: Run unit tests
         run: npm test
