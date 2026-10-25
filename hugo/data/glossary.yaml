@@ -274,7 +274,7 @@ terms:
     link: https://help.sap.com/docs/sap-mobile-services
   TypeScript:
     term: TypeScript
-    definition: Microsoft's typed superset of JavaScript — compiles to JS; preferred for new CAP and UI5 projects in this codebase.
+    definition: Microsoft's typed superset of JavaScript — compiles to JS; preferred for new UI5 projects.
     link: https://www.typescriptlang.org/
   Eclipse:
     term: Eclipse IDE
