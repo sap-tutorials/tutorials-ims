@@ -12,6 +12,9 @@
   --sapShell_BorderColor: transparent;
   --sapShell_Shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.2);
   --sapTextColor: #32363a;
+  --sapTitleColor: #1d2d3e;
+  --sapContent_IconColor: #0070f2;
+  --sapTile_BorderColor: #d9d9d9;
   --sapNeutralTextColor: #6a6d70;
   --sapNeutralBorderColor: #d9d9d9;
   --sapNeutralBackground: #f5f6f7;
@@ -72,6 +75,9 @@ html.dark {
   --sapShellColor: #1c2228;
   --sapShell_TextColor: #eaecee;
   --sapTextColor: #eaecee;
+  --sapTitleColor: #eaecee;
+  --sapContent_IconColor: #4db1ff;
+  --sapTile_BorderColor: #3c4854;
   --sapNeutralTextColor: #a9b4be;
   --sapNeutralBorderColor: #3c4854;
   --sapNeutralBackground: #1c2228;
