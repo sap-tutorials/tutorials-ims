@@ -381,16 +381,17 @@ jobs:
       - name: Build island fingerprint manifest
         run: npm run build:island-manifest
 
-      # [#2896 follow-up] Generated CSS parity with rebuild-content.yml (its
-      # "Build fingerprinted CSS (sap-fundamental + icon subset)" step). Both
-      # sap-fundamental.css (build:css, postcss) and fundamental-styles-icon.css
-      # (build:icon-subset) are build outputs — no longer committed, they are
-      # .gitignored. This workflow drives /tmp/hugo directly rather than
-      # `npm run build:all`, so — exactly like the island manifest above — these
-      # must be generated explicitly before the QA Hugo build. Without them a
-      # clean QA checkout has no hugo/assets/css/fundamental-styles-icon.css and
-      # Hugo's `resources.Get` fails at head.html:27 (the 2026-10-25 QA-head
-      # build break). Layouts are shared prod/QA, so QA needs the same two outputs.
+      # Generated CSS (#2896 follow-up, mirrors rebuild-content.yml). Commit
+      # ac6b7e39f stopped committing sap-fundamental.css (build:css, postcss)
+      # and fundamental-styles-icon.css (build:icon-subset) — both are now
+      # .gitignored build outputs. head.html does `resources.Get | minify` on
+      # the icon subset, so on a clean CI checkout where the file is absent the
+      # QA Hugo build fails at head.html:27 ("wrong type ...; got
+      # resource.Resource"). This workflow drives /tmp/hugo directly rather than
+      # `npm run build:all`, so — like the feed fetchers above — it must
+      # regenerate them BEFORE the Hugo build. build:css + build:icon-subset
+      # produce byte-identical output to the deploy's build:all, so QA and prod
+      # agree on the fingerprint. (QA regression #2912.)
       - name: Build fingerprinted CSS (sap-fundamental + icon subset)
         run: |
           npm run build:icon-subset
