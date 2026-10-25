@@ -813,20 +813,29 @@ jobs:
         env:
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
 
-      # Generated CSS (#2896 follow-up). sap-fundamental.css (build:css, postcss)
-      # and fundamental-styles-icon.css (build:icon-subset) are build outputs, no
-      # longer committed — they are .gitignored. This workflow drives /tmp/hugo
-      # directly rather than `npm run build:all`, so — exactly like the feed
-      # fetchers above — it must regenerate them explicitly BEFORE the Hugo build,
-      # or Hugo fingerprints a missing/stale file and the published content
-      # references a /css/<hash>.css the deployed approuter doesn't serve (the
-      # approuter-asset guard then blocks publish). build:css + build:icon-subset
-      # produce byte-identical output to the deploy's build:all, so both publish
-      # paths agree on the fingerprint.
-      - name: Build fingerprinted CSS (sap-fundamental + icon subset)
+      # [#2920] CSS on the REBUILD path must FOLLOW the deployed approuter, not
+      # race ahead of it. sap-fundamental.css (build:css, postcss) is the ONE
+      # fingerprinted stylesheet that is NOT Hugo-minified (head.html:73 is a bare
+      # `| fingerprint`), so its /css/<hash>.css URL == sha256 of the on-disk bytes.
+      # Post-#1659 a content rebuild never ships CSS to the approuter (static only
+      # changes on a full MTA deploy), so building sap-fundamental.css from HEAD
+      # source here made the baked HTML reference a hash the DEPLOYED approuter does
+      # not serve whenever CSS source changed since the last deploy → the
+      # approuter-asset guard (below) blocked publish, freezing all content
+      # publishing (the recurring 2026-10 saga, #2920). Fix: fetch the bytes the
+      # approuter CURRENTLY serves so Hugo fingerprints to the SAME hash → guard
+      # always passes, pages always styled, regardless of deploy lag. The DEPLOY
+      # path (build:all → build:css from source) is unchanged and still rotates the
+      # hash on deploy; this makes content-publish follow it. Fail-open: a brand-new
+      # env with nothing deployed falls back to build:css from source.
+      # fundamental-styles-icon.css stays a source build: Hugo `| minify`s it
+      # (head.html:27), so it self-heals from whatever on-disk bytes are present.
+      - name: Sync sap-fundamental CSS from deployed approuter (+ icon subset)
         run: |
           npm run build:icon-subset
-          npm run build:css
+          node scripts/sync-approuter-css.cjs --approuter-url "$APPROUTER_URL"
+        env:
+          APPROUTER_URL: ${{ steps.url.outputs.approuter_url }}
 
       - name: Build Hugo site
         run: /tmp/hugo --source hugo --minify

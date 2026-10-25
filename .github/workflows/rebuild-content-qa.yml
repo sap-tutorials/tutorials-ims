@@ -381,21 +381,23 @@ jobs:
       - name: Build island fingerprint manifest
         run: npm run build:island-manifest
 
-      # Generated CSS (#2896 follow-up, mirrors rebuild-content.yml). Commit
-      # ac6b7e39f stopped committing sap-fundamental.css (build:css, postcss)
-      # and fundamental-styles-icon.css (build:icon-subset) — both are now
-      # .gitignored build outputs. head.html does `resources.Get | minify` on
-      # the icon subset, so on a clean CI checkout where the file is absent the
-      # QA Hugo build fails at head.html:27 ("wrong type ...; got
-      # resource.Resource"). This workflow drives /tmp/hugo directly rather than
-      # `npm run build:all`, so — like the feed fetchers above — it must
-      # regenerate them BEFORE the Hugo build. build:css + build:icon-subset
-      # produce byte-identical output to the deploy's build:all, so QA and prod
-      # agree on the fingerprint. (QA regression #2912.)
-      - name: Build fingerprinted CSS (sap-fundamental + icon subset)
+      # [#2920] CSS on the REBUILD path must FOLLOW the deployed approuter (mirrors
+      # rebuild-content.yml). sap-fundamental.css is the one fingerprinted stylesheet
+      # NOT Hugo-minified (head.html:73), so its /css/<hash>.css URL == sha256 of the
+      # on-disk bytes; building it from HEAD source here made QA bake a hash the
+      # DEPLOYED approuter doesn't serve whenever CSS source changed since the last
+      # deploy → froze QA publishing. QA is a feature of PRODUCTION: /tutorials-qa/*
+      # is dressed by the MAIN (prod) approuter (xs-app.json → srv-qa-api), so the
+      # sync fetches from the PROD approuter (secrets.APPROUTER_URL_PROD), matching
+      # the asset guard below (#2923).
+      # fundamental-styles-icon.css stays a source build: Hugo `| minify`s it so it
+      # self-heals. Fail-open to build:css from source if the approuter is unreachable.
+      - name: Sync sap-fundamental CSS from deployed approuter (+ icon subset)
         run: |
           npm run build:icon-subset
-          npm run build:css
+          node scripts/sync-approuter-css.cjs --approuter-url "$APPROUTER_URL"
+        env:
+          APPROUTER_URL: ${{ secrets.APPROUTER_URL_PROD }}
 
       - name: Build QA Hugo site
         # Hugo was downloaded to /tmp/hugo (line 44). The build:qa npm script
@@ -429,6 +431,7 @@ jobs:
         # page — without this `if:`, a benign author typo would become a red
         # infra run and file a false failure issue.
         if: ${{ steps.source_errors.outputs.bad_slug == '' }}
+        env:
         env:
           # QA is a feature of PRODUCTION, not a separate environment: /tutorials-qa/*
           # is routed by the MAIN (prod) approuter (approuter/xs-app.json → srv-qa-api
