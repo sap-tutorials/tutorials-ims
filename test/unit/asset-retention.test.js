@@ -64,6 +64,26 @@ describe('mergeRetention', () => {
     const r = mergeRetention({ currentFiles: ['a-11111111.js'], retainedManifest: retained, nowMs: now, windowMs });
     expect(r.toDownload).toEqual([]); // 60h > 48h window, not in prior build → pruned
   });
+
+  // ── Regression (2026-10-25): legacy `assets/`-prefixed island CSS must be pruned ──
+  // Old Vite layouts emitted island CSS as `assets/<name>-<hash>.css`; the current
+  // pipeline injects island CSS via JS and emits NO `assets/`-prefixed bundles. Such
+  // an entry can never match a current file and its carry-forward download always
+  // 404s, so it lingered forever as a "prior build" entry and the post-deploy
+  // asset-retention smoke gate flapped on it. mergeRetention must drop it outright —
+  // even when it looks like it was in the immediately-prior build.
+  it('prunes a legacy assets/-prefixed entry even if it was in the prior build', () => {
+    const retained = [
+      { file: 'assets/app-space-CK7ssr7N.css', firstSeenMs: now - 5 * HOUR, lastSeenMs: now - 1 * HOUR },
+      { file: 'navigator-C76FZhtj.js', firstSeenMs: now - 1 * HOUR, lastSeenMs: now - 1 * HOUR },
+    ];
+    const r = mergeRetention({ currentFiles: ['a-11111111.js'], retainedManifest: retained, nowMs: now, windowMs });
+    // The assets/-prefixed CSS is gone from both the manifest and the download queue…
+    expect(r.toDownload).not.toContain('assets/app-space-CK7ssr7N.css');
+    expect(r.manifest.find(e => e.file === 'assets/app-space-CK7ssr7N.css')).toBeUndefined();
+    // …while a normal prior-build bundle still carries forward.
+    expect(r.toDownload).toContain('navigator-C76FZhtj.js');
+  });
 });
 
 // ── Regression (issue #2533): manifest must not advertise assets that were never

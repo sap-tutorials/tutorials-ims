@@ -39,6 +39,15 @@ function mergeRetention({ currentFiles, retainedManifest, nowMs, windowMs }) {
   const toDownload = [];
   for (const e of prior) {
     if (current.has(e.file)) continue;                 // already in this build
+    // Legacy carry-forward prune (2026-10-25). Old Vite layouts emitted island
+    // CSS as separate `assets/<name>-<hash>.css` files; the current pipeline
+    // injects island CSS via JS (vite-plugin-css-injected-by-js) and emits NO
+    // `assets/`-prefixed bundles. Such an entry can never match a current file
+    // and its carry-forward download (`/css/assets/…` or `/js/assets/…`) always
+    // 404s, so it lingers forever as a prior-build entry and the post-deploy
+    // asset-retention smoke gate flaps on it. Drop these permanently — nothing
+    // the current build produces or references lives under `assets/`.
+    if (e.file.startsWith('assets/')) continue;
     const last = lastOf(e);
     const inPriorBuild = hasLast(e) && priorBuildMs !== null && e.lastSeenMs === priorBuildMs;
     // Keep if it was current in the immediately-prior build (unconditional), or
