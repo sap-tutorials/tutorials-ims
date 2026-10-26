@@ -1,8 +1,9 @@
 // test/smoke/clickable-chips.smoke.test.ts
 //
 // Issue #161 — verifies the U1 Object Page renders experience and
-// topic/product chips as anchors deep-linking to /tutorials/?level=...
-// and /tutorials/?tag=... respectively. Pattern follows
+// topic/product chips as anchors deep-linking to /tutorial-navigator/?level=...
+// and /tutorial-navigator/?tag=... respectively (the navigator reads these as
+// deep-link entry params; /tutorials/ has no listing route and 404s). Pattern follows
 // test/smoke/license-icon.test.js. Quote-stripping tolerant — the Hugo
 // minifier removes quotes from safe attribute values, so regexes accept
 // both `class="op-chip..."` and `class=op-chip...` forms; see
@@ -33,12 +34,12 @@ describe(`Clickable chips on /tutorials/${SLUG}/ (#161)`, () => {
       /<a[^>]*class=["']?op-chip op-chip--link["']?[^>]*>[^<]*<span[^>]*op-chip__icon[^>]*>[^<]*<\/span>[^<]*<\/a>/,
     )
     expect(anchor, 'expected an experience chip anchor').toBeTruthy()
-    expect(html).toMatch(/href=["']?[^"' >]*\/tutorials\/\?level=[a-z]+["']?/)
+    expect(html).toMatch(/href=["']?[^"' >]*\/tutorial-navigator\/\?level=[a-z]+["']?/)
   })
 
   it('renders at least one topic/product chip as an anchor with ?tag=', () => {
     expect(html).toMatch(
-      /<a[^>]*class=["']?op-chip op-chip--tag op-chip--link["']?[^>]*href=["']?[^"' >]*\/tutorials\/\?tag=[^"' >]+["']?/,
+      /<a[^>]*class=["']?op-chip op-chip--tag op-chip--link["']?[^>]*href=["']?[^"' >]*\/tutorial-navigator\/\?tag=[^"' >]+["']?/,
     )
   })
 

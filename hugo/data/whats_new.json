@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-25T13:42:26.548Z",
+  "generatedAt": "2026-10-26T08:50:18.626Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,71 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2928",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2928,
+      "title": "fix(tutorials): tag/level chips link to /tutorial-navigator/ not /tutorials/",
+      "summary": "Tag and experience-level chips on tutorial pages now correctly link to the Tutorial Navigator, resolving 404 errors when filtering by tag or level from a tutorial.",
+      "category": "Fix",
+      "mergedAt": "2026-10-25T17:15:57Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2928"
+    },
+    {
+      "id": "tutorials-ims#2927",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2927,
+      "title": "fix(ci): remove duplicate env: key in QA rebuild workflow",
+      "summary": "Fixed a YAML validation error in the QA content rebuild workflow that prevented any QA rebuilds from starting.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-25T14:46:34Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2927"
+    },
+    {
+      "id": "tutorials-ims#2926",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2926,
+      "title": "fix(ci): prune legacy assets/-prefixed entries from asset retention",
+      "summary": "Cleared stale legacy CSS entries from the asset-retention list, stopping the post-deploy asset smoke gate from falsely flagging healthy deployments.",
+      "category": "Fix",
+      "mergedAt": "2026-10-25T14:13:15Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2926"
+    },
+    {
+      "id": "tutorials-ims#2924",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2924,
+      "title": "Content rebuild no longer freezes after a CSS source change",
+      "summary": "Content rebuilds now fetch the stylesheet bytes the live approuter serves rather than rebuilding from HEAD, so a CSS source change between deploys no longer blocks tutorial publishing.",
+      "category": "Fix",
+      "mergedAt": "2026-10-25T13:54:22Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2924"
+    },
+    {
+      "id": "tutorials-ims#2925",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2925,
+      "title": "release v1.41.3 DEV to main promotion",
+      "summary": "Patch release 1.41.3 promoting CI fixes from DEV to main.",
+      "category": "Maintenance",
+      "mergedAt": "2026-10-25T13:45:20Z",
+      "week": "2026-W43",
+      "weekStart": "2026-10-19",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2925"
+    },
     {
       "id": "tutorials-ims#2923",
       "repo": "tutorials-ims",
