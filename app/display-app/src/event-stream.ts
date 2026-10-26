@@ -39,8 +39,13 @@ export function useEventStream() {
     buckets.value.sort((a, b) => b.count !== a.count ? b.count - a.count : a.name.localeCompare(b.name))
   }
 
-  function recalcTotal() {
-    totalCount.value = buckets.value.reduce((sum, b) => sum + b.count, 0)
+  // Hero "total activity" = ALL window tutorial completions, independent of the
+  // per-track buckets. Seeded from getEventBuckets.totalCompletions on fetch,
+  // then bumped by the per-completion `completionTick` socket event. (Previously
+  // summed bucket counts, which — once buckets became track-scoped — undercounted
+  // to only track-member completions and double-counted multi-track tutorials.)
+  function setTotalFromFetch(total: number) {
+    totalCount.value = total
   }
 
   function removeOutdatedTimestamps() {
@@ -99,7 +104,6 @@ export function useEventStream() {
     bucketTimestamps.set(bucketName, ts)
 
     sortBuckets()
-    recalcTotal()
     setTimeout(() => {
       const b = buckets.value.find(b => b.name === bucketName)
       if (b) b.justUpdated = false
@@ -121,7 +125,7 @@ export function useEventStream() {
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
       const json = await res.json()
-      // getEventBuckets returns { eventName, eventType, hasLogo, buckets:[...] } (#2133);
+      // getEventBuckets returns { eventName, eventType, hasLogo, totalCompletions, buckets:[...] };
       // fall back to legacy array shapes for safety.
       const data: Array<{ bucketName: string; count: number }> =
         json.buckets ?? json.value ?? (Array.isArray(json) ? json : [])
@@ -129,7 +133,13 @@ export function useEventStream() {
       // above). Don't error out — proceed to the socket so late completions render (#2294).
       buckets.value = data.map(b => ({ name: b.bucketName, count: b.count, justUpdated: false }))
       sortBuckets()
-      recalcTotal()
+      // Hero total = ALL window completions (track-independent). Older servers that
+      // don't send totalCompletions fall back to the bucket sum.
+      setTotalFromFetch(
+        typeof json.totalCompletions === 'number'
+          ? json.totalCompletions
+          : buckets.value.reduce((sum, b) => sum + b.count, 0)
+      )
     } catch (e) {
       connectionState.value = 'error'
       errorMessage.value = `Failed to fetch from ${url}: ${(e as Error).message}`
@@ -166,6 +176,11 @@ export function useEventStream() {
       if (data.bucketName) applyUpdate(data.bucketName)
     })
 
+    // Hero "total activity" — one tick per completion (track or not).
+    socket.on('completionTick', () => {
+      totalCount.value++
+    })
+
     startCron()
   }
 
@@ -177,10 +192,11 @@ export function useEventStream() {
       justUpdated: false,
     }))
     sortBuckets()
-    recalcTotal()
+    totalCount.value = buckets.value.reduce((sum, b) => sum + b.count, 0)
     demoInterval = setInterval(() => {
       const tag = DEMO_TAGS[Math.floor(Math.random() * DEMO_TAGS.length)]
       applyUpdate(tag)
+      totalCount.value++
     }, 800 + Math.random() * 1200)
     startCron()
   }

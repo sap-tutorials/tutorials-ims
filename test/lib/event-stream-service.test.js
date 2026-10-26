@@ -69,6 +69,9 @@ describe('EventStreamService', () => {
     expect(byName['Alpha']).toBe(2);
     expect(byName['Beta']).toBe(1);
     expect(body.buckets.length).toBe(2);
+    // Hero total = ALL in-window TUTORIAL completions (7701×2 + 7702×1 + 7799×1 = 4),
+    // including 7799 which belongs to no track. 7702-out-of-window is excluded.
+    expect(body.totalCompletions).toBe(4);
 
     await DELETE.from(TaskRecords).where({ user_ID: { in: [u1, u2] } });
     await DELETE.from(Users).where({ ID: { in: [u1, u2] } });

@@ -27,10 +27,19 @@ export async function resolveEventMissionId(event, db) {
  * display bucket aggregation (computePathBuckets) and the realtime socket emit
  * so both label completions with the SAME track names the app-space page uses.
  *
+ * #1866: manually-authored event content populates a path/group item's
+ * `tutorial_ID` FK (UUID) and leaves `taskLegacyId` NULL — this is the normal
+ * shape for the TechEd/DSAG event missions, NOT a data defect. TaskRecords key
+ * completions by `taskLegacyId`, so every such item must be resolved FK-first
+ * (tutorial_ID → Tutorials.legacyId) before it can be matched to a completion.
+ * The earlier legacyId-only read missed all FK-only items, so whole tracks
+ * (e.g. "Joule Studio with N8N", "Frontend") counted 0 despite real tutorials
+ * and real activity. This mirrors path-item-task-resolver.buildTaskMap.
+ *
  * Returns { pathNameByToken: Map<string, Set<string>>, pathNameById: Map }.
  */
 export async function buildTrackMap(missionId, db) {
-  const { CompletionPaths, CompletionPathItems, GroupPathItems } = cds.entities(NS);
+  const { Tutorials, CompletionPaths, CompletionPathItems, GroupPathItems } = cds.entities(NS);
   const pathNameByToken = new Map();
 
   const paths = await db.run(
@@ -41,7 +50,7 @@ export async function buildTrackMap(missionId, db) {
 
   const pathIds = paths.map(p => p.ID);
   const items = await db.run(
-    SELECT.from(CompletionPathItems).columns('path_ID', 'taskType', 'taskLegacyId', 'group_ID')
+    SELECT.from(CompletionPathItems).columns('path_ID', 'taskType', 'taskLegacyId', 'tutorial_ID', 'group_ID')
       .where({ path_ID: { in: pathIds } })
   );
 
@@ -52,27 +61,56 @@ export async function buildTrackMap(missionId, db) {
     pathNameByToken.get(tok).add(name);
   };
 
-  const groupToPaths = new Map();   // group_ID → Set(path_ID)
+  // Collect tutorial_ID UUIDs that need legacyId resolution (direct items +,
+  // after the GROUP query below, group children). Map each (tutorial_ID → path).
+  const tutUuidToPaths = new Map();     // tutorial_ID → Set(path_ID)
+  const groupToPaths = new Map();       // group_ID → Set(path_ID)
+  const addUuidPath = (uuid, pid) => {
+    if (!tutUuidToPaths.has(uuid)) tutUuidToPaths.set(uuid, new Set());
+    tutUuidToPaths.get(uuid).add(pid);
+  };
+
   for (const it of items) {
     if (!it.path_ID) continue;
     if (it.taskType === 'GROUP' && it.group_ID) {
       if (!groupToPaths.has(it.group_ID)) groupToPaths.set(it.group_ID, new Set());
       groupToPaths.get(it.group_ID).add(it.path_ID);
+    } else if (it.taskType === 'TUTORIAL') {
+      // FK-first (#1866): prefer tutorial_ID; else the item's own taskLegacyId.
+      if (it.tutorial_ID) addUuidPath(it.tutorial_ID, it.path_ID);
+      else if (it.taskLegacyId != null) addToken(`TUTORIAL:${it.taskLegacyId}`, it.path_ID);
     } else if (it.taskLegacyId != null) {
+      // CHECKPOINT / PETOBERFEST carry no FK — legacyId only (unchanged).
       addToken(`${it.taskType}:${it.taskLegacyId}`, it.path_ID);
     }
   }
 
+  // Expand GROUP items to their child tutorials (GroupPathItems), FK-first too.
   const groupIds = [...groupToPaths.keys()];
   if (groupIds.length) {
     const gpi = await db.run(
-      SELECT.from(GroupPathItems).columns('group_ID', 'tutorial.legacyId as tutLegacyId')
+      SELECT.from(GroupPathItems).columns('group_ID', 'tutorial_ID')
         .where({ group_ID: { in: groupIds } })
     );
     for (const row of gpi) {
-      if (row.tutLegacyId == null) continue;
+      if (!row.tutorial_ID) continue;
       for (const pid of groupToPaths.get(row.group_ID) ?? []) {
-        addToken(`TUTORIAL:${row.tutLegacyId}`, pid);
+        addUuidPath(row.tutorial_ID, pid);
+      }
+    }
+  }
+
+  // Resolve all collected tutorial_ID UUIDs → legacyId in one batch, then key
+  // the map by legacyId (what TaskRecords.taskLegacyId carries).
+  const uuids = [...tutUuidToPaths.keys()];
+  if (uuids.length) {
+    const tuts = await db.run(
+      SELECT.from(Tutorials).columns('ID', 'legacyId').where({ ID: { in: uuids } })
+    );
+    for (const t of tuts) {
+      if (t.legacyId == null) continue;
+      for (const pid of tutUuidToPaths.get(t.ID) ?? []) {
+        addToken(`TUTORIAL:${t.legacyId}`, pid);
       }
     }
   }
@@ -107,55 +145,66 @@ export async function trackNamesForTutorial(event, tutorialLegacyId, db) {
  *           + GroupPathItems for GROUP items        (child tutorial → group → path)
  *
  * Then window-scoped TUTORIAL completions ([startDate,endDate]) are mapped to
- * their path(s) and counted. A completion can belong to more than one path
- * (a tutorial reused across tracks) — it is counted once per path it belongs
- * to, matching how app-space shows the tutorial in each track.
+ * their track(s) and counted. Every completion counts (NOT distinct users) —
+ * a track with 5 tutorial completions reads 5, even by one person. A completion
+ * can belong to more than one track (a tutorial reused across tracks) and is
+ * counted once per track, matching how app-space shows it in each.
  *
- * Returns [{ bucketName: path.name, count, percentage }] sorted desc by count.
- * Empty array when the event has no window, no mission, or no paths.
+ * NOTE: only TUTORIAL completions are counted. CHECKPOINT path items in the
+ * current data carry null taskLegacyId (no join key) and there are no checkpoint
+ * completions to credit, so checkpoint counting is deferred (would be inert).
+ *
+ * Returns { buckets, totalCompletions }:
+ *   buckets          [{ bucketName: track.name, count, percentage }] desc by count
+ *   totalCompletions ALL window TUTORIAL completions, regardless of track
+ *                    membership — the display hero number ("total activity").
+ * buckets is [] when the event has no window/mission/paths; totalCompletions is
+ * still returned (0 when no window).
  *
  * @param {object} event  resolved Events row (needs ID, startDate, endDate, mission_ID)
  * @param {object} db     cds db service
  */
 export async function computePathBuckets(event, db) {
-  if (!event?.startDate || !event?.endDate) return [];
+  if (!event?.startDate || !event?.endDate) return { buckets: [], totalCompletions: 0 };
 
   const { TaskRecords } = cds.entities(NS);
 
-  // 1. Resolve the event's mission + the (taskType:taskLegacyId) → track-name
-  //    map — SAME resolution the app-space page uses (shared helpers).
-  const missionId = await resolveEventMissionId(event, db);
-  if (!missionId) return [];
-  const { pathNameByToken } = await buildTrackMap(missionId, db);
-  if (pathNameByToken.size === 0) return [];
-
-  // 2. Window-scoped TUTORIAL completions → count distinct users per track.
+  // Window-scoped TUTORIAL completions — the hero "total activity" counts ALL
+  // of these, regardless of whether the tutorial belongs to an event track.
   const records = await db.run(
-    SELECT.from(TaskRecords).columns('user_ID', 'taskLegacyId')
+    SELECT.from(TaskRecords).columns('taskLegacyId')
       .where({ taskType: 'TUTORIAL', status: { in: ['COMPLETED', 'SUPERSEDED'] } })
       .and(`completionDate >=`, event.startDate)
       .and(`completionDate <=`, event.endDate)
   );
+  const totalCompletions = records.length;
 
-  const seen = new Set();                // dedupe (user, track-name)
+  // Resolve the event's mission + the (taskType:taskLegacyId) → track-name map —
+  // SAME resolution the app-space page uses (shared helpers).
+  const missionId = await resolveEventMissionId(event, db);
+  if (!missionId) return { buckets: [], totalCompletions };
+  const { pathNameByToken } = await buildTrackMap(missionId, db);
+  if (pathNameByToken.size === 0) return { buckets: [], totalCompletions };
+
+  // Per-track bars: count every completion (NOT distinct users) whose tutorial
+  // is a member of the track. One completion in N tracks counts once per track.
   const countByName = new Map();
   for (const r of records) {
     const names = pathNameByToken.get(`TUTORIAL:${r.taskLegacyId}`);
     if (!names) continue;
     for (const name of names) {
-      const key = `${r.user_ID}|${name}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
       countByName.set(name, (countByName.get(name) || 0) + 1);
     }
   }
 
   const total = [...countByName.values()].reduce((s, n) => s + n, 0);
-  return [...countByName.entries()]
+  const buckets = [...countByName.entries()]
     .map(([bucketName, count]) => ({
       bucketName,
       count,
       percentage: total > 0 ? Math.round((count / total) * 10000) / 100 : 0,
     }))
     .sort((a, b) => b.count - a.count);
+
+  return { buckets, totalCompletions };
 }

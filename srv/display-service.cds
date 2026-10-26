@@ -46,4 +46,10 @@ service DisplayService {
     tutorialTitle : String;
     userName      : String;
   }
+
+  // Fired once per active event for EVERY tutorial completion (track or not) —
+  // drives the hero "total activity" counter, independent of the per-track bars.
+  event completionTick {
+    tutorialTitle : String;
+  }
 }
