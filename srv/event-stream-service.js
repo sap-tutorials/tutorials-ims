@@ -18,12 +18,19 @@ export default class EventStreamService extends cds.ApplicationService {
       const event = await SELECT.one.from(Events).where({ legacyId: eventLegacyId });
       if (!event) return req.reject(404, `Event with legacy ID ${eventLegacyId} not found`);
 
+      // Scope completions by the event's date window, NOT by TaskRecords.event_ID.
+      // event_ID is only stamped by the TechEd scan-in / app-space flow; normal
+      // tutorial completions leave it NULL, so an event_ID join reported 0 for
+      // every date-windowed event (TechEd 2026 showed "0 completed" despite live
+      // activity). The display is already scoped to one event via its URL
+      // eventId, so [startDate,endDate] unambiguously selects the right rows.
+      // No window configured → nothing to count.
       const buckets = await cached(`es-buckets:${eventLegacyId}`, CACHE_TTL, async () => {
-        const records = await SELECT.from(TaskRecords).where({
-          event_ID: event.ID,
-          taskType: 'TUTORIAL',
-          status: { in: COMPLETION_STATUSES }
-        });
+        if (!event.startDate || !event.endDate) return [];
+        const records = await SELECT.from(TaskRecords)
+          .where({ taskType: 'TUTORIAL', status: { in: COMPLETION_STATUSES } })
+          .and(`completionDate >=`, event.startDate)
+          .and(`completionDate <=`, event.endDate);
         return computeBuckets(records);
       });
 

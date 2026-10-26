@@ -784,11 +784,19 @@ export default class DeveloperService extends cds.ApplicationService {
     // --- Real-time WebSocket broadcast ---
     this.after('createTaskRecord', async (result, req) => {
       if (!result || result.status !== 'COMPLETED') return;
-      if (result.taskType !== 'TUTORIAL' || !result.event_ID) return;
+      if (result.taskType !== 'TUTORIAL') return;
 
       try {
-        const event = await SELECT.one.from(dbEvents).where({ ID: result.event_ID });
-        if (!event) return;
+        // A completion is event-agnostic — it carries no event_ID. Match it to
+        // any event whose [startDate,endDate] window contains the completion
+        // instant and broadcast to that event's WS context. (The old code bailed
+        // on `!result.event_ID`, so normal completions — which never set it —
+        // never reached the display; see getEventBuckets for the same fix.)
+        const at = result.completionDate || new Date().toISOString();
+        const events = await SELECT.from(dbEvents)
+          .columns('legacyId')
+          .where(`startDate <=`, at).and(`endDate >=`, at);
+        if (!events.length) return;
 
         const tutorial = await SELECT.one.from(dbTutorials).where({ legacyId: result.taskLegacyId });
         const user = await SELECT.one.from(dbUsers).where({ ID: result.user_ID });
@@ -799,6 +807,8 @@ export default class DeveloperService extends cds.ApplicationService {
           tutorialTitle: tutorial?.title || 'Unknown Tutorial',
         };
 
+        const contexts = events.map(e => String(e.legacyId));
+
         // Broadcast to kiosks (unauthenticated, no user info).
         // Broadcast to authenticated clients (with user name).
         //
@@ -808,20 +818,29 @@ export default class DeveloperService extends cds.ApplicationService {
         // that scope, so we run the emits under `cds.User.privileged`. These
         // are trusted internal notifications (WS fan-out to display kiosks),
         // not user-authorized actions.
+        //
+        // Fire-and-forget: the WS fan-out is a best-effort side effect, never
+        // part of the completion transaction. Now that the trigger is "any
+        // active event window" (not just the rare scan-in row), a slow or
+        // wedged socket adapter must not be able to stall the completion
+        // response — so we do NOT await it; failures are logged, not awaited.
         const privileged = cds.User.privileged;
-        const eventStream = await cds.connect.to('EventStreamService');
-        await eventStream.tx({ user: privileged }, tx =>
-          tx.emit('tutorialCompleted', payload, { contexts: [String(event.legacyId)] })
-        );
-        const display = await cds.connect.to('DisplayService');
-        await display.tx({ user: privileged }, tx =>
-          tx.emit('tutorialCompleted',
-            { ...payload, userName: user?.displayName || 'Someone' },
-            { contexts: [String(event.legacyId)] }
-          )
-        );
+        const broadcast = async () => {
+          const eventStream = await cds.connect.to('EventStreamService');
+          await eventStream.tx({ user: privileged }, tx =>
+            tx.emit('tutorialCompleted', payload, { contexts })
+          );
+          const display = await cds.connect.to('DisplayService');
+          await display.tx({ user: privileged }, tx =>
+            tx.emit('tutorialCompleted',
+              { ...payload, userName: user?.displayName || 'Someone' },
+              { contexts }
+            )
+          );
+        };
+        broadcast().catch(e => cds.log('ws').warn('Failed to emit tutorialCompleted:', e.message));
       } catch (e) {
-        cds.log('ws').warn('Failed to emit tutorialCompleted:', e.message);
+        cds.log('ws').warn('Failed to resolve tutorialCompleted broadcast:', e.message);
       }
     });
 
