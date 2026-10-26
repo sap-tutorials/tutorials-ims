@@ -14,7 +14,7 @@ import { maybeAutoSendCompletion } from './lib/ngds-autosend.js';
 import { stampSubmissionId } from './lib/task-record-submission-id.js';
 import { rollUpParentsForCompletion } from './lib/completion-rollup.js';
 import { renderMarkdown } from './lib/markdown.js';
-import { buildTaskMap, effectiveLegacyId, expandGroupTutorials, buildPathItems, buildPathSegments, fetchGroupTitles, groupChildLegacyIds } from './lib/path-item-task-resolver.js';
+import { buildTaskMap, effectiveLegacyId, expandGroupTutorials, buildPathItems, buildPathSegments, fetchGroupTitles, groupChildLegacyIds, buildRecordMap } from './lib/path-item-task-resolver.js';
 import { annotateUnlocked } from './lib/app-space-segments.js';
 import { handleRequestAccountMerge, handleConfirmAccountMerge } from './lib/account-merge-request.js';
 
@@ -600,8 +600,11 @@ export default class DeveloperService extends cds.ApplicationService {
           taskLegacyId: { in: recordLegacyIds }
         });
       }
-      const recordMap = new Map();
-      for (const r of userRecords) recordMap.set(`${r.taskType}:${r.taskLegacyId}`, r);
+      // #600: a user can hold a COMPLETED row + SUPERSEDED rows for the same
+      // task; buildRecordMap keeps the most-done one deterministically (prefer
+      // COMPLETED) instead of the old unordered last-write-wins, which could
+      // surface a SUPERSEDED row and render a done task as incomplete.
+      const recordMap = buildRecordMap(userRecords);
 
       // Prefer the mission-side link (Missions.event_ID) the admin UI actually
       // sets; fall back to the forward Events.mission_ID lookup for legacy data.
@@ -711,8 +714,11 @@ export default class DeveloperService extends cds.ApplicationService {
           taskLegacyId: { in: recordLegacyIds }
         });
       }
-      const recordMap = new Map();
-      for (const r of userRecords) recordMap.set(`${r.taskType}:${r.taskLegacyId}`, r);
+      // #600: a user can hold a COMPLETED row + SUPERSEDED rows for the same
+      // task; buildRecordMap keeps the most-done one deterministically (prefer
+      // COMPLETED) instead of the old unordered last-write-wins, which could
+      // surface a SUPERSEDED row and render a done task as incomplete.
+      const recordMap = buildRecordMap(userRecords);
 
       return {
         eventId: event.legacyId,
