@@ -282,6 +282,48 @@ export function groupChildLegacyIds(groupTutorials) {
 }
 
 /**
+ * Collapse a user's TaskRecords to one record per `${taskType}:${taskLegacyId}`,
+ * keyed the way buildPathItems/shapeItem look them up.
+ *
+ * A user can hold MULTIPLE records for the same task — a current COMPLETED row
+ * plus one or more SUPERSEDED rows from prior completions (issue #600 "has-ever-
+ * completed"), and occasionally IN_PROGRESS. The old code did a plain
+ * `for (r of userRecords) map.set(key, r)` — last-write-wins over an UNORDERED
+ * query, so which row survived was nondeterministic. When a SUPERSEDED (or
+ * in-progress) row happened to land last, the path item rendered as not-complete
+ * even though the user had a COMPLETED record — e.g. app-space showing "2 of 4"
+ * ABAP tutorials done when all four were COMPLETED in-window (reported
+ * 2026-10-26). Prefer the most "done" record deterministically instead.
+ *
+ * Preference (highest wins): COMPLETED > SUPERSEDED > anything else; ties broken
+ * by latest completionDate. This picks the record that proves the task is done;
+ * the #2866 in-window downgrade (effectiveStatus) still applies downstream on
+ * whichever record we keep.
+ *
+ * @param {Array} userRecords  TaskRecords rows (taskType, taskLegacyId, status, completionDate)
+ * @returns {Map<string, object>} `${taskType}:${taskLegacyId}` → best record
+ */
+export function buildRecordMap(userRecords) {
+  const STATUS_RANK = { COMPLETED: 3, SUPERSEDED: 2 };
+  const rankOf = (r) => STATUS_RANK[r?.status] ?? 1;
+  const map = new Map();
+  for (const r of userRecords) {
+    const key = `${r.taskType}:${r.taskLegacyId}`;
+    const cur = map.get(key);
+    if (!cur) { map.set(key, r); continue; }
+    const rr = rankOf(r), rc = rankOf(cur);
+    if (rr > rc) { map.set(key, r); continue; }
+    if (rr === rc) {
+      // tie-break: latest completionDate wins (null sorts earliest)
+      const dr = r?.completionDate ? Date.parse(r.completionDate) : -Infinity;
+      const dc = cur?.completionDate ? Date.parse(cur.completionDate) : -Infinity;
+      if (dr > dc) map.set(key, r);
+    }
+  }
+  return map;
+}
+
+/**
  * Batch-fetch the titles for Groups referenced by path items (for fork lane
  * labels). Returns an empty Map when there are no GROUP items.
  *
