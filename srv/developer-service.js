@@ -789,25 +789,33 @@ export default class DeveloperService extends cds.ApplicationService {
       try {
         // A completion is event-agnostic — it carries no event_ID. Match it to
         // any event whose [startDate,endDate] window contains the completion
-        // instant and broadcast to that event's WS context. (The old code bailed
-        // on `!result.event_ID`, so normal completions — which never set it —
-        // never reached the display; see getEventBuckets for the same fix.)
+        // instant, and label it with the TRACK(s) it belongs to in that event's
+        // mission — the SAME grouping the display buckets + app-space page use
+        // (lib/event-path-buckets.js). A tutorial outside every track emits
+        // nothing (no bar). (The old code bailed on `!result.event_ID` — NULL on
+        // normal completions — and keyed bucketName on primaryTag, which did not
+        // match the path-grouped buckets; see getEventBuckets for the fetch fix.)
         const at = result.completionDate || new Date().toISOString();
         const events = await SELECT.from(dbEvents)
-          .columns('legacyId')
+          .columns('ID', 'legacyId', 'startDate', 'endDate', 'mission_ID')
           .where(`startDate <=`, at).and(`endDate >=`, at);
         if (!events.length) return;
 
+        const { trackNamesForTutorial } = await import('./lib/event-path-buckets.js');
+        const db = await cds.connect.to('db');
+
+        // Build [{ context, bucketName }] — one per (event, track) the completion lands in.
+        const targets = [];
+        for (const ev of events) {
+          const names = await trackNamesForTutorial(ev, result.taskLegacyId, db);
+          for (const name of names) targets.push({ context: String(ev.legacyId), bucketName: name });
+        }
+        if (!targets.length) return;
+
         const tutorial = await SELECT.one.from(dbTutorials).where({ legacyId: result.taskLegacyId });
         const user = await SELECT.one.from(dbUsers).where({ ID: result.user_ID });
-
-        const payload = {
-          bucketName: tutorial?.primaryTag || 'unknown',
-          completeDate: new Date().toISOString().slice(0, 10),
-          tutorialTitle: tutorial?.title || 'Unknown Tutorial',
-        };
-
-        const contexts = events.map(e => String(e.legacyId));
+        const completeDate = new Date().toISOString().slice(0, 10);
+        const tutorialTitle = tutorial?.title || 'Unknown Tutorial';
 
         // Broadcast to kiosks (unauthenticated, no user info).
         // Broadcast to authenticated clients (with user name).
@@ -827,16 +835,19 @@ export default class DeveloperService extends cds.ApplicationService {
         const privileged = cds.User.privileged;
         const broadcast = async () => {
           const eventStream = await cds.connect.to('EventStreamService');
-          await eventStream.tx({ user: privileged }, tx =>
-            tx.emit('tutorialCompleted', payload, { contexts })
-          );
           const display = await cds.connect.to('DisplayService');
-          await display.tx({ user: privileged }, tx =>
-            tx.emit('tutorialCompleted',
-              { ...payload, userName: user?.displayName || 'Someone' },
-              { contexts }
-            )
-          );
+          for (const t of targets) {
+            const payload = { bucketName: t.bucketName, completeDate, tutorialTitle };
+            await eventStream.tx({ user: privileged }, tx =>
+              tx.emit('tutorialCompleted', payload, { contexts: [t.context] })
+            );
+            await display.tx({ user: privileged }, tx =>
+              tx.emit('tutorialCompleted',
+                { ...payload, userName: user?.displayName || 'Someone' },
+                { contexts: [t.context] }
+              )
+            );
+          }
         };
         broadcast().catch(e => cds.log('ws').warn('Failed to emit tutorialCompleted:', e.message));
       } catch (e) {

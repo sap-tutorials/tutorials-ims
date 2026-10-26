@@ -24,7 +24,7 @@ describe('DisplayService', () => {
 
   describe('Event Data', () => {
     beforeAll(async () => {
-      const { Events, Users, Tutorials, Missions, TaskRecords } = cds.entities('com.sap.developers.ims');
+      const { Events, Users, Tutorials, Missions, CompletionPaths, CompletionPathItems, TaskRecords } = cds.entities('com.sap.developers.ims');
 
       await INSERT.into(Events).entries({
         ID: 'aaaaaaaa-1111-0000-0000-000000000001',
@@ -42,11 +42,18 @@ describe('DisplayService', () => {
       ]);
 
       await INSERT.into(Tutorials).entries([
-        { ID: 'aaaaaaaa-1111-0000-0000-000000000021', title: 'Tut 1', slug: 'disp-tut-1', legacyId: 5021 },
+        { ID: 'aaaaaaaa-1111-0000-0000-000000000021', title: 'Tut 1', slug: 'disp-tut-1', legacyId: 5021, status: 'ACTIVE' },
       ]);
 
+      // Mission linked to the event (backlink), with one track containing Tut 1.
       await INSERT.into(Missions).entries([
-        { ID: 'aaaaaaaa-1111-0000-0000-000000000031', title: 'Mission Alpha', legacyId: 5031 },
+        { ID: 'aaaaaaaa-1111-0000-0000-000000000031', title: 'Mission Alpha', legacyId: 5031, event_ID: 'aaaaaaaa-1111-0000-0000-000000000001', published: true },
+      ]);
+      await INSERT.into(CompletionPaths).entries([
+        { ID: 'aaaaaaaa-1111-0000-0000-000000000041', name: 'Track One', legacyId: 5041, mission_ID: 'aaaaaaaa-1111-0000-0000-000000000031' },
+      ]);
+      await INSERT.into(CompletionPathItems).entries([
+        { ID: 'aaaaaaaa-1111-0000-0000-000000000051', legacyId: 5051, path_ID: 'aaaaaaaa-1111-0000-0000-000000000041', taskType: 'TUTORIAL', taskLegacyId: 5021, itemOrder: 1 },
       ]);
 
       await INSERT.into(TaskRecords).entries([
@@ -69,13 +76,14 @@ describe('DisplayService', () => {
       expect(data.value[1].cumulative).toBe(3);
     });
 
-    it('getEventBuckets returns user distribution', async () => {
+    it('getEventBuckets returns per-track completion counts', async () => {
       const { status, data } = await project.get(
         '/display/getEventBuckets(eventLegacyId=5001)', displayAuth
       );
       expect(status).toBe(200);
-      expect(data.value.length).toBeGreaterThan(0);
-      expect(data.value[0].bucketName).toBe('1 tutorial');
+      // Tut 1 is in "Track One"; 3 users completed it in-window → Track One = 3.
+      expect(data.value.length).toBe(1);
+      expect(data.value[0].bucketName).toBe('Track One');
       expect(data.value[0].count).toBe(3);
     });
 

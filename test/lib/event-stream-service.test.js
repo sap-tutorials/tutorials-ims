@@ -26,43 +26,55 @@ describe('EventStreamService', () => {
     expect(res.response?.status ?? res.status).toBe(404);
   });
 
-  it('getEventBuckets counts completions within the event date window, ignoring event_ID', async () => {
-    const db = await cds.connect.to('db');
-    const { Events, Users, TaskRecords } = cds.entities('com.sap.developers.ims');
+  it('getEventBuckets returns per-track buckets grouped by CompletionPath, window-scoped', async () => {
+    const { Events, Missions, Users, Tutorials, CompletionPaths, CompletionPathItems, TaskRecords } =
+      cds.entities('com.sap.developers.ims');
 
-    const eventID = cds.utils.uuid();
+    const eventID = cds.utils.uuid(), misID = cds.utils.uuid();
     await INSERT.into(Events).entries({
-      ID: eventID, legacyId: 777001, name: 'Window Test Event',
-      eventType: 'TECHED',
+      ID: eventID, legacyId: 777001, name: 'Window Test Event', eventType: 'TECHED',
       startDate: '2026-10-26T14:00:00Z', endDate: '2026-10-29T16:00:00Z',
     });
+    await INSERT.into(Missions).entries({ ID: misID, legacyId: 777050, title: 'M', event_ID: eventID, published: true });
+    await INSERT.into(CompletionPaths).entries(
+      { ID: 'esp-A', legacyId: 777060, name: 'Alpha', mission_ID: misID },
+      { ID: 'esp-B', legacyId: 777061, name: 'Beta', mission_ID: misID },
+    );
+    await INSERT.into(Tutorials).entries(
+      { ID: 'est-1', legacyId: 7701, title: 'T1', status: 'ACTIVE' },
+      { ID: 'est-2', legacyId: 7702, title: 'T2', status: 'ACTIVE' },
+    );
+    await INSERT.into(CompletionPathItems).entries(
+      { ID: 'escpi-1', legacyId: 777070, path_ID: 'esp-A', taskType: 'TUTORIAL', taskLegacyId: 7701, itemOrder: 1 },
+      { ID: 'escpi-2', legacyId: 777071, path_ID: 'esp-B', taskType: 'TUTORIAL', taskLegacyId: 7702, itemOrder: 1 },
+    );
 
     const u1 = cds.utils.uuid(), u2 = cds.utils.uuid();
-    await INSERT.into(Users).entries(
-      { ID: u1, legacyId: 777101 }, { ID: u2, legacyId: 777102 });
-
+    await INSERT.into(Users).entries({ ID: u1, legacyId: 777101 }, { ID: u2, legacyId: 777102 });
     await INSERT.into(TaskRecords).entries(
-      // In window, no event_ID — must still count (the bug: event_ID join missed these)
-      { ID: cds.utils.uuid(), user_ID: u1, taskLegacyId: 1, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: '2026-10-27T10:00:00Z' },
-      { ID: cds.utils.uuid(), user_ID: u1, taskLegacyId: 2, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: '2026-10-27T11:00:00Z' },
-      { ID: cds.utils.uuid(), user_ID: u2, taskLegacyId: 1, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: '2026-10-28T09:00:00Z' },
-      // Before window — excluded
-      { ID: cds.utils.uuid(), user_ID: u2, taskLegacyId: 3, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: '2026-10-01T09:00:00Z' },
-      // After window — excluded
-      { ID: cds.utils.uuid(), user_ID: u1, taskLegacyId: 4, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: '2026-11-01T09:00:00Z' },
-      // In window but wrong taskType — excluded
-      { ID: cds.utils.uuid(), user_ID: u2, taskLegacyId: 5, taskType: 'MISSION', status: 'COMPLETED', completionDate: '2026-10-27T12:00:00Z' },
+      // Alpha: u1 + u2 complete 7701 (in window) → Alpha = 2
+      { ID: cds.utils.uuid(), user_ID: u1, taskLegacyId: 7701, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: '2026-10-27T10:00:00Z' },
+      { ID: cds.utils.uuid(), user_ID: u2, taskLegacyId: 7701, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: '2026-10-28T09:00:00Z' },
+      // Beta: u1 completes 7702 → Beta = 1
+      { ID: cds.utils.uuid(), user_ID: u1, taskLegacyId: 7702, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: '2026-10-27T11:00:00Z' },
+      // Out of window — excluded
+      { ID: cds.utils.uuid(), user_ID: u2, taskLegacyId: 7702, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: '2026-10-01T09:00:00Z' },
+      // Not a path tutorial — contributes to no track
+      { ID: cds.utils.uuid(), user_ID: u2, taskLegacyId: 7799, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: '2026-10-27T12:00:00Z' },
     );
 
     const res = await project.get('/rest/event-stream/getEventBuckets(eventLegacyId=777001)');
     const body = res.data ?? res;
-    // u1 = 2 tutorials, u2 = 1 tutorial → buckets: {"1 tutorial":1, "2 tutorials":1}
     const byName = Object.fromEntries(body.buckets.map(b => [b.bucketName, b.count]));
-    expect(byName['2 tutorials']).toBe(1);
-    expect(byName['1 tutorial']).toBe(1);
+    expect(byName['Alpha']).toBe(2);
+    expect(byName['Beta']).toBe(1);
+    expect(body.buckets.length).toBe(2);
 
     await DELETE.from(TaskRecords).where({ user_ID: { in: [u1, u2] } });
     await DELETE.from(Users).where({ ID: { in: [u1, u2] } });
+    await DELETE.from(CompletionPathItems).where({ path_ID: { in: ['esp-A', 'esp-B'] } });
+    await DELETE.from(CompletionPaths).where({ ID: { in: ['esp-A', 'esp-B'] } });
+    await DELETE.from(Missions).where({ ID: misID });
     await DELETE.from(Events).where({ ID: eventID });
   });
 

@@ -1,5 +1,6 @@
 import cds from '@sap/cds';
-import { computeBuckets, computeBurnup, computeTrackStats, computeCompletionSpeed, computeLeaderboard } from './lib/event-statistics.js';
+import { computeBurnup, computeTrackStats, computeCompletionSpeed, computeLeaderboard } from './lib/event-statistics.js';
+import { computePathBuckets } from './lib/event-path-buckets.js';
 import { cached } from './lib/ttl-cache.js';
 
 const CACHE_TTL = 600_000; // 600 seconds, matches IMS leaderboard cache
@@ -25,13 +26,13 @@ export default class DisplayService extends cds.ApplicationService {
       const event = await resolveEvent(eventLegacyId, req);
       if (!event) return;
 
+      // Per-track ("CompletionPath") completion counts, grouped the SAME way as
+      // the app-space page (event → mission → paths), window-scoped. Shared with
+      // the anonymous EventStreamService.getEventBuckets via lib/event-path-buckets.js.
+      // Replaces the old event_ID join (NULL on all normal completions → always []).
       return cached(`buckets:${eventLegacyId}`, CACHE_TTL, async () => {
-        const records = await SELECT.from(TaskRecords).where({
-          event_ID: event.ID,
-          taskType: 'TUTORIAL',
-          status: { in: COMPLETION_STATUSES }
-        });
-        return computeBuckets(records);
+        const db = await cds.connect.to('db');
+        return computePathBuckets(event, db);
       });
     });
 
