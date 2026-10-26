@@ -107,55 +107,66 @@ export async function trackNamesForTutorial(event, tutorialLegacyId, db) {
  *           + GroupPathItems for GROUP items        (child tutorial → group → path)
  *
  * Then window-scoped TUTORIAL completions ([startDate,endDate]) are mapped to
- * their path(s) and counted. A completion can belong to more than one path
- * (a tutorial reused across tracks) — it is counted once per path it belongs
- * to, matching how app-space shows the tutorial in each track.
+ * their track(s) and counted. Every completion counts (NOT distinct users) —
+ * a track with 5 tutorial completions reads 5, even by one person. A completion
+ * can belong to more than one track (a tutorial reused across tracks) and is
+ * counted once per track, matching how app-space shows it in each.
  *
- * Returns [{ bucketName: path.name, count, percentage }] sorted desc by count.
- * Empty array when the event has no window, no mission, or no paths.
+ * NOTE: only TUTORIAL completions are counted. CHECKPOINT path items in the
+ * current data carry null taskLegacyId (no join key) and there are no checkpoint
+ * completions to credit, so checkpoint counting is deferred (would be inert).
+ *
+ * Returns { buckets, totalCompletions }:
+ *   buckets          [{ bucketName: track.name, count, percentage }] desc by count
+ *   totalCompletions ALL window TUTORIAL completions, regardless of track
+ *                    membership — the display hero number ("total activity").
+ * buckets is [] when the event has no window/mission/paths; totalCompletions is
+ * still returned (0 when no window).
  *
  * @param {object} event  resolved Events row (needs ID, startDate, endDate, mission_ID)
  * @param {object} db     cds db service
  */
 export async function computePathBuckets(event, db) {
-  if (!event?.startDate || !event?.endDate) return [];
+  if (!event?.startDate || !event?.endDate) return { buckets: [], totalCompletions: 0 };
 
   const { TaskRecords } = cds.entities(NS);
 
-  // 1. Resolve the event's mission + the (taskType:taskLegacyId) → track-name
-  //    map — SAME resolution the app-space page uses (shared helpers).
-  const missionId = await resolveEventMissionId(event, db);
-  if (!missionId) return [];
-  const { pathNameByToken } = await buildTrackMap(missionId, db);
-  if (pathNameByToken.size === 0) return [];
-
-  // 2. Window-scoped TUTORIAL completions → count distinct users per track.
+  // Window-scoped TUTORIAL completions — the hero "total activity" counts ALL
+  // of these, regardless of whether the tutorial belongs to an event track.
   const records = await db.run(
-    SELECT.from(TaskRecords).columns('user_ID', 'taskLegacyId')
+    SELECT.from(TaskRecords).columns('taskLegacyId')
       .where({ taskType: 'TUTORIAL', status: { in: ['COMPLETED', 'SUPERSEDED'] } })
       .and(`completionDate >=`, event.startDate)
       .and(`completionDate <=`, event.endDate)
   );
+  const totalCompletions = records.length;
 
-  const seen = new Set();                // dedupe (user, track-name)
+  // Resolve the event's mission + the (taskType:taskLegacyId) → track-name map —
+  // SAME resolution the app-space page uses (shared helpers).
+  const missionId = await resolveEventMissionId(event, db);
+  if (!missionId) return { buckets: [], totalCompletions };
+  const { pathNameByToken } = await buildTrackMap(missionId, db);
+  if (pathNameByToken.size === 0) return { buckets: [], totalCompletions };
+
+  // Per-track bars: count every completion (NOT distinct users) whose tutorial
+  // is a member of the track. One completion in N tracks counts once per track.
   const countByName = new Map();
   for (const r of records) {
     const names = pathNameByToken.get(`TUTORIAL:${r.taskLegacyId}`);
     if (!names) continue;
     for (const name of names) {
-      const key = `${r.user_ID}|${name}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
       countByName.set(name, (countByName.get(name) || 0) + 1);
     }
   }
 
   const total = [...countByName.values()].reduce((s, n) => s + n, 0);
-  return [...countByName.entries()]
+  const buckets = [...countByName.entries()]
     .map(([bucketName, count]) => ({
       bucketName,
       count,
       percentage: total > 0 ? Math.round((count / total) * 10000) / 100 : 0,
     }))
     .sort((a, b) => b.count - a.count);
+
+  return { buckets, totalCompletions };
 }

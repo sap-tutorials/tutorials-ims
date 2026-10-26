@@ -804,13 +804,19 @@ export default class DeveloperService extends cds.ApplicationService {
         const { trackNamesForTutorial } = await import('./lib/event-path-buckets.js');
         const db = await cds.connect.to('db');
 
-        // Build [{ context, bucketName }] — one per (event, track) the completion lands in.
+        // Two distinct display signals:
+        //  • completionTick — ONE per active event, fired for EVERY tutorial
+        //    completion regardless of track membership. Drives the hero "total
+        //    activity" counter (matches getEventBuckets.totalCompletions).
+        //  • tutorialCompleted — one per (event, TRACK) the completion lands in.
+        //    Drives the per-track bars. A completion outside every track fires
+        //    none of these (no bar), but still ticks the hero above.
+        const tickContexts = events.map(ev => String(ev.legacyId));
         const targets = [];
         for (const ev of events) {
           const names = await trackNamesForTutorial(ev, result.taskLegacyId, db);
           for (const name of names) targets.push({ context: String(ev.legacyId), bucketName: name });
         }
-        if (!targets.length) return;
 
         const tutorial = await SELECT.one.from(dbTutorials).where({ legacyId: result.taskLegacyId });
         const user = await SELECT.one.from(dbUsers).where({ ID: result.user_ID });
@@ -836,6 +842,16 @@ export default class DeveloperService extends cds.ApplicationService {
         const broadcast = async () => {
           const eventStream = await cds.connect.to('EventStreamService');
           const display = await cds.connect.to('DisplayService');
+          // Hero tick — one per active event, always.
+          if (tickContexts.length) {
+            await eventStream.tx({ user: privileged }, tx =>
+              tx.emit('completionTick', { tutorialTitle }, { contexts: tickContexts })
+            );
+            await display.tx({ user: privileged }, tx =>
+              tx.emit('completionTick', { tutorialTitle }, { contexts: tickContexts })
+            );
+          }
+          // Per-track bars.
           for (const t of targets) {
             const payload = { bucketName: t.bucketName, completeDate, tutorialTitle };
             await eventStream.tx({ user: privileged }, tx =>

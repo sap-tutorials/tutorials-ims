@@ -26,13 +26,13 @@ export default class DisplayService extends cds.ApplicationService {
       const event = await resolveEvent(eventLegacyId, req);
       if (!event) return;
 
-      // Per-track ("CompletionPath") completion counts, grouped the SAME way as
-      // the app-space page (event → mission → paths), window-scoped. Shared with
-      // the anonymous EventStreamService.getEventBuckets via lib/event-path-buckets.js.
-      // Replaces the old event_ID join (NULL on all normal completions → always []).
+      // Per-track completion counts (same grouping as app-space + the anonymous
+      // EventStreamService). computePathBuckets returns { buckets, totalCompletions };
+      // this admin function's contract is the bucket array, so return buckets only.
       return cached(`buckets:${eventLegacyId}`, CACHE_TTL, async () => {
         const db = await cds.connect.to('db');
-        return computePathBuckets(event, db);
+        const { buckets } = await computePathBuckets(event, db);
+        return buckets;
       });
     });
 
