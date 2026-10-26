@@ -26,21 +26,26 @@ describe('computePathBuckets', () => {
     await INSERT.into(CompletionPaths).entries(
       { ID: 'path-A', legacyId: 900010, name: 'Track Alpha', mission_ID: misID },
       { ID: 'path-B', legacyId: 900011, name: 'Track Beta', mission_ID: misID },
+      { ID: 'path-C', legacyId: 900012, name: 'Track Gamma', mission_ID: misID },
     );
 
     await INSERT.into(Tutorials).entries(
       { ID: 'tut-1', legacyId: 901, title: 'T1', status: 'ACTIVE' },
       { ID: 'tut-2', legacyId: 902, title: 'T2', status: 'ACTIVE' },
       { ID: 'tut-3', legacyId: 903, title: 'T3', status: 'ACTIVE' },  // reached via GROUP on Track Beta
+      { ID: 'tut-4', legacyId: 904, title: 'T4', status: 'ACTIVE' },  // FK-only item on Track Gamma (#1866)
     );
     await INSERT.into(Groups).entries({ ID: 'grp-1', legacyId: 950, title: 'G1' });
 
-    // Track Alpha: direct TUTORIAL items 901, 902
-    // Track Beta: a GROUP item (grp-1) that contains tutorial 903
+    // Track Alpha: direct TUTORIAL items 901, 902 (legacyId-keyed)
+    // Track Beta:  a GROUP item (grp-1) that contains tutorial 903
+    // Track Gamma: an FK-ONLY direct item — tutorial_ID set, taskLegacyId NULL
+    //              (the #1866 manually-authored event shape that broke before)
     await INSERT.into(CompletionPathItems).entries(
       { ID: 'cpi-1', legacyId: 9601, path_ID: 'path-A', taskType: 'TUTORIAL', taskLegacyId: 901, itemOrder: 1 },
       { ID: 'cpi-2', legacyId: 9602, path_ID: 'path-A', taskType: 'TUTORIAL', taskLegacyId: 902, itemOrder: 2 },
       { ID: 'cpi-3', legacyId: 9603, path_ID: 'path-B', taskType: 'GROUP', taskLegacyId: 950, group_ID: 'grp-1', itemOrder: 1 },
+      { ID: 'cpi-4', legacyId: 9604, path_ID: 'path-C', taskType: 'TUTORIAL', tutorial_ID: 'tut-4', itemOrder: 1 },
     );
     await INSERT.into(GroupPathItems).entries(
       { ID: 'gpi-1', legacyId: 9701, group_ID: 'grp-1', tutorial_ID: 'tut-3', itemOrder: 1 },
@@ -52,12 +57,15 @@ describe('computePathBuckets', () => {
     const mid = new Date(now).toISOString();
     const before = new Date(now - 10 * 86400_000).toISOString();  // outside window
     await INSERT.into(TaskRecords).entries(
-      // Alpha: u1 did 901 + 902 (2 distinct), u2 did 901 → Alpha count = 2 users (u1,u2)
+      // Alpha: u1 did 901 + 902, u2 did 901 → 3 completions
       { ID: 'tr-1', user_ID: 'u-1', taskLegacyId: 901, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: mid },
       { ID: 'tr-2', user_ID: 'u-1', taskLegacyId: 902, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: mid },
       { ID: 'tr-3', user_ID: 'u-2', taskLegacyId: 901, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: mid },
       // Beta: u1 did 903 (the GROUP child) → Beta count = 1
       { ID: 'tr-4', user_ID: 'u-1', taskLegacyId: 903, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: mid },
+      // Gamma: u2 did 904 — the TaskRecord carries legacyId 904; the path item
+      // only had tutorial_ID. Proves FK-first resolution (#1866) → Gamma = 1.
+      { ID: 'tr-g', user_ID: 'u-2', taskLegacyId: 904, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: mid },
       // Out of window — excluded
       { ID: 'tr-5', user_ID: 'u-2', taskLegacyId: 902, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: before },
       // Not a path tutorial — excluded from any track
@@ -65,7 +73,7 @@ describe('computePathBuckets', () => {
     );
   });
 
-  it('counts tutorial completions per track (not distinct users), with GROUP expansion', async () => {
+  it('counts tutorial completions per track (not distinct users), resolving FK-only items and GROUP children', async () => {
     const event = await SELECT.one.from(cds.entities('com.sap.developers.ims').Events).where({ legacyId: 900001 });
     const { buckets, totalCompletions } = await computePathBuckets(event, db);
     const byName = Object.fromEntries(buckets.map(b => [b.bucketName, b.count]));
@@ -73,15 +81,19 @@ describe('computePathBuckets', () => {
     // Alpha: 3 completions in-window (u1/901, u1/902, u2/901) — counts completions,
     // NOT distinct users (would be 2). Proves the user-dedup bug is gone.
     expect(byName['Track Alpha']).toBe(3);
-    // Beta: u1 via GROUP child 903 = 1 (proves GroupPathItems expansion works)
+    // Beta: u1 via GROUP child 903 = 1 (GroupPathItems expansion)
     expect(byName['Track Beta']).toBe(1);
+    // Gamma: u2 via an FK-only path item (tutorial_ID set, taskLegacyId NULL) = 1.
+    // Proves #1866 FK-first resolution — the bug that zeroed real tracks.
+    expect(byName['Track Gamma']).toBe(1);
     // tutorial 999 (not a path item) contributes to no track
-    expect(buckets.length).toBe(2);
+    expect(buckets.length).toBe(3);
     // sorted desc by count
     expect(buckets[0].bucketName).toBe('Track Alpha');
     // Hero total = ALL in-window TUTORIAL completions regardless of track:
-    // tr-1,2,3 (Alpha) + tr-4 (Beta) + tr-6 (999, no track) = 5. tr-5 is out-of-window.
-    expect(totalCompletions).toBe(5);
+    // tr-1,2,3 (Alpha) + tr-4 (Beta) + tr-g (Gamma) + tr-6 (999, no track) = 6.
+    // tr-5 is out-of-window.
+    expect(totalCompletions).toBe(6);
   });
 
   it('returns empty buckets but still counts totalCompletions when there are no tracks', async () => {

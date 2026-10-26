@@ -27,10 +27,19 @@ export async function resolveEventMissionId(event, db) {
  * display bucket aggregation (computePathBuckets) and the realtime socket emit
  * so both label completions with the SAME track names the app-space page uses.
  *
+ * #1866: manually-authored event content populates a path/group item's
+ * `tutorial_ID` FK (UUID) and leaves `taskLegacyId` NULL — this is the normal
+ * shape for the TechEd/DSAG event missions, NOT a data defect. TaskRecords key
+ * completions by `taskLegacyId`, so every such item must be resolved FK-first
+ * (tutorial_ID → Tutorials.legacyId) before it can be matched to a completion.
+ * The earlier legacyId-only read missed all FK-only items, so whole tracks
+ * (e.g. "Joule Studio with N8N", "Frontend") counted 0 despite real tutorials
+ * and real activity. This mirrors path-item-task-resolver.buildTaskMap.
+ *
  * Returns { pathNameByToken: Map<string, Set<string>>, pathNameById: Map }.
  */
 export async function buildTrackMap(missionId, db) {
-  const { CompletionPaths, CompletionPathItems, GroupPathItems } = cds.entities(NS);
+  const { Tutorials, CompletionPaths, CompletionPathItems, GroupPathItems } = cds.entities(NS);
   const pathNameByToken = new Map();
 
   const paths = await db.run(
@@ -41,7 +50,7 @@ export async function buildTrackMap(missionId, db) {
 
   const pathIds = paths.map(p => p.ID);
   const items = await db.run(
-    SELECT.from(CompletionPathItems).columns('path_ID', 'taskType', 'taskLegacyId', 'group_ID')
+    SELECT.from(CompletionPathItems).columns('path_ID', 'taskType', 'taskLegacyId', 'tutorial_ID', 'group_ID')
       .where({ path_ID: { in: pathIds } })
   );
 
@@ -52,27 +61,56 @@ export async function buildTrackMap(missionId, db) {
     pathNameByToken.get(tok).add(name);
   };
 
-  const groupToPaths = new Map();   // group_ID → Set(path_ID)
+  // Collect tutorial_ID UUIDs that need legacyId resolution (direct items +,
+  // after the GROUP query below, group children). Map each (tutorial_ID → path).
+  const tutUuidToPaths = new Map();     // tutorial_ID → Set(path_ID)
+  const groupToPaths = new Map();       // group_ID → Set(path_ID)
+  const addUuidPath = (uuid, pid) => {
+    if (!tutUuidToPaths.has(uuid)) tutUuidToPaths.set(uuid, new Set());
+    tutUuidToPaths.get(uuid).add(pid);
+  };
+
   for (const it of items) {
     if (!it.path_ID) continue;
     if (it.taskType === 'GROUP' && it.group_ID) {
       if (!groupToPaths.has(it.group_ID)) groupToPaths.set(it.group_ID, new Set());
       groupToPaths.get(it.group_ID).add(it.path_ID);
+    } else if (it.taskType === 'TUTORIAL') {
+      // FK-first (#1866): prefer tutorial_ID; else the item's own taskLegacyId.
+      if (it.tutorial_ID) addUuidPath(it.tutorial_ID, it.path_ID);
+      else if (it.taskLegacyId != null) addToken(`TUTORIAL:${it.taskLegacyId}`, it.path_ID);
     } else if (it.taskLegacyId != null) {
+      // CHECKPOINT / PETOBERFEST carry no FK — legacyId only (unchanged).
       addToken(`${it.taskType}:${it.taskLegacyId}`, it.path_ID);
     }
   }
 
+  // Expand GROUP items to their child tutorials (GroupPathItems), FK-first too.
   const groupIds = [...groupToPaths.keys()];
   if (groupIds.length) {
     const gpi = await db.run(
-      SELECT.from(GroupPathItems).columns('group_ID', 'tutorial.legacyId as tutLegacyId')
+      SELECT.from(GroupPathItems).columns('group_ID', 'tutorial_ID')
         .where({ group_ID: { in: groupIds } })
     );
     for (const row of gpi) {
-      if (row.tutLegacyId == null) continue;
+      if (!row.tutorial_ID) continue;
       for (const pid of groupToPaths.get(row.group_ID) ?? []) {
-        addToken(`TUTORIAL:${row.tutLegacyId}`, pid);
+        addUuidPath(row.tutorial_ID, pid);
+      }
+    }
+  }
+
+  // Resolve all collected tutorial_ID UUIDs → legacyId in one batch, then key
+  // the map by legacyId (what TaskRecords.taskLegacyId carries).
+  const uuids = [...tutUuidToPaths.keys()];
+  if (uuids.length) {
+    const tuts = await db.run(
+      SELECT.from(Tutorials).columns('ID', 'legacyId').where({ ID: { in: uuids } })
+    );
+    for (const t of tuts) {
+      if (t.legacyId == null) continue;
+      for (const pid of tutUuidToPaths.get(t.ID) ?? []) {
+        addToken(`TUTORIAL:${t.legacyId}`, pid);
       }
     }
   }
