@@ -4,7 +4,7 @@ _schema-version: 3.3.0
 # This file lives at repo root → path: gen/srv-mcp (root-relative, no ../).
 # before-all runs from ROOT (no cd ..) — mbt uses the descriptor's directory as cwd.
 ID: tutorials-mcp
-version: 1.1.3
+version: 1.1.4
 
 # Destinations are subaccount-level, so DEV and PROD (sharing one subaccount)
 # need DISTINCT destination names. `dest-main-srv` defaults to the PROD name;
