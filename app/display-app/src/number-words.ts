@@ -168,12 +168,12 @@ function spanish(num: number): string[] {
 function ukrainian(num: number): string[] {
   if (num > 19999) return []
   const w = [
-    ['', 'один', 'два', 'три', 'четыре', 'пять', 'шесть', 'семь', 'восемь', 'девять', 'десять', 'одиннадцать', 'двенадцать', 'тринадцать', 'четырнадцать', 'пятнадцать', 'шестнадцать', 'семнадцать', 'восемнадцать', 'девятнадцать'],
-    ['', '', 'двадцать', 'тридцать', 'сорок', 'пятьдесят', 'шестьдесят', 'семьдесят', 'восемьдесят', 'девяносто'],
-    ['', 'сто', 'двести', 'триста', 'четыреста', 'пятьсот', 'шестьсот', 'семьсот', 'восемьсот', 'девятьсот'],
+    ['', 'один', 'два', 'три', 'чотири', "п'ять", 'шість', 'сім', 'вісім', "дев'ять", 'десять', 'одинадцять', 'дванадцять', 'тринадцять', 'чотирнадцять', "п'ятнадцять", 'шістнадцять', 'сімнадцять', 'вісімнадцять', "дев'ятнадцять"],
+    ['', '', 'двадцять', 'тридцять', 'сорок', "п'ятдесят", 'шістдесят', 'сімдесят', 'вісімдесят', "дев'яносто"],
+    ['', 'сто', 'двісті', 'триста', 'чотириста', "п'ятсот", 'шістсот', 'сімсот', 'вісімсот', "дев'ятсот"],
   ]
   const result: string[] = []
-  if (num === 0) { result.push('ноль'); return result }
+  if (num === 0) { result.push('нуль'); return result }
   const digits = ('' + num).split('').map(Number).reverse()
   while (digits.length >= 1) {
     const pos = digits.length - 1
@@ -184,17 +184,17 @@ function ukrainian(num: number): string[] {
     if (pos === 1) { const post = digits.pop()!; result.push(w[1][d] + ' ' + w[0][post]); continue }
     if (pos === 2) { result.push(w[2][d]); continue }
     if (pos === 3) {
-      let thousand = 'тысяч'
-      if (d < 5) thousand = 'тысячи'
-      if (d === 1) thousand = 'тысяча'
-      if (d === 2) thousand = 'две тысячи'
-      if (d >= 5) thousand = 'тысяч'
-      result.push((d !== 1 && d !== 2 ? w[0][d] + ' ' : '') + thousand)
+      let thousand = 'тисяч'
+      if (d === 1) thousand = 'тисяча'
+      else if (d >= 2 && d <= 4) thousand = 'тисячі'
+      else thousand = 'тисяч'
+      const prefix = d === 1 ? 'одна ' : d === 2 ? 'дві ' : w[0][d] + ' '
+      result.push(prefix + thousand)
       continue
     }
     if (pos === 4) {
       const c = parseInt(d + '' + digits.pop())
-      result.push(w[0][c] + ' тысяч')
+      result.push(w[0][c] + ' тисяч')
     }
   }
   return result
