@@ -13,7 +13,9 @@ export function useGameboardStream() {
     connectionState.value = 'connecting'
     const url = String(baseUrl || '').replace(/\/+$/, '') // '' → same-origin
     socket = io(`${url}/ws/event-stream`, {
-      transports: ['websocket'],
+      // Default polling→upgrade; websocket-only cold-upgrades 400 behind the
+      // prod approuter (TRANSPORT_HANDSHAKE_ERROR). Polling instance-safe since #2524.
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionDelay: 2000,
       reconnectionDelayMax: 10000,
