@@ -92,9 +92,11 @@ export function useEventStream() {
       return
     }
 
-    // Connect via Socket.IO to EventStreamService
+    // Connect via Socket.IO to EventStreamService. Default polling→upgrade
+    // order: websocket-only cold-upgrades 400 behind the prod approuter
+    // (engine.io TRANSPORT_HANDSHAKE_ERROR); polling is instance-safe since #2524.
     socket = io(`${url}/ws/event-stream`, {
-      transports: ['websocket'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionDelay: 2000,
       reconnectionDelayMax: 10000,

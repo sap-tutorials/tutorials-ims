@@ -14,7 +14,9 @@ export function useRealtimeProgress(baseUrl: string, eventId: string | number) {
   const url = String(baseUrl).replace(/\/+$/, '')
 
   const socket: Socket = io(`${url}/display`, {
-    transports: ['websocket'],
+    // Default polling→upgrade; websocket-only cold-upgrades 400 behind the
+    // prod approuter (TRANSPORT_HANDSHAKE_ERROR). Polling instance-safe since #2524.
+    transports: ['polling', 'websocket'],
     reconnection: true,
     reconnectionDelay: 2000,
     reconnectionDelayMax: 10000,
