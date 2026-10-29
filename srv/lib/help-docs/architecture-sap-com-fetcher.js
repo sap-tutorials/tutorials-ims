@@ -29,7 +29,9 @@ export function _resetForTests() { globalThis[SYM].mockFetcher = null; }
  * @property {string} sourceId       — repo-relative path, e.g. 'docs/ref-arch/RA0001.md'
  * @property {string} title
  * @property {string} description    — stripped body first 2000 chars
- * @property {string} url            — https://architecture.learning.sap.com/<path-without-extension>
+ * @property {string} url            — live site URL: honors the Docusaurus
+ *   `slug:` frontmatter (`${SITE_BASE}/docs${slug}`) when present; falls back
+ *   to the repo-path-derived URL otherwise.
  * @property {'architecture'} product
  * @property {null} section
  */
@@ -65,7 +67,7 @@ export async function fetchArchitectureSapComCorpus({
       continue;
     }
 
-    const { frontmatterTitle, body } = parseFrontmatter(raw);
+    const { frontmatterTitle, slug, body } = parseFrontmatter(raw);
     const filenameTitle = blob.path.split('/').pop().replace(/\.mdx?$/, '');
     const title = frontmatterTitle || extractH1(body) || filenameTitle;
 
@@ -77,7 +79,7 @@ export async function fetchArchitectureSapComCorpus({
       sourceId: blob.path,
       title,
       description,
-      url: `${SITE_BASE}/${blob.path.replace(/\.mdx?$/, '')}`,
+      url: buildDocUrl(blob.path, slug),
       product: 'architecture',
       section: null,
     });
@@ -123,13 +125,29 @@ async function fetchRaw(path) {
 
 function parseFrontmatter(raw) {
   const m = raw.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/);
-  if (!m) return { frontmatterTitle: null, body: raw };
+  if (!m) return { frontmatterTitle: null, slug: null, body: raw };
   const fm = m[1];
   const titleMatch = fm.match(/^title:\s*(.+)$/m);
   const frontmatterTitle = titleMatch
     ? titleMatch[1].trim().replace(/^["']|["']$/g, '')
     : null;
-  return { frontmatterTitle, body: raw.slice(m[0].length) };
+  const slugMatch = fm.match(/^slug:\s*(.+)$/m);
+  const slug = slugMatch
+    ? slugMatch[1].trim().replace(/^["']|["']$/g, '')
+    : null;
+  return { frontmatterTitle, slug, body: raw.slice(m[0].length) };
+}
+
+// The live Docusaurus site routes a doc by its `slug:` frontmatter when set,
+// served under the `/docs` prefix (slugs are root-absolute, e.g.
+// `/ref-arch/98efa0`). Without a slug it falls back to a path-derived URL —
+// not always what Docusaurus auto-routes, but the best available guess.
+function buildDocUrl(path, slug) {
+  if (slug) {
+    const normalized = slug.startsWith('/') ? slug : `/${slug}`;
+    return `${SITE_BASE}/docs${normalized}`;
+  }
+  return `${SITE_BASE}/${path.replace(/\.mdx?$/, '')}`;
 }
 
 function extractH1(body) {
