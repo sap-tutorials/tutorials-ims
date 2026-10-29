@@ -198,6 +198,11 @@ onMounted(async () => {
     hasLogo.value = Boolean(data.hasLogo)
   }
   loading.value = false
+
+  // Restore the selected track from the URL now that tracks are loaded. The
+  // popstate listener (for back/forward) is registered synchronously in setup
+  // below — registering lifecycle hooks after an `await` is unsupported.
+  syncTrackFromUrl()
 })
 
 // ── Real-time progress (requires login + event context) ───────────
@@ -461,13 +466,51 @@ function itemStatusClass(track: AppSpaceTrack, index: number): string {
   return 'step--locked'
 }
 
+// ── Track ↔ URL sync ──────────────────────────────────────────────
+// The selected track is reflected in the `track` query param so that a
+// refresh restores the detail view and the browser back/forward buttons
+// move between the track list and a track. Existing params (eventId, theme)
+// are preserved; `track` is only added/removed.
+function trackUrl(trackId: number | null): string {
+  const params = new URLSearchParams(window.location.search)
+  if (trackId === null) params.delete('track')
+  else params.set('track', String(trackId))
+  const qs = params.toString()
+  return window.location.pathname + (qs ? '?' + qs : '') + window.location.hash
+}
+
 function selectTrack(track: AppSpaceTrack) {
   selectedTrack.value = track
+  window.history.pushState({ track: track.id }, '', trackUrl(track.id))
 }
 
 function goBack() {
   selectedTrack.value = null
+  window.history.pushState({ track: null }, '', trackUrl(null))
 }
+
+// Reflect the URL's `track` param into state without touching history
+// (used on initial load and when the user navigates with back/forward).
+function syncTrackFromUrl() {
+  const params = new URLSearchParams(window.location.search)
+  const raw = params.get('track')
+  if (raw === null) {
+    selectedTrack.value = null
+    return
+  }
+  const id = Number(raw)
+  // A stale/unknown id (deleted track, hand-edited URL) falls back to the
+  // list rather than throwing — degrade gracefully.
+  selectedTrack.value = tracks.value.find(t => t.id === id) ?? null
+}
+
+// Keep state in sync with browser back/forward. Registered synchronously in
+// setup (not inside the async onMounted) because Vue lifecycle hooks must be
+// registered during the synchronous setup pass. syncTrackFromUrl is a no-op
+// for the list until tracks load; onMounted calls it again post-load.
+const onPopState = () => syncTrackFromUrl()
+onMounted(() => window.addEventListener('popstate', onPopState))
+onUnmounted(() => window.removeEventListener('popstate', onPopState))
 
 // Start the deliberate sign-in flow — same destination as the shellbar profile
 // click in hugo/layouts/partials/header.html: the /signin IdP chooser, carrying
