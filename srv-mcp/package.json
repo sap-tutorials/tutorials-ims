@@ -5,7 +5,7 @@
   "type": "module",
   "main": "server.js",
   "engines": {
-    "node": ">=22.12"
+    "node": ">=22.23.4 <23"
   },
   "scripts": {
     "start": "cds-serve"
