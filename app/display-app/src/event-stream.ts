@@ -1,6 +1,7 @@
 import { ref, readonly, onUnmounted } from 'vue'
 import { io, type Socket } from 'socket.io-client'
 import { reconcileBuckets } from './reconcile'
+import { completionsPerHour } from './rate'
 
 export interface Bucket {
   name: string
@@ -61,16 +62,15 @@ export function useEventStream() {
   }
 
   function speedApproximation(): number {
-    if (messageTimestamps.length < 3) return 0
-    const time = messageTimestamps[messageTimestamps.length - 1] - messageTimestamps[0]
-    if (time === 0) return 0
-    const approx = (60 * 60 * 1000) / time
-    return Math.round(approx * messageTimestamps.length)
+    // Driven by messageTimestamps, which is fed from completionTick (EVERY
+    // completion), so the rate reflects all activity — not only track-mapped
+    // completions. See rate.ts for why this matters (per-hour-stuck-at-0 bug).
+    return completionsPerHour(messageTimestamps)
   }
 
   function startCron() {
     cronInterval = setInterval(() => {
-      if (messageTimestamps.length < 3) return
+      if (messageTimestamps.length < 2) return
       removeOutdatedTimestamps()
       speed.value = speedApproximation()
 
@@ -94,7 +94,10 @@ export function useEventStream() {
     } else {
       buckets.value.push({ name: bucketName, count: 1, justUpdated: true })
     }
-    messageTimestamps.push(Date.now())
+    // NOTE: the overall "Tutorials Per Hour" rate is fed from completionTick
+    // (every completion), NOT here — a track completion fires BOTH completionTick
+    // and tutorialCompleted, so feeding the rate from both would double-count.
+    // This bucketTimestamps feed below stays (it drives per-bucket velocity).
 
     recentEvents.value = [
       { name: bucketName, timestamp: Date.now() },
@@ -220,6 +223,11 @@ export function useEventStream() {
     // Hero "total activity" — one tick per completion (track or not).
     socket.on('completionTick', () => {
       totalCount.value++
+      // Feed the "Tutorials Per Hour" rate from EVERY completion (track or not).
+      // Previously the rate was fed only from tutorialCompleted (track-mapped),
+      // so events whose completions didn't resolve to a CompletionPath showed a
+      // permanently-zero per-hour. completionTick fires for all completions.
+      messageTimestamps.push(Date.now())
     })
 
     startCron()
