@@ -930,6 +930,8 @@ entity TutorialFeedback : managed {
   ratingVisuals     : Integer @assert.range: [0, 10];
   npsScore          : Integer @assert.range: [0, 10];
   comment           : String(2000);
+  isIrrelevant      : Boolean default false;
+  irrelevantReason  : String(500);
 }
 
 // Author-supplied code-check material per (tutorial, step). Server-only:
