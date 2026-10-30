@@ -1058,7 +1058,7 @@ const emptyStateMessage = computed(() => {
 .hero {
   background: var(--sapShellColor, #354a5f);
   color: var(--sapShell_TextColor, #fff);
-  padding: 2.5rem 2rem 1.5rem;
+  padding: 0.75rem 2rem;
   position: relative;
 }
 
@@ -1147,7 +1147,7 @@ const emptyStateMessage = computed(() => {
 
 .hero-instructions {
   max-width: 1200px;
-  margin: 1.5rem auto 0;
+  margin: 0.75rem auto 0;
   display: flex;
   gap: 1.5rem;
   flex-wrap: wrap;
@@ -1977,7 +1977,7 @@ const emptyStateMessage = computed(() => {
 
 @media (max-width: 640px) {
   .hero {
-    padding: 1.5rem 1rem 1rem;
+    padding: 0.75rem 1rem;
   }
 
   .content-area {
