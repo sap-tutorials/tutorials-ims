@@ -9,6 +9,11 @@ import type { GatingItem } from './app-space-gating'
 // ── Configuration ─────────────────────────────────────────────────
 const eventId = ref<number | null>(null)
 
+// #2952: cache-buster bumped on each manual refresh so a newly-unlocked prize
+// barcode PNG is re-pulled by the browser instead of served from the HTTP cache
+// (the endpoint ignores extra query params; the QR payload itself is stable).
+const barcodeNonce = ref(0)
+
 // ── Theme ─────────────────────────────────────────────────────────
 // Dark mode is driven by html[data-theme] (set pre-paint in head.html from
 // localStorage/prefers-color-scheme, and toggled at runtime by the header
@@ -117,6 +122,7 @@ interface AppSpaceData {
 const tracks = ref<AppSpaceTrack[]>([])
 const selectedTrack = ref<AppSpaceTrack | null>(null)
 const loading = ref(true)
+const refreshing = ref(false)
 const isLoggedIn = ref(false)
 const authenticated = ref(false)
 const loadError = ref('')
@@ -192,10 +198,7 @@ onMounted(async () => {
 
   const data = await loadData()
   if (data) {
-    tracks.value = data.paths
-    if (data.eventName) loadedEventName.value = data.eventName
-    if (data.eventDescription) loadedEventDescription.value = data.eventDescription
-    hasLogo.value = Boolean(data.hasLogo)
+    applyData(data)
   }
   loading.value = false
 
@@ -204,6 +207,40 @@ onMounted(async () => {
   // below — registering lifecycle hooks after an `await` is unsupported.
   syncTrackFromUrl()
 })
+
+// #2952: apply a loaded payload to component state. Shared by the initial
+// onMounted load and the manual Refresh handler so both paths stay identical.
+function applyData(data: AppSpaceData) {
+  tracks.value = data.paths
+  if (data.eventName) loadedEventName.value = data.eventName
+  if (data.eventDescription) loadedEventDescription.value = data.eventDescription
+  hasLogo.value = Boolean(data.hasLogo)
+}
+
+// #2952: re-check completion status (and the barcode unlock gate) without a full
+// browser reload. Re-runs the same anonymous-readable getAppSpaceProgress fetch,
+// re-applies it, and bumps the barcode nonce so a freshly-unlocked prize PNG is
+// re-pulled. A new login state is picked up too (loadData sets authenticated),
+// so signing in on another tab then refreshing reveals the prize code. If the
+// user was viewing a track, we keep them on it by re-selecting the same track id.
+async function refresh() {
+  if (refreshing.value) return
+  refreshing.value = true
+  const openTrackId = selectedTrack.value?.id ?? null
+  try {
+    const data = await loadData()
+    if (data) {
+      applyData(data)
+      barcodeNonce.value++
+      if (openTrackId != null) {
+        selectedTrack.value = tracks.value.find(t => t.id === openTrackId) ?? null
+      }
+      showToast('Progress updated')
+    }
+  } finally {
+    refreshing.value = false
+  }
+}
 
 // ── Real-time progress (requires login + event context) ───────────
 const eventIdForWs = ref<string>('')
@@ -527,7 +564,10 @@ function handleItemClick(track: AppSpaceTrack, index: number, item: AppSpaceItem
 }
 
 function checkpointBarcodeUrl(): string {
-  return _checkpointBarcodeUrl(eventId.value)
+  const base = _checkpointBarcodeUrl(eventId.value)
+  // #2952: append the refresh nonce so a just-unlocked barcode re-pulls instead
+  // of being served stale from cache. nonce 0 (initial render) keeps the clean URL.
+  return barcodeNonce.value ? `${base}&_=${barcodeNonce.value}` : base
 }
 
 function shouldShowCheckpointBarcode(track: AppSpaceTrack, index: number): boolean {
@@ -661,7 +701,22 @@ const emptyStateMessage = computed(() => {
     <div class="content-area" v-else-if="!selectedTrack">
       <div class="section-header">
         <h2 class="section-title">Choose Your Track</h2>
-        <span class="track-count">{{ completedTracks }} of {{ tracks.length }} tracks completed</span>
+        <div class="section-header__meta">
+          <span class="track-count">{{ completedTracks }} of {{ tracks.length }} tracks completed</span>
+          <button
+            class="refresh-button"
+            type="button"
+            :disabled="refreshing"
+            :aria-busy="refreshing"
+            title="Check for newly completed tutorials"
+            @click="refresh"
+          >
+            <svg class="refresh-button__icon" :class="{ spinning: refreshing }" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            {{ refreshing ? 'Updating…' : 'Refresh' }}
+          </button>
+        </div>
       </div>
       <div class="track-grid">
         <button
@@ -716,6 +771,19 @@ const emptyStateMessage = computed(() => {
         <div class="detail-title-row">
           <h2 class="detail-title">{{ selectedTrack.title }}</h2>
           <span class="detail-progress">{{ completedCount(selectedTrack) }} / {{ trackTutorialCount(selectedTrack) }} completed</span>
+          <button
+            class="refresh-button"
+            type="button"
+            :disabled="refreshing"
+            :aria-busy="refreshing"
+            title="Check for newly completed tutorials"
+            @click="refresh"
+          >
+            <svg class="refresh-button__icon" :class="{ spinning: refreshing }" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            {{ refreshing ? 'Updating…' : 'Refresh' }}
+          </button>
         </div>
         <p class="detail-desc">{{ selectedTrack.description }}</p>
       </div>
@@ -1261,6 +1329,59 @@ const emptyStateMessage = computed(() => {
 .track-count {
   font-size: 0.8125rem;
   color: var(--sapContent_LabelColor, #556b82);
+}
+
+/* #2952: manual progress refresh affordance (overview + detail headers). */
+.section-header__meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.refresh-button {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--sapButton_Lite_TextColor, var(--sapBrandColor, #0070f2));
+  padding: 0.3125rem 0.75rem;
+  border: 1px solid var(--sapButton_BorderColor, #d9d9d9);
+  border-radius: var(--sapButton_BorderCornerRadius, 0.5rem);
+  background: var(--sapButton_Background, transparent);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.refresh-button:hover:not(:disabled) {
+  border-color: var(--sapBrandColor, #0070f2);
+  background: var(--sapButton_Hover_Background, rgba(0, 112, 242, 0.06));
+}
+
+.refresh-button:focus-visible {
+  outline: 2px solid var(--sapBrandColor, #0070f2);
+  outline-offset: 2px;
+}
+
+.refresh-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.refresh-button__icon {
+  flex-shrink: 0;
+}
+
+.refresh-button__icon.spinning {
+  animation: refresh-spin 0.8s linear infinite;
+}
+
+@keyframes refresh-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* ── Empty / not-configured state ──────────────────────── */
