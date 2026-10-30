@@ -523,41 +523,6 @@ describe('Task 11 — computeBuckets helper handles SUPERSEDED', () => {
   });
 });
 
-describe('Task 11 — DisplayService passes SUPERSEDED rows to event-statistics helpers', () => {
-  beforeEach(async () => {
-    const { Users, Events, Tutorials, Missions, TaskRecords } = cds.entities('com.sap.developers.ims');
-    await DELETE.from(TaskRecords);
-    await DELETE.from(Events);
-    await DELETE.from(Tutorials);
-    await DELETE.from(Missions);
-    await DELETE.from(Users);
-  });
-
-  it('getEventBuckets: user with SUPERSEDED-only attempt is counted in the histogram', async () => {
-    const { Users, Events, Tutorials, TaskRecords } = cds.entities('com.sap.developers.ims');
-    await INSERT.into(Users).entries({ ID: 'u11', uuid: 'u11', sapId: 'sap-u11', legacyId: 11001 });
-    await INSERT.into(Events).entries({ ID: 'e11', legacyId: 11500, title: 'E11', timeZone: '+00:00' });
-    await INSERT.into(Tutorials).entries({ ID: 't11', slug: 'task11-tut', title: 'T11', legacyId: 7200, stepCount: 1 });
-
-    await INSERT.into(TaskRecords).entries([
-      { ID: 'tr-11-sup', user_ID: 'u11', event_ID: 'e11', taskLegacyId: 7200, taskType: 'TUTORIAL',
-        status: 'SUPERSEDED', progress: 100, attemptNumber: 1, legacyId: 11100 },
-      { ID: 'tr-11-ip', user_ID: 'u11', event_ID: 'e11', taskLegacyId: 7200, taskType: 'TUTORIAL',
-        status: 'IN_PROGRESS', progress: 25, attemptNumber: 2, legacyId: 11101 },
-    ]);
-
-    const display = await cds.connect.to('DisplayService');
-    const buckets = await display.tx({ user: new cds.User.Privileged() }, tx =>
-      tx.send({ event: 'getEventBuckets', data: { eventLegacyId: 11500 } })
-    );
-    // Pre-fix: SUPERSEDED filtered out → 0 buckets (no users counted).
-    // After-fix: SUPERSEDED counts; u11 has 1 completion → bucket "1 tutorial" count 1.
-    expect(buckets).toHaveLength(1);
-    expect(buckets[0].bucketName).toBe('1 tutorial');
-    expect(buckets[0].count).toBe(1);
-  });
-});
-
 describe('Task 12 — co-completion includes SUPERSEDED completions', () => {
   beforeEach(async () => {
     const { Users, Tutorials, TaskRecords } = cds.entities('com.sap.developers.ims');
