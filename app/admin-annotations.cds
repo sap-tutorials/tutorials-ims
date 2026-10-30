@@ -2292,7 +2292,11 @@ annotate AdminService.TutorialFeedback with @UI: {
     { Value: ratingDuration,   Label: 'Duration' },
     { Value: ratingStructure,  Label: 'Structure' },
     { Value: ratingInteresting,Label: 'Interesting' },
-    { Value: ratingVisuals,    Label: 'Visuals' }
+    { Value: ratingVisuals,    Label: 'Visuals' },
+    { Value: isIrrelevant,     Label: 'Irrelevant' },
+    { Value: irrelevantReason, Label: 'Reason' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.markFeedbackIrrelevant',   Label: 'Mark Irrelevant' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.unmarkFeedbackIrrelevant', Label: 'Unmark Irrelevant' }
   ]
 };
 
