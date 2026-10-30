@@ -848,6 +848,9 @@ service AdminService {
   @readonly entity TutorialFeedback          as projection on ims.TutorialFeedback;
   @readonly entity TutorialFeedbackAggregate as projection on ims.TutorialFeedbackAggregate;
 
+  action markFeedbackIrrelevant(id : UUID @mandatory, reason : String(500)) returns {};
+  action unmarkFeedbackIrrelevant(id : UUID @mandatory) returns {};
+
   // --- Admin actions ---
 
   // GDPR / Privacy

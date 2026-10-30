@@ -1778,6 +1778,24 @@ export default class AdminService extends cds.ApplicationService {
       return result;
     });
 
+    // --- Feedback moderation ---
+
+    this.on('markFeedbackIrrelevant', async (req) => {
+      const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+      const row = await SELECT.one.from(TutorialFeedback).where({ ID: req.data.id });
+      if (!row) return req.error(404, 'Feedback entry not found');
+      await UPDATE(TutorialFeedback).set({ isIrrelevant: true, irrelevantReason: req.data.reason ?? null }).where({ ID: req.data.id });
+      return {};
+    });
+
+    this.on('unmarkFeedbackIrrelevant', async (req) => {
+      const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+      const row = await SELECT.one.from(TutorialFeedback).where({ ID: req.data.id });
+      if (!row) return req.error(404, 'Feedback entry not found');
+      await UPDATE(TutorialFeedback).set({ isIrrelevant: false, irrelevantReason: null }).where({ ID: req.data.id });
+      return {};
+    });
+
     // clearChangeLog — bulk-purge sap.changelog.Changes rows. Designed for
     // admins to clear migration-trigger noise (74k+ rows on DEV today from
     // migrate-from-hana.js DB triggers) without waiting for the weekly cron.

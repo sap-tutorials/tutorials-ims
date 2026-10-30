@@ -4,7 +4,7 @@ import cds from '@sap/cds';
 
 process.env.SUBMISSION_SALT_SECRET = 'test-secret';
 
-cds.test('serve', '--project', '.', '--in-memory');
+const project = cds.test('serve', '--project', '.', '--in-memory');
 
 describe('submitTutorialFeedback', () => {
   let srv;
@@ -269,5 +269,54 @@ describe('submitTutorialFeedback', () => {
       _clientIp: ipB
     });
     expect(fresh).toBe(200);
+  });
+});
+
+describe('markFeedbackIrrelevant / unmarkFeedbackIrrelevant', () => {
+  let feedbackId;
+  const auth = { auth: { username: 'admin', password: 'admin' } };
+
+  beforeAll(async () => {
+    const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+    feedbackId = cds.utils.uuid();
+    await INSERT.into(TutorialFeedback).entries([{ ID: feedbackId, tutorialSlug: 'demo-tutorial', npsScore: 5 }]);
+  });
+
+  afterAll(async () => {
+    const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(TutorialFeedback).where({ ID: feedbackId });
+  });
+
+  it('marks a feedback entry irrelevant with a reason', async () => {
+    const { status } = await project.post(
+      '/admin/markFeedbackIrrelevant',
+      { id: feedbackId, reason: 'Off-topic' },
+      { ...auth, validateStatus: () => true }
+    );
+    expect(status).toBe(200);
+    const [row] = await SELECT.from('com.sap.developers.ims.TutorialFeedback').where({ ID: feedbackId });
+    expect(row.isIrrelevant).toBe(true);
+    expect(row.irrelevantReason).toBe('Off-topic');
+  });
+
+  it('unmarks a feedback entry and clears the reason', async () => {
+    const { status } = await project.post(
+      '/admin/unmarkFeedbackIrrelevant',
+      { id: feedbackId },
+      { ...auth, validateStatus: () => true }
+    );
+    expect(status).toBe(200);
+    const [row] = await SELECT.from('com.sap.developers.ims.TutorialFeedback').where({ ID: feedbackId });
+    expect(row.isIrrelevant).toBe(false);
+    expect(row.irrelevantReason).toBeNull();
+  });
+
+  it('returns 404 for an unknown id', async () => {
+    const { status } = await project.post(
+      '/admin/markFeedbackIrrelevant',
+      { id: '00000000-0000-0000-0000-000000000000' },
+      { ...auth, validateStatus: () => true }
+    );
+    expect(status).toBe(404);
   });
 });
