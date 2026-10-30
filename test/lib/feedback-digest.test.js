@@ -175,6 +175,22 @@ describe('computeFeedbackDigests — comment filter, window, grouping', () => {
     expect(digests[0].email).toBeNull();
     expect(digests[0].items).toHaveLength(1);
   });
+
+  it('excludes irrelevant feedback rows from digest computation', async () => {
+    const since = new Date(Date.now() - 3_600_000).toISOString();
+    const until = new Date(Date.now() + 1000).toISOString();
+    await seedTutorial({ slug: 'digest-irr-test', ownerEmail: 'author@example.com' });
+    const { TutorialFeedback } = cds.entities(NS);
+    seq += 1;
+    await INSERT.into(TutorialFeedback).entries([
+      { ID: `fbfb0000-0000-0000-irr1-${String(seq).padStart(12, '0')}`, tutorialSlug: 'digest-irr-test', comment: 'Great tutorial!', submittedAt: new Date(Date.now() - 1800_000).toISOString(), isIrrelevant: false, wasAuthenticated: false },
+      { ID: `fbfb0000-0000-0000-irr2-${String(seq + 1).padStart(12, '0')}`, tutorialSlug: 'digest-irr-test', comment: 'Ignore me',       submittedAt: new Date(Date.now() - 900_000).toISOString(),  isIrrelevant: true,  wasAuthenticated: false }
+    ]);
+    const digests = await mod.computeFeedbackDigests({ since, until }, cds.db);
+    const entry = digests.find(d => d.email === 'author@example.com');
+    expect(entry?.items).toHaveLength(1);
+    expect(entry?.items[0].comment).toBe('Great tutorial!');
+  });
 });
 
 describe('sendFeedbackDigests — orchestration + watermark', () => {
