@@ -452,7 +452,8 @@ entity TutorialFeedbackAggregate as
     sum(case when npsScore >= 9 then 1 else 0 end)        as promoters         : Integer,
     sum(case when npsScore <= 6 then 1 else 0 end)        as detractors        : Integer,
     sum(case when wasAuthenticated = true then 1 else 0 end) as authenticatedCount : Integer
-  } group by tutorialSlug;
+  } where isIrrelevant is null or isIrrelevant = false
+  group by tutorialSlug;
 
 
 // Issue #172 PR 5 — Author observability views.
@@ -653,46 +654,46 @@ entity AuthorSurveyDistribution as
          key 'structure' as dimension : String(20),
          key ratingStructure as score : Integer,
          count(*) as responseCount : Integer
-       } where ratingStructure is not null group by tutorialSlug, ratingStructure)
+       } where ratingStructure is not null AND (isIrrelevant is null or isIrrelevant = false) group by tutorialSlug, ratingStructure)
   union all
       (select from ims.TutorialFeedback {
          key tutorialSlug,
          key 'interesting' as dimension : String(20),
          key ratingInteresting as score : Integer,
          count(*) as responseCount : Integer
-       } where ratingInteresting is not null group by tutorialSlug, ratingInteresting)
+       } where ratingInteresting is not null AND (isIrrelevant is null or isIrrelevant = false) group by tutorialSlug, ratingInteresting)
   union all
       (select from ims.TutorialFeedback {
          key tutorialSlug,
          key 'useCase' as dimension : String(20),
          key ratingUseCase as score : Integer,
          count(*) as responseCount : Integer
-       } where ratingUseCase is not null group by tutorialSlug, ratingUseCase)
+       } where ratingUseCase is not null AND (isIrrelevant is null or isIrrelevant = false) group by tutorialSlug, ratingUseCase)
   union all
       (select from ims.TutorialFeedback {
          key tutorialSlug,
          key 'relevance' as dimension : String(20),
          key ratingRelevance as score : Integer,
          count(*) as responseCount : Integer
-       } where ratingRelevance is not null group by tutorialSlug, ratingRelevance)
+       } where ratingRelevance is not null AND (isIrrelevant is null or isIrrelevant = false) group by tutorialSlug, ratingRelevance)
   union all
       (select from ims.TutorialFeedback {
          key tutorialSlug,
          key 'duration' as dimension : String(20),
          key ratingDuration as score : Integer,
          count(*) as responseCount : Integer
-       } where ratingDuration is not null group by tutorialSlug, ratingDuration)
+       } where ratingDuration is not null AND (isIrrelevant is null or isIrrelevant = false) group by tutorialSlug, ratingDuration)
   union all
       (select from ims.TutorialFeedback {
          key tutorialSlug,
          key 'visuals' as dimension : String(20),
          key ratingVisuals as score : Integer,
          count(*) as responseCount : Integer
-       } where ratingVisuals is not null group by tutorialSlug, ratingVisuals)
+       } where ratingVisuals is not null AND (isIrrelevant is null or isIrrelevant = false) group by tutorialSlug, ratingVisuals)
   union all
       (select from ims.TutorialFeedback {
          key tutorialSlug,
          key 'nps' as dimension : String(20),
          key npsScore as score : Integer,
          count(*) as responseCount : Integer
-       } where npsScore is not null group by tutorialSlug, npsScore);
+       } where npsScore is not null AND (isIrrelevant is null or isIrrelevant = false) group by tutorialSlug, npsScore);
