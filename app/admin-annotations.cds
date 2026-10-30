@@ -2213,6 +2213,8 @@ annotate AdminService.TutorialFeedback with {
                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'primaryTag' }
                  ]
                };
+  isIrrelevant     @Common.Label: 'Irrelevant';
+  irrelevantReason @Common.Label: 'Reason';
 };
 
 annotate AdminService.TutorialFeedback with @(
@@ -2224,7 +2226,7 @@ annotate AdminService.TutorialFeedback with @(
     TypeNamePlural: 'Submissions',
     Title: { Value: tutorialSlug }
   },
-  UI.SelectionFields: [tutorialSlug, wasAuthenticated, submittedAt],
+  UI.SelectionFields: [tutorialSlug, wasAuthenticated, submittedAt, isIrrelevant],
   UI.LineItem: [
     { Value: tutorialSlug },
     { Value: submittedAt },
@@ -2236,7 +2238,11 @@ annotate AdminService.TutorialFeedback with @(
     { Value: ratingStructure },
     { Value: ratingInteresting },
     { Value: ratingVisuals },
-    { Value: comment }
+    { Value: comment },
+    { Value: isIrrelevant,     Label: 'Irrelevant' },
+    { Value: irrelevantReason, Label: 'Reason' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.markFeedbackIrrelevant',   Label: 'Mark Irrelevant' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.unmarkFeedbackIrrelevant', Label: 'Unmark Irrelevant' }
   ],
   UI.FieldGroup #Ratings: { Data: [
     { Value: ratingUseCase },
@@ -2248,9 +2254,14 @@ annotate AdminService.TutorialFeedback with @(
     { Value: npsScore }
   ]},
   UI.FieldGroup #CommentGroup: { Data: [{ Value: comment }] },
+  UI.FieldGroup #FlagGroup: { Data: [
+    { Value: isIrrelevant },
+    { Value: irrelevantReason }
+  ]},
   UI.Facets: [
     { $Type: 'UI.ReferenceFacet', Label: 'Ratings', Target: '@UI.FieldGroup#Ratings' },
-    { $Type: 'UI.ReferenceFacet', Label: 'Comment', Target: '@UI.FieldGroup#CommentGroup' }
+    { $Type: 'UI.ReferenceFacet', Label: 'Comment', Target: '@UI.FieldGroup#CommentGroup' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Relevance Flag', Target: '@UI.FieldGroup#FlagGroup' }
   ]
 );
 
