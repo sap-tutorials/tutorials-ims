@@ -289,8 +289,8 @@ describe('markFeedbackIrrelevant / unmarkFeedbackIrrelevant', () => {
 
   it('marks a feedback entry irrelevant with a reason', async () => {
     const { status } = await project.post(
-      '/admin/markFeedbackIrrelevant',
-      { id: feedbackId, reason: 'Off-topic' },
+      `/admin/TutorialFeedback(${feedbackId})/markFeedbackIrrelevant`,
+      { reason: 'Off-topic' },
       { ...auth, validateStatus: () => true }
     );
     expect(status).toBe(200);
@@ -301,8 +301,8 @@ describe('markFeedbackIrrelevant / unmarkFeedbackIrrelevant', () => {
 
   it('unmarks a feedback entry and clears the reason', async () => {
     const { status } = await project.post(
-      '/admin/unmarkFeedbackIrrelevant',
-      { id: feedbackId },
+      `/admin/TutorialFeedback(${feedbackId})/unmarkFeedbackIrrelevant`,
+      {},
       { ...auth, validateStatus: () => true }
     );
     expect(status).toBe(200);
@@ -313,8 +313,8 @@ describe('markFeedbackIrrelevant / unmarkFeedbackIrrelevant', () => {
 
   it('returns 404 for an unknown id', async () => {
     const { status } = await project.post(
-      '/admin/markFeedbackIrrelevant',
-      { id: '00000000-0000-0000-0000-000000000000' },
+      `/admin/TutorialFeedback(00000000-0000-0000-0000-000000000000)/markFeedbackIrrelevant`,
+      {},
       { ...auth, validateStatus: () => true }
     );
     expect(status).toBe(404);
