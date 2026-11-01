@@ -56,6 +56,33 @@ describe('architecture-sap-com-fetcher', () => {
     expect(byId['news/2026-06-agentic-code-quality.mdx']).toBe('https://architecture.learning.sap.com/news/2026-06-agentic-code-quality');
   });
 
+  it('honors Docusaurus slug: frontmatter, serving it under /docs (overrides file path)', async () => {
+    // The live site routes RA0029/readme.md at /docs/ref-arch/98efa0 via its
+    // slug, NOT the path-derived /docs/ref-arch/RA0029/readme (which 404s).
+    _setMockFetcher(async (url) => {
+      if (url.includes('/git/trees/')) return {
+        ...treeFixture,
+        tree: [treeFixture.tree[0]],
+      };
+      return '---\ntitle: Agentic AI\nslug: /ref-arch/98efa0\n---\n\nBody text here, long enough to survive the empty-description guard.';
+    });
+    const rows = await fetchArchitectureSapComCorpus({ apiKey: 'fake' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].url).toBe('https://architecture.learning.sap.com/docs/ref-arch/98efa0');
+  });
+
+  it('normalizes a slug without a leading slash', async () => {
+    _setMockFetcher(async (url) => {
+      if (url.includes('/git/trees/')) return {
+        ...treeFixture,
+        tree: [treeFixture.tree[0]],
+      };
+      return '---\ntitle: X\nslug: ref-arch/abc123\n---\n\nBody text here, long enough to survive the empty-description guard.';
+    });
+    const rows = await fetchArchitectureSapComCorpus({ apiKey: 'fake' });
+    expect(rows[0].url).toBe('https://architecture.learning.sap.com/docs/ref-arch/abc123');
+  });
+
   it('title precedence: frontmatter > H1 > filename', async () => {
     // File 1: frontmatter title present → win
     // File 2: no frontmatter, has H1 → win

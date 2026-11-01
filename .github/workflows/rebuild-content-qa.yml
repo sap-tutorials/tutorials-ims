@@ -212,25 +212,26 @@ jobs:
           YOUTUBE_OAUTH_CLIENT_SECRET: ${{ secrets.YOUTUBE_OAUTH_CLIENT_SECRET }}
           YOUTUBE_OAUTH_REFRESH_TOKEN: ${{ secrets.YOUTUBE_OAUTH_REFRESH_TOKEN }}
 
-      # Author content-error routing (#2384). A slug-targeted QA run whose
+      # Author content-error routing (#2384, #2951). A slug-targeted QA run whose
       # source markdown could not be fetched (missing/misnamed file, e.g.
       # `tutorials/<slug>/architecture.md` instead of `<slug>.md`) is an AUTHOR
       # error, not an infra failure — fetch-tutorials records it in
       # `.tutorial-cache-qa/errors.json`, SKIPS the slug, and exits 0. Detect
-      # that here: if the effective target slug is among the fetch errors, the
-      # publish step is skipped (nothing rendered to publish → would otherwise
-      # throw the "--slug not found" exit 2 that failed the whole job) and a
-      # per-tutorial issue is filed against the source repo below. QA dispatches
-      # carry exactly ONE slug (notify-qa template), so at most one bad slug.
+      # that here so the downstream guard and publish steps only process slugs
+      # that actually rendered. Handles both single-slug (client_payload.slug)
+      # and multi-slug (client_payload.slugs) dispatches.
       - name: Detect author source errors
         id: source_errors
         env:
           EFFECTIVE_SLUG: ${{ github.event.client_payload.slug || inputs.slug }}
+          EFFECTIVE_SLUGS: ${{ github.event.client_payload.slugs }}
           SOURCE_REPO: ${{ github.event.client_payload.repo }}
         run: |
           set -uo pipefail
           ERRORS_FILE=".tutorial-cache-qa/errors.json"
           BAD_SLUG=""
+
+          # --- Single-slug path (original #2384 logic) ---
           if [ -n "$EFFECTIVE_SLUG" ] && [ -f "$ERRORS_FILE" ]; then
             # Was the requested slug among the fetch errors?
             if jq -e --arg s "$EFFECTIVE_SLUG" 'any(.[]; .slug == $s)' "$ERRORS_FILE" >/dev/null 2>&1; then
@@ -260,6 +261,32 @@ jobs:
           if [ -z "$BAD_SLUG" ]; then
             echo "bad_slug=" >> "$GITHUB_OUTPUT"
           fi
+
+          # --- Multi-slug path (#2951): filter client_payload.slugs against errors.json ---
+          # When a push touches N tutorials and some fail to fetch, only the
+          # successfully-rendered slugs should reach the guard and publish steps.
+          # bad_slugs  = comma-separated list of slugs that failed fetch
+          # good_slugs = comma-separated list of slugs that rendered successfully
+          GOOD_SLUGS=""
+          BAD_SLUGS=""
+          if [ -n "$EFFECTIVE_SLUGS" ] && [ -f "$ERRORS_FILE" ]; then
+            IFS=',' read -ra SLUG_ARRAY <<< "$EFFECTIVE_SLUGS"
+            for s in "${SLUG_ARRAY[@]}"; do
+              s="${s// /}"  # trim whitespace
+              [ -z "$s" ] && continue
+              if jq -e --arg slug "$s" 'any(.[]; .slug == $slug)' "$ERRORS_FILE" >/dev/null 2>&1; then
+                BAD_SLUGS="${BAD_SLUGS:+$BAD_SLUGS,}$s"
+                echo "::warning title=Author source error (multi)::Tutorial '$s' could not be fetched — skipping from multi-slug publish."
+              else
+                GOOD_SLUGS="${GOOD_SLUGS:+$GOOD_SLUGS,}$s"
+              fi
+            done
+          else
+            # No multi-slug payload, or no errors file — pass through unchanged.
+            GOOD_SLUGS="$EFFECTIVE_SLUGS"
+          fi
+          echo "bad_slugs=$BAD_SLUGS" >> "$GITHUB_OUTPUT"
+          echo "good_slugs=$GOOD_SLUGS" >> "$GITHUB_OUTPUT"
 
       # Resolve the tutorial's author (last committer of tutorials/<slug>/ in
       # the source repo, falling back to the dispatched commit's author) so the
@@ -425,12 +452,12 @@ jobs:
       # self-heal like prod), so this gate is the only thing standing between a
       # fingerprint-skewed deploy and unstyled /tutorials-qa/* pages.
       - name: Guard - approuter serves referenced CSS + islands (QA)
-        # Share the publish step's skip condition (line ~405): an author
-        # source-error (#2384) leaves no rendered page for the slug, and
-        # check-approuter-assets.cjs resolvePages() die()s (exit 1) on a missing
-        # page — without this `if:`, a benign author typo would become a red
-        # infra run and file a false failure issue.
-        if: ${{ steps.source_errors.outputs.bad_slug == '' }}
+        # Skip when the only targeted slug failed to fetch (#2384 single-slug),
+        # OR when all multi-slug targets failed to fetch (#2951 multi-slug):
+        # check-approuter-assets.cjs die()s on any slug with no rendered page.
+        # For partial multi-slug failures, good_slugs is non-empty and the guard
+        # runs against only the slugs that actually rendered.
+        if: ${{ steps.source_errors.outputs.bad_slug == '' && (steps.source_errors.outputs.good_slugs != '' || github.event.client_payload.slugs == '') }}
         env:
           # QA is a feature of PRODUCTION, not a separate environment: /tutorials-qa/*
           # is routed by the MAIN (prod) approuter (approuter/xs-app.json → srv-qa-api
@@ -441,12 +468,13 @@ jobs:
           # (2026-10-25).
           APPROUTER_URL: ${{ secrets.APPROUTER_URL_PROD }}
           # Match the publish step's PUBLISH_SLUG / PUBLISH_SLUGS expressions
-          # EXACTLY (lines 424/431) so the probe scope tracks the publish scope:
-          # a force-publish run ships the WHOLE catalog, so it must NOT pin the
-          # guard to one slug (that would gate 1 and strand ~1400 — the inverse
-          # of the bug this closes). check-approuter-assets.cjs reads both.
+          # EXACTLY so the probe scope tracks the publish scope: a force-publish
+          # run ships the WHOLE catalog, so it must NOT pin the guard to one slug.
+          # (#2951) Use good_slugs (fetch-error slugs filtered out) instead of the
+          # raw client_payload.slugs so the guard never checks a slug that Hugo
+          # never rendered.
           PUBLISH_SLUG: ${{ ((! inputs.force-publish) || inputs.allow-revert) && (github.event.client_payload.slug || inputs.slug) || '' }}
-          PUBLISH_SLUGS: ${{ (! inputs.force-publish) && github.event.client_payload.slugs || '' }}
+          PUBLISH_SLUGS: ${{ (! inputs.force-publish) && steps.source_errors.outputs.good_slugs || '' }}
         run: |
           SLUGS_ARG=""
           [ -n "$PUBLISH_SLUGS" ] && SLUGS_ARG="--slugs $PUBLISH_SLUGS"
@@ -460,7 +488,9 @@ jobs:
         # #2384): nothing rendered for it, so a slug-scoped publish would throw
         # the "--slug not found" exit 2 and fail the whole job. A full rebuild
         # (empty bad_slug) and a healthy slug-targeted run both publish normally.
-        if: ${{ steps.source_errors.outputs.bad_slug == '' }}
+        # For multi-slug with partial failures, bad_slug is empty and good_slugs
+        # contains only the slugs that rendered — publish proceeds on those.
+        if: ${{ steps.source_errors.outputs.bad_slug == '' && (steps.source_errors.outputs.good_slugs != '' || github.event.client_payload.slugs == '') }}
         # allow-revert path (per-slug #672 override): the server-side guard is only
         # reached at COMMIT, but publish-content.ts's client-side #672 short-circuit
         # (source+html hash match) drops the slug BEFORE commit — and --allow-revert
@@ -483,10 +513,9 @@ jobs:
           # Multi-slug (N-tutorial push) companion. Scope the publish to exactly
           # the changed slugs when the notify template sent a validated
           # client_payload.slugs — publish-content.ts reads PUBLISH_SLUGS as the
-          # --slugs fallback (filterToSlugs). Empty on force-publish (full
-          # re-seed) and on single-slug/allow-revert runs. Payload-only (no
-          # inputs.slugs — the QA workflow_dispatch has no slugs input).
-          PUBLISH_SLUGS: ${{ (! inputs.force-publish) && github.event.client_payload.slugs || '' }}
+          # --slugs fallback (filterToSlugs). (#2951) Use good_slugs (fetch-error
+          # slugs filtered out) so publish never tries a slug Hugo skipped.
+          PUBLISH_SLUGS: ${{ (! inputs.force-publish) && steps.source_errors.outputs.good_slugs || '' }}
 
       # #1373 — synthetic watchdog. The publish step reporting success is not
       # proof rows landed: the render-concepts 404 that hid for days (#1372)
@@ -496,9 +525,9 @@ jobs:
       # run that the failure notifier below emails on.
       - name: Verify QA publish landed rows
         # Skipped when the publish step was skipped for an author source error
-        # (#2384) — there was no publish to verify, and the channel's existing
-        # rows are unchanged.
-        if: ${{ steps.source_errors.outputs.bad_slug == '' }}
+        # (#2384/#2951) — there was no publish to verify, and the channel's
+        # existing rows are unchanged.
+        if: ${{ steps.source_errors.outputs.bad_slug == '' && (steps.source_errors.outputs.good_slugs != '' || github.event.client_payload.slugs == '') }}
         uses: ./.github/actions/verify-publish-landed
         with:
           base-url: ${{ secrets.CAP_SRV_URL_QA }}

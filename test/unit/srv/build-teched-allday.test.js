@@ -80,7 +80,7 @@ describe('GET /build/teched — all-day activities', () => {
     // scheduledEnd (issue #2392 — matches the fetcher dropPast carve-out).
     const allDay = data.sessions.filter((s) => s.allDay);
     expect(allDay.map((s) => s.title).sort()).toEqual(['AI Showfloor Expo', 'Developer Garage']);
-    // timed sessions (fixture dated 2026-10) are still present too
+    // timed sessions (fixture dated 2026-12) are still present too
     expect(data.sessions.some((s) => s.sessionCode === 'KEY100')).toBe(true);
   });
 

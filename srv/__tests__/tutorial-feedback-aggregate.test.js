@@ -98,3 +98,37 @@ describe('TutorialFeedbackAggregate', () => {
     expect(Number(row.avgRelevance)).toBeCloseTo((9 + 4) / 2, 2);
   });
 });
+
+describe('isIrrelevant filtering', () => {
+  afterEach(async () => {
+    const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(TutorialFeedback).where({ tutorialSlug: { like: 'flag-test%' } });
+  });
+
+  it('excludes flagged rows from TutorialFeedbackAggregate responseCount', async () => {
+    const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(TutorialFeedback).entries([
+      { tutorialSlug: 'flag-test-1', npsScore: 9, isIrrelevant: false },
+      { tutorialSlug: 'flag-test-1', npsScore: 0, isIrrelevant: true }
+    ]);
+    const [row] = await SELECT.from('com.sap.developers.ims.TutorialFeedbackAggregate')
+      .where({ tutorialSlug: 'flag-test-1' });
+    expect(row.responseCount).toBe(1);
+    expect(row.promoters).toBe(1);
+    expect(row.detractors).toBe(0);
+  });
+
+  it('AuthorSurveyDistribution excludes flagged rows across all legs', async () => {
+    const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(TutorialFeedback).entries([
+      { tutorialSlug: 'flag-test-2', npsScore: 8, ratingStructure: 7, isIrrelevant: false },
+      { tutorialSlug: 'flag-test-2', npsScore: 1, ratingStructure: 2, isIrrelevant: true }
+    ]);
+    const rows = await SELECT.from('com.sap.developers.ims.AuthorSurveyDistribution')
+      .where({ tutorialSlug: 'flag-test-2' });
+    // Flagged row had scores 1 (nps) and 2 (structure) — neither should appear
+    expect(rows.every(r => r.score !== 1 && r.score !== 2)).toBe(true);
+    // Non-flagged row's scores 8 (nps) and 7 (structure) must appear
+    expect(rows.some(r => r.score === 8)).toBe(true);
+  });
+});

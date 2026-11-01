@@ -30,14 +30,14 @@ function english(num: number): string[] {
     }
     if (pos === 2 && d !== 0) { result.push(w[0][d] + ' ' + w[2][0]); continue }
     if (pos === 3) {
-      if (consolidate(digits) !== 0) { result.push(w[0][d] + ' ' + w[3][0] + ', '); continue }
+      if (consolidate(digits) !== 0) { result.push(w[0][d] + ' ' + w[3][0]); continue }
       else result.push(w[0][d] + ' ' + w[3][0])
     }
     if (pos === 4) {
       const c = parseInt(d + '' + digits.pop())
       result.push(w[0][c] + ' ' + w[3])
       if (consolidate(digits) === 0) break
-      result.push(result.pop()! + ', ')
+      result.push(result.pop()!)
     }
   }
   return result
@@ -206,42 +206,43 @@ function hebrew(num: number): string[] {
     ['', 'אחת', 'שתים', 'שלוש', 'ארבע', 'חמש', 'שש', 'שבע', 'שמונה', 'תשע', 'עשר', 'אחת-עשרה', 'שתים-עשרה', 'שלוש-עשרה', 'ארבע-עשרה', 'חמש-עשרה', 'שש-עשרה', 'שבע-עשרה', 'שמונה-עשרה', 'תשע-עשרה'],
     ['', 'עשרה', 'עשרים', 'שלושים', 'ארבעים', 'חמשים', 'ששים', 'שבעים', 'שמונים', 'תשעים'],
     ['מאות'],
-    ['', 'אלף', 'אלפים', 'שלושת אלפים', 'ארבעת אלפים', 'חמשת אלפים', 'ששת אלפים', 'שבעת אלפים', 'שמונת אלפים', 'תשעת אלפים', 'עשרת אלפים'],
+    ['', 'אלף', 'אלפיים', 'שלושת אלפים', 'ארבעת אלפים', 'חמשת אלפים', 'ששת אלפים', 'שבעת אלפים', 'שמונת אלפים', 'תשעת אלפים', 'עשרת אלפים'],
   ]
   const digits = ('' + num).split('').map(Number).reverse()
   const result: string[] = []
   if (digits.length === 1 && digits[0] === 0) { result.push('אפס'); return result }
+  let prefix = ''
   while (digits.length >= 1) {
     const pos = digits.length - 1
     const d = digits.pop()!
     if (d === 0) continue
-    if (pos === 0) { result.push(w[0][d]); continue }
-    if (pos === 1 && d === 1) { result.push(w[0][parseInt(d + '' + digits.pop())]); continue }
+    if (pos === 0) { result.push(prefix + w[0][d]); prefix = ''; continue }
+    if (pos === 1 && d === 1) { result.push(prefix + w[0][parseInt(d + '' + digits.pop())]); prefix = ''; continue }
     if (pos === 1) {
       const n = digits.pop()!
       let ten = w[1][d]
       if (d === 2) ten = 'עשרים'
       if (d === 3 && n === 0) ten = 'שלושים'
-      result.push(ten + (n !== 0 ? ' ו' : '') + w[0][n])
+      result.push(prefix + ten + (n !== 0 ? ' ו' : '') + w[0][n]); prefix = ''
       continue
     }
     if (pos === 2) {
-      const vav = consolidate(digits) < 10 && consolidate(digits) !== 0 ? ' ו' : ''
-      if (d === 1) { result.push('מאה' + vav); continue }
-      if (d === 2) { result.push('מאתים' + vav); continue }
-      result.push(w[0][d] + ' ' + w[2][0] + vav)
+      const needsVav = consolidate(digits) < 10 && consolidate(digits) !== 0
+      if (d === 1) { result.push(prefix + 'מאה'); prefix = needsVav ? 'ו' : ''; continue }
+      if (d === 2) { result.push(prefix + 'מאתים'); prefix = needsVav ? 'ו' : ''; continue }
+      result.push(prefix + w[0][d] + ' ' + w[2][0]); prefix = needsVav ? 'ו' : ''
       continue
     }
     if (pos === 3) {
-      const vav = consolidate(digits) < 10 && consolidate(digits) !== 0 ? ' ו' : ''
-      result.push(w[3][d] + vav)
+      const needsVav = consolidate(digits) < 10 && consolidate(digits) !== 0
+      result.push(prefix + w[3][d]); prefix = needsVav ? 'ו' : ''
       continue
     }
     if (pos === 4 && d === 1) {
       const c = parseInt(d + '' + digits.pop())
-      const vav = consolidate(digits) < 10 && consolidate(digits) !== 0 ? ' ו' : ''
-      if (c === 10) { result.push('עשרת אלפים' + vav); continue }
-      result.push(w[0][c] + ' אלף' + vav)
+      const needsVav = consolidate(digits) < 10 && consolidate(digits) !== 0
+      if (c === 10) { result.push(prefix + 'עשרת אלפים'); prefix = needsVav ? 'ו' : ''; continue }
+      result.push(prefix + w[0][c] + ' אלף'); prefix = needsVav ? 'ו' : ''
     }
   }
   return result
@@ -252,7 +253,7 @@ function arabic(num: number): string[] {
   const w = [
     ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة', 'عشرة', 'إحدى عشر', 'إثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'],
     ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'],
-    ['', 'مائة', 'مائتان', 'ثلاثمية', 'أربعمية', 'خمسمية', 'ستمية', 'سبعمية', 'ثمانيمية', 'تسعمية'],
+    ['', 'مائة', 'مائتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة'],
   ]
   const digits = ('' + num).split('').map(Number).reverse()
   const result: string[] = []
@@ -275,8 +276,8 @@ function arabic(num: number): string[] {
     }
     if (pos === 3) {
       if (d === 1) { result.push('ألف'); continue }
-      if (d === 2) { result.push('الفا'); continue }
-      result.push(w[0][d] + 'الاف ')
+      if (d === 2) { result.push('ألفان'); continue }
+      result.push(w[0][d] + ' آلاف')
       continue
     }
     if (pos === 4) {
@@ -299,6 +300,13 @@ function mandarin(num: number): string[] {
   const digits = ('' + num).split('').map(Number).reverse()
   const result: string[] = []
   if (digits.length === 1 && digits[0] === 0) { result.push('零'); return result }
+  const push = (s: string) => {
+    if (result.length > 0 && result[result.length - 1].endsWith('零')) {
+      result.push(result.pop()! + s)
+    } else {
+      result.push(s)
+    }
+  }
   while (digits.length >= 1) {
     const pos = digits.length - 1
     const d = digits.pop()!
@@ -310,20 +318,20 @@ function mandarin(num: number): string[] {
       } catch {}
       continue
     }
-    if (pos === 0) { result.push(w[0][d]); continue }
+    if (pos === 0) { push(w[0][d]); continue }
     if (pos === 1) {
       const n = digits.pop()!
-      if (d === 1) { result.push(w[1][0] + w[0][n]); continue }
-      result.push(w[0][d] + w[1][0] + w[0][n])
+      if (d === 1) { push(w[1][0] + w[0][n]); continue }
+      push(w[0][d] + w[1][0] + w[0][n])
       continue
     }
     if (pos === 2) {
       if (consolidate(digits) < 20 && consolidate(digits) > 9) {
         digits.pop()
-        result.push(w[0][d] + w[2][0] + w[0][1] + w[1][0])
+        push(w[0][d] + w[2][0] + w[0][1] + w[1][0])
         continue
       }
-      result.push(w[0][d] + w[2][0])
+      push(w[0][d] + w[2][0])
       continue
     }
     if (pos === 3) {

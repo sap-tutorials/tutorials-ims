@@ -845,7 +845,10 @@ service AdminService {
   @readonly entity PipelineLogItems as projection on ims.PipelineLogItems;
   @readonly entity JobLogItems      as projection on ims.JobLogItems;
 
-  @readonly entity TutorialFeedback          as projection on ims.TutorialFeedback;
+  @readonly entity TutorialFeedback as projection on ims.TutorialFeedback actions {
+    action markFeedbackIrrelevant(reason : String(500)) returns {};
+    action unmarkFeedbackIrrelevant() returns {};
+  };
   @readonly entity TutorialFeedbackAggregate as projection on ims.TutorialFeedbackAggregate;
 
   // --- Admin actions ---

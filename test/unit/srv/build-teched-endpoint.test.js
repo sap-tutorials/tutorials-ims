@@ -95,7 +95,7 @@ describe('GET /build/teched', () => {
     expect(data.sessions.some((s) => s.sessionCode === 'KEY100')).toBe(false);
   });
 
-  it('?upcoming=true keeps not-yet-ended sessions (fixture is in 2026-10)', async () => {
+  it('?upcoming=true keeps not-yet-ended sessions (fixture is in 2026-12)', async () => {
     const { data } = await project.get('/build/teched?upcoming=true');
     expect(data.sessions.length).toBe(6);
   });

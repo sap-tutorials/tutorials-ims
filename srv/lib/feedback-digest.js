@@ -149,7 +149,7 @@ export async function computeFeedbackDigests({ since, until }, db = cds.db) {
   const { TutorialFeedback } = cds.entities(NS);
   const rows = await db.run(
     SELECT.from(TutorialFeedback)
-      .where`submittedAt > ${since} and submittedAt <= ${until}`
+      .where`submittedAt > ${since} and submittedAt <= ${until} and (isIrrelevant is null or isIrrelevant = false)`
       .orderBy('submittedAt')
   );
 

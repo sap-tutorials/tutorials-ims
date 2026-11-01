@@ -1778,6 +1778,28 @@ export default class AdminService extends cds.ApplicationService {
       return result;
     });
 
+    // --- Feedback moderation ---
+
+    this.on('markFeedbackIrrelevant', 'TutorialFeedback', async (req) => {
+      const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+      const id = req.params[0]?.ID ?? req.params[0];
+      if (!id) return req.error(400, 'Missing entity key');
+      const row = await SELECT.one.from(TutorialFeedback).where({ ID: id });
+      if (!row) return req.error(404, 'Feedback entry not found');
+      await UPDATE(TutorialFeedback).set({ isIrrelevant: true, irrelevantReason: req.data.reason ?? null }).where({ ID: id });
+      return {};
+    });
+
+    this.on('unmarkFeedbackIrrelevant', 'TutorialFeedback', async (req) => {
+      const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+      const id = req.params[0]?.ID ?? req.params[0];
+      if (!id) return req.error(400, 'Missing entity key');
+      const row = await SELECT.one.from(TutorialFeedback).where({ ID: id });
+      if (!row) return req.error(404, 'Feedback entry not found');
+      await UPDATE(TutorialFeedback).set({ isIrrelevant: false, irrelevantReason: null }).where({ ID: id });
+      return {};
+    });
+
     // clearChangeLog — bulk-purge sap.changelog.Changes rows. Designed for
     // admins to clear migration-trigger noise (74k+ rows on DEV today from
     // migrate-from-hana.js DB triggers) without waiting for the weekly cron.

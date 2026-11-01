@@ -1,5 +1,7 @@
 import { ref, readonly, onUnmounted } from 'vue'
 import { io, type Socket } from 'socket.io-client'
+import { reconcileBuckets } from './reconcile'
+import { completionsPerHour } from './rate'
 
 export interface Bucket {
   name: string
@@ -32,6 +34,7 @@ export function useEventStream() {
   let socket: Socket | null = null
   let demoInterval: ReturnType<typeof setInterval> | null = null
   let cronInterval: ReturnType<typeof setInterval> | null = null
+  let reconcileInterval: ReturnType<typeof setInterval> | null = null
   const messageTimestamps: number[] = []
   const bucketTimestamps = new Map<string, number[]>()
 
@@ -59,16 +62,15 @@ export function useEventStream() {
   }
 
   function speedApproximation(): number {
-    if (messageTimestamps.length < 3) return 0
-    const time = messageTimestamps[messageTimestamps.length - 1] - messageTimestamps[0]
-    if (time === 0) return 0
-    const approx = (60 * 60 * 1000) / time
-    return Math.round(approx * messageTimestamps.length)
+    // Driven by messageTimestamps, which is fed from completionTick (EVERY
+    // completion), so the rate reflects all activity — not only track-mapped
+    // completions. See rate.ts for why this matters (per-hour-stuck-at-0 bug).
+    return completionsPerHour(messageTimestamps)
   }
 
   function startCron() {
     cronInterval = setInterval(() => {
-      if (messageTimestamps.length < 3) return
+      if (messageTimestamps.length < 2) return
       removeOutdatedTimestamps()
       speed.value = speedApproximation()
 
@@ -92,7 +94,10 @@ export function useEventStream() {
     } else {
       buckets.value.push({ name: bucketName, count: 1, justUpdated: true })
     }
-    messageTimestamps.push(Date.now())
+    // NOTE: the overall "Tutorials Per Hour" rate is fed from completionTick
+    // (every completion), NOT here — a track completion fires BOTH completionTick
+    // and tutorialCompleted, so feeding the rate from both would double-count.
+    // This bucketTimestamps feed below stays (it drives per-bucket velocity).
 
     recentEvents.value = [
       { name: bucketName, timestamp: Date.now() },
@@ -110,18 +115,30 @@ export function useEventStream() {
     }, 1200)
   }
 
-  async function connect(baseUrl: string, eventId: number | string) {
-    connectionState.value = 'connecting'
-    errorMessage.value = ''
-    const url = String(baseUrl).replace(/\/+$/, '')
-
-    // Fetch initial bucket data from unauthenticated EventStreamService
+  // Fetch the authoritative getEventBuckets snapshot and apply it.
+  //
+  // mode='seed'  — initial load: adopt counts verbatim (sets up the board).
+  // mode='reconcile' — periodic heal: merge via reconcileBuckets so counts that
+  //   drifted below the snapshot (missed socket events) are corrected WITHOUT
+  //   rewinding counts the live socket has already advanced past. This is what
+  //   stops the all-day kiosk from silently falling behind and needing a manual
+  //   refresh — the historical "numbers don't update live" complaint.
+  //
+  // Returns false on a hard fetch failure so the initial seed can surface an error;
+  // reconcile passes ignore failures (transient; the next tick retries).
+  async function fetchBuckets(
+    url: string,
+    eventId: number | string,
+    mode: 'seed' | 'reconcile',
+  ): Promise<boolean> {
     try {
       const res = await fetch(`${url}/rest/event-stream/getEventBuckets(eventLegacyId=${eventId})`)
       if (res.status === 404) {
-        connectionState.value = 'error'
-        errorMessage.value = `Event ID ${eventId} not found. Verify the event exists and has the correct legacy ID.`
-        return
+        if (mode === 'seed') {
+          connectionState.value = 'error'
+          errorMessage.value = `Event ID ${eventId} not found. Verify the event exists and has the correct legacy ID.`
+        }
+        return false
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
       const json = await res.json()
@@ -129,22 +146,47 @@ export function useEventStream() {
       // fall back to legacy array shapes for safety.
       const data: Array<{ bucketName: string; count: number }> =
         json.buckets ?? json.value ?? (Array.isArray(json) ? json : [])
-      // Empty buckets = event exists but no completions yet (a 404 event is rejected
-      // above). Don't error out — proceed to the socket so late completions render (#2294).
-      buckets.value = data.map(b => ({ name: b.bucketName, count: b.count, justUpdated: false }))
+      if (mode === 'seed') {
+        // Empty buckets = event exists but no completions yet (a 404 event is rejected
+        // above). Don't error out — proceed to the socket so late completions render (#2294).
+        buckets.value = data.map(b => ({ name: b.bucketName, count: b.count, justUpdated: false }))
+      } else {
+        // Heal drift: never rewind a count the live socket already advanced.
+        buckets.value = reconcileBuckets(buckets.value, data)
+      }
       sortBuckets()
       // Hero total = ALL window completions (track-independent). Older servers that
-      // don't send totalCompletions fall back to the bucket sum.
-      setTotalFromFetch(
+      // don't send totalCompletions fall back to the bucket sum. Monotonic on
+      // reconcile so a late socket tick isn't rewound by a slightly-stale snapshot.
+      const fetchedTotal =
         typeof json.totalCompletions === 'number'
           ? json.totalCompletions
           : buckets.value.reduce((sum, b) => sum + b.count, 0)
-      )
+      if (mode === 'seed') setTotalFromFetch(fetchedTotal)
+      else if (fetchedTotal > totalCount.value) setTotalFromFetch(fetchedTotal)
+      return true
     } catch (e) {
-      connectionState.value = 'error'
-      errorMessage.value = `Failed to fetch from ${url}: ${(e as Error).message}`
-      return
+      if (mode === 'seed') {
+        connectionState.value = 'error'
+        errorMessage.value = `Failed to fetch from ${url}: ${(e as Error).message}`
+      }
+      return false
     }
+  }
+
+  async function connect(baseUrl: string, eventId: number | string) {
+    connectionState.value = 'connecting'
+    errorMessage.value = ''
+    const url = String(baseUrl).replace(/\/+$/, '')
+
+    // Initial authoritative seed. Abort on hard failure (404 / network).
+    const seeded = await fetchBuckets(url, eventId, 'seed')
+    if (!seeded) return
+
+    // Periodic reconciliation (every 15s) — the safety net that lets the socket
+    // provide snappy live deltas while guaranteeing the board self-heals from any
+    // missed event over a long kiosk session. No page refresh required.
+    reconcileInterval = setInterval(() => { void fetchBuckets(url, eventId, 'reconcile') }, 15000)
 
     // Connect via Socket.IO to EventStreamService.
     // Use the default polling→upgrade transport order. A websocket-only pin
@@ -181,6 +223,11 @@ export function useEventStream() {
     // Hero "total activity" — one tick per completion (track or not).
     socket.on('completionTick', () => {
       totalCount.value++
+      // Feed the "Tutorials Per Hour" rate from EVERY completion (track or not).
+      // Previously the rate was fed only from tutorialCompleted (track-mapped),
+      // so events whose completions didn't resolve to a CompletionPath showed a
+      // permanently-zero per-hour. completionTick fires for all completions.
+      messageTimestamps.push(Date.now())
     })
 
     startCron()
@@ -207,6 +254,7 @@ export function useEventStream() {
     if (socket) { socket.disconnect(); socket = null }
     if (demoInterval) { clearInterval(demoInterval); demoInterval = null }
     if (cronInterval) { clearInterval(cronInterval); cronInterval = null }
+    if (reconcileInterval) { clearInterval(reconcileInterval); reconcileInterval = null }
     connectionState.value = 'idle'
   }
 
