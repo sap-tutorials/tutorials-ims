@@ -143,7 +143,10 @@ describe('FeaturedTasks order default', () => {
 
   afterAll(async () => {
     for (const id of createdIDs) {
-      await project.delete(`/admin/FeaturedTasks(ID=${id},IsActiveEntity=true)`, adminAuth);
+      // Under cds.fiori.draft_admin_integrity (CAP 10.2) a residual draft can
+      // linger after activation — discard first, then delete the active entity.
+      await project.delete(`/admin/FeaturedTasks(ID=${id},IsActiveEntity=false)`, adminAuth).catch(() => {});
+      await project.delete(`/admin/FeaturedTasks(ID=${id},IsActiveEntity=true)`, adminAuth).catch(() => {});
     }
   });
 

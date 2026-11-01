@@ -33,6 +33,10 @@ describe('AdminService.GridTemplates', () => {
     expect([200, 201]).toContain(activateRes.status);
     expect(activateRes.data.IsActiveEntity).toBe(true);
 
+    // Under cds.fiori.draft_admin_integrity (CAP 10.2) a residual draft can
+    // linger after activation on SQLite and blocks the active delete with
+    // "a draft exists" — discard any leftover draft first, then delete active.
+    await project.delete(`/admin/GridTemplates(ID=${id},IsActiveEntity=false)`, ADMIN_AUTH).catch(() => {});
     const delRes = await project.delete(
       `/admin/GridTemplates(ID=${id},IsActiveEntity=true)`,
       ADMIN_AUTH
