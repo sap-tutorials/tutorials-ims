@@ -1275,6 +1275,40 @@ export default class AdminService extends cds.ApplicationService {
     this.after('SAVE', 'Missions', onMissionSave);
     this.after('SAVE', 'Groups', onGroupSave);
 
+    // #2909 — draft DISCARD reconcile. With cds.fiori.draft_admin_integrity on,
+    // discarding a Mission/Group draft cascade-deletes its draft CompletionPathItems/
+    // GroupPathItems at the DB level, bypassing the per-row after('DELETE') reconcile
+    // hooks above. These root DISCARD handlers restore rollup correctness by firing
+    // reconcile for the ACTIVE entity's legacyId (the discard reverts the draft to
+    // the active state, so we reconcile against that). DISCARD fires at the draft
+    // root regardless of the child-row cascade. Fail-open like the SAVE hooks.
+    const onMissionDiscard = async (_data, req) => {
+      try {
+        const { Missions } = cds.entities('com.sap.developers.ims');
+        const id = req.data?.ID ?? req.params?.[0]?.ID;
+        const legacyId = id
+          ? (await SELECT.one.from(Missions).columns('legacyId').where({ ID: id }))?.legacyId
+          : null;
+        fireReconcile('MISSION', legacyId);
+      } catch (_) { /* fail-open */ }
+    };
+    const onGroupDiscard = async (_data, req) => {
+      try {
+        const { Groups } = cds.entities('com.sap.developers.ims');
+        const groupId = req.data?.ID ?? req.params?.[0]?.ID;
+        const legacyId = groupId
+          ? (await SELECT.one.from(Groups).columns('legacyId').where({ ID: groupId }))?.legacyId
+          : null;
+        fireReconcile('GROUP', legacyId);
+        if (groupId) {
+          const missionLegacyIds = await resolveMissionsNestingGroup(groupId).catch(() => []);
+          for (const mLegacy of missionLegacyIds) fireReconcile('MISSION', mLegacy);
+        }
+      } catch (_) { /* fail-open */ }
+    };
+    this.after('DISCARD', 'Missions.drafts', onMissionDiscard);
+    this.after('DISCARD', 'Groups.drafts', onGroupDiscard);
+
     // Advocates: auto-derive slug from firstName + lastName on CREATE.
     advocateHandlers.register(this);
     devtoberfestBannerHandlers.register(this);

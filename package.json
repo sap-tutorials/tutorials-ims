@@ -457,6 +457,9 @@
     "hana": {
       "fuzzy": false
     },
+    "fiori": {
+      "draft_admin_integrity": true
+    },
     "websocket": {
       "kind": "socket.io",
       "adapter": {
