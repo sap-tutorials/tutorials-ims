@@ -107,8 +107,12 @@ describe('Draft Enablement', () => {
       );
       expect(activateStatus).toBe(201);
 
-      // Cleanup
-      await project.delete(`/admin/Missions(ID=${mission.ID},IsActiveEntity=true)`, adminAuth);
+      // Cleanup. Under cds.fiori.draft_admin_integrity (CAP 10.2) a residual
+      // draft can linger after activation on SQLite and blocks the active delete
+      // with "a draft exists" — discard any leftover draft first, then delete the
+      // active entity.
+      await project.delete(`/admin/Missions(ID=${mission.ID},IsActiveEntity=false)`, adminAuth).catch(() => {});
+      await project.delete(`/admin/Missions(ID=${mission.ID},IsActiveEntity=true)`, adminAuth).catch(() => {});
     });
   });
 });
