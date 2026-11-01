@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-01T12:18:20.851Z",
+  "generatedAt": "2026-11-01T18:24:27.644Z",
   "repos": [
     {
       "key": "tutorials-ims",
@@ -8,6 +8,110 @@
     }
   ],
   "entries": [
+    {
+      "id": "tutorials-ims#2971",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2971,
+      "title": "Startup preflight check for draft cascade constraints",
+      "summary": "The server now verifies that all 26 draft tables have the required ON DELETE CASCADE constraints at startup, logging a warning if any are missing so operators can catch constraint drift before it affects users.",
+      "category": "Maintenance",
+      "mergedAt": "2026-11-01T18:19:06Z",
+      "week": "2026-W44",
+      "weekStart": "2026-10-26",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2971"
+    },
+    {
+      "id": "tutorials-ims#2970",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2970,
+      "title": "test(hybrid): draft DISCARD reconcile on real HANA (#2909)",
+      "summary": "Added a hybrid HANA test that proves draft DISCARD correctly reconciles Mission/Group rollups on a real database with cascade constraints active.",
+      "category": "Maintenance",
+      "mergedAt": "2026-11-01T18:07:22Z",
+      "week": "2026-W44",
+      "weekStart": "2026-10-26",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2970"
+    },
+    {
+      "id": "tutorials-ims#2969",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2969,
+      "title": "fix(test): apply draft_admin_integrity cleanup to 2 missed tests (#2909)",
+      "summary": "Fixed two test files that missed the draft cleanup pattern update from the draft_admin_integrity adoption, restoring a fully green unit suite.",
+      "category": "Maintenance",
+      "mergedAt": "2026-11-01T17:46:12Z",
+      "week": "2026-W44",
+      "weekStart": "2026-10-26",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2969"
+    },
+    {
+      "id": "tutorials-ims#2967",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2967,
+      "title": "Optimized draft deletion with CAP 10.2 draft_admin_integrity",
+      "summary": "Enabled CAP's draft_admin_integrity flag so draft activation and cancellation now cascade-delete child draft rows at the database level, reducing round-trips and keeping draft tables clean automatically.",
+      "category": "Performance",
+      "mergedAt": "2026-11-01T16:20:36Z",
+      "week": "2026-W44",
+      "weekStart": "2026-10-26",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2967"
+    },
+    {
+      "id": "tutorials-ims#2966",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2966,
+      "title": "Upgraded to CAP 10.2",
+      "summary": "The platform now runs on CAP 10.2 (cds 10.2.2) with updated @cap-js plugins, bringing the latest bug fixes, performance improvements, and compatibility with upcoming CAP features.",
+      "category": "Maintenance",
+      "mergedAt": "2026-11-01T15:22:13Z",
+      "week": "2026-W44",
+      "weekStart": "2026-10-26",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2966"
+    },
+    {
+      "id": "tutorials-ims#2965",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2965,
+      "title": "Retired btp-onboarding tutorial repo",
+      "summary": "Removed the 7 decommissioned btp-ea-onboard-* tutorials from the fetch registry and content hashes; they will no longer appear in browse results or be fetched during builds.",
+      "category": "Maintenance",
+      "mergedAt": "2026-11-01T13:47:55Z",
+      "week": "2026-W44",
+      "weekStart": "2026-10-26",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2965"
+    },
+    {
+      "id": "tutorials-ims#2964",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2964,
+      "title": "release 1.41.8: CF staging fix + event-app improvements",
+      "summary": "Promoted 1.41.8 release to production, including the CF buildpack staging fix and event-app improvements.",
+      "category": "Maintenance",
+      "mergedAt": "2026-11-01T12:35:09Z",
+      "week": "2026-W44",
+      "weekStart": "2026-10-26",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2964"
+    },
+    {
+      "id": "tutorials-ims#2963",
+      "repo": "tutorials-ims",
+      "label": "Developer Portal",
+      "number": 2963,
+      "title": "chore(release): bump MTA version to 1.41.8",
+      "summary": "Bumped MTA version to 1.41.8 and refreshed the What's New digest with 15 new entries for the PRs merged since 1.41.7.",
+      "category": "Maintenance",
+      "mergedAt": "2026-11-01T12:34:56Z",
+      "week": "2026-W44",
+      "weekStart": "2026-10-26",
+      "url": "https://github.com/sap-tutorials/tutorials-ims/pull/2963"
+    },
     {
       "id": "tutorials-ims#2962",
       "repo": "tutorials-ims",
