@@ -104,6 +104,7 @@ import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
 import { uploadPetSubmission, decodePhotoUpload } from './lib/petoberfest-upload.js';
 import { fetchPetPhoto } from './lib/petoberfest-photo-store.js';
 import { installDbWrap } from './lib/metrics-db-wrap.js';
+import { wireDraftIntegrityPreflight } from './lib/draft-integrity-preflight.js';
 import './graphql-config.js';
 import { makeA2aRouter } from './lib/a2a/rpc-router.js';
 import { a2aIasAuthMiddleware } from './lib/a2a/ias-auth-mw.js';
@@ -2345,6 +2346,8 @@ cds.on('served', () => {
 //     db.tx.ms observation can double-count against the wall-clock of an
 //     already-active tx. Not a correctness issue — flagged so admin-tile
 //     percentiles read as "acquire + tx pressure signal" not "unique samples."
+wireDraftIntegrityPreflight(cds);
+
 cds.on('served', () => {
   const installed = installDbWrap(cds);
   if (installed) {
