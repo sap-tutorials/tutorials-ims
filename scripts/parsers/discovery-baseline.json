@@ -1509,41 +1509,6 @@
     "repo": "btp-foundation",
     "branch": "main"
   },
-  "btp-ea-onboard-01-intro": {
-    "slug": "btp-ea-onboard-01-intro",
-    "repo": "btp-onboarding",
-    "branch": "main"
-  },
-  "btp-ea-onboard-02-ga": {
-    "slug": "btp-ea-onboard-02-ga",
-    "repo": "btp-onboarding",
-    "branch": "main"
-  },
-  "btp-ea-onboard-03-subb": {
-    "slug": "btp-ea-onboard-03-subb",
-    "repo": "btp-onboarding",
-    "branch": "main"
-  },
-  "btp-ea-onboard-04-subm": {
-    "slug": "btp-ea-onboard-04-subm",
-    "repo": "btp-onboarding",
-    "branch": "main"
-  },
-  "btp-ea-onboard-05-abapb": {
-    "slug": "btp-ea-onboard-05-abapb",
-    "repo": "btp-onboarding",
-    "branch": "main"
-  },
-  "btp-ea-onboard-06-abapm": {
-    "slug": "btp-ea-onboard-06-abapm",
-    "repo": "btp-onboarding",
-    "branch": "main"
-  },
-  "btp-ea-onboard-07-cli": {
-    "slug": "btp-ea-onboard-07-cli",
-    "repo": "btp-onboarding",
-    "branch": "main"
-  },
   "btp-free-tier-account": {
     "slug": "btp-free-tier-account",
     "repo": "btp-adai",
