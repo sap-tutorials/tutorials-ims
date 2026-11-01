@@ -8,7 +8,7 @@
  *
  * Spec: docs/superpowers/specs/2026-06-27-601-advocate-profile-pages-design.md
  */
-import { writeFileSync, readdirSync, unlinkSync, mkdirSync } from 'node:fs';
+import { writeFileSync, readdirSync, unlinkSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import MarkdownIt from 'markdown-it';
@@ -137,10 +137,20 @@ if (process.argv[1]?.endsWith('fetch-advocates.ts') || process.argv[1]?.endsWith
   const contentDir = join(repoRoot, 'hugo', 'content', 'developer-advocates');
   const cacheDir = join(repoRoot, '.tutorial-cache');
 
+  const cacheFile = join(cacheDir, 'advocates-roster.json');
   const fetcher = async () => {
-    const res = await fetch(`${CAP_BASE_URL}/api/advocates`);
-    if (!res.ok) throw new Error(`fetch /api/advocates: ${res.status}`);
-    return res.json();
+    try {
+      const res = await fetch(`${CAP_BASE_URL}/api/advocates`);
+      if (!res.ok) throw new Error(`fetch /api/advocates: ${res.status}`);
+      return res.json();
+    } catch (err) {
+      if (existsSync(cacheFile)) {
+        console.warn(`[fetch-advocates] live fetch failed (${(err as Error).message}); using cached roster`);
+        const cached = JSON.parse(readFileSync(cacheFile, 'utf8'));
+        return { advocates: cached.roster ?? [] };
+      }
+      throw err;
+    }
   };
 
   runFetchAdvocates({ fetcher, contentDir, cacheDir })
