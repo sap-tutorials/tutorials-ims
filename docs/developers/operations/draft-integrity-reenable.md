@@ -3,10 +3,11 @@
 **Status:** DEFERRED — This runbook documents the SAFE re-enable procedure for `cds.fiori.draft_admin_integrity`. The flag is currently **disabled** (`false` in `package.json`). Re-enable ONLY after all green checks — another outage is unacceptable. This runbook exists so it CAN be done safely when the decision is made; it is NOT an instruction to do it now.
 
 **Context:**
-- Issue #2909 (CAP 10.2): draft_admin_integrity ON + missing HANA cascade constraints orphaned all Mission drafts (PROD outage).
-- Issue #2992 (Task 1 fix): added preflight check `srv/lib/draft-integrity-preflight.js`; issue #2968 expanded it.
-- Issue #2994 (Task 2 fix): added orphan cleanup script `scripts/cleanup-draft-orphans.cjs`.
-- Issue #2993 (this work): added build-time FK injection `scripts/patch-draft-cascade-constraints.cjs` + gate test + re-enable runbook.
+- Issue #2909: introduced the flag (CAP 10.2) + missing cascade constraints → PROD outage.
+- Issue #2968: added the preflight check `srv/lib/draft-integrity-preflight.js`.
+- Issue #2992: disabled the flag for all profiles and fixed the preflight (it had queried non-existent `com_sap_developers_ims_*_drafts` names instead of the real `ADMINSERVICE_*_DRAFTS` discovered from `SYS.TABLE_COLUMNS`).
+- Issue #2994: added the orphan cleanup sweep `scripts/cleanup-draft-orphans.cjs`.
+- Issue #2993 (this work): added the build-time FK injection `scripts/patch-draft-cascade-constraints.cjs`, the gate test `test/admin-drafts-cascade-gate.test.js`, and this runbook.
 
 **Key facts:**
 - Constraints are built `NOT VALIDATED` (no pre-clean needed); they remain **inert** until `draft_admin_integrity: true` is set.
@@ -212,11 +213,11 @@ If any step fails or the deployed service encounters errors:
 
 ## Related Issues
 
-- **#2909:** CAP 10.2 draft_admin_integrity ON + missing cascade constraints → PROD outage.
-- **#2968:** Preflight check discovered missing cascade FK columns on draft tables.
-- **#2992:** Task 1 fix: build-time FK injection + preflight expansion.
-- **#2994:** Task 2 fix: orphan cleanup script.
-- **#2993:** This work: gate test + re-enable runbook.
+- **#2909:** Introduced the flag (CAP 10.2) + missing cascade constraints → PROD outage.
+- **#2968:** Added the preflight check `srv/lib/draft-integrity-preflight.js`.
+- **#2992:** Disabled the flag for all profiles and fixed the preflight (queried non-existent `com_sap_developers_ims_*_drafts` instead of real `ADMINSERVICE_*_DRAFTS` from `SYS.TABLE_COLUMNS`).
+- **#2994:** Added the orphan cleanup sweep `scripts/cleanup-draft-orphans.cjs`.
+- **#2993:** Added the build-time FK injection `scripts/patch-draft-cascade-constraints.cjs`, the gate test `test/admin-drafts-cascade-gate.test.js`, and this runbook.
 
 ---
 
