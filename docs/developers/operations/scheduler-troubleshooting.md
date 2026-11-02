@@ -126,6 +126,8 @@ UPDATE COM_SAP_DEVELOPERS_IMS_PIPELINELOG
 
 The most severe mode: **every** scheduled job shows stale/overdue on `/admin-ui/#board` at once, none dispatch, yet **manual Run-now still works**. First observed in PROD on 2026-10-12.
 
+> **Before you trust a "scheduler is dead" signal:** a `JobLastRun` row named `__scheduler_selfheal__` is **not** a tracked job and reads as permanently stale — ignore it, and verify liveness by scheduled jobs advancing since boot (see [Self-heal liveness](#self-heal-liveness--do-not-read-it-off-a-joblastrun-row-2983)). #2983.
+
 ### How to recognise it
 
 - The board shows **all** (not one) jobs overdue — `Last success` stale across the board, next-fire times in the past.
@@ -186,6 +188,21 @@ The reaper (#2782/#2814) and re-seeder (#2827) both act on **row-data states** �
 
 
 If the `SchedulerStallDetected` alert fires but the board **still** shows all jobs overdue after a couple of self-heal ticks (reaper + re-seed + `cds.flush()` all ran and none cleared it), fall back to the manual rolling restart below.
+
+### Self-heal liveness — do NOT read it off a `JobLastRun` row (#2983)
+
+The self-heal timer (`armSchedulerSelfHeal`, `srv/lib/scheduler-reaper.js`) is a plain `.unref()`'d `setInterval` — reap tombstones + #2827 re-seed + #2975 `cds.flush()` + alert-only canary. It is **not** a `runWithLock` job and **never writes a `JobLastRun` row**. There is no `__scheduler_selfheal__` tracked job.
+
+- **Verify self-heal liveness by whether scheduled jobs are advancing since boot** — a couple of fresh `SCHEDULED_JOB` SUCCESS rows for the high-frequency jobs (`kg-ondemand-drain` `*/2`, `metrics-rollup` `*/5`) within ~5 min (the "Verify recovery" query below), **not** by any self-heal `lastSuccessAt`.
+- **Ignore / exclude `__scheduler_selfheal__` from any JobLastRun-sorted "overdue" view.** If a `JobLastRun` row named `__scheduler_selfheal__` is present it is a **dead orphan from a previous self-heal implementation** (removed by #2983). No running code advances it, so it will read as permanently stale — it is **not** evidence the scheduler is down. A false "scheduler is dead" verification after the #2975 PROD deploy was caused by exactly this row. If you still see it, delete it (one-time cleanup — see below); nothing re-creates it.
+
+**One-time cleanup** (safe on any env — guarded, idempotent, no-op if the row is absent):
+
+```bash
+cf target                                    # MUST confirm the intended space before PROD
+cds bind --exec -- node scripts/cleanup-selfheal-orphan.cjs    # dry-run: prints the row if present
+cds bind --exec -- node scripts/cleanup-selfheal-orphan.cjs --delete   # delete it
+```
 
 ### Recovery — rolling restart (manual)
 
