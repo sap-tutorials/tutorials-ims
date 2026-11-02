@@ -5,7 +5,7 @@ import { performance } from 'node:perf_hooks'
 import { hugoFrontmatterStringify as yamlStringify } from './lib/hugo-yaml.js'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
 import { composeTutorial } from './parsers/compose.js'
-import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
+import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial, type DiscoverySource } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache, type BrowseFeaturedEntry } from './parsers/cap.js'
 import {
   computeFeedFingerprint,
@@ -92,6 +92,40 @@ export function getHugoContentDir(channel: Channel): string {
   return channel === 'qa'
     ? join(__dirname, '..', 'hugo', 'content-qa')
     : join(__dirname, '..', 'hugo', 'content')
+}
+
+/**
+ * #2974 — Decide whether a QA-channel discovery result is a *degraded* (stale)
+ * fetch that the deploy must reject rather than silently ship.
+ *
+ * The QA channel (`ONLY_CONTRIBUTION_REPOS=true`) fetches the private
+ * `sap-tutorials/*-Contribution` repos over github.com **only**. A wrong-host
+ * token (e.g. a `github.tools.sap` PAT bridged in by the deploy-watcher WSL
+ * wrapper) or an expired one makes GraphQL + REST discovery 401, and
+ * `discoverAllTutorials()` fails *soft* — it falls back to the on-disk
+ * `_discovery.json` (`source: 'disk'`) or HANA RepoCatalog (`source: 'hana'`)
+ * and the per-slug content 404s are collected into an error list that never
+ * throws. The step exits 0 and the deploy ships a QA channel built from stale
+ * cache minus the private slugs the bad token couldn't reach.
+ *
+ * A QA fetch is only trustworthy when discovery actually reached GitHub this
+ * run — `'github'` (GraphQL) or `'rest'` (live REST fallback, which still
+ * proves the token is valid). `'disk'`/`'hana'` mean GitHub was unreachable or
+ * the token was rejected → degraded.
+ *
+ * Scoped to QA: the prod channel tolerates cache fallback by design (it keeps
+ * the public site serving during a GitHub outage). `allowStale` is the
+ * `ALLOW_STALE_QA` opt-out for a *genuine* github.com outage, where proceeding
+ * on stale QA cache is the lesser evil.
+ */
+export function qaDiscoveryIsDegraded(
+  channel: Channel,
+  source: DiscoverySource,
+  allowStale: boolean,
+): boolean {
+  if (channel !== 'qa') return false
+  if (allowStale) return false
+  return source === 'disk' || source === 'hana'
 }
 
 /**
@@ -902,6 +936,24 @@ async function main() {
 
     const discovery = await discoverAllTutorials()
     allTutorials = discovery.tutorials
+
+    // #2974 — Fail LOUD on a degraded QA fetch. QA discovery that fell back to
+    // the disk/HANA cache means the github.com token couldn't reach the private
+    // *-Contribution repos (wrong-host or expired token), so the QA channel
+    // would bake from stale cache minus the private slugs. Exit non-zero so the
+    // deploy (deploy-mta.cjs Step 2.7) aborts instead of shipping degraded QA.
+    // Opt out with ALLOW_STALE_QA=true during a genuine github.com outage.
+    if (qaDiscoveryIsDegraded(channel, discovery.source, process.env.ALLOW_STALE_QA === 'true')) {
+      console.error(
+        `\n✗ [channel=qa] discovery degraded to '${discovery.source}' fallback — the github.com token ` +
+        `could not reach the private sap-tutorials/*-Contribution repos.\n` +
+        `  A QA channel built now would ship STALE cache missing private slugs (see #2974).\n` +
+        `  Fix: bridge a github.com token (NOT github.tools.sap) with read access to the\n` +
+        `  *-Contribution repos into GITHUB_TOKEN/TUTORIALS_GITHUB_TOKEN.\n` +
+        `  To proceed anyway during a genuine github.com outage, set ALLOW_STALE_QA=true.\n`,
+      )
+      process.exit(1)
+    }
     // #2585 — skip DELETED/INACTIVE tutorials before any downstream consumer
     // (cache write, HANA baseline, task map). Fail-open: unreachable endpoint
     // → empty set → no filtering.
