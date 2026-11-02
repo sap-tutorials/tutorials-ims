@@ -23,22 +23,25 @@ const cds = require('@sap/cds');
 const SOURCE = 'architecture-sap-com';
 const SITE_BASE = 'https://architecture.learning.sap.com';
 
-// sourceId (repo-relative path) → corrected slug (as it appears in frontmatter).
-// Final URL = `${SITE_BASE}/docs${slug}`. Slugs are root-absolute (leading /).
+// sourceId (repo-relative path) → corrected URL. For ref-arch docs the fix is
+// the Docusaurus slug route (`${SITE_BASE}/docs${slug}`); for the dated news
+// post it is the blog date-path route (`${SITE_BASE}/news/YYYY/MM/DD/rest`).
+// Every target below was verified 200 against the live site.
 const FIXES = [
-  { sourceId: 'docs/ref-arch/RA0029/readme.md', slug: '/ref-arch/98efa0' },
-  { sourceId: 'docs/ref-arch/RA0029/1-a2a-and-mcp/readme.md', slug: '/ref-arch/76ec36' },
-  { sourceId: 'docs/ref-arch/RA0029/4-integrate-ai-agents-with-joule/readme.md', slug: '/ref-arch/ae6821' },
-  { sourceId: 'docs/ref-arch/RA0029/5-integrate-joule-agents-and-tools-into-your-ecosystem/readme.md', slug: '/ref-arch/fe0d1d' },
-  { sourceId: 'docs/ref-arch/RA0029/5-integrate-joule-agents-and-tools-into-your-ecosystem/1-aws-integration/readme.md', slug: '/ref-arch/b4d7e2' },
-  { sourceId: 'docs/ref-arch/RA0039/readme.md', slug: '/ref-arch/5hj89h' },
+  { sourceId: 'docs/ref-arch/RA0029/readme.md', url: `${SITE_BASE}/docs/ref-arch/98efa0` },
+  { sourceId: 'docs/ref-arch/RA0029/1-a2a-and-mcp/readme.md', url: `${SITE_BASE}/docs/ref-arch/76ec36` },
+  { sourceId: 'docs/ref-arch/RA0029/4-integrate-ai-agents-with-joule/readme.md', url: `${SITE_BASE}/docs/ref-arch/ae6821` },
+  { sourceId: 'docs/ref-arch/RA0029/5-integrate-joule-agents-and-tools-into-your-ecosystem/readme.md', url: `${SITE_BASE}/docs/ref-arch/fe0d1d` },
+  { sourceId: 'docs/ref-arch/RA0029/5-integrate-joule-agents-and-tools-into-your-ecosystem/1-aws-integration/readme.md', url: `${SITE_BASE}/docs/ref-arch/b4d7e2` },
+  { sourceId: 'docs/ref-arch/RA0039/readme.md', url: `${SITE_BASE}/docs/ref-arch/5hj89h` },
+  { sourceId: 'news/2026-10-27-a2a-agent-gateway-interoperability.md', url: `${SITE_BASE}/news/2026/10/27/a2a-agent-gateway-interoperability` },
 ];
 
 const COMMIT = process.argv.includes('--commit');
 
 async function main() {
   await cds.connect.to('db');
-  const { HelpDocs } = cds.entities('com.sap.developers.ims.external');
+  const { HelpDocs, HelpDocConceptLinks } = cds.entities('com.sap.developers.ims.external');
 
   console.log(`\nfix-archcenter-urls — ${COMMIT ? 'COMMIT' : 'DRY-RUN'} mode`);
   console.log('='.repeat(72));
@@ -47,8 +50,7 @@ async function main() {
   let changed = 0;
   const plan = [];
 
-  for (const { sourceId, slug } of FIXES) {
-    const newUrl = `${SITE_BASE}/docs${slug}`;
+  for (const { sourceId, url: newUrl } of FIXES) {
     // Metadata-only read (never SELECT description/LOB alongside) — LOB-locator safe.
     const row = await SELECT.one
       .from(HelpDocs)
@@ -87,6 +89,27 @@ async function main() {
     changed += n;
   }
   console.log(`\nApplied: ${changed} row(s) updated.`);
+
+  // Concept-publish digest nudge (#2948 follow-up): the concept re-render phase
+  // keys its delta on concept-input-digest.js, which probes max(modifiedAt) over
+  // HelpDocConceptLinks — but NOT over HelpDocs. So a bare HelpDocs.url change
+  // does NOT bump the digest, and a full publish would phase-skip and never
+  // re-bake the corrected href into the concept BLOB. Touching the linking rows
+  // bumps their managed modifiedAt (= $now on any UPDATE) so the next full PROD
+  // publish re-renders the affected concept pages. We write each row's EXISTING
+  // modelVersion back unchanged — content-neutral (no column value altered),
+  // modifiedAt is the only field that moves. Scoped to the fixed HelpDocs.
+  const fixedIds = plan.map((p) => p.ID);
+  const linkRows = await SELECT.from(HelpDocConceptLinks)
+    .columns('ID', 'modelVersion')
+    .where({ helpDoc_ID: { in: fixedIds } });
+  let touched = 0;
+  for (const lr of linkRows) {
+    touched += await UPDATE(HelpDocConceptLinks)
+      .set({ modelVersion: lr.modelVersion })  // same value → only modifiedAt moves
+      .where({ ID: lr.ID });
+  }
+  console.log(`Digest nudge: touched ${touched} HelpDocConceptLinks row(s) (bumps modifiedAt for concept re-render; values unchanged).`);
 
   // Post-write read-back for audit.
   console.log('\nVerification (stored url after write):');
