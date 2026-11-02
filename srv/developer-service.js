@@ -731,7 +731,11 @@ export default class DeveloperService extends cds.ApplicationService {
         paths: paths.map(p => {
           const pathItems = allItems.filter(i => i.path_ID === p.ID);
           return {
-            id: p.legacyId,
+            // #2952: track identity is the CompletionPaths UUID (always present),
+            // NOT legacyId — legacyId is only populated for IMS-migrated rows and
+            // is null for AI-generated / event tracks, which broke the App Space
+            // track→URL sync, Refresh re-match, and barcode unlock gate.
+            id: p.ID,
             title: p.name,
             description: p.description || mission.description || '',
             items: buildPathItems({

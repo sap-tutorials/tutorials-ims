@@ -35,11 +35,18 @@ export function claimRequest(uid: string, eventId: number): { url: string; metho
   }
 }
 
-// When the XSUAA session expires the AppRouter returns 401 (or a 302 → HTML
-// login page that fetch follows, ending up non-ok with no JSON body).  Rather
-// than showing a cryptic error, reload so the AppRouter can redirect to login.
-function redirectToLoginIfUnauthorized(status: number): boolean {
-  if (status === 401) {
+// When the XSUAA session expires the AppRouter may answer in one of two ways:
+//   1. HTTP 401 on the API call, or
+//   2. a 302 → the IdP/login page which `fetch` transparently follows, so the
+//      Response lands as `ok` (HTTP 200) carrying an HTML login document with
+//      no JSON body (res.redirected === true, content-type text/html).
+// The old check only caught case 1, so at TechEd the expired-session scanner
+// silently showed a parse error instead of bouncing to login. Detect both:
+// reload the page so the AppRouter re-issues its auth redirect from the top.
+function redirectToLoginIfUnauthorized(res: Response): boolean {
+  const ct = res.headers?.get?.('content-type') ?? ''
+  const looksLikeLoginPage = res.redirected || /text\/html/i.test(ct)
+  if (res.status === 401 || (res.status === 403 && looksLikeLoginPage) || (res.ok && looksLikeLoginPage)) {
     window.location.reload()
     return true
   }
@@ -59,7 +66,7 @@ async function fetchCsrfToken(): Promise<string | null> {
   // The OData v4 service document is a cheap GET under the same /scanner/ route
   // and auth scope, so the approuter issues a token for it.
   const res = await fetch('/scanner/', { headers: { 'x-csrf-token': 'fetch' } })
-  if (redirectToLoginIfUnauthorized(res.status)) return null
+  if (redirectToLoginIfUnauthorized(res)) return null
   const token = res.headers?.get?.('x-csrf-token') ?? null
   if (token && token.toLowerCase() !== 'required') csrfToken = token
   return csrfToken
@@ -75,7 +82,7 @@ export function useScannerApi() {
     error.value = null
     try {
       const res = await fetch(`/scanner/getContestant(accountNumber='${encodeURIComponent(uid)}',eventId=${eventId})`)
-      if (redirectToLoginIfUnauthorized(res.status)) return Promise.reject(new Error('Session expired'))
+      if (redirectToLoginIfUnauthorized(res)) return Promise.reject(new Error('Session expired'))
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error?.message || `HTTP ${res.status}`)
@@ -89,7 +96,7 @@ export function useScannerApi() {
 
   async function getEventStats(eventId: number): Promise<EventStats> {
     const res = await fetch(`/scanner/getEventStats(eventId=${eventId})`)
-    if (redirectToLoginIfUnauthorized(res.status)) return Promise.reject(new Error('Session expired'))
+    if (redirectToLoginIfUnauthorized(res)) return Promise.reject(new Error('Session expired'))
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
       throw new Error(body.error?.message || `HTTP ${res.status}`)
@@ -116,14 +123,14 @@ export function useScannerApi() {
       if (token === null && !csrfToken) return Promise.reject(new Error('Session expired'))
       let res = await postOnce(token)
 
-      if (redirectToLoginIfUnauthorized(res.status)) return Promise.reject(new Error('Session expired'))
+      if (redirectToLoginIfUnauthorized(res)) return Promise.reject(new Error('Session expired'))
 
       if (res.status === 403 && (res.headers?.get?.('x-csrf-token') ?? '').toLowerCase() === 'required') {
         csrfToken = null
         token = await fetchCsrfToken()
         if (token === null && !csrfToken) return Promise.reject(new Error('Session expired'))
         res = await postOnce(token)
-        if (redirectToLoginIfUnauthorized(res.status)) return Promise.reject(new Error('Session expired'))
+        if (redirectToLoginIfUnauthorized(res)) return Promise.reject(new Error('Session expired'))
       }
 
       if (!res.ok) {
