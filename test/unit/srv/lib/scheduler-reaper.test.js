@@ -648,6 +648,39 @@ describe('scheduler-reaper — armSchedulerSelfHeal (periodic timer wiring)', ()
     expect(raiseAlert).toHaveBeenCalledTimes(1);
   });
 
+  it('#2975 each tick calls cds.flush() to drain ready outbox rows', async () => {
+    let tickFn;
+    const setIntervalFn = vi.fn().mockImplementation((fn) => { tickFn = fn; return { unref() {} }; });
+    const flush = vi.fn().mockResolvedValue(undefined);
+    armSchedulerSelfHeal({
+      env: enabledEnv, setIntervalFn, jobSchedules: new Map(),
+      reap: vi.fn().mockResolvedValue({ inspected: 0, reaped: 0 }),
+      flush,
+      loadRows: async () => [], raiseAlert: vi.fn(),
+    });
+    await tickFn();
+    expect(flush).toHaveBeenCalledTimes(1);
+  });
+
+  it('#2975 a tick where flush throws still runs the canary check (fail-open, timer survives)', async () => {
+    let tickFn;
+    const setIntervalFn = vi.fn().mockImplementation((fn) => { tickFn = fn; return { unref() {} }; });
+    const stale = new Date(Date.now() - 30 * 60_000).toISOString();
+    const raiseAlert = vi.fn().mockResolvedValue(undefined);
+    armSchedulerSelfHeal({
+      env: enabledEnv, setIntervalFn, jobSchedules: new Map(),
+      reap: vi.fn().mockResolvedValue({ inspected: 0, reaped: 0 }),
+      flush: vi.fn().mockRejectedValue(new Error('flush blew up')),
+      loadRows: async () => [
+        { jobName: 'metrics-rollup', lastSuccessAt: stale },
+        { jobName: 'kg-ondemand-drain', lastSuccessAt: stale },
+      ],
+      raiseAlert,
+    });
+    await expect(tickFn()).resolves.toBeUndefined();
+    expect(raiseAlert).toHaveBeenCalledTimes(1);
+  });
+
   it('raises SchedulerStallDetected ALERT (alert-only, NO exit) when both canaries are stale', async () => {
     let tickFn;
     const setIntervalFn = vi.fn().mockImplementation((fn) => { tickFn = fn; return { unref() {} }; });
