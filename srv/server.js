@@ -105,7 +105,7 @@ import { uploadPetSubmission, decodePhotoUpload } from './lib/petoberfest-upload
 import { fetchPetPhoto } from './lib/petoberfest-photo-store.js';
 import { installDbWrap } from './lib/metrics-db-wrap.js';
 import { wireDraftIntegrityPreflight } from './lib/draft-integrity-preflight.js';
-import { isSchedulerReady, computeReadiness } from './lib/scheduler-ready.js';
+import { isSchedulerReady, computeReadiness, dbPingSql } from './lib/scheduler-ready.js';
 import './graphql-config.js';
 import { makeA2aRouter } from './lib/a2a/rpc-router.js';
 import { a2aIasAuthMiddleware } from './lib/a2a/ias-auth-mw.js';
@@ -297,7 +297,7 @@ cds.on('bootstrap', (app) => {
   app.get('/health/ready', async (req, res) => {
     let dbOk = false;
     if (cds.db) {
-      try { await cds.db.run('SELECT 1'); dbOk = true; }
+      try { await cds.db.run(dbPingSql(cds.db.kind)); dbOk = true; }
       catch (_err) { dbOk = false; }
     }
     // cds.db absent → dbOk stays false
@@ -307,7 +307,7 @@ cds.on('bootstrap', (app) => {
 
   app.get('/health/db', async (req, res) => {
     try {
-      await cds.db?.run('SELECT 1 FROM DUMMY');
+      await cds.db?.run(dbPingSql(cds.db?.kind));
       res.json({ status: 'ok', db: 'connected' });
     } catch (err) {
       console.error('[health/db]', err.message);

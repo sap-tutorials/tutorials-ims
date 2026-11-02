@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { markSchedulerReady, isSchedulerReady, _resetForTests, computeReadiness } from '../../../../srv/lib/scheduler-ready.js';
+import { markSchedulerReady, isSchedulerReady, _resetForTests, computeReadiness, dbPingSql } from '../../../../srv/lib/scheduler-ready.js';
 
 describe('scheduler-ready latch', () => {
   beforeEach(() => _resetForTests());
@@ -37,5 +37,17 @@ describe('computeReadiness', () => {
   });
   it('not-ready when both false', () => {
     expect(computeReadiness({ schedulerArmed: false, dbOk: false }).ready).toBe(false);
+  });
+});
+
+describe('dbPingSql (#2975 HANA regression)', () => {
+  it('uses FROM DUMMY on HANA (bare SELECT 1 is a HANA syntax error)', () => {
+    expect(dbPingSql('hana')).toBe('SELECT 1 FROM DUMMY');
+  });
+  it('uses bare SELECT 1 on SQLite (FROM DUMMY is a SQLite error)', () => {
+    expect(dbPingSql('sqlite')).toBe('SELECT 1');
+  });
+  it('defaults to bare SELECT 1 when kind is undefined', () => {
+    expect(dbPingSql()).toBe('SELECT 1');
   });
 });
