@@ -39,14 +39,18 @@ function mergeRetention({ currentFiles, retainedManifest, nowMs, windowMs }) {
   const toDownload = [];
   for (const e of prior) {
     if (current.has(e.file)) continue;                 // already in this build
-    // Legacy carry-forward prune (2026-10-25). Old Vite layouts emitted island
-    // CSS as separate `assets/<name>-<hash>.css` files; the current pipeline
-    // injects island CSS via JS (vite-plugin-css-injected-by-js) and emits NO
-    // `assets/`-prefixed bundles. Such an entry can never match a current file
-    // and its carry-forward download (`/css/assets/…` or `/js/assets/…`) always
-    // 404s, so it lingers forever as a prior-build entry and the post-deploy
-    // asset-retention smoke gate flaps on it. Drop these permanently — nothing
-    // the current build produces or references lives under `assets/`.
+    // Carry-forward prune for `assets/`-prefixed island CSS sidecars.
+    // The pipeline DOES still emit these: `hugo/static/js/assets/<name>-<hash>.css`
+    // sidecars live under the JS output tree and resolve at `/js/assets/…` (never
+    // `/css/…`). Current-build `assets/` files re-enter normally via `currentFiles`
+    // (the `current.has(e.file)` check above already kept them this build).
+    // What we skip here is only the PRIOR-manifest carry-forward path: an `assets/`
+    // entry from a prior build must not be re-downloaded via the generic
+    // `/css/assets/…` route (wrong tree ⇒ 404) and pinned as a stale prior entry.
+    // Dropping it from carry-forward is harmless — if the current build still
+    // produces it, it is already in `currentFiles`; if it doesn't, it is genuinely
+    // gone and should not linger. See issue #2982 (this comment) and PR #2981 (the
+    // smoke-gate side of the same `assets/` ⇒ `/js/` path invariant).
     if (e.file.startsWith('assets/')) continue;
     const last = lastOf(e);
     const inPriorBuild = hasLast(e) && priorBuildMs !== null && e.lastSeenMs === priorBuildMs;
