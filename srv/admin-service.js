@@ -3946,6 +3946,7 @@ export default class AdminService extends cds.ApplicationService {
           mission_ID: missionId,
           name: 'Default',
           slug: `${lcSlug}-default`,
+          pathOrder: 10,
         })
       );
       await tx.run(
@@ -4057,6 +4058,7 @@ export default class AdminService extends cds.ApplicationService {
           name: p.name,
           description: p.description,
           slug: pathSlug,
+          pathOrder: p.pathOrder,
         }));
         const items = await tx.run(SELECT.from(CompletionPathItems).where({ path_ID: p.ID }));
         if (items.length) {

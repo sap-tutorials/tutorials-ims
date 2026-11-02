@@ -614,6 +614,35 @@ describe('AdminService', () => {
       // first copy took copy-src-copy; this one falls back
       expect(data.slug).toBe('copy-src-copy-2');
     });
+
+    it('preserves pathOrder on all cloned CompletionPaths (#2990)', async () => {
+      const {
+        Missions, CompletionPaths,
+      } = cds.entities('com.sap.developers.ims');
+
+      // Seed a fresh source mission with two paths having explicit pathOrder values.
+      const srcId2 = cds.utils.uuid();
+      const pathA = cds.utils.uuid();
+      const pathB = cds.utils.uuid();
+      await INSERT.into(Missions).entries({
+        ID: srcId2, slug: 'po-copy-src', title: 'PO Copy Source', published: false,
+        missionType: 'SEQUENTIAL', experienceTag: 'beginner',
+      });
+      await INSERT.into(CompletionPaths).entries([
+        { ID: pathA, mission_ID: srcId2, name: 'Path A', slug: 'po-copy-src-a', pathOrder: 10 },
+        { ID: pathB, mission_ID: srcId2, name: 'Path B', slug: 'po-copy-src-b', pathOrder: 20 },
+      ]);
+
+      const { status, data } = await project.post('/admin/copyMission', { ID: srcId2 }, adminAuth);
+      expect(status).toBe(200);
+
+      const copiedPaths = await SELECT.from(CompletionPaths)
+        .where({ mission_ID: data.ID })
+        .orderBy('pathOrder');
+      expect(copiedPaths.length).toBe(2);
+      expect(copiedPaths[0].pathOrder).toBe(10);
+      expect(copiedPaths[1].pathOrder).toBe(20);
+    });
   });
 
   describe('setPathOrder — auto gap-numbering on CompletionPaths (#2990)', () => {
