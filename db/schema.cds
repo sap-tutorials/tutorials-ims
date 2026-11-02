@@ -463,6 +463,7 @@ entity CompletionPaths : cuid, LegacyKeyed {
   name                      : String(255);
   description               : String(1000);
   slug                      : String(255);
+  pathOrder                 : Integer;
   items                     : Composition of many CompletionPathItems on items.path = $self;
 }
 
