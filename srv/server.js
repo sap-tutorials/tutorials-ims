@@ -105,6 +105,7 @@ import { uploadPetSubmission, decodePhotoUpload } from './lib/petoberfest-upload
 import { fetchPetPhoto } from './lib/petoberfest-photo-store.js';
 import { installDbWrap } from './lib/metrics-db-wrap.js';
 import { wireDraftIntegrityPreflight } from './lib/draft-integrity-preflight.js';
+import { isSchedulerReady, computeReadiness } from './lib/scheduler-ready.js';
 import './graphql-config.js';
 import { makeA2aRouter } from './lib/a2a/rpc-router.js';
 import { a2aIasAuthMiddleware } from './lib/a2a/ias-auth-mw.js';
@@ -291,6 +292,18 @@ cds.on('bootstrap', (app) => {
 
   app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  app.get('/health/ready', async (req, res) => {
+    let dbOk = false;
+    try {
+      await cds.db?.run('SELECT 1');
+      dbOk = true;
+    } catch (_err) {
+      dbOk = false;
+    }
+    const r = computeReadiness({ schedulerArmed: isSchedulerReady(), dbOk });
+    res.status(r.ready ? 200 : 503).json({ status: r.status, scheduler: r.scheduler, db: r.db, timestamp: new Date().toISOString() });
   });
 
   app.get('/health/db', async (req, res) => {
