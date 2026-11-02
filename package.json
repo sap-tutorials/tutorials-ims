@@ -458,7 +458,7 @@
       "fuzzy": false
     },
     "fiori": {
-      "draft_admin_integrity": true
+      "draft_admin_integrity": false
     },
     "websocket": {
       "kind": "socket.io",
