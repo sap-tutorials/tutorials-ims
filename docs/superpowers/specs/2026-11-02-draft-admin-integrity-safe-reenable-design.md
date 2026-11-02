@@ -24,7 +24,7 @@ the proof*, not the switch.
 1. **Author the real cascade constraints as committed, deployable artifacts**
    for every `AdminService.*_drafts` table. The build already emits these tables
    with the `DraftAdministrativeData_DraftUUID` FK column but no cascade clause;
-   the work adds `ON DELETE CASCADE` (`NOT VALIDATED`) via a build-time patch of
+   the work adds `ON DELETE CASCADE` via a build-time patch of
    the generated `.hdbtable` files (see Findings + deliverable 1). They must be
    deployable independently of the flag.
 2. **A flag-agnostic gate test** proving `draftEdit → discard` on a Mission
