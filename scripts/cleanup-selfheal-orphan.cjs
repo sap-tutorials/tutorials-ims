@@ -21,6 +21,12 @@ const ORPHAN = "__scheduler_selfheal__";
 const DO_DELETE = process.argv.includes("--delete");
 
 (async () => {
+  // Load + link the CDS model so `cds.entities(...)` is callable. Under
+  // `cds bind --exec` there is no serving lifecycle to populate cds.model, and
+  // a bare CSN's `.definitions` is non-iterable — prime the getter BEFORE
+  // connect, which otherwise strips the iterator linked() installs. See #757/#911.
+  cds.model = cds.linked(await cds.load("*"));
+  void cds.model.entities;
   await cds.connect.to("db");
   const { JobLastRun } = cds.entities("com.sap.developers.ims");
 
