@@ -296,12 +296,11 @@ cds.on('bootstrap', (app) => {
 
   app.get('/health/ready', async (req, res) => {
     let dbOk = false;
-    try {
-      await cds.db?.run('SELECT 1');
-      dbOk = true;
-    } catch (_err) {
-      dbOk = false;
+    if (cds.db) {
+      try { await cds.db.run('SELECT 1'); dbOk = true; }
+      catch (_err) { dbOk = false; }
     }
+    // cds.db absent → dbOk stays false
     const r = computeReadiness({ schedulerArmed: isSchedulerReady(), dbOk });
     res.status(r.ready ? 200 : 503).json({ status: r.status, scheduler: r.scheduler, db: r.db, timestamp: new Date().toISOString() });
   });

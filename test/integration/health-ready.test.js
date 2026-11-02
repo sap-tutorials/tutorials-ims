@@ -7,5 +7,7 @@ describe('/health/ready (#2975)', () => {
     expect(res.status).toBe(200);
     expect(res.data.status).toBe('ready');
     expect(res.data.scheduler).toBe('armed');
+    expect(res.data.db).toBe('connected');
+    expect(res.data.timestamp).toBeTruthy();
   });
 });
