@@ -15,6 +15,13 @@ vi.mock('../useRealtimeProgress', async () => {
 
 import AppSpace from '../AppSpace.vue'
 
+// Track ids are the CompletionPaths UUID (`p.ID`), NOT the legacy `legacyId`:
+// legacyId is only populated for IMS-migrated rows and is null for
+// AI-generated / event tracks (the TechEd Texas regression). The UUID is
+// always present, so the UI must key track identity on it.
+const TRACK_A = 'a1111111-1111-4111-8111-111111111111'
+const TRACK_B = 'b2222222-2222-4222-8222-222222222222'
+
 const eventBody = {
   eventId: 10000002,
   eventName: 'Track URL Event',
@@ -23,10 +30,10 @@ const eventBody = {
   authenticated: false,
   type: 'COMPLEX',
   paths: [
-    { id: 11, title: 'Track A', description: '', items: [
+    { id: TRACK_A, title: 'Track A', description: '', items: [
       { imsId: 1, title: 'Tut 1', type: 'TUTORIAL', status: '', progress: 0, experience: '', timeToComplete: 0, url: '/tutorials/x.html', description: '' }
     ] },
-    { id: 22, title: 'Track B', description: '', items: [
+    { id: TRACK_B, title: 'Track B', description: '', items: [
       { imsId: 2, title: 'Tut 2', type: 'TUTORIAL', status: '', progress: 0, experience: '', timeToComplete: 0, url: '/tutorials/y.html', description: '' }
     ] },
   ],
@@ -49,7 +56,7 @@ describe('AppSpace track ↔ URL sync', () => {
   })
 
   it('restores the selected track from ?track=<id> on load, preserving other params', async () => {
-    window.history.replaceState({}, '', '/app-space/?eventId=10000002&track=22')
+    window.history.replaceState({}, '', `/app-space/?eventId=10000002&track=${TRACK_B}`)
     stubFetch()
 
     const wrapper = mount(AppSpace)
@@ -67,17 +74,17 @@ describe('AppSpace track ↔ URL sync', () => {
     const wrapper = mount(AppSpace)
     await flushPromises()
 
-    const vm = wrapper.vm as unknown as { selectTrack: (t: { id: number }) => void; tracks: { id: number }[] }
-    vm.selectTrack(vm.tracks.find(t => t.id === 11)!)
+    const vm = wrapper.vm as unknown as { selectTrack: (t: { id: string }) => void; tracks: { id: string }[] }
+    vm.selectTrack(vm.tracks.find(t => t.id === TRACK_A)!)
     await flushPromises()
 
     const params = new URLSearchParams(window.location.search)
-    expect(params.get('track')).toBe('11')
+    expect(params.get('track')).toBe(TRACK_A)
     expect(params.get('eventId')).toBe('10000002')
   })
 
   it('removes ?track on goBack', async () => {
-    window.history.replaceState({}, '', '/app-space/?eventId=10000002&track=11')
+    window.history.replaceState({}, '', `/app-space/?eventId=10000002&track=${TRACK_A}`)
     stubFetch()
     const wrapper = mount(AppSpace)
     await flushPromises()
@@ -96,8 +103,8 @@ describe('AppSpace track ↔ URL sync', () => {
     const wrapper = mount(AppSpace)
     await flushPromises()
 
-    const vm = wrapper.vm as unknown as { selectTrack: (t: { id: number }) => void; tracks: { id: number }[] }
-    vm.selectTrack(vm.tracks.find(t => t.id === 22)!)
+    const vm = wrapper.vm as unknown as { selectTrack: (t: { id: string }) => void; tracks: { id: string }[] }
+    vm.selectTrack(vm.tracks.find(t => t.id === TRACK_B)!)
     await flushPromises()
     expect(wrapper.find('.detail-title').text()).toBe('Track B')
 
@@ -110,7 +117,7 @@ describe('AppSpace track ↔ URL sync', () => {
   })
 
   it('falls back to the list for an unknown track id', async () => {
-    window.history.replaceState({}, '', '/app-space/?eventId=10000002&track=999')
+    window.history.replaceState({}, '', '/app-space/?eventId=10000002&track=nonexistent-uuid-000')
     stubFetch()
     const wrapper = mount(AppSpace)
     await flushPromises()
