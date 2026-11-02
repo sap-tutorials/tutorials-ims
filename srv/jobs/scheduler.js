@@ -64,7 +64,6 @@ import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js'
 import { sendFeedbackDigests } from '../lib/feedback-digest.js';
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
 import { logPipelineStart, logPipelineEnd, logJobItem } from '../lib/pipeline-log.js';
-import { deleteStuckOutboxRow } from '../lib/scheduler-wedge.js';
 import * as alerting from '../lib/alerting.js';
 import cds from '@sap/cds';
 
@@ -210,16 +209,18 @@ async function runWithLock(jobName, durationMs, fn, opts = {}) {
       resource: { resourceName: jobName, resourceType: 'job' }
     }); // fail-open, non-blocking
   } finally {
-    // #1021: belt-and-suspenders — clear any stuck cds.outbox.Messages
-    // row for this jobName before recording JobLastRun. Runs on every
-    // tick (success and failure) so that a future framework bug that
-    // fails to flip status on success still cannot wedge us. Wrapped
-    // in try/catch inside the helper — never fails the cron.
-    try {
-      await deleteStuckOutboxRow(jobName);
-    } catch (err) {
-      LOG.warn(`deleteStuckOutboxRow(${jobName}) threw unexpectedly: ${err.message}`);
-    }
+    // #2975: the #1021 per-tick deleteStuckOutboxRow() call was REMOVED here.
+    // CAP 10.2.0 made the singleton `.every().as()` completion delete-then-
+    // reseed GUARDED: it recreates the next occurrence only if ITS OWN delete
+    // of the status='processing' row removed it (libx/queue/processing.js —
+    // `_cnt > 0`). Our finally deleted that same row on every tick, racing
+    // CAP's complete-tx; when ours won, CAP saw _cnt=0, assumed the task was
+    // unscheduled concurrently, and skipped re-seeding — so each job ran once
+    // then never rescheduled until a process restart. Harmless pre-10.2 (the
+    // next occurrence was recreated unconditionally), fatal from 10.2 on. CAP
+    // already guarantees exactly-once deletion in its complete-tx, so the
+    // belt-and-suspenders is obsolete. Genuine mid-flight tombstones are still
+    // handled out-of-band by scheduler-reaper.js.
     try {
       await recordJobLastRun(jobName, outcome, errorMessage);
     } catch (err) {
