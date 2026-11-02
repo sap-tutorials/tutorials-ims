@@ -49,8 +49,9 @@ the proof*, not the switch.
 - Any change that could cause the DB-cascade delete path to become active on a
   live environment (i.e. the flag going on, directly or via a build artifact
   that behaves like enabling it).
-- Committed artifacts that `cf deploy` would apply as `VALIDATED` (would block
-  deploy on existing orphan data) or that `die` the deploy if a referenced
+- Committed artifacts that `cf deploy` would reject because of existing orphan data
+  (the enforced inline FK fails if orphaned draft rows are present — sweep first
+  using `cleanup-draft-orphans.cjs`) or that `die` the deploy if a referenced
   draft table does not yet exist on the target.
 
 ## Findings (verified this session)
@@ -81,10 +82,14 @@ the proof*, not the switch.
   cascade FK is proven present on the target env. The `CDS_*` env override does
   not reach `cds.fiori.draft_admin_integrity`, so the value is whatever
   `package.json` bakes at build time.
-- **Cascade needed, per table:** `FOREIGN KEY (DraftAdministrativeData_DraftUUID)
-  REFERENCES DRAFT_DraftAdministrativeData(DraftUUID) ON DELETE CASCADE`,
-  deployed `NOT VALIDATED` (HANA skips the existing-data check, so no pre-clean
-  required). Parent table/PK confirmed via `cleanup-draft-orphans.cjs`
+- **Cascade needed, per table:** `FOREIGN KEY ("DRAFTADMINISTRATIVEDATA_DRAFTUUID")
+  REFERENCES "DRAFT_DRAFTADMINISTRATIVEDATA"("DRAFTUUID") ON DELETE CASCADE`,
+  deployed ENFORCED (inline FK inside `COLUMN TABLE (...)` is always enforced —
+  `NOT VALIDATED` is an `ALTER TABLE`-only affordance). This means orphaned draft
+  rows must be swept BEFORE deploying the constraint, or HANA rejects the deploy.
+  Local column is bare/unquoted in the generated DDL, so HANA folds it to
+  `DRAFTADMINISTRATIVEDATA_DRAFTUUID`; the FK reference must quote that uppercase
+  name. Parent table/PK confirmed via `cleanup-draft-orphans.cjs`
   (`DRAFT_DRAFTADMINISTRATIVEDATA(DRAFTUUID)`).
 - **QA container is out of scope.** The QA db build model is `db-qa` only and
   does **not** include `AdminService`; `gen/db-qa/src/gen/` emits **0** draft
@@ -99,16 +104,18 @@ the proof*, not the switch.
 The build emits the 46 `_drafts.hdbtable` files with the FK column but no
 cascade clause, and `.hdiconfig` has no `hdbconstraint` plugin. So the mechanism
 is **not** committed `db/src/*.hdbconstraint` (HDI would ignore it). Instead,
-add the `FOREIGN KEY (DraftAdministrativeData_DraftUUID) REFERENCES
-DRAFT_DraftAdministrativeData(DraftUUID) ON DELETE CASCADE` clause to each
+add the `FOREIGN KEY ("DRAFTADMINISTRATIVEDATA_DRAFTUUID") REFERENCES
+"DRAFT_DRAFTADMINISTRATIVEDATA"("DRAFTUUID") ON DELETE CASCADE` clause to each
 generated `gen/db/src/gen/AdminService.*_drafts.hdbtable` via a **build-time
 patch step**, mirroring the existing MTA `before-all` `.hdiconfig` patch
-precedent. The table list is derived programmatically from the generated
-`_drafts.hdbtable` set (not a hand-maintained list), so it cannot drift from the
-live draft-table count the preflight checks. Applied to the **prod `gen/db`
-tree only** (QA emits no draft tables). The committed `package.json` flag stays
-`false` throughout; the patch makes the constraints *deployable* but the runtime
-cascade path stays dormant until a future flip.
+precedent. The FK is enforced (inline DDL); orphaned rows must be swept before
+the constraint-bearing build is deployed. The table list is derived
+programmatically from the generated `_drafts.hdbtable` set (not a hand-maintained
+list), so it cannot drift from the live draft-table count the preflight checks.
+Applied to the **prod `gen/db` tree only** (QA emits no draft tables). The
+committed `package.json` flag stays `false` throughout; the patch makes the
+constraints *deployable* but the runtime cascade path stays dormant until a
+future flip.
 
 ### 2. Flag-agnostic gate test
 
@@ -125,12 +132,13 @@ future flip.
 
 ### 3. Re-enable runbook
 
-A doc (under `docs/developers/operations/`) giving the exact order: deploy
-constraints (`NOT VALIDATED`) → confirm preflight logs `verified (N/N)` on the
-target env → run the gate test green → flip `package.json` flag → full rebuild
-+ redeploy → smoke draftEdit/discard. Encodes issue guardrails: flag does not
-go on until constraints are green on the *target* env; `CDS_*` env override is
-not a substitute for the baked `package.json` value.
+A doc (under `docs/developers/operations/`) giving the exact order: sweep orphans
+first (`cleanup-draft-orphans.cjs --dry-run` then `--commit` if needed) → deploy
+constraints (enforced inline FK — clean schema required) → confirm preflight
+logs `verified (N/N)` on the target env → run the gate test green → flip
+`package.json` flag → full rebuild + redeploy → smoke draftEdit/discard. Encodes
+issue guardrails: flag does not go on until constraints are green on the *target*
+env; `CDS_*` env override is not a substitute for the baked `package.json` value.
 
 ## Constraints
 

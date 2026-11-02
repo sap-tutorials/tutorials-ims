@@ -17,7 +17,7 @@
 - Branch is `worktree-draft-integrity-constraints-2993`, based on `origin/DEV`. PR targets `DEV`, never `main`.
 - `npm test` (in-memory SQLite) must stay green; the gate test is additive.
 - Constraint patch applies to the **prod `gen/db` tree only** — QA's db build excludes `AdminService` and emits 0 draft tables.
-- Cascade FK form, per table: `FOREIGN KEY (DraftAdministrativeData_DraftUUID) REFERENCES "DRAFT_DRAFTADMINISTRATIVEDATA"("DRAFTUUID") ON DELETE CASCADE` — authored so HANA deploys it `NOT VALIDATED` (skips existing-data check; no pre-clean needed).
+- Cascade FK form, per table: `FOREIGN KEY ("DRAFTADMINISTRATIVEDATA_DRAFTUUID") REFERENCES "DRAFT_DRAFTADMINISTRATIVEDATA"("DRAFTUUID") ON DELETE CASCADE` — the local column is declared bare/unquoted in the generated DDL, so HANA folds it to uppercase; the FK reference must quote the uppercase name. The inline FK is ENFORCED (not `NOT VALIDATED` — that is an ALTER TABLE affordance only); orphaned rows must be swept BEFORE deploying the constraint-bearing build.
 - Draft table list is derived programmatically from the generated `*_drafts.hdbtable` files — never hand-maintained (must not drift from the preflight's live `SYS.TABLE_COLUMNS` count).
 
 ## Review Focus
@@ -167,7 +167,7 @@ git commit -m "test(drafts): flag-agnostic gate — Mission discard leaves zero 
 
 - [ ] **Step 1: Write the runbook**
 
-Document the exact order, encoding the spec guardrails: (1) deploy with the Task-1 patch active so constraints land `NOT VALIDATED` while the flag is still `false` (constraints inert); (2) confirm `srv/lib/draft-integrity-preflight.js` logs `verified (N/N)` on the target env (not a WARN); (3) run `scripts/cleanup-draft-orphans.cjs --dry-run` → expect 0 orphans; (4) run the Task-2 gate test green; (5) only then flip `draft_admin_integrity` to `true` in `package.json` (both blocks), full `npm run build:all` + redeploy; (6) smoke a Mission draftEdit→discard. Note: the `CDS_*` env override does NOT work on the deployed build — the baked `package.json` value is authoritative. DEV before PROD.
+Document the exact order, encoding the spec guardrails: (1) sweep orphans first — `scripts/cleanup-draft-orphans.cjs --dry-run` then `--commit` if needed — the enforced inline FK will reject the deploy if orphaned rows are present; (2) deploy with the Task-1 patch active so constraints land (enforced, schema must be clean); (3) confirm `srv/lib/draft-integrity-preflight.js` logs `verified (N/N)` on the target env (not a WARN); (4) run the Task-2 gate test green; (5) only then flip `draft_admin_integrity` to `true` in `package.json` (both blocks), full `npm run build:all` + redeploy; (6) smoke a Mission draftEdit→discard. Note: the `CDS_*` env override does NOT work on the deployed build — the baked `package.json` value is authoritative. DEV before PROD.
 
 - [ ] **Step 2: Add CLAUDE.md pointer**
 

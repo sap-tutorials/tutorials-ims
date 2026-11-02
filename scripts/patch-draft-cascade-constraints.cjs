@@ -22,8 +22,11 @@ const fs = require('fs');
 const path = require('path');
 
 const FK_COLUMN = 'DraftAdministrativeData_DraftUUID';
+// Local column is declared BARE (unquoted) in the generated .hdbtable, so HANA
+// stores its name folded to UPPERCASE: DRAFTADMINISTRATIVEDATA_DRAFTUUID.
+// The FK reference must therefore quote the UPPERCASE name to resolve correctly.
 const FK_CLAUSE =
-  'FOREIGN KEY ("DraftAdministrativeData_DraftUUID") REFERENCES "DRAFT_DRAFTADMINISTRATIVEDATA"("DRAFTUUID") ON DELETE CASCADE';
+  'FOREIGN KEY ("DRAFTADMINISTRATIVEDATA_DRAFTUUID") REFERENCES "DRAFT_DRAFTADMINISTRATIVEDATA"("DRAFTUUID") ON DELETE CASCADE';
 
 /**
  * Enumerate all *_drafts.hdbtable files under genDir, and for each one that
@@ -59,10 +62,10 @@ function patchDraftCascadeConstraints(genDir) {
     }
 
     // Idempotency: if OUR specific FK clause is already present, skip.
-    // Match the FK column name AND ON DELETE CASCADE on the same logical line.
-    // Uses [\s\S]*? (non-greedy cross-paren match) because the clause itself
-    // contains parentheses: FOREIGN KEY (...) REFERENCES ...("DRAFTUUID") ON DELETE CASCADE.
-    if (/FOREIGN KEY\s*\([^F]*DraftAdministrativeData_DraftUUID[\s\S]*?ON DELETE CASCADE/i.test(original)) {
+    // Match DRAFTADMINISTRATIVEDATA_DRAFTUUID (the HANA-folded uppercase name we
+    // emit) + ON DELETE CASCADE. Uses [\s\S]*? because the clause contains
+    // parentheses that [^)]* cannot cross.
+    if (/FOREIGN KEY\s*\([^F]*DRAFTADMINISTRATIVEDATA_DRAFTUUID[\s\S]*?ON DELETE CASCADE/i.test(original)) {
       skipped.push(filename);
       continue;
     }
@@ -70,7 +73,7 @@ function patchDraftCascadeConstraints(genDir) {
     // Inject the FK clause as the last item inside the COLUMN TABLE (...) body.
     // Target form:
     //   PRIMARY KEY(ID),
-    //   FOREIGN KEY ("DraftAdministrativeData_DraftUUID") REFERENCES ... ON DELETE CASCADE
+    //   FOREIGN KEY ("DRAFTADMINISTRATIVEDATA_DRAFTUUID") REFERENCES ... ON DELETE CASCADE
     // )
     //
     // Strategy: find the last ')' (the table body closing paren). Everything

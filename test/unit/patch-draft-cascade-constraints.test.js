@@ -48,9 +48,14 @@ describe('patchDraftCascadeConstraints', () => {
   it('appends ON DELETE CASCADE FK to draft tables that carry the FK column', () => {
     const r = patchDraftCascadeConstraints(tmp);
     const sql = fs.readFileSync(path.join(tmp, 'AdminService.Missions_drafts.hdbtable'), 'utf8');
+    // Local column must be quoted UPPERCASE (HANA folds bare column names to upper).
+    // A mixed-case quoted reference ("DraftAdministrativeData_DraftUUID") would be
+    // case-sensitive and fail to resolve against the stored UPPERCASE name.
     expect(sql).toMatch(
-      /FOREIGN KEY\s*\("?DraftAdministrativeData_DraftUUID"?\)\s*REFERENCES\s+"DRAFT_DRAFTADMINISTRATIVEDATA"\("DRAFTUUID"\)\s+ON DELETE CASCADE/i
+      /FOREIGN KEY\s*\("DRAFTADMINISTRATIVEDATA_DRAFTUUID"\)\s*REFERENCES\s+"DRAFT_DRAFTADMINISTRATIVEDATA"\("DRAFTUUID"\)\s+ON DELETE CASCADE/
     );
+    // Regression guard: must NOT emit the mixed-case quoted form.
+    expect(sql).not.toMatch(/FOREIGN KEY\s*\("DraftAdministrativeData_DraftUUID"\)/);
     expect(r.patched).toContain('AdminService.Missions_drafts.hdbtable');
   });
 

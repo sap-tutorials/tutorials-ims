@@ -10,7 +10,7 @@
 - Issue #2993 (this work): added the build-time FK injection `scripts/patch-draft-cascade-constraints.cjs`, the gate test `test/admin-drafts-cascade-gate.test.js`, and this runbook.
 
 **Key facts:**
-- Constraints are built `NOT VALIDATED` (no pre-clean needed); they remain **inert** until `draft_admin_integrity: true` is set.
+- The inline FK (`FOREIGN KEY ... ON DELETE CASCADE` inside the `COLUMN TABLE (...)` body) is created **ENFORCED** by HANA — `NOT VALIDATED` is an `ALTER TABLE` affordance only and cannot be specified inline. This means orphaned draft rows **must be swept BEFORE the constraint-bearing HDbtable is deployed**, or HANA will reject the deploy.
 - `CDS_*` env-var overrides do NOT reach `cds.fiori.draft_admin_integrity` on deployed builds — only the baked `package.json` value counts.
 - Preflight is HANA-only and fail-open; SQLite unit tests do not require cascade FKs.
 
@@ -25,49 +25,9 @@
 
 ---
 
-## Step 1: Deploy with Cascade Constraints (Flag Still `false`)
+## Step 1: Sweep Orphaned Drafts (Dry-Run First)
 
-The Task 1 patch `scripts/patch-draft-cascade-constraints.cjs` already injects `ON DELETE CASCADE` foreign keys into the 46 draft tables in the generated `gen/db/src/gen/AdminService.*_drafts.hdbtable` files.
-
-**On the target environment (DEV or PROD):**
-
-1. Ensure the MTA includes the latest `cds build --production` output with the patched constraints.
-2. Deploy the MTA as usual (e.g., `npm run deploy -- --env dev` or via CI/CD):
-   ```bash
-   npm run build:all
-   cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f
-   ```
-3. The HANA schema will accept the constraints as `NOT VALIDATED` — existing orphaned rows are unaffected while the flag is `false`.
-4. Verify deployment success and CAP service startup.
-
-**Note:** The constraints land on every build already (while `draft_admin_integrity` is `false`). This step merely ensures they have deployed to the target environment HANA schema.
-
----
-
-## Step 2: Verify Preflight Check
-
-After deployment, the CAP service logs startup messages. Look for the preflight result from `srv/lib/draft-integrity-preflight.js`.
-
-**Expected log:**
-```
-[draft-integrity-preflight] verified (N/N)
-```
-where N is the count of verified draft tables (typically 46 for Admin/Mission/Group/Author services + compositions).
-
-**If you see a WARN instead:**
-```
-[draft-integrity-preflight] ⚠ missing: <table-names>
-```
-**STOP.** The constraints are incomplete or not deployed. Do not proceed to Step 3. Investigate:
-- Is the MTA's `gen/db` module serving the patched HDbtable files?
-- Did the HANA HDI deployment succeed (check `cf logs <app> --recent`)?
-- Run `cds build --production` locally and verify `gen/db/src/gen/AdminService.*_drafts.hdbtable` files contain the `ON DELETE CASCADE` clause.
-
----
-
-## Step 3: Sweep Orphaned Drafts (Dry-Run First)
-
-Orphaned draft rows are draft-only children whose parent active entity was deleted or reassigned. The cleanup script `scripts/cleanup-draft-orphans.cjs` identifies and removes them.
+The inline FK is ENFORCED — HANA will reject deploying the constraint if orphaned draft rows already exist in the schema. Sweep orphans **before** deploying the constraint-bearing build.
 
 **Locally, with credentials bound to the target environment:**
 
@@ -94,6 +54,47 @@ Orphaned draft rows are draft-only children whose parent active entity was delet
      npx cds bind --exec -- node scripts/cleanup-draft-orphans.cjs --commit
      ```
    - Verify the count matches the dry-run scan.
+   - Re-run dry-run to confirm zero before proceeding.
+
+---
+
+## Step 2: Deploy with Cascade Constraints (Flag Still `false`)
+
+The Task 1 patch `scripts/patch-draft-cascade-constraints.cjs` already injects `ON DELETE CASCADE` foreign keys into the 46 draft tables in the generated `gen/db/src/gen/AdminService.*_drafts.hdbtable` files.
+
+**On the target environment (DEV or PROD), after Step 1 confirms zero orphans:**
+
+1. Ensure the MTA includes the latest `cds build --production` output with the patched constraints.
+2. Deploy the MTA as usual (e.g., `npm run deploy -- --env dev` or via CI/CD):
+   ```bash
+   npm run build:all
+   cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f
+   ```
+3. The FK is enforced — a clean schema (zero orphans from Step 1) is the precondition for the deploy to succeed.
+4. Verify deployment success and CAP service startup.
+
+**Note:** The constraints land on every build already (while `draft_admin_integrity` is `false`). This step ensures they have deployed to the target environment HANA schema with a clean baseline.
+
+---
+
+## Step 3: Verify Preflight Check
+
+After deployment, the CAP service logs startup messages. Look for the preflight result from `srv/lib/draft-integrity-preflight.js`.
+
+**Expected log:**
+```
+[draft-integrity-preflight] verified (N/N)
+```
+where N is the count of verified draft tables (typically 46 for Admin/Mission/Group/Author services + compositions).
+
+**If you see a WARN instead:**
+```
+[draft-integrity-preflight] ⚠ missing: <table-names>
+```
+**STOP.** The constraints are incomplete or not deployed. Do not proceed to Step 4. Investigate:
+- Is the MTA's `gen/db` module serving the patched HDbtable files?
+- Did the HANA HDI deployment succeed (check `cf logs <app> --recent`)?
+- Run `cds build --production` locally and verify `gen/db/src/gen/AdminService.*_drafts.hdbtable` files contain the `ON DELETE CASCADE` clause.
 
 ---
 
@@ -196,7 +197,7 @@ If any step fails or the deployed service encounters errors:
    cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/<env>.mtaext -f
    ```
 
-3. The constraints remain in the schema (`NOT VALIDATED`, inert); they cause no harm. The flag controls their enforcement.
+3. The enforced constraints remain in the schema but the flag controls whether the runtime relies on them. With the flag `false` the app-level reconcile path runs instead, so the deployed constraints are dormant but harmless.
 
 4. Investigate the root cause before attempting re-enable again. Involve the team.
 
