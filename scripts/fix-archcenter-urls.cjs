@@ -49,6 +49,8 @@ async function main() {
   let planned = 0;
   let changed = 0;
   const plan = [];
+  const presentIds = [];   // every target HelpDoc row that EXISTS (for the nudge),
+                           // independent of whether its url needed changing.
 
   for (const { sourceId, url: newUrl } of FIXES) {
     // Metadata-only read (never SELECT description/LOB alongside) — LOB-locator safe.
@@ -61,6 +63,7 @@ async function main() {
       console.log(`  MISSING  ${sourceId}\n           (no row — skipping; nothing to fix)`);
       continue;
     }
+    presentIds.push(row.ID);
     if (row.url === newUrl) {
       console.log(`  OK       ${sourceId}\n           already ${newUrl}`);
       continue;
@@ -79,37 +82,44 @@ async function main() {
     console.log('\nDRY-RUN — no writes. Re-run with --commit to apply.\n');
     return;
   }
-  if (planned === 0) {
-    console.log('\nNothing to apply.\n');
-    return;
-  }
 
   for (const p of plan) {
     const n = await UPDATE(HelpDocs).set({ url: p.newUrl }).where({ ID: p.ID });
     changed += n;
   }
-  console.log(`\nApplied: ${changed} row(s) updated.`);
+  console.log(`\nApplied: ${changed} url row(s) updated (${plan.length === 0 ? 'all already correct' : ''}).`);
 
   // Concept-publish digest nudge (#2948 follow-up): the concept re-render phase
   // keys its delta on concept-input-digest.js, which probes max(modifiedAt) over
   // HelpDocConceptLinks — but NOT over HelpDocs. So a bare HelpDocs.url change
   // does NOT bump the digest, and a full publish would phase-skip and never
   // re-bake the corrected href into the concept BLOB. Touching the linking rows
-  // bumps their managed modifiedAt (= $now on any UPDATE) so the next full PROD
+  // bumps their managed modifiedAt (= $now on any UPDATE) so the next full
   // publish re-renders the affected concept pages. We write each row's EXISTING
   // modelVersion back unchanged — content-neutral (no column value altered),
-  // modifiedAt is the only field that moves. Scoped to the fixed HelpDocs.
-  const fixedIds = plan.map((p) => p.ID);
-  const linkRows = await SELECT.from(HelpDocConceptLinks)
-    .columns('ID', 'modelVersion')
-    .where({ helpDoc_ID: { in: fixedIds } });
+  // modifiedAt is the only field that moves.
+  //
+  // IMPORTANT: nudge ALL present target HelpDocs' links, not just the ones whose
+  // url changed this run. On a re-run where urls are already correct (idempotent
+  // path), the data is right but the served BLOB may still be stale — the nudge
+  // is exactly what forces the re-bake, so it must fire regardless of `changed`.
   let touched = 0;
-  for (const lr of linkRows) {
-    touched += await UPDATE(HelpDocConceptLinks)
-      .set({ modelVersion: lr.modelVersion })  // same value → only modifiedAt moves
-      .where({ ID: lr.ID });
+  if (presentIds.length > 0) {
+    const linkRows = await SELECT.from(HelpDocConceptLinks)
+      .columns('ID', 'modelVersion')
+      .where({ helpDoc_ID: { in: presentIds } });
+    for (const lr of linkRows) {
+      touched += await UPDATE(HelpDocConceptLinks)
+        .set({ modelVersion: lr.modelVersion })  // same value → only modifiedAt moves
+        .where({ ID: lr.ID });
+    }
   }
   console.log(`Digest nudge: touched ${touched} HelpDocConceptLinks row(s) (bumps modifiedAt for concept re-render; values unchanged).`);
+
+  if (plan.length === 0 && touched === 0) {
+    console.log('\nNothing to apply and no links to nudge.\n');
+    return;
+  }
 
   // Post-write read-back for audit.
   console.log('\nVerification (stored url after write):');
