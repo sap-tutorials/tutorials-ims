@@ -289,14 +289,13 @@ describe('catalog-data — mission with direct-TUTORIAL CompletionPathItems', ()
   });
 });
 
-// #2990 — loadMissionContext orders paths by pathOrder, then name.
+// #2990 — loadMissionContext orders paths by pathOrder (NULL last), then name.
 // Three paths: name order (Z, M, A) differs from pathOrder (3, 1, NULL).
-// SQLite orders NULLs FIRST, so expected path title order is:
-//   "Z Path" (pathOrder=null, name='Z Path' — NULL sorts first on SQLite)
+// The coalesce sentinel (coalesce(pathOrder, 999999)) ensures NULLs sort LAST
+// on both SQLite and HANA so DEV/PROD behavior matches tests. Expected order:
 //   "A Path" (pathOrder=1)
 //   "M Path" (pathOrder=3)
-// This documents the observed SQLite NULL-first behavior; the controller
-// can decide whether a NULL-last clause is needed.
+//   "Z Path" (pathOrder=null → treated as 999999, sorts last)
 describe('catalog-data — loadMissionContext orders paths by pathOrder then name (#2990)', () => {
   const NS = 'com.sap.developers.ims';
   const TUT_PO_ID   = 'cccccccc-2990-cd00-0000-000000000001';
@@ -330,12 +329,14 @@ describe('catalog-data — loadMissionContext orders paths by pathOrder then nam
     ]);
   });
 
-  it('emits paths ordered by pathOrder asc then name; NULL pathOrder sorts first on SQLite', async () => {
+  it('emits paths ordered by pathOrder asc then name; NULL pathOrder sorts LAST (coalesce sentinel)', async () => {
     const ctx = await loadMissionContext('__test__-cd-po-mission');
     expect(ctx).not.toBeNull();
     // One synthetic group card per path → 3 total
     expect(ctx.groups).toHaveLength(3);
-    // SQLite NULLs first: Z Path (null), A Path (1), M Path (3)
-    expect(ctx.groups.map(g => g.title)).toEqual(['Z Path', 'A Path', 'M Path']);
+    // Coalesce sentinel: A Path (1), M Path (3), Z Path (null→last)
+    // This assertion would FAIL under plain .orderBy('pathOrder','name') on SQLite
+    // because SQLite puts NULLs first by default.
+    expect(ctx.groups.map(g => g.title)).toEqual(['A Path', 'M Path', 'Z Path']);
   });
 });

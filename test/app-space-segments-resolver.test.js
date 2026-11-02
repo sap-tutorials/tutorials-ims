@@ -252,12 +252,12 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
   });
 });
 
-// #2990 — getAppSpaceProgress returns paths in pathOrder, then name order.
+// #2990 — getAppSpaceProgress returns paths in pathOrder (NULL last via coalesce), then name.
 // Three paths: name order (Z→M→A) differs from pathOrder (3→null→1).
-// SQLite NULLs sort FIRST so expected title order is:
-//   Z Path (pathOrder=null), A Path (pathOrder=1), M Path (pathOrder=3)
-// (NULL < 1 < 3 in SQLite ASC ordering).
-describe('App-Space path ordering by pathOrder (#2990)', () => {
+// Coalesce sentinel (NULL→999999): A Path (1), M Path (3), Z Path (null→last).
+// This assertion pins NULL-last behavior — it FAILS under plain .orderBy('pathOrder','name')
+// on SQLite where NULLs sort first, proving the coalesce fix is needed.
+describe('App-Space path ordering by pathOrder, NULL last (#2990)', () => {
   const PO_EVENT_ID   = 10002991;
   const PO_MISSION_ID = '11111111-2990-aaaa-0000-000000000001';
   const PO_EVENT_UUID = 'eeeeeeee-2990-aaaa-0000-000000000001';
@@ -306,10 +306,11 @@ describe('App-Space path ordering by pathOrder (#2990)', () => {
     await DELETE.from(Tutorials).where({ ID: PO_TUT_ID });
   });
 
-  it('returns paths ordered by pathOrder asc then name; NULL pathOrder sorts first on SQLite', async () => {
+  it('returns paths ordered by pathOrder asc then name; NULL pathOrder sorts LAST (coalesce sentinel)', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${PO_EVENT_ID})`);
     expect(data.paths).toHaveLength(3);
-    // SQLite NULLs first: Z Path (null), A Path (1), M Path (3)
-    expect(data.paths.map(p => p.title)).toEqual(['Z Path', 'A Path', 'M Path']);
+    // Coalesce: A Path (1), M Path (3), Z Path (null → sorts last)
+    // Would be ['Z Path','A Path','M Path'] under plain orderBy on SQLite — wrong on HANA.
+    expect(data.paths.map(p => p.title)).toEqual(['A Path', 'M Path', 'Z Path']);
   });
 });

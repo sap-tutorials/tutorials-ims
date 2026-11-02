@@ -114,15 +114,17 @@ describe('/build/mission/:slug — alt-group grouping', () => {
 });
 
 // #2990 — mission-detail /build/mission/:slug returns paths[0] as the
-// pathOrder-first path, not insertion order.
-// Three paths: name order (Z→M→A) differs from pathOrder (3→NULL→1).
-// SQLite NULLs sort FIRST so order is: M Path (null), A Path (1), Z Path (3).
-describe('/build/mission/:slug — paths ordered by pathOrder then name (#2990)', () => {
+// pathOrder-first path (NULL last via coalesce sentinel), not insertion order.
+// Three paths: name order (Z→M→A) differs from pathOrder (3→null→1).
+// Coalesce sentinel: A Path (1), Z Path (3), M Path (null→999999 = last).
+// Only A Path has items — so if NULL sorted first (old bug), paths[0] would
+// be M Path (empty items → items:[]). With coalesce, paths[0] = A Path → items non-empty.
+describe('/build/mission/:slug — paths ordered by pathOrder then name, NULL last (#2990)', () => {
   const MDP_MISSION_ID = '11111111-2990-dc00-0000-000000000001';
   // Three paths; name Z→M→A, pathOrder 3→null→1
-  const MDP_PATH_A_ID = '22222222-2990-dc00-0000-000000000001'; // name='A Path', pathOrder=1
-  const MDP_PATH_M_ID = '22222222-2990-dc00-0000-000000000002'; // name='M Path', pathOrder=null
-  const MDP_PATH_Z_ID = '22222222-2990-dc00-0000-000000000003'; // name='Z Path', pathOrder=3
+  const MDP_PATH_A_ID = '22222222-2990-dc00-0000-000000000001'; // name='A Path', pathOrder=1 → paths[0]
+  const MDP_PATH_M_ID = '22222222-2990-dc00-0000-000000000002'; // name='M Path', pathOrder=null → paths[2]
+  const MDP_PATH_Z_ID = '22222222-2990-dc00-0000-000000000003'; // name='Z Path', pathOrder=3 → paths[1]
   const MDP_TUT_ID    = '33333333-2990-dc00-0000-000000000001';
 
   beforeAll(async () => {
@@ -139,12 +141,12 @@ describe('/build/mission/:slug — paths ordered by pathOrder then name (#2990)'
     await INSERT.into(Tutorials).entries({
       ID: MDP_TUT_ID, legacyId: 299031, slug: '__test__-mdp-tut', title: 'MDP Tutorial', status: 'ACTIVE',
     });
-    // Only path A has items — so the handler picks the pathOrder-first path (not insertion order).
-    // After the fix, paths[0] should be M Path (null sorts first), so we add an item on M Path.
-    // That way if the old legacyId order were used (A=1 < M=2 < Z=3), we'd get A Path instead.
+    // Only A Path (pathOrder=1) has items. With the coalesce fix, paths[0] = A Path → items
+    // are returned. With plain .orderBy (SQLite NULL-first bug) paths[0] would be M Path
+    // (null) → empty items → this test would fail, proving the coalesce fix is required.
     await INSERT.into(CompletionPathItems).entries({
       ID: '44444444-2990-dc00-0000-000000000001', legacyId: 299041,
-      path_ID: MDP_PATH_M_ID, taskType: 'TUTORIAL', tutorial_ID: MDP_TUT_ID, itemOrder: 0,
+      path_ID: MDP_PATH_A_ID, taskType: 'TUTORIAL', tutorial_ID: MDP_TUT_ID, itemOrder: 0,
     });
     __resetCacheForTest();
   });
@@ -158,14 +160,15 @@ describe('/build/mission/:slug — paths ordered by pathOrder then name (#2990)'
     __resetCacheForTest();
   });
 
-  it('paths[0] is the path with the lowest pathOrder (NULL < 1 < 3 on SQLite)', async () => {
-    // M Path has pathOrder=null → sorts FIRST on SQLite → becomes paths[0].
-    // The handler uses paths[0] exclusively; items should come from M Path.
+  it('paths[0] is the lowest explicit pathOrder (A Path=1); NULL-pathOrder path sorts last (coalesce sentinel)', async () => {
+    // A Path has pathOrder=1 → sorts FIRST via coalesce → becomes paths[0].
+    // The handler uses paths[0] exclusively; items come from A Path → non-empty.
+    // Under the old plain .orderBy('pathOrder','name') SQLite puts M Path (null) first,
+    // so items would be empty — this assertion pins the NULL-last behavior.
     const { status, data } = await project.get('/build/mission/__test__-mdp-mission?nocache=1');
     expect(status).toBe(200);
-    // missionSlug canonicalized
     expect(data.missionSlug).toBe('__test__-mdp-mission');
-    // M Path has the one tutorial item → items should be non-empty
+    // A Path has the tutorial item → items must be non-empty
     expect(data.items).toHaveLength(1);
     expect(data.items[0].slug).toBe('__test__-mdp-tut');
   });

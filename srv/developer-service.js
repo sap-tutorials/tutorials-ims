@@ -561,7 +561,7 @@ export default class DeveloperService extends cds.ApplicationService {
 
       const paths = await SELECT.from(dbPaths)
         .where({ mission_ID: mission.ID })
-        .orderBy('pathOrder', 'name');
+        .orderBy`coalesce(pathOrder, 999999), name`;
 
       const pathIds = paths.map(p => p.ID);
       const allItems = pathIds.length > 0
@@ -672,7 +672,7 @@ export default class DeveloperService extends cds.ApplicationService {
 
       const paths = await SELECT.from(dbPaths)
         .where({ mission_ID: mission.ID })
-        .orderBy('pathOrder', 'name');
+        .orderBy`coalesce(pathOrder, 999999), name`;
 
       const pathIds = paths.map(p => p.ID);
       const allItems = pathIds.length > 0
