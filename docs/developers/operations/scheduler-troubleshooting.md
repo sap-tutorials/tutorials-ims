@@ -183,7 +183,32 @@ The reaper (#2782/#2814) and re-seeder (#2827) both act on **row-data states** �
   - **Observed on PROD 2026-11-02:** both instances booted 13:01, `metrics-rollup` (`*/5`) ticked once at boot, then the 13:05 and 13:15 fires **no-showed** with the row stuck at `status=NULL` and **no queue error**. (Also matches 2026-11-01: stalled at the 20:16 deploy boot, recovered at the 21:01 manual restart — ~45 min in, i.e. the restart beat the 1h timer.)
 - **What it does.** On every ~10-min self-heal tick, call the **documented** `cds.flush()`. This forces the outbox runner to process all ready messages immediately — idempotent (drains what's ready, no-op otherwise), so calling it unconditionally every tick is safe. This bounds post-deploy drain latency to **≤ one self-heal interval (~10 min)** regardless of whether the runner's event chain re-armed, with **no manual restart** — even when the reaper and re-seeder find nothing to do. Uses only public CAP API (no `flushInterval` tweak).
 - **Fail-open.** A `flush()` fault is logged and swallowed — it never skips the canary check, never kills the timer, and never fails a scheduled tick. Injectable (`opts.flush`) for the SQLite unit test.
-- **Readiness note (open follow-up).** The deeper cause of Fault A — `tutorials-srv` has no `health-check-type: http` / `health-check-http-endpoint: /health` in `mta.yaml`/`prod.mtaext`, so CF retires the blue instances the instant green's TCP port is up (`cds.on('listening')`, before the queue is cycling) — is **not** closed by #2975. The `cds.flush()` self-heal is the in-process safety net; wiring CF's health check at `/health` (gated on `CronService.init()` complete + poll armed) is tracked separately. Until then, the ≤10-min flush is the guaranteed recovery.
+#### Readiness gate (#2975 Fault A)
+
+CF blue-green cuts over the instant green's TCP port accepts connections — `cds.on('listening')` fires — not when the scheduler is wired. There are three meaningful boot states:
+
+1. **Port open** — TCP accepts connections; `cds.on('listening')` has fired. Scheduler _not_ yet started. This is the old default; CF retired blue here.
+2. **Scheduler wired + DB connected** — `CronService.init()` has completed (schedules registered, tombstone reaper + self-heal armed, boot sweep queued) **and** a `SELECT 1` DB ping succeeds. The outbox queue will drain within one self-heal interval.
+3. **Actually draining** — the first `cds.flush()` inside `armSchedulerSelfHeal` has completed and jobs are ticking. Unreachable synchronously at boot (even the fastest canary, `kg-ondemand-drain` at `1-59/2`, only ticks every ~2 min — gating on a real drain would make CF kill healthy freshly-booted green instances).
+
+The gate asserts **state 2**, not state 3. That is sufficient: combined with the `cds.flush()` self-heal (see above), the first drain lands within ≤ one self-heal interval (~10 min) after state 2 is reached.
+
+**`/health/ready` contract** — anonymous `GET /health/ready`, registered before auth middleware in `srv/server.js`:
+- Returns **200** when `isSchedulerReady()` (latch in `srv/lib/scheduler-ready.js`, flipped by `markSchedulerReady()` at the end of `CronService.init()`) **and** a live `SELECT 1` DB ping succeeds.
+- Returns **503** otherwise (port open but scheduler not yet wired, or DB unreachable).
+
+**MTA wiring** — `tutorials-srv` and `tutorials-srv-qa` in **both** `.deploy/mta.yaml` and root `mta.yaml`:
+```yaml
+health-check-type: http
+health-check-http-endpoint: /health/ready
+health-check-invocation-timeout: 10
+timeout: 180
+```
+`timeout: 180` gives the cold-HANA init loop (DB connection + schema bootstrap) time to complete before CF declares the deploy failed. `mta-mcp.yaml` is intentionally excluded — the MCP MTA has no scheduler.
+
+**How it composes with the flush self-heal:**
+- **Gate closes Fault A** — CF will not retire the blue instance until green has reached state 2 (scheduler wired + DB connected). The SIGTERM-mid-tick race window shrinks from "any time after port-open" to "only after the scheduler is fully armed".
+- **Flush closes Fault B** — even with the gate, the event-driven re-trigger chain may not re-arm after a SIGTERM. The `cds.flush()` on every ~10-min self-heal tick bounds drain latency to ≤ one interval, no manual restart required.
 
 
 
