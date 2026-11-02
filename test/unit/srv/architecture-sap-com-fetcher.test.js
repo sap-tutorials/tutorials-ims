@@ -83,6 +83,45 @@ describe('architecture-sap-com-fetcher', () => {
     expect(rows[0].url).toBe('https://architecture.learning.sap.com/docs/ref-arch/abc123');
   });
 
+  it('routes a dated news post via the Docusaurus blog date path (YYYY-MM-DD → YYYY/MM/DD)', async () => {
+    // Blog-plugin posts route at /news/YYYY/MM/DD/rest, NOT the naive
+    // /news/YYYY-MM-DD-rest (which 404s). Verified live. News files carry no
+    // slug: frontmatter, so this exercises the path-derived fallback branch.
+    _setMockFetcher(async (url) => {
+      if (url.includes('/git/trees/')) return {
+        ...treeFixture,
+        tree: [{
+          path: 'news/2026-10-27-a2a-agent-gateway-interoperability.md',
+          mode: '100644', type: 'blob', sha: 'bn1', size: 900,
+          url: 'https://api.github.com/blobs/bn1',
+        }],
+      };
+      return '---\ntitle: Agent Gateway\n---\n\nBody text here, long enough to survive the empty-description guard.';
+    });
+    const rows = await fetchArchitectureSapComCorpus({ apiKey: 'fake' });
+    expect(rows[0].url).toBe(
+      'https://architecture.learning.sap.com/news/2026/10/27/a2a-agent-gateway-interoperability'
+    );
+  });
+
+  it('leaves a non-dated news path on the plain fallback form (no spurious date expansion)', async () => {
+    // Only the YYYY-MM-DD- prefix triggers blog date routing; anything else
+    // (incl. the legacy YYYY-MM- shape) falls through to the plain path URL.
+    _setMockFetcher(async (url) => {
+      if (url.includes('/git/trees/')) return {
+        ...treeFixture,
+        tree: [{
+          path: 'news/overview.md',
+          mode: '100644', type: 'blob', sha: 'bn2', size: 900,
+          url: 'https://api.github.com/blobs/bn2',
+        }],
+      };
+      return '---\ntitle: Overview\n---\n\nBody text here, long enough to survive the empty-description guard.';
+    });
+    const rows = await fetchArchitectureSapComCorpus({ apiKey: 'fake' });
+    expect(rows[0].url).toBe('https://architecture.learning.sap.com/news/overview');
+  });
+
   it('title precedence: frontmatter > H1 > filename', async () => {
     // File 1: frontmatter title present → win
     // File 2: no frontmatter, has H1 → win
