@@ -156,7 +156,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('fork path has 3 segments with kinds [linear, fork, linear]', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${FORK_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008060);
+    const path = data.paths.find(p => p.id === FORK_PATH_ID);
     expect(path).toBeDefined();
     expect(path.segments).toBeDefined();
     expect(path.segments).toHaveLength(3);
@@ -165,7 +165,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('fork segment has 2 lanes labeled MCP and Agents (from Groups.title)', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${FORK_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008060);
+    const path = data.paths.find(p => p.id === FORK_PATH_ID);
     const forkSeg = path.segments.find(s => s.kind === 'fork');
     expect(forkSeg).toBeDefined();
     expect(forkSeg.lanes).toHaveLength(2);
@@ -176,7 +176,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('MCP lane contains its child tutorials', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${FORK_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008060);
+    const path = data.paths.find(p => p.id === FORK_PATH_ID);
     const forkSeg = path.segments.find(s => s.kind === 'fork');
     const mcpLane = forkSeg.lanes.find(l => l.label === 'MCP');
     expect(mcpLane).toBeDefined();
@@ -187,7 +187,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('MCP lane ends with a synthetic CHECKPOINT (from prize_ID)', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${FORK_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008060);
+    const path = data.paths.find(p => p.id === FORK_PATH_ID);
     const forkSeg = path.segments.find(s => s.kind === 'fork');
     const mcpLane = forkSeg.lanes.find(l => l.label === 'MCP');
     const lastItem = mcpLane.items[mcpLane.items.length - 1];
@@ -196,7 +196,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('Agents lane has no synthetic CHECKPOINT (no prize)', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${FORK_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008060);
+    const path = data.paths.find(p => p.id === FORK_PATH_ID);
     const forkSeg = path.segments.find(s => s.kind === 'fork');
     const agentsLane = forkSeg.lanes.find(l => l.label === 'Agents');
     expect(agentsLane).toBeDefined();
@@ -205,7 +205,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('linear segment at Order 10 has the Setup tutorial', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${FORK_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008060);
+    const path = data.paths.find(p => p.id === FORK_PATH_ID);
     const setupSeg = path.segments.find(s => s.order === 10);
     expect(setupSeg.kind).toBe('linear');
     expect(setupSeg.items).toHaveLength(1);
@@ -214,7 +214,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('linear segment at Order 30 has the CHECKPOINT', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${FORK_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008060);
+    const path = data.paths.find(p => p.id === FORK_PATH_ID);
     const cpSeg = path.segments.find(s => s.order === 30);
     expect(cpSeg.kind).toBe('linear');
     expect(cpSeg.items).toHaveLength(1);
@@ -224,7 +224,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('flat items array is still present (backwards compat)', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${FORK_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008060);
+    const path = data.paths.find(p => p.id === FORK_PATH_ID);
     expect(Array.isArray(path.items)).toBe(true);
     // items should contain the tutorials (flat, existing behavior)
     expect(path.items.length).toBeGreaterThan(0);
@@ -234,7 +234,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('lone GROUP at an order produces a linear segment with expanded tutorials (no lane wrapper)', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${LONE_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008061);
+    const path = data.paths.find(p => p.id === LONE_PATH_ID);
     expect(path).toBeDefined();
     expect(path.segments).toBeDefined();
     expect(path.segments).toHaveLength(1);

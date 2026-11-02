@@ -170,7 +170,8 @@ describe('App-Space: GROUP expansion + per-path description', () => {
   it('expands a GROUP path item into its child tutorials (not "0 tutorials")', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${G_EVENT_ID})`);
 
-    const groupPath = data.paths.find(p => p.id === 10009260);
+    // #2952: track id is now the CompletionPaths UUID (p.ID), not legacyId.
+    const groupPath = data.paths.find(p => p.id === G_PATH_GROUP);
     expect(groupPath).toBeDefined();
     const tutorials = groupPath.items.filter(i => i.type === 'TUTORIAL');
     expect(tutorials.map(t => t.title)).toEqual([G_TUT_A.title, G_TUT_B.title]); // ordered by itemOrder
@@ -185,10 +186,10 @@ describe('App-Space: GROUP expansion + per-path description', () => {
   it('each path shows its OWN description, not the mission description', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${G_EVENT_ID})`);
     const byId = Object.fromEntries(data.paths.map(p => [p.id, p]));
-    expect(byId[10009260].description).toBe('Joule Studio (web)');
-    expect(byId[10009261].description).toBe('Joule Work path description');
+    expect(byId[G_PATH_GROUP].description).toBe('Joule Studio (web)');
+    expect(byId[G_PATH_FLAT].description).toBe('Joule Work path description');
     // The two descriptions differ (the bug made them identical = mission text).
-    expect(byId[10009260].description).not.toBe(byId[10009261].description);
-    expect(byId[10009260].description).not.toContain('hands dirty');
+    expect(byId[G_PATH_GROUP].description).not.toBe(byId[G_PATH_FLAT].description);
+    expect(byId[G_PATH_GROUP].description).not.toContain('hands dirty');
   });
 });
