@@ -54,6 +54,15 @@ describe('patchDraftCascadeConstraints', () => {
     expect(r.patched).toContain('AdminService.Missions_drafts.hdbtable');
   });
 
+  it('comma trails the previous line — no leading-comma style', () => {
+    patchDraftCascadeConstraints(tmp);
+    const sql = fs.readFileSync(path.join(tmp, 'AdminService.Missions_drafts.hdbtable'), 'utf8');
+    // The separator comma must be attached to PRIMARY KEY(ID), not on its own line.
+    expect(sql).toMatch(/PRIMARY KEY\(ID\),\s*\n\s*FOREIGN KEY/i);
+    // Confirm there is no bare leading comma on its own line before FOREIGN KEY.
+    expect(sql).not.toMatch(/^\s*,\s*\n\s*FOREIGN KEY/im);
+  });
+
   it('skips draft tables without the FK column', () => {
     patchDraftCascadeConstraints(tmp);
     const sql = fs.readFileSync(path.join(tmp, 'AdminService.NoFk_drafts.hdbtable'), 'utf8');

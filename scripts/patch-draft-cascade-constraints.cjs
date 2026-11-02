@@ -58,15 +58,24 @@ function patchDraftCascadeConstraints(genDir) {
       continue;
     }
 
-    // Idempotency: if the FK clause is already present, skip.
-    if (/ON DELETE CASCADE/i.test(original)) {
+    // Idempotency: if OUR specific FK clause is already present, skip.
+    // Match the FK column name AND ON DELETE CASCADE on the same logical line.
+    // Uses [\s\S]*? (non-greedy cross-paren match) because the clause itself
+    // contains parentheses: FOREIGN KEY (...) REFERENCES ...("DRAFTUUID") ON DELETE CASCADE.
+    if (/FOREIGN KEY\s*\([^F]*DraftAdministrativeData_DraftUUID[\s\S]*?ON DELETE CASCADE/i.test(original)) {
       skipped.push(filename);
       continue;
     }
 
     // Inject the FK clause as the last item inside the COLUMN TABLE (...) body.
-    // The closing ) is the last non-whitespace character after PRIMARY KEY(...).
-    // Strategy: find the last ) and insert ", <FK_CLAUSE>\n" before it.
+    // Target form:
+    //   PRIMARY KEY(ID),
+    //   FOREIGN KEY ("DraftAdministrativeData_DraftUUID") REFERENCES ... ON DELETE CASCADE
+    // )
+    //
+    // Strategy: find the last ')' (the table body closing paren). Everything
+    // before it (trimmed of trailing whitespace/newlines) gets a trailing comma,
+    // then the FK clause on its own line, then the closing ')'.
     const lastParen = original.lastIndexOf(')');
     if (lastParen === -1) {
       // Malformed file — skip rather than corrupt it.
@@ -74,8 +83,10 @@ function patchDraftCascadeConstraints(genDir) {
       continue;
     }
 
+    // Trim trailing whitespace from the body so the comma trails the last element.
+    const bodyPart = original.slice(0, lastParen).trimEnd();
     const patched_content =
-      original.slice(0, lastParen) +
+      bodyPart +
       ',\n  ' +
       FK_CLAUSE +
       '\n' +
