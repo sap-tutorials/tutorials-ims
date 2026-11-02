@@ -85,15 +85,16 @@ describe('runWithLock — JobLastRun retrofit + manual-trigger opts', () => {
   });
 });
 
-// #1021: belt-and-suspenders — DELETE the stuck outbox row on every
-// tick (success or failure). The DELETE call must happen inside
-// runWithLock's finally block. In-memory SQLite has no cds.outbox
-// schema so the DELETE is a no-op here; we spy on the helper to
-// assert it was invoked in the right order.
+// #2975: the #1021 per-tick deleteStuckOutboxRow() DELETE was REMOVED from
+// runWithLock's finally. Under CAP 10.2's guarded singleton re-seed, deleting
+// the status='processing' row per tick raced CAP's complete-tx and stopped the
+// next occurrence from being scheduled (job ran once then never rescheduled).
+// These tests pin the fix: runWithLock must NOT call deleteStuckOutboxRow, and
+// must still record JobLastRun on both success and failure.
 import * as wedge from '../../../srv/lib/scheduler-wedge.js';
 import { vi } from 'vitest';
 
-describe('runWithLock — belt-and-suspenders outbox wedge recovery (#1021)', () => {
+describe('runWithLock — must not delete the outbox row per tick (#2975)', () => {
   beforeAll(async () => {
     await cds.deploy([
       path.join(process.cwd(), 'db'),
@@ -115,50 +116,46 @@ describe('runWithLock — belt-and-suspenders outbox wedge recovery (#1021)', ()
     vi.restoreAllMocks();
   });
 
-  it('runWithLock invokes deleteStuckOutboxRow in finally on success', async () => {
+  it('does NOT call deleteStuckOutboxRow on a successful tick (would break CAP 10.2 re-seed)', async () => {
     const spy = vi.spyOn(wedge, 'deleteStuckOutboxRow').mockResolvedValue(false);
     registerJob({
-      jobName: 'test-belt-success',
+      jobName: 'test-noreap-success',
       schedule: '0 0 1 1 *',
       ttlMs: 60000,
-      description: 'unit test — belt on success',
+      description: 'unit test — no per-tick reap on success',
       fn: async () => ({ ok: true }),
     });
-    await runJobByName('test-belt-success');
-    expect(spy).toHaveBeenCalledWith('test-belt-success');
+    await runJobByName('test-noreap-success');
+    expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
 
-  it('runWithLock invokes deleteStuckOutboxRow in finally on failure', async () => {
+  it('does NOT call deleteStuckOutboxRow on a failed tick', async () => {
     const spy = vi.spyOn(wedge, 'deleteStuckOutboxRow').mockResolvedValue(false);
     registerJob({
-      jobName: 'test-belt-fail',
+      jobName: 'test-noreap-fail',
       schedule: '0 0 1 1 *',
       ttlMs: 60000,
-      description: 'unit test — belt on failure',
+      description: 'unit test — no per-tick reap on failure',
       fn: async () => { throw new Error('boom'); },
     });
-    await runJobByName('test-belt-fail');
-    expect(spy).toHaveBeenCalledWith('test-belt-fail');
+    await runJobByName('test-noreap-fail');
+    expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
 
-  it('runWithLock still records JobLastRun even if deleteStuckOutboxRow throws', async () => {
-    const spy = vi.spyOn(wedge, 'deleteStuckOutboxRow')
-      .mockRejectedValue(new Error('DELETE went sideways'));
+  it('still records JobLastRun on a successful tick', async () => {
     registerJob({
-      jobName: 'test-belt-throws',
+      jobName: 'test-noreap-records',
       schedule: '0 0 1 1 *',
       ttlMs: 60000,
-      description: 'unit test — DELETE error does not skip JobLastRun',
+      description: 'unit test — JobLastRun still lands',
       fn: async () => ({ ok: true }),
     });
-    await runJobByName('test-belt-throws');
-    // Even though the DELETE spy rejected, JobLastRun must land.
+    await runJobByName('test-noreap-records');
     const { JobLastRun } = cds.entities('com.sap.developers.ims');
-    const row = await SELECT.one.from(JobLastRun).where({ jobName: 'test-belt-throws' });
+    const row = await SELECT.one.from(JobLastRun).where({ jobName: 'test-noreap-records' });
     expect(row).toBeTruthy();
     expect(row.lastSuccessAt).toBeTruthy();
-    spy.mockRestore();
   });
 });

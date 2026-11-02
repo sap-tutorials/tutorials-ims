@@ -481,6 +481,9 @@
       "swagger": {
         "basePath": "/$api-docs",
         "diagram": true
+      },
+      "fiori": {
+        "draft_admin_integrity": false
       }
     },
     "mcp": {
