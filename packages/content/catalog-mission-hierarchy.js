@@ -91,7 +91,7 @@ export function collectAltGroups(items, resolveTutorialIdentity) {
  * @param {object} args.mission - The Missions row (`.ID` at minimum)
  * @param {Array<object>} args.paths - CompletionPaths for this mission, in
  *   the order they should appear. Caller is responsible for ordering
- *   (build-catalog.js orders by legacyId; catalog-data.js orders by legacyId).
+ *   (build-catalog.js orders by pathOrder, then name; catalog-data.js orders by pathOrder, then name).
  * @param {Array<object>} args.items - CompletionPathItems for any path in
  *   `paths`. The helper filters per-path internally — passing extras is
  *   harmless; passing missing items means those items simply don't appear.

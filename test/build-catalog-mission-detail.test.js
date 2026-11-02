@@ -112,3 +112,61 @@ describe('/build/mission/:slug — alt-group grouping', () => {
     await DELETE.from(BranchDecisions).where({ missionSlug: '__test__-mission' });
   });
 });
+
+// #2990 — mission-detail /build/mission/:slug returns paths[0] as the
+// pathOrder-first path, not insertion order.
+// Three paths: name order (Z→M→A) differs from pathOrder (3→NULL→1).
+// SQLite NULLs sort FIRST so order is: M Path (null), A Path (1), Z Path (3).
+describe('/build/mission/:slug — paths ordered by pathOrder then name (#2990)', () => {
+  const MDP_MISSION_ID = '11111111-2990-dc00-0000-000000000001';
+  // Three paths; name Z→M→A, pathOrder 3→null→1
+  const MDP_PATH_A_ID = '22222222-2990-dc00-0000-000000000001'; // name='A Path', pathOrder=1
+  const MDP_PATH_M_ID = '22222222-2990-dc00-0000-000000000002'; // name='M Path', pathOrder=null
+  const MDP_PATH_Z_ID = '22222222-2990-dc00-0000-000000000003'; // name='Z Path', pathOrder=3
+  const MDP_TUT_ID    = '33333333-2990-dc00-0000-000000000001';
+
+  beforeAll(async () => {
+    const { Missions, CompletionPaths, CompletionPathItems, Tutorials } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Missions).entries({
+      ID: MDP_MISSION_ID, legacyId: 299020, title: '__TEST__ MDP Mission',
+      slug: '__test__-mdp-mission', published: true,
+    });
+    await INSERT.into(CompletionPaths).entries([
+      { ID: MDP_PATH_A_ID, legacyId: 299021, mission_ID: MDP_MISSION_ID, name: 'A Path', slug: '__test__-mdp-path-a', pathOrder: 1 },
+      { ID: MDP_PATH_M_ID, legacyId: 299022, mission_ID: MDP_MISSION_ID, name: 'M Path', slug: '__test__-mdp-path-m', pathOrder: null },
+      { ID: MDP_PATH_Z_ID, legacyId: 299023, mission_ID: MDP_MISSION_ID, name: 'Z Path', slug: '__test__-mdp-path-z', pathOrder: 3 },
+    ]);
+    await INSERT.into(Tutorials).entries({
+      ID: MDP_TUT_ID, legacyId: 299031, slug: '__test__-mdp-tut', title: 'MDP Tutorial', status: 'ACTIVE',
+    });
+    // Only path A has items — so the handler picks the pathOrder-first path (not insertion order).
+    // After the fix, paths[0] should be M Path (null sorts first), so we add an item on M Path.
+    // That way if the old legacyId order were used (A=1 < M=2 < Z=3), we'd get A Path instead.
+    await INSERT.into(CompletionPathItems).entries({
+      ID: '44444444-2990-dc00-0000-000000000001', legacyId: 299041,
+      path_ID: MDP_PATH_M_ID, taskType: 'TUTORIAL', tutorial_ID: MDP_TUT_ID, itemOrder: 0,
+    });
+    __resetCacheForTest();
+  });
+
+  afterAll(async () => {
+    const { Missions, CompletionPaths, CompletionPathItems, Tutorials, ChatSettings } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(CompletionPathItems).where({ path_ID: { in: [MDP_PATH_A_ID, MDP_PATH_M_ID, MDP_PATH_Z_ID] } });
+    await DELETE.from(CompletionPaths).where({ ID: { in: [MDP_PATH_A_ID, MDP_PATH_M_ID, MDP_PATH_Z_ID] } });
+    await DELETE.from(Missions).where({ ID: MDP_MISSION_ID });
+    await DELETE.from(Tutorials).where({ ID: MDP_TUT_ID });
+    __resetCacheForTest();
+  });
+
+  it('paths[0] is the path with the lowest pathOrder (NULL < 1 < 3 on SQLite)', async () => {
+    // M Path has pathOrder=null → sorts FIRST on SQLite → becomes paths[0].
+    // The handler uses paths[0] exclusively; items should come from M Path.
+    const { status, data } = await project.get('/build/mission/__test__-mdp-mission?nocache=1');
+    expect(status).toBe(200);
+    // missionSlug canonicalized
+    expect(data.missionSlug).toBe('__test__-mdp-mission');
+    // M Path has the one tutorial item → items should be non-empty
+    expect(data.items).toHaveLength(1);
+    expect(data.items[0].slug).toBe('__test__-mdp-tut');
+  });
+});

@@ -37,7 +37,7 @@ export async function missionDetailHandler(req, res) {
     const mission = await SELECT.one.from(Missions).where({ slug });
     if (!mission) return res.status(404).json({ error: 'mission_not_found' });
 
-    const paths = await SELECT.from(CompletionPaths).where({ mission_ID: mission.ID });
+    const paths = await SELECT.from(CompletionPaths).where({ mission_ID: mission.ID }).orderBy('pathOrder', 'name');
     if (paths.length === 0) return res.json({ missionSlug: slug, items: [] });
 
     // For v1 we render the FIRST path only (matches today's mission-side-nav rendering).

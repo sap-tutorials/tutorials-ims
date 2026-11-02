@@ -251,3 +251,65 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
     expect(seg.items.every(i => i.type === 'TUTORIAL')).toBe(true);
   });
 });
+
+// #2990 — getAppSpaceProgress returns paths in pathOrder, then name order.
+// Three paths: name order (Z→M→A) differs from pathOrder (3→null→1).
+// SQLite NULLs sort FIRST so expected title order is:
+//   Z Path (pathOrder=null), A Path (pathOrder=1), M Path (pathOrder=3)
+// (NULL < 1 < 3 in SQLite ASC ordering).
+describe('App-Space path ordering by pathOrder (#2990)', () => {
+  const PO_EVENT_ID   = 10002991;
+  const PO_MISSION_ID = '11111111-2990-aaaa-0000-000000000001';
+  const PO_EVENT_UUID = 'eeeeeeee-2990-aaaa-0000-000000000001';
+  const PO_PATH_A_ID  = '22222222-2990-aaaa-0000-000000000001'; // name='A Path', pathOrder=1
+  const PO_PATH_M_ID  = '22222222-2990-aaaa-0000-000000000002'; // name='M Path', pathOrder=3
+  const PO_PATH_Z_ID  = '22222222-2990-aaaa-0000-000000000003'; // name='Z Path', pathOrder=null
+  const PO_TUT_ID     = 'cccccccc-2990-aaaa-0000-000000000001';
+
+  beforeAll(async () => {
+    const { Events, Missions, CompletionPaths, CompletionPathItems, Tutorials } =
+      cds.entities('com.sap.developers.ims');
+
+    await INSERT.into(Tutorials).entries({
+      ID: PO_TUT_ID, legacyId: 10002980, slug: 'po-tut-2990', title: 'PO Tutorial',
+    });
+    await INSERT.into(Missions).entries({
+      ID: PO_MISSION_ID, legacyId: 10002990, title: 'PO Mission',
+      slug: 'po-mission-2990', description: 'Path order mission', published: true,
+    });
+    await INSERT.into(Events).entries({
+      ID: PO_EVENT_UUID, legacyId: PO_EVENT_ID,
+      name: 'PO Test Event', eventType: 'OTHER', mission_ID: PO_MISSION_ID,
+    });
+    await INSERT.into(CompletionPaths).entries([
+      { ID: PO_PATH_A_ID, legacyId: 10002991, name: 'A Path', mission_ID: PO_MISSION_ID, pathOrder: 1 },
+      { ID: PO_PATH_M_ID, legacyId: 10002992, name: 'M Path', mission_ID: PO_MISSION_ID, pathOrder: 3 },
+      { ID: PO_PATH_Z_ID, legacyId: 10002993, name: 'Z Path', mission_ID: PO_MISSION_ID, pathOrder: null },
+    ]);
+    // One item per path so all three paths appear in the response.
+    await INSERT.into(CompletionPathItems).entries([
+      { ID: 'dddddddd-2990-aaaa-0000-000000000001', path_ID: PO_PATH_A_ID, itemOrder: 1, taskType: 'TUTORIAL', tutorial_ID: PO_TUT_ID },
+      { ID: 'dddddddd-2990-aaaa-0000-000000000002', path_ID: PO_PATH_M_ID, itemOrder: 1, taskType: 'TUTORIAL', tutorial_ID: PO_TUT_ID },
+      { ID: 'dddddddd-2990-aaaa-0000-000000000003', path_ID: PO_PATH_Z_ID, itemOrder: 1, taskType: 'TUTORIAL', tutorial_ID: PO_TUT_ID },
+    ]);
+  });
+
+  afterAll(async () => {
+    const { Events, Missions, CompletionPaths, CompletionPathItems, Tutorials } =
+      cds.entities('com.sap.developers.ims');
+    await DELETE.from(CompletionPathItems).where({
+      path_ID: { in: [PO_PATH_A_ID, PO_PATH_M_ID, PO_PATH_Z_ID] }
+    });
+    await DELETE.from(CompletionPaths).where({ ID: { in: [PO_PATH_A_ID, PO_PATH_M_ID, PO_PATH_Z_ID] } });
+    await DELETE.from(Events).where({ legacyId: PO_EVENT_ID });
+    await DELETE.from(Missions).where({ ID: PO_MISSION_ID });
+    await DELETE.from(Tutorials).where({ ID: PO_TUT_ID });
+  });
+
+  it('returns paths ordered by pathOrder asc then name; NULL pathOrder sorts first on SQLite', async () => {
+    const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${PO_EVENT_ID})`);
+    expect(data.paths).toHaveLength(3);
+    // SQLite NULLs first: Z Path (null), A Path (1), M Path (3)
+    expect(data.paths.map(p => p.title)).toEqual(['Z Path', 'A Path', 'M Path']);
+  });
+});

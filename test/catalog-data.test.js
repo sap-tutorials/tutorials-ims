@@ -288,3 +288,54 @@ describe('catalog-data — mission with direct-TUTORIAL CompletionPathItems', ()
     expect(ctx.groups[0].slug).toBe('__test__-cd-group');
   });
 });
+
+// #2990 — loadMissionContext orders paths by pathOrder, then name.
+// Three paths: name order (Z, M, A) differs from pathOrder (3, 1, NULL).
+// SQLite orders NULLs FIRST, so expected path title order is:
+//   "Z Path" (pathOrder=null, name='Z Path' — NULL sorts first on SQLite)
+//   "A Path" (pathOrder=1)
+//   "M Path" (pathOrder=3)
+// This documents the observed SQLite NULL-first behavior; the controller
+// can decide whether a NULL-last clause is needed.
+describe('catalog-data — loadMissionContext orders paths by pathOrder then name (#2990)', () => {
+  const NS = 'com.sap.developers.ims';
+  const TUT_PO_ID   = 'cccccccc-2990-cd00-0000-000000000001';
+  const MISSION_PO_ID = 'mmmmmmmm-2990-cd00-0000-000000000001';
+  // Three paths: name order A→M→Z differs from pathOrder 1→3→NULL
+  const PATH_PO_A_ID = 'eeeeeeee-2990-cd00-0000-000000000001'; // name='A Path', pathOrder=1
+  const PATH_PO_M_ID = 'eeeeeeee-2990-cd00-0000-000000000002'; // name='M Path', pathOrder=3
+  const PATH_PO_Z_ID = 'eeeeeeee-2990-cd00-0000-000000000003'; // name='Z Path', pathOrder=NULL
+
+  beforeAll(async () => {
+    const { Tutorials, Missions, CompletionPaths, CompletionPathItems } = cds.entities(NS);
+    await INSERT.into(Tutorials).entries({
+      ID: TUT_PO_ID, slug: '__test__-cd-po-tut', title: '__TEST__ PO Tut',
+      description: 'po', status: 'ACTIVE',
+    });
+    await INSERT.into(Missions).entries({
+      ID: MISSION_PO_ID, legacyId: 299010, slug: '__test__-cd-po-mission',
+      title: '__TEST__ PO Mission', description: 'po-desc',
+      published: true, status: 'ACTIVE',
+    });
+    await INSERT.into(CompletionPaths).entries([
+      { ID: PATH_PO_A_ID, mission_ID: MISSION_PO_ID, name: 'A Path', slug: '__test__-cd-po-path-a', legacyId: 299011, pathOrder: 1 },
+      { ID: PATH_PO_M_ID, mission_ID: MISSION_PO_ID, name: 'M Path', slug: '__test__-cd-po-path-m', legacyId: 299012, pathOrder: 3 },
+      { ID: PATH_PO_Z_ID, mission_ID: MISSION_PO_ID, name: 'Z Path', slug: '__test__-cd-po-path-z', legacyId: 299013, pathOrder: null },
+    ]);
+    // Each path has one direct TUTORIAL item so it produces a synthetic group card.
+    await INSERT.into(CompletionPathItems).entries([
+      { path_ID: PATH_PO_A_ID, tutorial_ID: TUT_PO_ID, taskType: 'TUTORIAL', itemOrder: 1 },
+      { path_ID: PATH_PO_M_ID, tutorial_ID: TUT_PO_ID, taskType: 'TUTORIAL', itemOrder: 1 },
+      { path_ID: PATH_PO_Z_ID, tutorial_ID: TUT_PO_ID, taskType: 'TUTORIAL', itemOrder: 1 },
+    ]);
+  });
+
+  it('emits paths ordered by pathOrder asc then name; NULL pathOrder sorts first on SQLite', async () => {
+    const ctx = await loadMissionContext('__test__-cd-po-mission');
+    expect(ctx).not.toBeNull();
+    // One synthetic group card per path → 3 total
+    expect(ctx.groups).toHaveLength(3);
+    // SQLite NULLs first: Z Path (null), A Path (1), M Path (3)
+    expect(ctx.groups.map(g => g.title)).toEqual(['Z Path', 'A Path', 'M Path']);
+  });
+});
