@@ -142,6 +142,10 @@ modules:
       # srv/developer-service.js, srv/lib/ip-rate-limit.js, srv/lib/chat-rate-limit.js.
       # See docs/developers/operations/mta-deployment.md "Scaling Constraints" and TODO §22.
       instances: 1
+      health-check-type: http
+      health-check-http-endpoint: /health/ready
+      health-check-invocation-timeout: 10
+      timeout: 180
     properties:
       EXPOSE_CAP_UI: true
       NODE_ENV: production
@@ -191,6 +195,10 @@ modules:
       disk-quota: 1024M
       buildpack: nodejs_buildpack
       instances: 1
+      health-check-type: http
+      health-check-http-endpoint: /health/ready
+      health-check-invocation-timeout: 10
+      timeout: 180
     properties:
       EXPOSE_CAP_UI: false
       NODE_ENV: production
