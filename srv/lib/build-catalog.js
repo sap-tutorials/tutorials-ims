@@ -19,7 +19,7 @@ export async function buildCatalogHandler(req, res) {
 
   try {
     const missions = await SELECT.from(Missions).where({ published: true });
-    const paths = await SELECT.from(CompletionPaths).orderBy('legacyId');
+    const paths = await SELECT.from(CompletionPaths).orderBy`mission_ID, coalesce(pathOrder, 999999), name`;
     const items = await SELECT.from(CompletionPathItems).orderBy('itemOrder');
     const tutorials = await SELECT.from(Tutorials)
       .columns('ID', 'legacyId', 'slug', 'title', 'description')

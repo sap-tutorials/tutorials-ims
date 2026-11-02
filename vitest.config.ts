@@ -105,6 +105,11 @@ export default defineConfig({
             // @shared/ProgressRing.vue, etc. The unit project doesn't load
             // hugo-apps/vite.config.ts so the alias is redeclared here.
             '@shared': fileURLToPath(new URL('./hugo-apps/src/shared', import.meta.url)),
+            // Worktree isolation (#2990): force @tutorials/content to resolve from
+            // this worktree's packages/content directory rather than the parent
+            // repo's npm-workspace symlink, which still points to the parent's
+            // unmodified source when running tests from a git worktree.
+            '@tutorials/content': fileURLToPath(new URL('./packages/content', import.meta.url)),
           },
         },
       },

@@ -1139,6 +1139,22 @@ export default class AdminService extends cds.ApplicationService {
     this.before('NEW', 'GroupPathItems.drafts', setGroupItemOrder);
     this.before('CREATE', 'GroupPathItems', setGroupItemOrder);
 
+    // Gap-number pathOrder for new CompletionPaths rows so inline-created paths
+    // get a sensible order without the user typing one. NEW fires on draft
+    // inline create (visible immediately); CREATE covers programmatic posts.
+    const setPathOrder = async (req) => {
+      if (req.data.pathOrder != null) return;
+      const missionId = req.data.mission_ID
+        || (Array.isArray(req.params) && req.params[0] && req.params[0].ID);
+      if (!missionId) return;
+      const row = await SELECT.one.from(req.target)
+        .columns('max(pathOrder) as maxOrder')
+        .where({ mission_ID: missionId });
+      req.data.pathOrder = ((row?.maxOrder ?? 0) + 10);
+    };
+    this.before('NEW', 'CompletionPaths.drafts', setPathOrder);
+    this.before('CREATE', 'CompletionPaths', setPathOrder);
+
     // Issue #172 — refuse incoherent alt-group shapes.
     // Per PR 2 reviewer addendum item G: enforceMultiMember=false on CREATE
     // (authors create members one at a time in Fiori draft).
@@ -3930,6 +3946,7 @@ export default class AdminService extends cds.ApplicationService {
           mission_ID: missionId,
           name: 'Default',
           slug: `${lcSlug}-default`,
+          pathOrder: 10,
         })
       );
       await tx.run(
@@ -4041,6 +4058,7 @@ export default class AdminService extends cds.ApplicationService {
           name: p.name,
           description: p.description,
           slug: pathSlug,
+          pathOrder: p.pathOrder,
         }));
         const items = await tx.run(SELECT.from(CompletionPathItems).where({ path_ID: p.ID }));
         if (items.length) {

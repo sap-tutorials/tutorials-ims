@@ -614,5 +614,128 @@ describe('AdminService', () => {
       // first copy took copy-src-copy; this one falls back
       expect(data.slug).toBe('copy-src-copy-2');
     });
+
+    it('preserves pathOrder on all cloned CompletionPaths (#2990)', async () => {
+      const {
+        Missions, CompletionPaths,
+      } = cds.entities('com.sap.developers.ims');
+
+      // Seed a fresh source mission with two paths having explicit pathOrder values.
+      const srcId2 = cds.utils.uuid();
+      const pathA = cds.utils.uuid();
+      const pathB = cds.utils.uuid();
+      await INSERT.into(Missions).entries({
+        ID: srcId2, slug: 'po-copy-src', title: 'PO Copy Source', published: false,
+        missionType: 'SEQUENTIAL', experienceTag: 'beginner',
+      });
+      await INSERT.into(CompletionPaths).entries([
+        { ID: pathA, mission_ID: srcId2, name: 'Path A', slug: 'po-copy-src-a', pathOrder: 10 },
+        { ID: pathB, mission_ID: srcId2, name: 'Path B', slug: 'po-copy-src-b', pathOrder: 20 },
+      ]);
+
+      const { status, data } = await project.post('/admin/copyMission', { ID: srcId2 }, adminAuth);
+      expect(status).toBe(200);
+
+      const copiedPaths = await SELECT.from(CompletionPaths)
+        .where({ mission_ID: data.ID })
+        .orderBy('pathOrder');
+      expect(copiedPaths.length).toBe(2);
+      expect(copiedPaths[0].pathOrder).toBe(10);
+      expect(copiedPaths[1].pathOrder).toBe(20);
+    });
+  });
+
+  describe('setPathOrder — auto gap-numbering on CompletionPaths (#2990)', () => {
+    // CompletionPaths is a composition of Missions, which has @odata.draft.enabled
+    // (see app/admin-annotations.cds). CAP enforces that compositions of draft-enabled
+    // roots can only be modified via the root's draft navigation.
+    //
+    // The setPathOrder handler is registered on:
+    //   before('NEW', 'CompletionPaths.drafts', ...) — fires on draft inline create
+    //   before('CREATE', 'CompletionPaths', ...)    — fires on draftActivate cascade
+    //
+    // Tests exercise the NEW path (post to parent draft's nav property) and verify
+    // the returned draft row has the correct pathOrder.
+
+    it('assigns pathOrder=10 to the first path on a new mission draft', async () => {
+      const { Tags } = cds.entities('com.sap.developers.ims');
+      const tagId = cds.utils.uuid();
+      await INSERT.into(Tags).entries({ ID: tagId, legacyId: 99901, name: '__TEST__ po-tag-01' });
+
+      // Create mission draft
+      const { status: s1, data: mDraft } = await project.post('/admin/Missions', {
+        title: '__TEST__ PO Mission 01',
+        slug: 'po-test-mission-01',
+        experienceTag: 'beginner',
+        primaryTagRef_ID: tagId,
+      }, { ...adminAuth, headers: { Prefer: 'handling=lenient' } });
+      expect(s1).toBe(201);
+
+      // Add first path via draft nav — before('NEW', 'CompletionPaths.drafts') fires
+      const { status: s2, data: path } = await project.post(
+        `/admin/Missions(ID=${mDraft.ID},IsActiveEntity=false)/completionPaths`,
+        { name: 'First Path' },
+        adminAuth
+      );
+      expect(s2).toBe(201);
+      expect(path.pathOrder).toBe(10);
+    });
+
+    it('assigns pathOrder=20 to a second path when the first has pathOrder=10', async () => {
+      const { Tags } = cds.entities('com.sap.developers.ims');
+      const tagId = cds.utils.uuid();
+      await INSERT.into(Tags).entries({ ID: tagId, legacyId: 99902, name: '__TEST__ po-tag-02' });
+
+      // Create mission draft
+      const { status: s1, data: mDraft } = await project.post('/admin/Missions', {
+        title: '__TEST__ PO Mission 02',
+        slug: 'po-test-mission-02',
+        experienceTag: 'beginner',
+        primaryTagRef_ID: tagId,
+      }, { ...adminAuth, headers: { Prefer: 'handling=lenient' } });
+      expect(s1).toBe(201);
+
+      // Add first path (pathOrder should be 10)
+      const { status: s2, data: path1 } = await project.post(
+        `/admin/Missions(ID=${mDraft.ID},IsActiveEntity=false)/completionPaths`,
+        { name: 'Path One' },
+        adminAuth
+      );
+      expect(s2).toBe(201);
+      expect(path1.pathOrder).toBe(10);
+
+      // Add second path — handler reads max(pathOrder)=10 from draft table, returns 20
+      const { status: s3, data: path2 } = await project.post(
+        `/admin/Missions(ID=${mDraft.ID},IsActiveEntity=false)/completionPaths`,
+        { name: 'Path Two' },
+        adminAuth
+      );
+      expect(s3).toBe(201);
+      expect(path2.pathOrder).toBe(20);
+    });
+
+    it('preserves an explicit pathOrder passed on create', async () => {
+      const { Tags } = cds.entities('com.sap.developers.ims');
+      const tagId = cds.utils.uuid();
+      await INSERT.into(Tags).entries({ ID: tagId, legacyId: 99903, name: '__TEST__ po-tag-03' });
+
+      // Create mission draft
+      const { status: s1, data: mDraft } = await project.post('/admin/Missions', {
+        title: '__TEST__ PO Mission 03',
+        slug: 'po-test-mission-03',
+        experienceTag: 'beginner',
+        primaryTagRef_ID: tagId,
+      }, { ...adminAuth, headers: { Prefer: 'handling=lenient' } });
+      expect(s1).toBe(201);
+
+      // Add path with explicit pathOrder=55 — should NOT be overwritten
+      const { status: s2, data: path } = await project.post(
+        `/admin/Missions(ID=${mDraft.ID},IsActiveEntity=false)/completionPaths`,
+        { name: 'Explicit Path', pathOrder: 55 },
+        adminAuth
+      );
+      expect(s2).toBe(201);
+      expect(path.pathOrder).toBe(55);
+    });
   });
 });

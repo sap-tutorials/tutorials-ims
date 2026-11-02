@@ -181,8 +181,8 @@ export async function loadMissionContext(slug) {
 
   const paths = await SELECT.from(CompletionPaths)
     .where({ mission_ID: mission.ID })
-    .columns('ID', 'name', 'slug', 'legacyId')
-    .orderBy('legacyId');
+    .columns('ID', 'name', 'slug', 'legacyId', 'pathOrder')
+    .orderBy`coalesce(pathOrder, 999999), name`;
 
   const pathIds = paths.map(p => p.ID);
   // [#382 phase F1] Fetch BOTH taskType variants. Direct TUTORIAL items

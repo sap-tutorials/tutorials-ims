@@ -216,6 +216,7 @@ annotate AdminService.CompletionPaths with {
   name        @Common.Label: 'Title';
   description @Common.Label: 'Description'  @UI.MultiLineText;
   slug        @Common.Label: 'Slug';
+  pathOrder   @Common.Label: 'Order';
 };
 
 annotate AdminService.CompletionPaths with @UI: {
@@ -233,7 +234,9 @@ annotate AdminService.CompletionPaths with @UI: {
       { Value: description }
     ]
   },
+  PresentationVariant: { SortOrder: [ { Property: pathOrder } ] },
   LineItem: [
+    { Value: pathOrder, Label: 'Order' },
     { Value: name },
     { Value: slug }
   ]
