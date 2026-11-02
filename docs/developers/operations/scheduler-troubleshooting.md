@@ -189,7 +189,7 @@ CF blue-green cuts over the instant green's TCP port accepts connections — `cd
 
 1. **Port open** — TCP accepts connections; `cds.on('listening')` has fired. Scheduler _not_ yet started. This is the old default; CF retired blue here.
 2. **Scheduler wired + DB connected** — `CronService.init()` has completed (schedules registered, tombstone reaper + self-heal armed, boot sweep queued) **and** a `SELECT 1` DB ping succeeds. The outbox queue will drain within one self-heal interval.
-3. **Actually draining** — the first `cds.flush()` inside `armSchedulerSelfHeal` has completed and jobs are ticking. Unreachable synchronously at boot (fastest canary is `*/2` — gating on a real drain would make CF kill healthy freshly-booted green instances).
+3. **Actually draining** — the first `cds.flush()` inside `armSchedulerSelfHeal` has completed and jobs are ticking. Unreachable synchronously at boot (even the fastest canary, `kg-ondemand-drain` at `1-59/2`, only ticks every ~2 min — gating on a real drain would make CF kill healthy freshly-booted green instances).
 
 The gate asserts **state 2**, not state 3. That is sufficient: combined with the `cds.flush()` self-heal (see above), the first drain lands within ≤ one self-heal interval (~10 min) after state 2 is reached.
 

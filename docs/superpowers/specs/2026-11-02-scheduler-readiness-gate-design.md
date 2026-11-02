@@ -35,9 +35,10 @@ Three boot states, in order:
    (`srv/cron-service.js:44`); outbox rows exist and `cds.db` is connected.
 3. **Scheduler draining** — the processor has actually consumed ≥1 tick since boot.
 
-State 3 is what we'd *love* to gate on, but it is **unreachable synchronously**: the
-fastest canary (`metrics-rollup`) is `*/5`, so a freshly-booted green could legitimately
-take up to 5 min before it has drained anything — far beyond any CF health-check timeout.
+State 3 is what we'd *love* to gate on, but it is **unreachable synchronously**: even the
+fastest canary (`kg-ondemand-drain`, `1-59/2` = every ~2 min; `metrics-rollup` is `*/5`) means a
+freshly-booted green could legitimately take minutes before it has drained anything — far beyond
+any CF health-check timeout.
 Gating on state 3 would make CF kill every healthy freshly-booted instance. That is a trap
 and is explicitly **out of scope**.
 
