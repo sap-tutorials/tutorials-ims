@@ -391,6 +391,16 @@ export function armSchedulerSelfHeal(opts = {}) {
   const reap = opts.reap ?? reapTombstonedOutboxRows;
   const reseed = opts.reseed ?? reseedMissingSuccessorRows;
   const reseedJob = opts.reseedJob; // #2827: no default — only wired when a service handle exists
+  // #2975: documented cds.flush() forces the outbox runner to process ready
+  // messages immediately. CAP 10.2's in-memory runner does one boot flush then
+  // relies on an event-driven re-trigger chain; when that chain doesn't re-arm
+  // (observed on PROD after a deploy), ready rows sit unconsumed until the ~1h
+  // fallback. Calling flush every self-heal tick bounds that to the tick
+  // interval (~10m). Injectable for tests; fail-open at the call site.
+  const flush = opts.flush ?? (async () => {
+    const cdsmod = (await import('@sap/cds')).default;
+    if (typeof cdsmod.flush === 'function') return cdsmod.flush();
+  });
   const loadRows = opts.loadRows ?? loadCanaryRows;
   const raiseAlert = opts.raiseAlert ?? (async (input) => {
     const alerting = await import('./alerting.js');
@@ -424,6 +434,20 @@ export function armSchedulerSelfHeal(opts = {}) {
       } catch (err) {
         LOG.warn(`scheduler self-heal re-seed tick failed (ignored): ${err.message ?? err}`);
       }
+    }
+
+    // 1c. #2975: force an outbox drain via the documented cds.flush(). The
+    //     CAP 10.2 runner does one boot flush then only re-arms off an
+    //     event-driven chain; when that chain doesn't carry forward (seen on
+    //     PROD after a deploy), ready status=NULL rows sit unconsumed until the
+    //     ~1h fallback. flush() is idempotent (drains what's ready, no-op
+    //     otherwise), so calling it unconditionally every tick bounds the stall
+    //     to the self-heal interval. Fail-open — a flush fault never skips the
+    //     canary check or throws out of the timer.
+    try {
+      await flush();
+    } catch (err) {
+      LOG.warn(`scheduler self-heal flush tick failed (ignored): ${err.message ?? err}`);
     }
 
     // 2. Alert-only canary check. If both canaries are stale, the queue is
