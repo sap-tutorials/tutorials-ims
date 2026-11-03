@@ -24,7 +24,6 @@
 export interface TimeItem {
   type: 'TUTORIAL' | 'CHECKPOINT' | 'PRIZE'
   timeToComplete: number
-  [key: string]: unknown
 }
 
 export interface TimeForkLane {

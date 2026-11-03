@@ -63,11 +63,25 @@ describe('trackTotalTime (#3007)', () => {
     expect(trackTotalTime(track)).toBe(40)
   })
 
+  it('sums contributions across multiple branch segments (linear 60 + fork avg 40 + cluster avg 30 => 130)', () => {
+    const track: TimeTrack = {
+      segments: [
+        { order: 1, kind: 'linear', items: [tut(60)] },
+        { order: 2, kind: 'fork', lanes: [
+          { label: 'A', items: [tut(30)] },
+          { label: 'B', items: [tut(50)] },
+        ] }, // avg 40
+        { order: 3, kind: 'parallel-any', items: [tut(20), tut(40)] }, // avg 30
+      ],
+    }
+    expect(trackTotalTime(track)).toBe(130)
+  })
+
   it('ignores non-tutorial items (synthetic prize checkpoints have timeToComplete 0)', () => {
     const track: TimeTrack = {
       segments: [
         { order: 1, kind: 'fork', lanes: [
-          { label: 'A', items: [tut(40), { type: 'CHECKPOINT', timeToComplete: 0, prizeId: 9 }] },
+          { label: 'A', items: [tut(40), { type: 'CHECKPOINT', timeToComplete: 0 }] },
           { label: 'B', items: [tut(60)] },
         ] },
       ],
