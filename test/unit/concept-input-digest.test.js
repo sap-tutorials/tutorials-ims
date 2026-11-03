@@ -14,4 +14,14 @@ describe('digestFromProbes', () => {
     expect(digestFromProbes(bumped)).not.toBe(digestFromProbes(base));
   });
   it('is order-independent', () => expect(digestFromProbes([base[1], base[0]])).toBe(digestFromProbes(base)));
+
+  // #2998: a change confined to the HelpDocs table (e.g. HelpDocs.url repaired,
+  // no *ConceptLinks row touched) must move the digest so the concept re-render
+  // phase does not skip. This guards the HelpDocs probe added to
+  // computeConceptInputDigest.
+  it('changes when only the HelpDocs probe moves', () => {
+    const withHelpDocs = [...base, { t: 'HelpDocs', max: '2026-10-01T00:00:00Z', n: 100 }];
+    const bumped = [...base, { t: 'HelpDocs', max: '2026-10-02T00:00:00Z', n: 100 }];
+    expect(digestFromProbes(bumped)).not.toBe(digestFromProbes(withHelpDocs));
+  });
 });
