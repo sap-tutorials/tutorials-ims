@@ -46,7 +46,7 @@ async function main() {
   // iterable, and resolve the namespace off the linked model directly (#911).
   const linked = cds.linked(await cds.load('*'));
   await cds.connect.to('db');
-  const { HelpDocs, HelpDocConceptLinks } = linked.entities('com.sap.developers.ims.external');
+  const { HelpDocs } = linked.entities('com.sap.developers.ims.external');
 
   console.log(`\nfix-archcenter-urls — ${COMMIT ? 'COMMIT' : 'DRY-RUN'} mode`);
   console.log('='.repeat(72));
@@ -54,8 +54,6 @@ async function main() {
   let planned = 0;
   let changed = 0;
   const plan = [];
-  const presentIds = [];   // every target HelpDoc row that EXISTS (for the nudge),
-                           // independent of whether its url needed changing.
 
   for (const { sourceId, url: newUrl } of FIXES) {
     // Metadata-only read (never SELECT description/LOB alongside) — LOB-locator safe.
@@ -68,7 +66,6 @@ async function main() {
       console.log(`  MISSING  ${sourceId}\n           (no row — skipping; nothing to fix)`);
       continue;
     }
-    presentIds.push(row.ID);
     if (row.url === newUrl) {
       console.log(`  OK       ${sourceId}\n           already ${newUrl}`);
       continue;
@@ -94,35 +91,14 @@ async function main() {
   }
   console.log(`\nApplied: ${changed} url row(s) updated (${plan.length === 0 ? 'all already correct' : ''}).`);
 
-  // Concept-publish digest nudge (#2948 follow-up): the concept re-render phase
-  // keys its delta on concept-input-digest.js, which probes max(modifiedAt) over
-  // HelpDocConceptLinks — but NOT over HelpDocs. So a bare HelpDocs.url change
-  // does NOT bump the digest, and a full publish would phase-skip and never
-  // re-bake the corrected href into the concept BLOB. Touching the linking rows
-  // bumps their managed modifiedAt (= $now on any UPDATE) so the next full
-  // publish re-renders the affected concept pages. We write each row's EXISTING
-  // modelVersion back unchanged — content-neutral (no column value altered),
-  // modifiedAt is the only field that moves.
-  //
-  // IMPORTANT: nudge ALL present target HelpDocs' links, not just the ones whose
-  // url changed this run. On a re-run where urls are already correct (idempotent
-  // path), the data is right but the served BLOB may still be stale — the nudge
-  // is exactly what forces the re-bake, so it must fire regardless of `changed`.
-  let touched = 0;
-  if (presentIds.length > 0) {
-    const linkRows = await SELECT.from(HelpDocConceptLinks)
-      .columns('ID', 'modelVersion')
-      .where({ helpDoc_ID: { in: presentIds } });
-    for (const lr of linkRows) {
-      touched += await UPDATE(HelpDocConceptLinks)
-        .set({ modelVersion: lr.modelVersion })  // same value → only modifiedAt moves
-        .where({ ID: lr.ID });
-    }
-  }
-  console.log(`Digest nudge: touched ${touched} HelpDocConceptLinks row(s) (bumps modifiedAt for concept re-render; values unchanged).`);
+  // The UPDATE to HelpDocs.url bumps its managed modifiedAt (= $now), which the
+  // concept-publish digest now observes directly (#2998: HelpDocs probe added to
+  // concept-input-digest.js). So the next full publish re-renders the affected
+  // concept pages without any further action — the old HelpDocConceptLinks
+  // "digest nudge" workaround is no longer needed and has been removed.
 
-  if (plan.length === 0 && touched === 0) {
-    console.log('\nNothing to apply and no links to nudge.\n');
+  if (plan.length === 0) {
+    console.log('\nNothing to apply — all target urls already correct.\n');
     return;
   }
 
