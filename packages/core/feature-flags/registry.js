@@ -438,8 +438,16 @@ export const FEATURE_FLAGS = [
     key: 'KTT_ENABLED', label: 'KTT — Kasimir Teaches TLAs', category: 'Content',
     kind: 'db', imsConfigKey: 'flag.ktt.enabled',
     valueType: 'boolean', default: false, status: 'beta',
-    description: 'Enables the /explore/ktt/ acronym trainer and its /ktt CAP endpoints. Off → completeLesson/syncProgress reject 503.',
+    description: 'Enables the /explore/ktt/ acronym trainer and its /ktt CAP endpoints. Off -> completeLesson/syncProgress reject 503.',
     howToChange: featureFlagUpsert('KTT_ENABLED', 'flag.ktt.enabled'),
+  },
+  // ---- App-Space Kasimir Arcade (#3009) ----
+  {
+    key: 'APP_SPACE_GAME_ENABLED', label: 'App-Space Kasimir Arcade', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.appSpaceGame',
+    valueType: 'boolean', default: false, status: 'dev-only',
+    description: 'Enables the Kasimir Arcade attract-mode game overlay on the App-Space page (#3009). Off -> page shows the normal track grid. Surfaced on getAppSpaceProgress as appSpaceGameEnabled.',
+    howToChange: featureFlagUpsert('APP_SPACE_GAME_ENABLED', 'flag.appSpaceGame'),
   },
   // ---- Generative UI (research spike #2362) ----
   {

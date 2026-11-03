@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@imgly/background-removal": "^1.7.0",
+    "three": "^0.161.0",
     "@mediapipe/tasks-vision": "^0.10.35",
     "canvas-confetti": "1.9.4",
     "cropperjs": "1.6.2",
