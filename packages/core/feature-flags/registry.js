@@ -352,6 +352,13 @@ export const FEATURE_FLAGS = [
     howToChange: featureFlagUpsert('COMMUNITY_BLOGS_CLASSIFIER_ENABLED', 'flag.community.blogsClassifier'),
   },
   {
+    key: 'COMMUNITY_RSS_USE_CURL', label: 'Community RSS transport: curl vs Khoros', category: 'Content',
+    kind: 'db', imsConfigKey: 'flag.community.rss.useCurl',
+    valueType: 'boolean', default: true, issue: '#3011', status: 'ga',
+    description: 'Selects the transport the SAP Community RSS fetchers (community-blogs-fetch + homepage RSS) use against community.sap.com. ON (default) → curl on the raw /rss/ feeds (borrows a TLS fingerprint Cloudflare passes). OFF → the Khoros LiQL JSON API (/api/2.0/search). Default is ON because Cloudflare now 403-challenges the Khoros API path (#3011). The RSS_TRANSPORT env var, when set to curl/khoros/fetch, overrides this flag (fetch is test-only). DB-driven config (ImsConfig key flag.community.rss.useCurl).',
+    howToChange: featureFlagUpsert('COMMUNITY_RSS_USE_CURL', 'flag.community.rss.useCurl'),
+  },
+  {
     key: 'HOMEPAGE_NEWS_RELEVANCE_ENABLED', label: 'Homepage news relevance scoring', category: 'Content',
     kind: 'db', imsConfigKey: 'flag.homepage.newsRelevance',
     valueType: 'boolean', default: true, issue: '', status: 'ga',
