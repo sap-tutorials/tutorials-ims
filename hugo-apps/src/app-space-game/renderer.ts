@@ -435,10 +435,14 @@ export function createGame(
     // Goal reach check (player-control mode only, for onPickTrack)
     if (playerControl) {
       zoneMeta.forEach((zm, zi) => {
-        const zoneId = model.zones[zi]?.id
+        const zone = model.zones[zi]
+        const zoneId = zone?.id
         if (zoneId && !goalHit.has(zoneId) && !zm.locked && Math.abs(kasX - zm.goalX) < 1.3) {
           goalHit.add(zoneId)
-          opts.onPickTrack(zoneId)
+          // Prefer goal.trackId (set for all goal kinds per buildLevelModel);
+          // fall back to zone.id so every goal-reach always fires a usable id.
+          const trackId = zone.goal.trackId ?? zoneId
+          opts.onPickTrack(trackId)
         }
       })
     }
