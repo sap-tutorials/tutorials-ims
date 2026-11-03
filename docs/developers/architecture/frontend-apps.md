@@ -57,6 +57,7 @@ Compiled by `build:apps` (a single Vite project) into `hugo/static/js/<name>.js`
 | --- | --- | --- |
 | `navigator` | `/` (homepage) | Tutorial navigator with filters and search |
 | `app-space` | `/app-space` | Event-themed Vue SPA (Joule/Sapphire theme overlays); progress via `/api/getEventProgress`, QR via `/api/qrcode`, live updates via Socket.IO |
+| `app-space-game` | `/app-space` (sibling overlay) | Kasimir Arcade (#3009): feature-flagged Three.js 2.5D attract-mode game layered over `app-space`. Idle -> auto-plays; reads the same `getAppSpaceProgress` payload (tracks=zones, tutorials=coins); hands off to the grid via `?track=` + popstate. Three.js is dynamically imported (code-split into the `renderer` chunk); flag/WebGL/data gate falls back to the grid. Does not modify `app-space`. |
 | `event-display` | `/event-display` | Launcher for the standalone display dashboard |
 | `nav-dropdown` | All pages (header) | Mission/group dropdown in the shellbar |
 | `scanner-vue` | `/scanner-vue/` | Vue 3 mobile-optimized scanner using native `BarcodeDetector`, falls back to manual JSON input |
