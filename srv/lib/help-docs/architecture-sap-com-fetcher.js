@@ -140,14 +140,26 @@ function parseFrontmatter(raw) {
 
 // The live Docusaurus site routes a doc by its `slug:` frontmatter when set,
 // served under the `/docs` prefix (slugs are root-absolute, e.g.
-// `/ref-arch/98efa0`). Without a slug it falls back to a path-derived URL —
-// not always what Docusaurus auto-routes, but the best available guess.
+// `/ref-arch/98efa0`). Without a slug it falls back to a path-derived URL.
+//
+// News posts (`news/…`) are served by the Docusaurus BLOG plugin, which routes
+// a dated post `news/YYYY-MM-DD-rest.md` at `/news/YYYY/MM/DD/rest` (the date
+// prefix is expanded into path segments and dropped from the slug). The naive
+// `${SITE_BASE}/news/YYYY-MM-DD-rest` form 404s. Verified live against several
+// posts. Non-dated news files (rare) fall through to the plain path form.
 function buildDocUrl(path, slug) {
   if (slug) {
     const normalized = slug.startsWith('/') ? slug : `/${slug}`;
     return `${SITE_BASE}/docs${normalized}`;
   }
-  return `${SITE_BASE}/${path.replace(/\.mdx?$/, '')}`;
+  const stripped = path.replace(/\.mdx?$/, '');
+  // Blog-plugin date routing: news/YYYY-MM-DD-rest → /news/YYYY/MM/DD/rest
+  const newsMatch = stripped.match(/^news\/(\d{4})-(\d{2})-(\d{2})-(.+)$/);
+  if (newsMatch) {
+    const [, y, m, d, rest] = newsMatch;
+    return `${SITE_BASE}/news/${y}/${m}/${d}/${rest}`;
+  }
+  return `${SITE_BASE}/${stripped}`;
 }
 
 function extractH1(body) {

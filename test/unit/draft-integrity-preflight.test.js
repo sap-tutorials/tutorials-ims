@@ -1,6 +1,9 @@
 // test/unit/draft-integrity-preflight.test.js
 //
-// Unit tests for srv/lib/draft-integrity-preflight.js (#2968).
+// Unit tests for srv/lib/draft-integrity-preflight.js (#2968, rev #2909-fix).
+// checkDraftCascadeConstraints now DISCOVERS the real ADMINSERVICE_*_DRAFTS
+// tables from SYS.TABLE_COLUMNS, then checks which have an ON DELETE CASCADE
+// constraint. The mock dbRun below branches on the SQL to emulate both queries.
 // All tests use mock dbRun — no CAP boot required.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
@@ -10,22 +13,29 @@ import {
   wireDraftIntegrityPreflight,
 } from '../../srv/lib/draft-integrity-preflight.js';
 
-describe('DRAFT_TABLES', () => {
-  it('is a non-empty array of lowercase strings', () => {
+// Realistic sample of discovered draft tables (service-prefixed, uppercase).
+const DISCOVERED = [
+  'ADMINSERVICE_MISSIONS_DRAFTS',
+  'ADMINSERVICE_GROUPS_DRAFTS',
+  'ADMINSERVICE_TUTORIALS_DRAFTS',
+];
+
+// Build a mock dbRun that answers the discovery query with `discovered`
+// and the cascade-constraint query with `cascade`.
+const makeDbRun = (discovered, cascade) => async (sql) => {
+  if (/TABLE_COLUMNS/.test(sql)) {
+    return discovered.map((t) => ({ TABLE_NAME: t }));
+  }
+  if (/REFERENTIAL_CONSTRAINTS/.test(sql)) {
+    return cascade.map((t) => ({ TABLE_NAME: t }));
+  }
+  return [];
+};
+
+describe('DRAFT_TABLES (deprecated export)', () => {
+  it('is still exported as a non-empty array (legacy import compatibility)', () => {
     expect(Array.isArray(DRAFT_TABLES)).toBe(true);
     expect(DRAFT_TABLES.length).toBeGreaterThan(0);
-    for (const t of DRAFT_TABLES) {
-      expect(typeof t).toBe('string');
-      expect(t).toBe(t.toLowerCase());
-    }
-  });
-
-  it('contains the known high-risk draft tables', () => {
-    // These are the tables mentioned in the runbook. If a new draft-enabled
-    // entity is added to AdminService and this test fails, add it to DRAFT_TABLES.
-    expect(DRAFT_TABLES).toContain('com_sap_developers_ims_missions_drafts');
-    expect(DRAFT_TABLES).toContain('com_sap_developers_ims_groups_drafts');
-    expect(DRAFT_TABLES).toContain('com_sap_developers_ims_tutorials_drafts');
   });
 });
 
@@ -33,15 +43,12 @@ describe('isHanaKind', () => {
   it('returns true when cds.db.options.kind is hana', () => {
     expect(isHanaKind({ db: { options: { kind: 'hana' } } })).toBe(true);
   });
-
   it('returns false for sqlite', () => {
     expect(isHanaKind({ db: { options: { kind: 'sqlite' } } })).toBe(false);
   });
-
   it('returns false when cds.db is undefined', () => {
     expect(isHanaKind({})).toBe(false);
   });
-
   it('returns false when cds itself is empty-ish', () => {
     expect(isHanaKind(null)).toBe(false);
     expect(isHanaKind(undefined)).toBe(false);
@@ -49,51 +56,66 @@ describe('isHanaKind', () => {
 });
 
 describe('checkDraftCascadeConstraints', () => {
-  it('returns ok:true when all DRAFT_TABLES have a cascade constraint', async () => {
-    const allRows = DRAFT_TABLES.map(t => ({ TABLE_NAME: t.toUpperCase() }));
-    const result = await checkDraftCascadeConstraints(async () => allRows);
+  it('ok:true when every discovered draft table has a cascade constraint', async () => {
+    const result = await checkDraftCascadeConstraints(makeDbRun(DISCOVERED, DISCOVERED));
     expect(result.ok).toBe(true);
+    expect(result.total).toBe(DISCOVERED.length);
+    expect(result.found).toHaveLength(DISCOVERED.length);
     expect(result.missing).toHaveLength(0);
-    expect(result.found).toHaveLength(DRAFT_TABLES.length);
     expect(result.error).toBeUndefined();
   });
 
-  it('returns ok:false when no constraints exist', async () => {
-    const result = await checkDraftCascadeConstraints(async () => []);
+  it('ok:false and lists missing when some tables lack the constraint', async () => {
+    const result = await checkDraftCascadeConstraints(
+      makeDbRun(DISCOVERED, [DISCOVERED[0]])
+    );
     expect(result.ok).toBe(false);
+    expect(result.total).toBe(DISCOVERED.length);
+    expect(result.found).toEqual([DISCOVERED[0]]);
+    expect(result.missing).toEqual([DISCOVERED[1], DISCOVERED[2]]);
+  });
+
+  it('ok:false with all missing when no constraints exist', async () => {
+    const result = await checkDraftCascadeConstraints(makeDbRun(DISCOVERED, []));
+    expect(result.ok).toBe(false);
+    expect(result.missing).toHaveLength(DISCOVERED.length);
     expect(result.found).toHaveLength(0);
-    expect(result.missing).toHaveLength(DRAFT_TABLES.length);
   });
 
-  it('returns ok:false and lists only missing tables when partial', async () => {
-    const partial = [{ TABLE_NAME: DRAFT_TABLES[0].toUpperCase() }];
-    const result = await checkDraftCascadeConstraints(async () => partial);
-    expect(result.ok).toBe(false);
-    expect(result.found).toHaveLength(1);
-    expect(result.found[0]).toBe(DRAFT_TABLES[0]);
-    expect(result.missing).toHaveLength(DRAFT_TABLES.length - 1);
-    expect(result.missing).not.toContain(DRAFT_TABLES[0]);
-  });
-
-  it('handles case-insensitive TABLE_NAME matching', async () => {
-    // HANA returns uppercase; we store lowercase — ensure the comparison works
-    const rows = DRAFT_TABLES.map(t => ({ TABLE_NAME: t.toUpperCase() }));
-    const result = await checkDraftCascadeConstraints(async () => rows);
+  it('total:0 and ok:true when no draft tables are discovered', async () => {
+    // Nothing to validate -> ok (the served handler warns on total===0 separately)
+    const result = await checkDraftCascadeConstraints(makeDbRun([], []));
+    expect(result.total).toBe(0);
     expect(result.ok).toBe(true);
+    expect(result.missing).toHaveLength(0);
   });
 
-  it('returns ok:false with error property when dbRun throws (fail-open shape)', async () => {
-    const result = await checkDraftCascadeConstraints(async () => { throw new Error('HANA gone'); });
+  it('matches case-insensitively (HANA uppercase vs mixed)', async () => {
+    const run = async (sql) => {
+      if (/TABLE_COLUMNS/.test(sql)) return [{ TABLE_NAME: 'adminservice_missions_drafts' }];
+      if (/REFERENTIAL_CONSTRAINTS/.test(sql)) return [{ TABLE_NAME: 'ADMINSERVICE_MISSIONS_DRAFTS' }];
+      return [];
+    };
+    const result = await checkDraftCascadeConstraints(run);
+    expect(result.ok).toBe(true);
+    expect(result.found).toEqual(['ADMINSERVICE_MISSIONS_DRAFTS']);
+  });
+
+  it('ok:false with error property when dbRun throws (fail-open shape)', async () => {
+    const result = await checkDraftCascadeConstraints(async () => {
+      throw new Error('HANA gone');
+    });
     expect(result.ok).toBe(false);
     expect(result.error).toBe('HANA gone');
     expect(result.found).toHaveLength(0);
-    expect(result.missing).toHaveLength(DRAFT_TABLES.length);
+    expect(result.total).toBe(0);
   });
 
-  it('treats null/undefined rows result as empty (no crash)', async () => {
+  it('treats null rows result as empty (no crash)', async () => {
     const result = await checkDraftCascadeConstraints(async () => null);
-    expect(result.ok).toBe(false);
-    expect(result.found).toHaveLength(0);
+    // discovery returned null -> no tables -> total 0, ok true, no throw
+    expect(result.total).toBe(0);
+    expect(result.ok).toBe(true);
   });
 });
 
@@ -103,9 +125,14 @@ describe('wireDraftIntegrityPreflight sentinel', () => {
   const makeFakeCds = () => ({
     db: {
       options: { kind: 'hana' },
-      run: async () => { dbRunCalls++; return []; },
+      run: async () => {
+        dbRunCalls++;
+        return [];
+      },
     },
-    on: (event, fn) => { if (event === 'served') void fn(); },
+    on: (event, fn) => {
+      if (event === 'served') void fn();
+    },
     log: () => ({ warn: () => {}, info: () => {} }),
   });
 
@@ -121,16 +148,16 @@ describe('wireDraftIntegrityPreflight sentinel', () => {
     const fakeCds = makeFakeCds();
     wireDraftIntegrityPreflight(fakeCds);
     wireDraftIntegrityPreflight(fakeCds);
-    // One microtask tick to let async handler settle
-    await new Promise(r => setTimeout(r, 0));
-    expect(dbRunCalls).toBeLessThanOrEqual(1);
+    await new Promise((r) => setTimeout(r, 0));
+    // One served handler -> at most the two discovery+constraint queries for ONE run
+    expect(dbRunCalls).toBeLessThanOrEqual(2);
   });
 
   it('skips the DB query entirely when kind is not hana', async () => {
     const fakeCds = makeFakeCds();
     fakeCds.db.options.kind = 'sqlite';
     wireDraftIntegrityPreflight(fakeCds);
-    await new Promise(r => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
     expect(dbRunCalls).toBe(0);
   });
 });

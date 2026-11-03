@@ -58,7 +58,14 @@ describeIf('asset retention', () => {
     async function worker() {
       while (cursor < manifest.length) {
         const { file } = manifest[cursor++];
-        const kind = file.endsWith('.css') ? 'css' : 'js';
+        // Serving path is NOT a pure function of the file extension. Vite emits
+        // each island's CSS sidecar into the JS output tree under `assets/`
+        // (hugo/static/js/assets/<name>-<hash>.css), so an `assets/`-prefixed
+        // bundle — even a `.css` one — ships at /js/assets/… , never /css/… .
+        // Deriving kind from the extension alone probed /css/assets/*.css and
+        // 404'd on healthy deploys (false positive). Only top-level `.css`
+        // (Hugo-fingerprinted) bundles live under /css/.
+        const kind = file.startsWith('assets/') ? 'js' : (file.endsWith('.css') ? 'css' : 'js');
         const r = await fetchWithRetry(`${BASE_URL}/${kind}/${file}`, { method: 'HEAD', redirect: 'follow' });
         if (r.status !== 200) failures.push(`${file} → ${r.status}`);
       }

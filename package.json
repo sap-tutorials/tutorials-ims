@@ -59,6 +59,7 @@
     "export:advocates": "cds bind --exec -- node scripts/export-advocates.cjs",
     "import:advocates": "cds bind --exec -- node scripts/import-advocates.cjs",
     "backfill-categories": "node scripts/backfill-categories.cjs",
+    "backfill-completion-path-order": "cds bind --exec -- node scripts/backfill-completion-path-order.cjs",
     "kg:reextract": "cross-env KG_EXTRACT_BUILD_CAP=10000 cds bind --exec -- node scripts/kg-reextract.cjs",
     "seed-channels": "cds bind --exec -- node scripts/seed-channels.cjs",
     "promote-channels": "cds bind --exec -- node scripts/promote-channels-to-shelves.cjs",
@@ -458,7 +459,7 @@
       "fuzzy": false
     },
     "fiori": {
-      "draft_admin_integrity": true
+      "draft_admin_integrity": false
     },
     "websocket": {
       "kind": "socket.io",

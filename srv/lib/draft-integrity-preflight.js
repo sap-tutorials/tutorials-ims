@@ -19,7 +19,12 @@
 // Authoritative list of draft-enabled entity table names (lowercase).
 // Source: all entities with @odata.draft.enabled: true in AdminService,
 // mapped to their underlying HANA table name (dots → underscores + _drafts).
-// If a new draft-enabled entity is added to AdminService, add its entry here.
+// DEPRECATED — no longer used by checkDraftCascadeConstraints, which now
+// discovers the real `ADMINSERVICE_<ENTITY>_DRAFTS` tables from SYS.TABLES at
+// runtime. These `com_sap_developers_ims_*_drafts` names never matched any
+// deployed table (the check reported them all "missing" and validated nothing).
+// Retained only for the existing unit test's import; safe to delete once that
+// test is updated.
 export const DRAFT_TABLES = [
   'com_sap_developers_ims_tutorials_drafts',
   'com_sap_developers_ims_missions_drafts',
@@ -60,29 +65,52 @@ export function isHanaKind(cds) {
 }
 
 /**
- * Query SYS.REFERENTIAL_CONSTRAINTS for ON DELETE CASCADE FKs on draft tables.
+ * Query SYS.REFERENTIAL_CONSTRAINTS for ON DELETE CASCADE FKs on draft tables,
+ * comparing against the draft tables ACTUALLY present in the schema.
+ *
+ * The real draft shadow tables are named `ADMINSERVICE_<ENTITY>_DRAFTS`
+ * (service-prefixed, uppercased) — NOT the entity-DB names. An earlier
+ * hardcoded `com_sap_developers_ims_*_drafts` list never matched any real
+ * table, so the check silently reported 26/26 "missing" and validated nothing.
+ * We now discover the draft tables from SYS.TABLES at runtime so the list can
+ * never drift out of sync with the deployed schema.
  *
  * Pure: receives dbRun as a parameter so it can be tested without booting CAP.
  *
  * @param {(sql: string) => Promise<any[]>} dbRun
- * @returns {Promise<{ok: boolean, found: string[], missing: string[], error?: string}>}
+ * @returns {Promise<{ok: boolean, found: string[], missing: string[], total: number, error?: string}>}
  */
 export async function checkDraftCascadeConstraints(dbRun) {
   try {
-    const rows = await dbRun(
+    // 1. Discover the draft tables that actually exist in this schema, and
+    //    that carry the DraftAdministrativeData FK column (i.e. real draft
+    //    shadow tables, not child comps without the FK).
+    const draftTableRows = await dbRun(
+      `SELECT c.TABLE_NAME FROM SYS.TABLE_COLUMNS c` +
+      `  JOIN SYS.TABLES t ON t.SCHEMA_NAME = c.SCHEMA_NAME AND t.TABLE_NAME = c.TABLE_NAME` +
+      ` WHERE c.SCHEMA_NAME = CURRENT_SCHEMA` +
+      `   AND c.TABLE_NAME LIKE '%\\_DRAFTS' ESCAPE '\\'` +
+      `   AND c.COLUMN_NAME = 'DRAFTADMINISTRATIVEDATA_DRAFTUUID'`
+    );
+    const draftTables = (draftTableRows || []).map(r => String(r.TABLE_NAME).toUpperCase());
+
+    // 2. Which of those have an ON DELETE CASCADE FK on the DraftUUID column.
+    const cascadeRows = await dbRun(
       `SELECT TABLE_NAME FROM SYS.REFERENTIAL_CONSTRAINTS` +
       ` WHERE COLUMN_NAME = 'DRAFTADMINISTRATIVEDATA_DRAFTUUID'` +
       `   AND DELETE_RULE = 'CASCADE'`
     );
-    const foundSet = new Set((rows || []).map(r => String(r.TABLE_NAME).toLowerCase()));
-    const found = DRAFT_TABLES.filter(t => foundSet.has(t));
-    const missing = DRAFT_TABLES.filter(t => !foundSet.has(t));
-    return { ok: missing.length === 0, found, missing };
+    const cascadeSet = new Set((cascadeRows || []).map(r => String(r.TABLE_NAME).toUpperCase()));
+
+    const found = draftTables.filter(t => cascadeSet.has(t));
+    const missing = draftTables.filter(t => !cascadeSet.has(t));
+    return { ok: missing.length === 0, found, missing, total: draftTables.length };
   } catch (err) {
     return {
       ok: false,
       found: [],
-      missing: [...DRAFT_TABLES],
+      missing: [],
+      total: 0,
       error: err?.message ?? String(err),
     };
   }
@@ -109,11 +137,17 @@ export function wireDraftIntegrityPreflight(cds) {
           `[draft-integrity-preflight] DB error querying SYS.REFERENTIAL_CONSTRAINTS (fail-open):`,
           result.error
         );
+      } else if (result.total === 0) {
+        log.warn(
+          `[draft-integrity-preflight] no draft shadow tables with a` +
+          ` DraftAdministrativeData FK were found in the schema — cannot verify` +
+          ` cascade constraints. If drafts are expected, check the schema name.`
+        );
       } else if (!result.ok) {
         log.warn(
           `[draft-integrity-preflight] cds.fiori.draft_admin_integrity is ON but` +
           ` ON DELETE CASCADE constraints are missing on HANA for` +
-          ` ${result.missing.length}/${DRAFT_TABLES.length} draft tables.` +
+          ` ${result.missing.length}/${result.total} draft tables.` +
           ` Missing: ${result.missing.join(', ')}.` +
           ` Deploy the HDI constraints (.hdbconstraint) before drafts are created` +
           ` or activated on this environment, then restart.`
@@ -121,7 +155,7 @@ export function wireDraftIntegrityPreflight(cds) {
       } else {
         log.info(
           `[draft-integrity-preflight] draft cascade constraints verified` +
-          ` (${result.found.length}/${DRAFT_TABLES.length}).`
+          ` (${result.found.length}/${result.total}).`
         );
       }
     } catch (err) {

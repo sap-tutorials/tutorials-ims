@@ -13,9 +13,29 @@ cds.on('bootstrap', (app) => {
   app.disable('x-powered-by');
 
   app.get('/healthz', (_req, res) => res.json({ status: 'ok', channel: 'qa' }));
+  // #2975 readiness gate: the MTA sets srv-qa's CF startup health check to
+  // http /health/ready (parity with tutorials-srv). srv-qa has NO scheduler,
+  // so readiness here is DB-only: ready ⇔ the HANA connection answers a ping.
+  // Dialect-safe: HANA rejects a bare `SELECT 1` (needs FROM DUMMY); SQLite
+  // rejects FROM DUMMY. Without this route CF's probe 404s and srv-qa
+  // crash-loops, aborting the whole MTA deploy (observed 2026-11-02).
+  app.get('/health/ready', async (_req, res) => {
+    let dbOk = false;
+    if (cds.db) {
+      const ping = cds.db.kind === 'hana' ? 'SELECT 1 FROM DUMMY' : 'SELECT 1';
+      try { await cds.db.run(ping); dbOk = true; }
+      catch (_err) { dbOk = false; }
+    }
+    res.status(dbOk ? 200 : 503).json({
+      status: dbOk ? 'ready' : 'not-ready',
+      channel: 'qa',
+      db: dbOk ? 'connected' : 'error',
+      timestamp: new Date().toISOString(),
+    });
+  });
   app.get('/health/db', async (_req, res) => {
     try {
-      await cds.db?.run('SELECT 1 FROM DUMMY');
+      await cds.db?.run(cds.db?.kind === 'hana' ? 'SELECT 1 FROM DUMMY' : 'SELECT 1');
       res.json({ status: 'ok', db: 'connected' });
     } catch (err) {
       console.error('[health/db][qa]', err.message);

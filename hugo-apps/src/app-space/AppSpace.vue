@@ -101,7 +101,7 @@ interface ForkSegment {
 type AppSpaceSegment = LinearSegment | ClusterSegment | ForkSegment
 
 interface AppSpaceTrack {
-  id: number
+  id: string
   title: string
   description: string
   items: AppSpaceItem[]
@@ -508,7 +508,7 @@ function itemStatusClass(track: AppSpaceTrack, index: number): string {
 // refresh restores the detail view and the browser back/forward buttons
 // move between the track list and a track. Existing params (eventId, theme)
 // are preserved; `track` is only added/removed.
-function trackUrl(trackId: number | null): string {
+function trackUrl(trackId: string | null): string {
   const params = new URLSearchParams(window.location.search)
   if (trackId === null) params.delete('track')
   else params.set('track', String(trackId))
@@ -535,10 +535,12 @@ function syncTrackFromUrl() {
     selectedTrack.value = null
     return
   }
-  const id = Number(raw)
+  // Track id is the CompletionPaths UUID string — compare as-is. (Previously
+  // Number(raw) coerced it to NaN for UUIDs, so the detail view never
+  // restored on refresh/back — the TechEd Texas regression.)
   // A stale/unknown id (deleted track, hand-edited URL) falls back to the
   // list rather than throwing — degrade gracefully.
-  selectedTrack.value = tracks.value.find(t => t.id === id) ?? null
+  selectedTrack.value = tracks.value.find(t => t.id === raw) ?? null
 }
 
 // Keep state in sync with browser back/forward. Registered synchronously in

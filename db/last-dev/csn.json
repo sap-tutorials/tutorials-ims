@@ -1298,6 +1298,10 @@
           "type": "cds.String",
           "length": 255,
           "@cds.persistence.name": "SLUG"
+        },
+        "pathOrder": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "PATHORDER"
         }
       },
       "$tableConstraints": {
@@ -4522,7 +4526,7 @@
     "flavor": "inferred",
     "sap.changelog.enhanced": true,
     "minified": true,
-    "build": "CDS Build v10.1.0"
+    "build": "CDS Build v10.2.2"
   },
   "$version": "2.0"
 }

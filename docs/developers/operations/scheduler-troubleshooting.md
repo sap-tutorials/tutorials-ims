@@ -126,6 +126,8 @@ UPDATE COM_SAP_DEVELOPERS_IMS_PIPELINELOG
 
 The most severe mode: **every** scheduled job shows stale/overdue on `/admin-ui/#board` at once, none dispatch, yet **manual Run-now still works**. First observed in PROD on 2026-10-12.
 
+> **Before you trust a "scheduler is dead" signal:** a `JobLastRun` row named `__scheduler_selfheal__` is **not** a tracked job and reads as permanently stale — ignore it, and verify liveness by scheduled jobs advancing since boot (see [Self-heal liveness](#self-heal-liveness--do-not-read-it-off-a-joblastrun-row-2983)). #2983.
+
 ### How to recognise it
 
 - The board shows **all** (not one) jobs overdue — `Last success` stale across the board, next-fire times in the past.
@@ -155,7 +157,7 @@ Deleting the stuck `processing` row (Force-unwedge / the HANA escape hatch above
 Since #2782, every srv boot arms a **tombstone reaper** (`srv/lib/scheduler-reaper.js`, from `CronService.init()`). It targets the root cause directly: the NULL-`lastAttemptTimestamp` `processing` rows CAP's lease can never reclaim.
 
 - **Boot sweep.** Right after init, a deferred `reapTombstonedOutboxRows()` pass clears any tombstone left by the instance that just cut over.
-- **Periodic self-heal.** Every ~10 min (`SCHEDULER_SELFHEAL_INTERVAL_MS`) a single `.unref()`'d timer re-reaps — a tombstone can be created *after* an instance booted, which the boot sweep can't catch — **and** runs an **alert-only** canary check (`metrics-rollup` `*/5`, `kg-ondemand-drain` `*/2`): if **both** are stale past the grace window it raises a `SchedulerStallDetected` **ALERT**. There is **no `process.exit`** — the reaper is the recovery, the alert is just the signal.
+- **Periodic self-heal.** Every ~10 min (`SCHEDULER_SELFHEAL_INTERVAL_MS`) a single `.unref()`'d timer runs, on every tick: (1) `reapTombstonedOutboxRows()` (clears NULL-`lastAttemptTimestamp` tombstones), (2) `reseedMissingSuccessorRows()` (#2827, re-seeds jobs with zero rows), (3) a documented `cds.flush()` (#2975, drains ready `status=NULL` rows the idle CAP 10.2 runner stopped polling — see "processor-idle" below), and (4) a canary check (`metrics-rollup` `*/5`, `kg-ondemand-drain` `*/2`): if **both** are stale past the grace window it raises a `SchedulerStallDetected` **ALERT**. There is **no `process.exit`** — passes 1–3 are the active recovery; the canary alert is the signal of last resort (fires only if those three didn't clear it this tick).
 - **What the reaper deletes.** Only rows at `status='processing'` that are genuinely **stale** per `scheduler-wedge.isRowStale` (the 60-min floor + cron-period rule). A legitimately long-running job (e.g. `extractConcepts` ~40 min) inside the floor is **never** reaped; a pending `status=NULL` future row is never touched. Deleting (rather than nulling status) lets the next `CronService.init()` `.every().as()` UPSERT — or the next healthy tick — re-seed a fresh future row; nulling status would instead make CAP immediately **retry** the dead row.
 - **HANA-HA-failover fast path (#2814).** #2782's fast recovery assumed the tombstone always coincided with an app restart (blue-green cutover → boot sweep). A **HANA HA failover** (uptime patch / standby takeover) tombstones the same row **without** bouncing srv, so neither `init()` nor the boot sweep re-runs — leaving only the periodic reaper, which used to wait out the full 60-min floor (~70 min total stall). The reaper now cross-checks each stuck job's `PipelineLog` (`loadRunningScheduledJobNames`): a `processing` row whose job has **no RUNNING `SCHEDULED_JOB` `PipelineLog` row** is not actually in-flight, so it is reaped **regardless of age** (recovery within one ~10-min reaper tick, no manual restart). A row whose job **does** have a RUNNING `PipelineLog` row is protected at **any** age — even past the floor — so a genuinely long run is never reaped mid-flight. If both the outbox tombstone **and** an orphaned RUNNING `PipelineLog` row linger (a handler that died after writing its RUNNING row), the RUNNING row vetoes the fast path until `reconcileOrphanedRunningJobs` closes it at the 60-min floor — recovery then matches the pre-#2814 timing (no worse).
 - **Fail-open throughout.** A missing entity, DB fault, or a single row's DELETE throwing never aborts the pass, never kills the timer, and never fails a scheduled tick. The #2814 `PipelineLog` lookup is fail-open too: if it can't be read it falls back to **floor-only** reaping — never reaps more aggressively on error. Enabled on CF, off locally (`SCHEDULER_HEALTHCHECK_ENABLED` overrides).
@@ -173,9 +175,59 @@ Since #2827, the same ~10-min self-heal tick that runs the reaper now also runs 
 - **Fail-open throughout.** A missing outbox entity, a faulting queue SELECT, one job's `reseedJob` UPSERT throwing, or no callback at all never aborts the pass, never kills the timer, and never fails a scheduled tick.
 
 
-- **Knobs** (default-safe): `SCHEDULER_HEALTHCHECK_ENABLED` (on in CF, off locally), `SCHEDULER_HEALTHCHECK_GRACE_MS` (default 6 min, canary staleness), `SCHEDULER_SELFHEAL_INTERVAL_MS` (default 10 min, reaper cadence).
+### Automatic recovery — idle-runner drain via `cds.flush()` (#2975)
 
-If the `SchedulerStallDetected` alert fires but the board **still** shows all jobs overdue after a couple of reaper ticks, fall back to the manual rolling restart below.
+The reaper (#2782/#2814) and re-seeder (#2827) both act on **row-data states** — a `processing` tombstone, or a job with zero rows. But there is a third stall mode where the **data is perfectly healthy** and only the live in-memory processor is idle:
+
+- **The signature: processor idle, queue healthy.** CAP 10.2's in-memory outbox runner does **one boot flush** on `cds.on('listening')`, then keeps draining only via an **event-driven re-trigger chain** (each `succeeded` context plans the next poll). The periodic `setInterval(_flush, flushInterval)` is only a **fallback wakeup**, and `flushInterval` defaults to **`'1h'`** (undocumented, not a supported `cds.requires.queue` option — do **not** set it). A blue-green cutover SIGTERMs the draining instance and breaks that chain mid-flight; the surviving/new instance re-arms its own interval and does its boot flush, but if the event chain doesn't carry forward, the **only guaranteed next wakeup is the 1h fallback**. Every job's row stays at a healthy `status=NULL` future tick — **nothing is consuming them** — for up to ~60 min. There is no tombstone to reap and no missing row to re-seed, so passes 1 and 2 are both no-ops. A manual `cf restart-app-instance` "works" only because it forces a fresh `listening` → one boot flush; it re-arms nothing the 1h timer wouldn't eventually hit.
+  - **Observed on PROD 2026-11-02:** both instances booted 13:01, `metrics-rollup` (`*/5`) ticked once at boot, then the 13:05 and 13:15 fires **no-showed** with the row stuck at `status=NULL` and **no queue error**. (Also matches 2026-11-01: stalled at the 20:16 deploy boot, recovered at the 21:01 manual restart — ~45 min in, i.e. the restart beat the 1h timer.)
+- **What it does.** On every ~10-min self-heal tick, call the **documented** `cds.flush()`. This forces the outbox runner to process all ready messages immediately — idempotent (drains what's ready, no-op otherwise), so calling it unconditionally every tick is safe. This bounds post-deploy drain latency to **≤ one self-heal interval (~10 min)** regardless of whether the runner's event chain re-armed, with **no manual restart** — even when the reaper and re-seeder find nothing to do. Uses only public CAP API (no `flushInterval` tweak).
+- **Fail-open.** A `flush()` fault is logged and swallowed — it never skips the canary check, never kills the timer, and never fails a scheduled tick. Injectable (`opts.flush`) for the SQLite unit test.
+#### Readiness gate (#2975 Fault A)
+
+CF blue-green cuts over the instant green's TCP port accepts connections — `cds.on('listening')` fires — not when the scheduler is wired. There are three meaningful boot states:
+
+1. **Port open** — TCP accepts connections; `cds.on('listening')` has fired. Scheduler _not_ yet started. This is the old default; CF retired blue here.
+2. **Scheduler wired + DB connected** — `CronService.init()` has completed (schedules registered, tombstone reaper + self-heal armed, boot sweep queued) **and** a `SELECT 1` DB ping succeeds. The outbox queue will drain within one self-heal interval.
+3. **Actually draining** — the first `cds.flush()` inside `armSchedulerSelfHeal` has completed and jobs are ticking. Unreachable synchronously at boot (even the fastest canary, `kg-ondemand-drain` at `1-59/2`, only ticks every ~2 min — gating on a real drain would make CF kill healthy freshly-booted green instances).
+
+The gate asserts **state 2**, not state 3. That is sufficient: combined with the `cds.flush()` self-heal (see above), the first drain lands within ≤ one self-heal interval (~10 min) after state 2 is reached.
+
+**`/health/ready` contract** — anonymous `GET /health/ready`, registered before auth middleware in `srv/server.js`:
+- Returns **200** when `isSchedulerReady()` (latch in `srv/lib/scheduler-ready.js`, flipped by `markSchedulerReady()` at the end of `CronService.init()`) **and** a live `SELECT 1` DB ping succeeds.
+- Returns **503** otherwise (port open but scheduler not yet wired, or DB unreachable).
+
+**MTA wiring** — `tutorials-srv` and `tutorials-srv-qa` in **both** `.deploy/mta.yaml` and root `mta.yaml`:
+```yaml
+health-check-type: http
+health-check-http-endpoint: /health/ready
+health-check-invocation-timeout: 10
+timeout: 180
+```
+`timeout: 180` gives the cold-HANA init loop (DB connection + schema bootstrap) time to complete before CF declares the deploy failed. `mta-mcp.yaml` is intentionally excluded — the MCP MTA has no scheduler.
+
+**How it composes with the flush self-heal:**
+- **Gate closes Fault A** — CF will not retire the blue instance until green has reached state 2 (scheduler wired + DB connected). The SIGTERM-mid-tick race window shrinks from "any time after port-open" to "only after the scheduler is fully armed".
+- **Flush closes Fault B** — even with the gate, the event-driven re-trigger chain may not re-arm after a SIGTERM. The `cds.flush()` on every ~10-min self-heal tick bounds drain latency to ≤ one interval, no manual restart required.
+
+
+
+If the `SchedulerStallDetected` alert fires but the board **still** shows all jobs overdue after a couple of self-heal ticks (reaper + re-seed + `cds.flush()` all ran and none cleared it), fall back to the manual rolling restart below.
+
+### Self-heal liveness — do NOT read it off a `JobLastRun` row (#2983)
+
+The self-heal timer (`armSchedulerSelfHeal`, `srv/lib/scheduler-reaper.js`) is a plain `.unref()`'d `setInterval` — reap tombstones + #2827 re-seed + #2975 `cds.flush()` + alert-only canary. It is **not** a `runWithLock` job and **never writes a `JobLastRun` row**. There is no `__scheduler_selfheal__` tracked job.
+
+- **Verify self-heal liveness by whether scheduled jobs are advancing since boot** — a couple of fresh `SCHEDULED_JOB` SUCCESS rows for the high-frequency jobs (`kg-ondemand-drain` `*/2`, `metrics-rollup` `*/5`) within ~5 min (the "Verify recovery" query below), **not** by any self-heal `lastSuccessAt`.
+- **Ignore / exclude `__scheduler_selfheal__` from any JobLastRun-sorted "overdue" view.** If a `JobLastRun` row named `__scheduler_selfheal__` is present it is a **dead orphan from a previous self-heal implementation** (removed by #2983). No running code advances it, so it will read as permanently stale — it is **not** evidence the scheduler is down. A false "scheduler is dead" verification after the #2975 PROD deploy was caused by exactly this row. If you still see it, delete it (one-time cleanup — see below); nothing re-creates it.
+
+**One-time cleanup** (safe on any env — guarded, idempotent, no-op if the row is absent):
+
+```bash
+cf target                                    # MUST confirm the intended space before PROD
+cds bind --exec -- node scripts/cleanup-selfheal-orphan.cjs    # dry-run: prints the row if present
+cds bind --exec -- node scripts/cleanup-selfheal-orphan.cjs --delete   # delete it
+```
 
 ### Recovery — rolling restart (manual)
 

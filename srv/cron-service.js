@@ -17,6 +17,7 @@ import {
 } from './jobs/scheduler.js';
 import { reconcileOrphanedRunningJobs } from './lib/pipeline-log-reconciler.js';
 import { reapTombstonedOutboxRows, armSchedulerSelfHeal } from './lib/scheduler-reaper.js';
+import { markSchedulerReady } from './lib/scheduler-ready.js';
 
 const LOG = cds.log('cron-service');
 
@@ -102,6 +103,9 @@ export default class CronService extends cds.ApplicationService {
     const reseedJob = (jobName, cron) =>
       this.schedule(`cron.${jobName}`, {}).every(cron).as(jobName);
     armSchedulerSelfHeal({ jobSchedules, reseedJob });
+
+    // #2975 Fault A: readiness gate — mark scheduler ready after schedules registered + self-heal armed
+    markSchedulerReady();
 
     await super.init();
   }

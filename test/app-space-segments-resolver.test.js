@@ -156,7 +156,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('fork path has 3 segments with kinds [linear, fork, linear]', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${FORK_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008060);
+    const path = data.paths.find(p => p.id === FORK_PATH_ID);
     expect(path).toBeDefined();
     expect(path.segments).toBeDefined();
     expect(path.segments).toHaveLength(3);
@@ -165,7 +165,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('fork segment has 2 lanes labeled MCP and Agents (from Groups.title)', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${FORK_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008060);
+    const path = data.paths.find(p => p.id === FORK_PATH_ID);
     const forkSeg = path.segments.find(s => s.kind === 'fork');
     expect(forkSeg).toBeDefined();
     expect(forkSeg.lanes).toHaveLength(2);
@@ -176,7 +176,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('MCP lane contains its child tutorials', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${FORK_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008060);
+    const path = data.paths.find(p => p.id === FORK_PATH_ID);
     const forkSeg = path.segments.find(s => s.kind === 'fork');
     const mcpLane = forkSeg.lanes.find(l => l.label === 'MCP');
     expect(mcpLane).toBeDefined();
@@ -187,7 +187,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('MCP lane ends with a synthetic CHECKPOINT (from prize_ID)', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${FORK_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008060);
+    const path = data.paths.find(p => p.id === FORK_PATH_ID);
     const forkSeg = path.segments.find(s => s.kind === 'fork');
     const mcpLane = forkSeg.lanes.find(l => l.label === 'MCP');
     const lastItem = mcpLane.items[mcpLane.items.length - 1];
@@ -196,7 +196,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('Agents lane has no synthetic CHECKPOINT (no prize)', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${FORK_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008060);
+    const path = data.paths.find(p => p.id === FORK_PATH_ID);
     const forkSeg = path.segments.find(s => s.kind === 'fork');
     const agentsLane = forkSeg.lanes.find(l => l.label === 'Agents');
     expect(agentsLane).toBeDefined();
@@ -205,7 +205,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('linear segment at Order 10 has the Setup tutorial', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${FORK_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008060);
+    const path = data.paths.find(p => p.id === FORK_PATH_ID);
     const setupSeg = path.segments.find(s => s.order === 10);
     expect(setupSeg.kind).toBe('linear');
     expect(setupSeg.items).toHaveLength(1);
@@ -214,7 +214,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('linear segment at Order 30 has the CHECKPOINT', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${FORK_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008060);
+    const path = data.paths.find(p => p.id === FORK_PATH_ID);
     const cpSeg = path.segments.find(s => s.order === 30);
     expect(cpSeg.kind).toBe('linear');
     expect(cpSeg.items).toHaveLength(1);
@@ -224,7 +224,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('flat items array is still present (backwards compat)', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${FORK_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008060);
+    const path = data.paths.find(p => p.id === FORK_PATH_ID);
     expect(Array.isArray(path.items)).toBe(true);
     // items should contain the tutorials (flat, existing behavior)
     expect(path.items.length).toBeGreaterThan(0);
@@ -234,7 +234,7 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
 
   it('lone GROUP at an order produces a linear segment with expanded tutorials (no lane wrapper)', async () => {
     const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${LONE_EVENT_ID})`);
-    const path = data.paths.find(p => p.id === 10008061);
+    const path = data.paths.find(p => p.id === LONE_PATH_ID);
     expect(path).toBeDefined();
     expect(path.segments).toBeDefined();
     expect(path.segments).toHaveLength(1);
@@ -249,5 +249,68 @@ describe('App-Space segments: fork lanes + synthetic prize CHECKPOINT + lone-GRO
     expect(titles).toContain(TUT_LONE_B.title);
     // No GROUP cards, only TUTORIAL cards
     expect(seg.items.every(i => i.type === 'TUTORIAL')).toBe(true);
+  });
+});
+
+// #2990 — getAppSpaceProgress returns paths in pathOrder (NULL last via coalesce), then name.
+// Three paths: name order (Z→M→A) differs from pathOrder (3→null→1).
+// Coalesce sentinel (NULL→999999): A Path (1), M Path (3), Z Path (null→last).
+// This assertion pins NULL-last behavior — it FAILS under plain .orderBy('pathOrder','name')
+// on SQLite where NULLs sort first, proving the coalesce fix is needed.
+describe('App-Space path ordering by pathOrder, NULL last (#2990)', () => {
+  const PO_EVENT_ID   = 10002991;
+  const PO_MISSION_ID = '11111111-2990-aaaa-0000-000000000001';
+  const PO_EVENT_UUID = 'eeeeeeee-2990-aaaa-0000-000000000001';
+  const PO_PATH_A_ID  = '22222222-2990-aaaa-0000-000000000001'; // name='A Path', pathOrder=1
+  const PO_PATH_M_ID  = '22222222-2990-aaaa-0000-000000000002'; // name='M Path', pathOrder=3
+  const PO_PATH_Z_ID  = '22222222-2990-aaaa-0000-000000000003'; // name='Z Path', pathOrder=null
+  const PO_TUT_ID     = 'cccccccc-2990-aaaa-0000-000000000001';
+
+  beforeAll(async () => {
+    const { Events, Missions, CompletionPaths, CompletionPathItems, Tutorials } =
+      cds.entities('com.sap.developers.ims');
+
+    await INSERT.into(Tutorials).entries({
+      ID: PO_TUT_ID, legacyId: 10002980, slug: 'po-tut-2990', title: 'PO Tutorial',
+    });
+    await INSERT.into(Missions).entries({
+      ID: PO_MISSION_ID, legacyId: 10002990, title: 'PO Mission',
+      slug: 'po-mission-2990', description: 'Path order mission', published: true,
+    });
+    await INSERT.into(Events).entries({
+      ID: PO_EVENT_UUID, legacyId: PO_EVENT_ID,
+      name: 'PO Test Event', eventType: 'OTHER', mission_ID: PO_MISSION_ID,
+    });
+    await INSERT.into(CompletionPaths).entries([
+      { ID: PO_PATH_A_ID, legacyId: 10002991, name: 'A Path', mission_ID: PO_MISSION_ID, pathOrder: 1 },
+      { ID: PO_PATH_M_ID, legacyId: 10002992, name: 'M Path', mission_ID: PO_MISSION_ID, pathOrder: 3 },
+      { ID: PO_PATH_Z_ID, legacyId: 10002993, name: 'Z Path', mission_ID: PO_MISSION_ID, pathOrder: null },
+    ]);
+    // One item per path so all three paths appear in the response.
+    await INSERT.into(CompletionPathItems).entries([
+      { ID: 'dddddddd-2990-aaaa-0000-000000000001', path_ID: PO_PATH_A_ID, itemOrder: 1, taskType: 'TUTORIAL', tutorial_ID: PO_TUT_ID },
+      { ID: 'dddddddd-2990-aaaa-0000-000000000002', path_ID: PO_PATH_M_ID, itemOrder: 1, taskType: 'TUTORIAL', tutorial_ID: PO_TUT_ID },
+      { ID: 'dddddddd-2990-aaaa-0000-000000000003', path_ID: PO_PATH_Z_ID, itemOrder: 1, taskType: 'TUTORIAL', tutorial_ID: PO_TUT_ID },
+    ]);
+  });
+
+  afterAll(async () => {
+    const { Events, Missions, CompletionPaths, CompletionPathItems, Tutorials } =
+      cds.entities('com.sap.developers.ims');
+    await DELETE.from(CompletionPathItems).where({
+      path_ID: { in: [PO_PATH_A_ID, PO_PATH_M_ID, PO_PATH_Z_ID] }
+    });
+    await DELETE.from(CompletionPaths).where({ ID: { in: [PO_PATH_A_ID, PO_PATH_M_ID, PO_PATH_Z_ID] } });
+    await DELETE.from(Events).where({ legacyId: PO_EVENT_ID });
+    await DELETE.from(Missions).where({ ID: PO_MISSION_ID });
+    await DELETE.from(Tutorials).where({ ID: PO_TUT_ID });
+  });
+
+  it('returns paths ordered by pathOrder asc then name; NULL pathOrder sorts LAST (coalesce sentinel)', async () => {
+    const { data } = await project.get(`/api/getAppSpaceProgress(eventLegacyId=${PO_EVENT_ID})`);
+    expect(data.paths).toHaveLength(3);
+    // Coalesce: A Path (1), M Path (3), Z Path (null → sorts last)
+    // Would be ['Z Path','A Path','M Path'] under plain orderBy on SQLite — wrong on HANA.
+    expect(data.paths.map(p => p.title)).toEqual(['A Path', 'M Path', 'Z Path']);
   });
 });
