@@ -5,6 +5,7 @@ import { useConfetti } from '../composables/useConfetti'
 import { checkpointBarcodeUrl as _checkpointBarcodeUrl, shouldShowCheckpointBarcode as _shouldShowCheckpointBarcode } from './checkpoint-barcode'
 import { isItemUnlocked as _isItemUnlocked, isTutorialOpenable as _isTutorialOpenable } from './app-space-gating'
 import type { GatingItem } from './app-space-gating'
+import { trackTotalTime } from './app-space-time'
 
 // ── Configuration ─────────────────────────────────────────────────
 const eventId = ref<number | null>(null)
@@ -393,10 +394,9 @@ function completedCount(track: AppSpaceTrack): number {
   return tutorialItems(track).filter(i => i.status === 'COMPLETED').length
 }
 
-function trackTotalTime(track: AppSpaceTrack): number {
-  if (hasSegments(track)) return segmentTutorials(track).reduce((sum, i) => sum + i.timeToComplete, 0)
-  return tutorialItems(track).reduce((sum, i) => sum + i.timeToComplete, 0)
-}
+// #3007: trackTotalTime now lives in ./app-space-time (imported above). Branching
+// (fork / parallel-any) segments are AVERAGED across their optional paths rather
+// than summed, so a track's headline time reflects the one path a learner walks.
 
 // #2887 authored completion rule: a track is complete when its reward is
 // satisfiable. A segment carrying a synthetic lane prize (CHECKPOINT+prizeId)
