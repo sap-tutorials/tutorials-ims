@@ -15,14 +15,9 @@ import { safeFetch } from './safe-fetch.js';
 import { parseRss, RSS_FETCH_HEADERS } from './rss-parse.js';
 import { curlFetch } from './curl-transport.js';
 import { buildKhorosUrl, khorosFetch } from './khoros-transport.js';
+import { rssMode } from './rss-transport-mode.js';
 
 const log = cds.log('homepage-rss-fetcher');
-
-// (#1144) Tri-state transport — see community-blogs-fetcher.js. Default khoros.
-function rssMode() {
-  const m = process.env.RSS_TRANSPORT;
-  return m === 'curl' || m === 'fetch' ? m : 'khoros';
-}
 
 // Derive a Khoros LiQL predicate from a community.sap.com RSS feed URL.
 // board feeds carry ?board.id=<id>; returns null if not derivable.

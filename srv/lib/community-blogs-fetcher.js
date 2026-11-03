@@ -22,19 +22,10 @@ import { parseRss, RSS_FETCH_HEADERS } from './rss-parse.js';
 import { curlFetch } from './curl-transport.js';
 import { buildKhorosUrl, khorosFetch } from './khoros-transport.js';
 import { backfillManagedApiQuery } from './community-blog-source-defaults.js';
+import { rssMode } from './rss-transport-mode.js';
 import * as metrics from './metrics.js';
 
 const log = cds.log('community-blogs-fetcher');
-
-// (#1144) Tri-state transport. Default 'khoros' hits the unauthenticated
-// Khoros LiQL JSON API (dodges the Cloudflare egress-IP 403 that curl also
-// hit — see memory cloudflare-ja3-blocks-node-fetch-not-ua). 'curl' reverts
-// to the #1145 curl transport (kill switch); 'fetch' uses native fetch on
-// the raw RSS feed (local/tests). Toggle: cf set-env RSS_TRANSPORT curl.
-function rssMode() {
-  const m = process.env.RSS_TRANSPORT;
-  return m === 'curl' || m === 'fetch' ? m : 'khoros';
-}
 
 const TIMEOUT_MS = 5000;
 const MAX_REDIRECTS = 3;
