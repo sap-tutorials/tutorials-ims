@@ -1,12 +1,8 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 
 describe('AppSpaceGame mount scaffold', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks()
-  })
-
   it('mounts without throwing and renders data-app-space-game root', async () => {
     const AppSpaceGame = (await import('../AppSpaceGame.vue')).default
 

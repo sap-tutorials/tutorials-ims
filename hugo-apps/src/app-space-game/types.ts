@@ -1,4 +1,4 @@
-// Payload interfaces copied from hugo-apps/src/app-space/AppSpace.vue (lines 53–118)
+// Payload interfaces copied from hugo-apps/src/app-space/AppSpace.vue (lines 53-118)
 // to avoid cross-island import dependency.
 
 export interface AppSpaceItem {

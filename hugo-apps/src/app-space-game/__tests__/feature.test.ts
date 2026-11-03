@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-// ── isGameEnabled ──────────────────────────────────────────────────────────
+// --- isGameEnabled ---
 describe('isGameEnabled', () => {
   beforeEach(() => {
     vi.resetAllMocks()
@@ -30,7 +30,7 @@ describe('isGameEnabled', () => {
   })
 })
 
-// ── isWebGLAvailable ──────────────────────────────────────────────────────
+// --- isWebGLAvailable ---
 describe('isWebGLAvailable', () => {
   let originalCreateElement: typeof document.createElement
 
@@ -85,7 +85,7 @@ describe('isWebGLAvailable', () => {
   })
 })
 
-// ── loadAppSpaceData ──────────────────────────────────────────────────────
+// --- loadAppSpaceData ---
 describe('loadAppSpaceData', () => {
   const mockData = {
     eventId: 42,
@@ -123,6 +123,22 @@ describe('loadAppSpaceData', () => {
     const { loadAppSpaceData } = await import('../feature')
     const result = await loadAppSpaceData()
     expect(result).toEqual(mockData)
+  })
+
+  it('falls back to /app-space-data.json when primary response.ok=true but .json() rejects', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockRejectedValueOnce(new Error('bad json')),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValueOnce(mockFallbackData),
+      }),
+    )
+    const { loadAppSpaceData } = await import('../feature')
+    const result = await loadAppSpaceData()
+    expect(result).toEqual(mockFallbackData)
   })
 
   it('falls back to /app-space-data.json when the primary fetch fails (non-ok response)', async () => {

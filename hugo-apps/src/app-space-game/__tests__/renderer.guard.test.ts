@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Module-contract guard for renderer.ts — NO real WebGL.
+// Module-contract guard for renderer.ts - NO real WebGL.
 // Three.js WebGLRenderer is mocked so this test runs in jsdom/node without a GPU.
 // Only asserts the exported API shape and that stop() before start() is safe.
 import { describe, it, expect, vi, beforeEach } from 'vitest'

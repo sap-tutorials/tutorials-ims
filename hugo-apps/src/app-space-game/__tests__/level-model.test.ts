@@ -3,7 +3,7 @@ import { buildLevelModel, zoneColor } from '../level-model'
 import type { AppSpaceData } from '../types'
 
 describe('buildLevelModel', () => {
-  it('empty paths ⇒ zones.length === 0', () => {
+  it('empty paths -> zones.length === 0', () => {
     const data: AppSpaceData = {
       eventId: 1,
       eventName: 'Test Event',
@@ -14,7 +14,7 @@ describe('buildLevelModel', () => {
     expect(result.zones).toHaveLength(0)
   })
 
-  it('one linear path, 3 TUTORIAL items ⇒ 1 zone, 3 coins in order, titles preserved', () => {
+  it('one linear path, 3 TUTORIAL items  -> 1 zone, 3 coins in order, titles preserved', () => {
     const data: AppSpaceData = {
       eventId: 1,
       eventName: 'Test Event',
@@ -77,7 +77,7 @@ describe('buildLevelModel', () => {
     expect(result.zones[0].coins[2].title).toBe('Tutorial C')
   })
 
-  it('fork + parallel-any segments ⇒ coins flattened to one ordered list', () => {
+  it('fork + parallel-any segments  -> coins flattened to one ordered list', () => {
     const data: AppSpaceData = {
       eventId: 1,
       eventName: 'Test Event',
@@ -186,7 +186,7 @@ describe('buildLevelModel', () => {
     expect(result.zones[0].coins[4].title).toBe('Fork Lane B 1')
   })
 
-  it('path with a literal type:PRIZE item ⇒ goal.kind==="prize"', () => {
+  it('path with a literal type:PRIZE item  -> goal.kind==="prize"', () => {
     const data: AppSpaceData = {
       eventId: 1,
       eventName: 'Test Event',
@@ -237,7 +237,7 @@ describe('buildLevelModel', () => {
     expect(result.zones[0].goal.prizeId).toBe(42)
   })
 
-  it('path whose only prize is type:CHECKPOINT + prizeId ⇒ goal.kind==="checkpoint", prizeId preserved', () => {
+  it('path whose only prize is type:CHECKPOINT + prizeId  -> goal.kind==="checkpoint", prizeId preserved', () => {
     const data: AppSpaceData = {
       eventId: 1,
       eventName: 'Test Event',
@@ -288,7 +288,7 @@ describe('buildLevelModel', () => {
     expect(result.zones[0].goal.prizeId).toBe(99)
   })
 
-  it('path with neither PRIZE nor prizeId CHECKPOINT ⇒ goal.kind==="track", trackId set', () => {
+  it('path with neither PRIZE nor prizeId CHECKPOINT  -> goal.kind==="track", trackId set', () => {
     const data: AppSpaceData = {
       eventId: 1,
       eventName: 'Test Event',
@@ -326,7 +326,7 @@ describe('buildLevelModel', () => {
     expect(result.zones[0].goal.trackId).toBe('track5')
   })
 
-  it('authenticated + some status:COMPLETED ⇒ those coins done:true; zone with all tutorials COMPLETED ⇒ cleared:true', () => {
+  it('authenticated + some status:COMPLETED  -> those coins done:true; zone with all tutorials COMPLETED  -> cleared:true', () => {
     const data: AppSpaceData = {
       eventId: 1,
       eventName: 'Test Event',
@@ -377,7 +377,7 @@ describe('buildLevelModel', () => {
     expect(result.zones[0].cleared).toBe(true)
   })
 
-  it('anonymous payload (no authenticated, items lack status) ⇒ all coins available:true, done:false; no throw', () => {
+  it('anonymous payload (no authenticated, items lack status)  -> all coins available:true, done:false; no throw', () => {
     const data: AppSpaceData = {
       eventId: 1,
       eventName: 'Test Event',
@@ -415,7 +415,7 @@ describe('buildLevelModel', () => {
     expect(result.zones[0].coins[0].available).toBe(true)
   })
 
-  it('unlocked:false items ⇒ zone locked:true, coins available:false', () => {
+  it('unlocked:false items  -> zone locked:true, coins available:false', () => {
     const data: AppSpaceData = {
       eventId: 1,
       eventName: 'Test Event',
@@ -454,7 +454,7 @@ describe('buildLevelModel', () => {
     expect(result.zones[0].coins[0].available).toBe(false)
   })
 
-  it('CHECKPOINT item mid-list ⇒ a Gate with correct afterCoinIndex', () => {
+  it('CHECKPOINT item mid-list  -> a Gate with correct afterCoinIndex', () => {
     const data: AppSpaceData = {
       eventId: 1,
       eventName: 'Test Event',

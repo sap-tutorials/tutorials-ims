@@ -164,8 +164,6 @@ export function buildLevelModel(data: AppSpaceData): LevelModel {
     const { coins, gates } = buildCoinsAndGates(items, checkpointIndices, isAuthenticated, isLocked)
 
     // Determine if zone is cleared: at least 1 tutorial AND all tutorials COMPLETED
-    const hasAtLeastOneCompletion =
-      isAuthenticated && tutorialItems.length > 0 && tutorialItems.some(item => item.status === 'COMPLETED')
     const allTutorialsCompleted =
       isAuthenticated && tutorialItems.length > 0 && tutorialItems.every(item => item.status === 'COMPLETED')
     const cleared = allTutorialsCompleted

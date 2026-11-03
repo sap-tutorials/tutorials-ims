@@ -1,9 +1,9 @@
 /**
  * Feature gate for the Kasimir Arcade App-Space game island.
- * All checks are best-effort — no function here throws into the UI.
+ * All checks are best-effort - no function here throws into the UI.
  *
  * Pattern modelled on hugo-apps/src/ktt/lib/server.ts (isKttEnabled).
- * Uses native fetch (Node/browser built-in — no axios or other HTTP libs).
+ * Uses native fetch (Node/browser built-in - no axios or other HTTP libs).
  */
 
 import type { AppSpaceData } from './types'
@@ -14,7 +14,7 @@ import type { AppSpaceData } from './types'
  * The flag is a runtime DB value (no redeploy required), so the client must
  * ask the server. We probe the getAppSpaceProgress endpoint with a dummy id:
  * the service rejects with 503 when the APP_SPACE_GAME_ENABLED flag is OFF.
- * Returns false on 503/network error, true on ok — best-effort, never throws.
+ * Returns false on 503/network error, true on ok - best-effort, never throws.
  *
  * // TODO(#3009): Replace this probe with a dedicated lightweight flag endpoint
  * // (e.g. /api/isAppSpaceGameEnabled) once one is added to the CAP service.
@@ -33,7 +33,7 @@ export async function isGameEnabled(): Promise<boolean> {
 /**
  * Synchronously detect WebGL support by creating a throwaway canvas.
  * Returns true if either webgl2 or webgl contexts are available.
- * Wraps ALL operations in try/catch so any throw → false.
+ * Wraps ALL operations in try/catch so any throw -> false.
  */
 export function isWebGLAvailable(): boolean {
   try {
@@ -48,7 +48,7 @@ export function isWebGLAvailable(): boolean {
  * Load App-Space progress data for the current page's event.
  *
  * Resolves the eventId from the URL search params case-insensitively
- * (matching the pattern in hugo-apps/src/app-space/AppSpace.vue lines 194–198).
+ * (matching the pattern in hugo-apps/src/app-space/AppSpace.vue lines 194-198).
  * Falls back to `/app-space-data.json` if the primary endpoint fails.
  * Returns null if both fetches fail. Never throws.
  */
@@ -64,7 +64,7 @@ export async function loadAppSpaceData(): Promise<AppSpaceData | null> {
       }
     }
   } catch {
-    // URL parsing failed — proceed with no eventId
+  // URL parsing failed - proceed with no eventId
   }
 
   const param = eventId ? `eventLegacyId=${eventId}` : `eventLegacyId=0`
@@ -76,7 +76,7 @@ export async function loadAppSpaceData(): Promise<AppSpaceData | null> {
       return (await res.json()) as AppSpaceData
     }
   } catch {
-    // Primary failed — fall through to fallback
+  // Primary failed - fall through to fallback
   }
 
   // Fallback: static JSON file
