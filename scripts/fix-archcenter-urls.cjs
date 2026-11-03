@@ -40,8 +40,13 @@ const FIXES = [
 const COMMIT = process.argv.includes('--commit');
 
 async function main() {
+  // Prime the CDS model before connect: under `cds bind --exec` the model is
+  // not auto-linked, so cds.entities() would throw "is not a function" (#757).
+  // cds.load('*') returns a bare CSN; wrap via cds.linked() so .entities() is
+  // iterable, and resolve the namespace off the linked model directly (#911).
+  const linked = cds.linked(await cds.load('*'));
   await cds.connect.to('db');
-  const { HelpDocs, HelpDocConceptLinks } = cds.entities('com.sap.developers.ims.external');
+  const { HelpDocs, HelpDocConceptLinks } = linked.entities('com.sap.developers.ims.external');
 
   console.log(`\nfix-archcenter-urls — ${COMMIT ? 'COMMIT' : 'DRY-RUN'} mode`);
   console.log('='.repeat(72));
