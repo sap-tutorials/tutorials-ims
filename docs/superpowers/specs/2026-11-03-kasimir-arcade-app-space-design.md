@@ -46,6 +46,26 @@ Validated in the spike — the level is not decoration, it encodes the track str
 - **Single URL / attract mode:** Inactivity timer on the existing page swaps grid↔game; manual trigger link; any input exits attract and gives control; handoff returns to the grid focused on the chosen track.
 - **Feature-flagged & progressively rolled out**, DEV-first, consistent with how this repo ships risky UI. Flag OFF = today's grid, untouched.
 
+## Resolved decisions (builder-check round)
+
+A fresh builder review of this doc surfaced five gaps. The three below change what gets built and were decided by Tom; the two after are the author's (Claude's) calls.
+
+**Decided by Tom:**
+
+1. **Per-zone color = client-side palette.** The `getAppSpaceProgress` payload carries **no** per-track color/theme/accent field (verified against the CDS return type and the segment builders), and we hold the zero-backend-changes rule. So the game derives an 11-entry palette **client-side** from track index/title. Consequence: "the level reads the track" remains literally true for **tutorials, checkpoints, prizes, and cleared/locked state** (all data-driven); the zone *color* is attractive-but-arbitrary, not brand-matched. This is acceptable and is **not** a progress-misrepresentation anti-goal (color is decoration; the structural/state encoding is faithful). A future backend color field could upgrade this without reworking the game.
+
+2. **Every zone always ends in a selectable goal.** Prizes are not always literal `type:'PRIZE'` items — the real payload often models a prize as a **synthetic `type:'CHECKPOINT'` item carrying `prizeId`** (per the #2887/#2889 lane-end pattern), and some tracks have no prize at all. Mapping rule: literal PRIZE → chest; prize-checkpoint (CHECKPOINT + `prizeId`) → chest; **neither → a generic "track goal" flag** that still acts as the selector. Guarantee: **no zone is ever unselectable** (directly serves the kiosk-never-stuck anti-goal).
+
+3. **Fork / parallel-any tracks flatten to linear for v1.** A side-scroller is linear; real tracks contain `fork` (labeled lanes) and `parallel-any` (any-order) segments. v1 **flattens** every segment to one left→right line of coins (all tutorials, in segment order). Consequence: branching structure is not visually shown, but **every tutorial still appears** and the attract AI stays simple and never stalls. Faithful lane rendering is explicitly a possible v2, not v1.
+
+**Author's calls (sensible-builder decisions):**
+
+4. **Handoff + auth.** Reaching a zone's goal always opens the real grid on that track's detail. If the visitor is **anonymous**, the handoff lands them on the track detail and surfaces the normal sign-in affordance (the grid's existing `startLogin` path) — it does **not** dead-end on a locked prize. Attract-driven navigation must not pollute browser history (replace, don't push, when the transition is automatic).
+
+5. **No change to `AppSpace.vue`.** The game ships as a **new sibling island** (`app-space-game`) mounted alongside the existing App-Space island on the same Hugo page. Attract-mode state, the overlay/dim, and the "▶ Demo" trigger live in the **new** island; the existing grid island is left untouched. (If a tiny hook into the grid proves unavoidable during planning, that's a plan-level call, but the intent is zero edits to `AppSpace.vue`.)
+
+**Build fact confirmed by the review:** the `hugo-apps` Vite config already uses per-island entries that are content-hashed via the island-manifest step, so adding an `app-space-game` entry is a known low-risk pattern. **Three.js must be a dynamic import** so it loads only for this island and never bloats other pages.
+
 ## Goals
 
 - Eye-catching color + motion that reads across a crowded event floor.
@@ -84,11 +104,11 @@ Validated in the spike — the level is not decoration, it encodes the track str
 
 ## Left to the builder / plan
 
-- Exact mapping code from `getAppSpaceProgress` payload (segments: linear / parallel-any / fork) into the zone/coin/gate/chest scene graph, including fork lanes.
-- Inactivity-timer mechanism and the grid↔game mount/unmount choreography on the shared page (overlay vs. swap, transition).
-- The handoff target: how "reaching track X's chest" scrolls/opens the real grid to track X (reuse `syncTrackFromUrl` / selectedTrack).
+- Exact mapping code from `getAppSpaceProgress` payload into the zone/coin/gate/chest scene graph, applying the resolved rules above (flatten fork/parallel-any to linear; always-a-selector goal; client-side palette).
+- Inactivity-timer mechanism and the grid↔game mount/unmount choreography on the shared page (overlay vs. swap, transition), kept within the new sibling island.
+- The handoff target: how "reaching track X's goal" scrolls/opens the real grid to track X (reuse `syncTrackFromUrl` / selectedTrack), with replace-not-push for automatic transitions.
 - Feature-flag names and gating (follow existing App-Space / KG flag conventions), plus the WebGL-support / error fallback path.
-- Three.js bundling + code-splitting strategy in the Vite `hugo-apps` build; asset-loading of the Kasimir PNGs.
+- Three.js code-splitting (dynamic import) in the Vite `hugo-apps` build; asset-loading of the Kasimir PNGs.
 - Attract-AI pathing so Kasimir never stalls and the loop reads well; which poses map to run/jump/idle/celebrate.
 - Accessibility & input: keyboard + touch + the manual Demo link; respect `prefers-reduced-motion`; ensure the grid remains the accessible canonical surface.
 - Test strategy (unit for the data→scene mapping; the engine itself is spike-grade and largely manual/visual).
