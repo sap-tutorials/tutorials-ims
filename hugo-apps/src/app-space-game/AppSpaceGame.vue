@@ -35,16 +35,21 @@
       </div>
     </div>
 
-    <!-- Canvas: always in DOM so canvasRef binds on mount; shown only in attract mode -->
+    <!-- Canvas: always in DOM so canvasRef binds on mount; shown only in attract mode.
+         position:fixed (not relative) is load-bearing: #app-space-game is an empty,
+         zero-height mount div placed after the grid, so a relative/flow canvas lays
+         out ~1740px down the page — off-screen — while the fixed overlay covers the
+         viewport. The result: the renderer draws correctly but the canvas is nowhere
+         the user can see it. Fixed + full-viewport anchors it over the overlay dim. -->
     <canvas
       ref="canvasRef"
-      :style="attractVisible ? 'display:block;width:100%;height:100%;position:relative;z-index:10000' : 'display:none'"
+      :style="attractVisible ? 'display:block;position:fixed;inset:0;width:100vw;height:100vh;z-index:10000' : 'display:none'"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import type { LevelModel } from './types'
 import { isWebGLAvailable, loadAppSpaceData } from './feature'
 import { buildLevelModel } from './level-model'
@@ -92,11 +97,21 @@ function resetIdleTimer(): void {
 }
 
 /** Start attract mode: show overlay + call game.start(). */
-function startAttract(): void {
+async function startAttract(): Promise<void> {
   if (!game) return
   attractVisible.value = true
   showPlayerHint.value = false
   inPlayerControl = false
+  // The canvas is display:none until `attractVisible` flips it, and it is
+  // position:fixed/full-viewport only while visible. Wait for Vue to flush the DOM
+  // so the fixed canvas is laid out at its real viewport size before game.start()
+  // runs its initial resizeToCanvas() — otherwise the camera aspect bakes against a
+  // hidden/0-size canvas and the scene renders stretched. One nextTick suffices: a
+  // position:fixed element has its size the moment the style applies (no paint frame
+  // needed), and flushPromises() drives this in tests.
+  await nextTick()
+  // Guard: the user may have closed the overlay during the await.
+  if (!attractVisible.value || !game) return
   game.start()
 }
 
@@ -222,10 +237,14 @@ onUnmounted(() => {
 }
 
 [data-demo-trigger] {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 10;
+  /* Anchor to the viewport, not the mount div: #app-space-game is an empty,
+     zero-height sibling placed after the grid, so position:absolute dropped the
+     button ~1748px down the page (below the fold, never seen). Fixed keeps the
+     manual attract-mode trigger visible in the corner regardless of scroll. */
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 998;
   padding: 6px 14px;
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 4px;
