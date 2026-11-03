@@ -18,7 +18,22 @@
       role="dialog"
       aria-label="Kasimir Arcade Demo"
       aria-modal="true"
-    />
+    >
+      <!-- Close / skip button - always visible so the user can always exit -->
+      <button
+        data-game-close
+        type="button"
+        aria-label="Close game and return to grid"
+        @click="closeGame"
+      >
+        &#x2715; Close
+      </button>
+
+      <!-- Player control hint shown once player has taken over -->
+      <div v-if="showPlayerHint" data-player-hint aria-live="polite">
+        Arrow keys or tap to move &rarr; &nbsp; Reach the flag to pick a track
+      </div>
+    </div>
 
     <!-- Canvas: always in DOM so canvasRef binds on mount; shown only in attract mode -->
     <canvas
@@ -31,7 +46,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import type { LevelModel } from './types'
-import { isGameEnabled, isWebGLAvailable, loadAppSpaceData } from './feature'
+import { isWebGLAvailable, loadAppSpaceData } from './feature'
 import { buildLevelModel } from './level-model'
 import type { GameHandle } from './renderer'
 
@@ -46,6 +61,8 @@ const levelModel = ref<LevelModel | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 // Whether the attract overlay is currently shown
 const attractVisible = ref(false)
+// Whether the player has taken over (shows hint)
+const showPlayerHint = ref(false)
 // Whether the user has taken control from attract mode
 let inPlayerControl = false
 // Game handle for cleanup
@@ -78,8 +95,18 @@ function resetIdleTimer(): void {
 function startAttract(): void {
   if (!game) return
   attractVisible.value = true
+  showPlayerHint.value = false
   inPlayerControl = false
   game.start()
+}
+
+/** Close the game overlay without picking a track - return to grid as-is. */
+function closeGame(): void {
+  attractVisible.value = false
+  showPlayerHint.value = false
+  inPlayerControl = false
+  game?.stop()
+  resetIdleTimer()
 }
 
 /** Build the track URL preserving existing search params. */
@@ -99,15 +126,23 @@ function onPickTrack(trackId: string): void {
   window.dispatchEvent(new PopStateEvent('popstate', { state: { track: trackId } }))
   // 3. Hide overlay and stop renderer
   attractVisible.value = false
+  showPlayerHint.value = false
   inPlayerControl = false
   game?.stop()
 }
 
 /** Handler called on any page-level input event. */
-function onUserInput(): void {
+function onUserInput(e: Event): void {
+  // Escape key always closes the game overlay
+  if (e instanceof KeyboardEvent && e.key === 'Escape' && attractVisible.value) {
+    closeGame()
+    return
+  }
+
   if (attractVisible.value && !inPlayerControl) {
     // Hand control to the player but keep overlay up
     inPlayerControl = true
+    showPlayerHint.value = true
     game?.setPlayerControl(true)
     return
   }
@@ -121,20 +156,10 @@ function onUserInput(): void {
 const INPUT_EVENTS: string[] = ['mousemove', 'touchstart', 'keydown']
 
 onMounted(async () => {
-  // All three conditions must pass; any failure leaves gateReady false (grid intact)
-  let enabled: boolean, webgl: boolean
-  try {
-    const results = await Promise.all([
-      isGameEnabled(),
-      Promise.resolve(isWebGLAvailable()),
-    ])
-    enabled = results[0]
-    webgl = results[1]
-  } catch {
-    return
-  }
-  if (!enabled || !webgl) return
+  // WebGL must be available
+  if (!isWebGLAvailable()) return
 
+  // Load data - the payload carries the feature flag
   let data
   try {
     data = await loadAppSpaceData()
@@ -142,6 +167,9 @@ onMounted(async () => {
     return
   }
   if (!data) return
+
+  // Gate on the server-side flag (default OFF - absent or false means no game)
+  if (data.appSpaceGameEnabled !== true) return
 
   // Build the level model
   let model
@@ -163,7 +191,7 @@ onMounted(async () => {
 
   // Arm input listeners for idle timer and player-control handoff
   for (const ev of INPUT_EVENTS) {
-    window.addEventListener(ev, onUserInput, { passive: true })
+    window.addEventListener(ev, onUserInput, { passive: ev !== 'keydown' })
   }
 
   // Start the idle countdown
@@ -179,6 +207,7 @@ onUnmounted(() => {
     window.removeEventListener(ev, onUserInput)
   }
   game?.stop()
+  game?.dispose?.()
   game = null
 })
 </script>
@@ -216,5 +245,40 @@ onUnmounted(() => {
   inset: 0;
   z-index: 9999;
   background: rgba(6, 8, 15, 0.92);
+}
+
+[data-game-close] {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10001;
+  padding: 6px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 4px;
+  background: rgba(6, 8, 15, 0.85);
+  color: #ffffff;
+  font-size: 13px;
+  font-family: system-ui, sans-serif;
+  cursor: pointer;
+}
+
+[data-game-close]:hover {
+  background: rgba(60, 20, 20, 0.9);
+}
+
+[data-player-hint] {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10001;
+  padding: 6px 16px;
+  border-radius: 4px;
+  background: rgba(6, 8, 15, 0.8);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-family: system-ui, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
 }
 </style>

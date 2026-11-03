@@ -57,6 +57,7 @@ export interface AppSpaceData {
   eventDescription?: string
   hasLogo?: boolean
   authenticated?: boolean
+  appSpaceGameEnabled?: boolean
   type: string
   paths: AppSpaceTrack[]
 }

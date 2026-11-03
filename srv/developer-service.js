@@ -16,6 +16,7 @@ import { rollUpParentsForCompletion } from './lib/completion-rollup.js';
 import { renderMarkdown } from './lib/markdown.js';
 import { buildTaskMap, effectiveLegacyId, expandGroupTutorials, buildPathItems, buildPathSegments, fetchGroupTitles, groupChildLegacyIds, buildRecordMap } from './lib/path-item-task-resolver.js';
 import { annotateUnlocked } from './lib/app-space-segments.js';
+import { isFlagEnabled } from './lib/feature-flags/db-flags.js';
 import { handleRequestAccountMerge, handleConfirmAccountMerge } from './lib/account-merge-request.js';
 
 // Per-user rate limit for resetTutorialProgress — same window as the
@@ -720,13 +721,21 @@ export default class DeveloperService extends cds.ApplicationService {
       // surface a SUPERSEDED row and render a done task as incomplete.
       const recordMap = buildRecordMap(userRecords);
 
+      let appSpaceGameEnabled = false;
+      try {
+        appSpaceGameEnabled = isFlagEnabled('APP_SPACE_GAME_ENABLED');
+      } catch {
+        // flag check failed - leave as false (default OFF)
+      }
+
       return {
         eventId: event.legacyId,
         eventName: event.name || '',
-        eventDescription: renderMarkdown(event.description),   // #2296: admin-authored Markdown → safe HTML for the app-space hero
+        eventDescription: renderMarkdown(event.description),   // #2296: admin-authored Markdown -> safe HTML for the app-space hero
         eventType: event.eventType ?? 'OTHER',
         hasLogo: Boolean(event.hasLogo),
-        authenticated: Boolean(dbUser),   // #2314/#2730: false only for anonymous callers → client skips the logged-in-only realtime/confetti path. Truthy when user resolves via any tier (sapId, identity link, or pin).
+        authenticated: Boolean(dbUser),   // #2314/#2730: false only for anonymous callers -> client skips the logged-in-only realtime/confetti path. Truthy when user resolves via any tier (sapId, identity link, or pin).
+        appSpaceGameEnabled,
         type: 'COMPLEX',
         paths: paths.map(p => {
           const pathItems = allItems.filter(i => i.path_ID === p.ID);

@@ -8,6 +8,7 @@ const MOCK_DATA = {
   eventId: 1,
   eventName: 'Test',
   type: 'DEVTOBERFEST',
+  appSpaceGameEnabled: true,
   paths: [
     {
       id: 'track-alpha',
@@ -44,13 +45,13 @@ function makeGameHandle() {
     start: vi.fn(),
     stop: vi.fn(),
     setPlayerControl: vi.fn(),
+    dispose: vi.fn(),
   }
 }
 
 // -- Module mocks (hoisted so vi.mock applies before imports) ----------------
 
 vi.mock('../feature', () => ({
-  isGameEnabled: vi.fn(),
   isWebGLAvailable: vi.fn(),
   loadAppSpaceData: vi.fn(),
 }))
@@ -62,11 +63,10 @@ vi.mock('../renderer', () => ({
 // -- Helpers -----------------------------------------------------------------
 
 async function mountWithGatePass() {
-  const { isGameEnabled, isWebGLAvailable, loadAppSpaceData } = await import('../feature')
+  const { isWebGLAvailable, loadAppSpaceData } = await import('../feature')
   const { createGame } = await import('../renderer')
   const gameHandle = makeGameHandle()
 
-  vi.mocked(isGameEnabled).mockResolvedValue(true)
   vi.mocked(isWebGLAvailable).mockReturnValue(true)
   vi.mocked(loadAppSpaceData).mockResolvedValue(MOCK_DATA)
   vi.mocked(createGame).mockReturnValue(gameHandle)
@@ -80,12 +80,26 @@ async function mountWithGatePass() {
 }
 
 async function mountWithGateFail() {
-  const { isGameEnabled, isWebGLAvailable, loadAppSpaceData } = await import('../feature')
+  const { isWebGLAvailable, loadAppSpaceData } = await import('../feature')
   const { createGame } = await import('../renderer')
 
-  vi.mocked(isGameEnabled).mockResolvedValue(false)
   vi.mocked(isWebGLAvailable).mockReturnValue(false)
   vi.mocked(loadAppSpaceData).mockResolvedValue(null)
+  vi.mocked(createGame).mockReset()
+
+  const AppSpaceGame = (await import('../AppSpaceGame.vue')).default
+  const wrapper = mount(AppSpaceGame)
+  await flushPromises()
+
+  return { wrapper, createGame: vi.mocked(createGame) }
+}
+
+async function mountWithFlagOff() {
+  const { isWebGLAvailable, loadAppSpaceData } = await import('../feature')
+  const { createGame } = await import('../renderer')
+
+  vi.mocked(isWebGLAvailable).mockReturnValue(true)
+  vi.mocked(loadAppSpaceData).mockResolvedValue({ ...MOCK_DATA, appSpaceGameEnabled: false })
   vi.mocked(createGame).mockReset()
 
   const AppSpaceGame = (await import('../AppSpaceGame.vue')).default
@@ -241,6 +255,59 @@ describe('AppSpaceGame attract state machine', () => {
     // Still no overlay
     expect(wrapper.find('[data-game-overlay]').exists()).toBe(false)
     expect(createGame).not.toHaveBeenCalled()
+  })
+
+  // (f) Server flag OFF (appSpaceGameEnabled: false) -> gate does not pass
+  it('(f) server flag OFF: no overlay, no Demo button, createGame never called', async () => {
+    const { wrapper, createGame } = await mountWithFlagOff()
+
+    // No overlay
+    expect(wrapper.find('[data-game-overlay]').exists()).toBe(false)
+    // No demo button
+    expect(wrapper.find('[data-demo-trigger]').exists()).toBe(false)
+    // createGame never called
+    expect(createGame).not.toHaveBeenCalled()
+
+    // Advance timers - nothing should happen
+    await vi.advanceTimersByTimeAsync(120000)
+    await flushPromises()
+
+    expect(wrapper.find('[data-game-overlay]').exists()).toBe(false)
+    expect(createGame).not.toHaveBeenCalled()
+  })
+
+  // (g) Close button is visible when overlay is showing; clicking it hides overlay
+  it('(g) close button hides overlay without picking a track', async () => {
+    const { wrapper, gameHandle } = await mountWithGatePass()
+
+    // Trigger attract mode
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(wrapper.find('[data-game-overlay]').exists()).toBe(true)
+
+    const closeBtn = wrapper.find('[data-game-close]')
+    expect(closeBtn.exists()).toBe(true)
+
+    await closeBtn.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-game-overlay]').exists()).toBe(false)
+    expect(gameHandle.stop).toHaveBeenCalled()
+  })
+
+  // (h) Escape key closes the overlay
+  it('(h) Escape key closes the game overlay', async () => {
+    const { wrapper, gameHandle } = await mountWithGatePass()
+
+    // Trigger attract mode
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(wrapper.find('[data-game-overlay]').exists()).toBe(true)
+
+    // Dispatch Escape keydown on window
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+
+    expect(wrapper.find('[data-game-overlay]').exists()).toBe(false)
+    expect(gameHandle.stop).toHaveBeenCalled()
   })
 
   // prefers-reduced-motion: idle auto-start disabled, Demo button still works

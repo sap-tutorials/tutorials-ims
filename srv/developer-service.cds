@@ -232,13 +232,14 @@ service DeveloperService {
   // client whether to enable the logged-in-only realtime/confetti path.
   @(requires: 'any')
   function getAppSpaceProgress(eventLegacyId : Integer) returns {
-    eventId          : Integer;
-    eventName        : String;
-    eventDescription : String;
-    eventType        : String;
-    hasLogo          : Boolean;
-    authenticated    : Boolean;
-    type             : String;
+    eventId             : Integer;
+    eventName           : String;
+    eventDescription    : String;
+    eventType           : String;
+    hasLogo             : Boolean;
+    authenticated       : Boolean;
+    appSpaceGameEnabled : Boolean;
+    type                : String;
     paths     : many {
       id          : Integer;
       title       : String;

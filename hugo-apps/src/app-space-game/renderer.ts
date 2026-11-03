@@ -281,6 +281,7 @@ export interface GameHandle {
   start(): void
   stop(): void
   setPlayerControl(on: boolean): void
+  dispose?(): void
 }
 
 export function createGame(
@@ -297,6 +298,7 @@ export function createGame(
       start() {},
       stop() {},
       setPlayerControl(_on: boolean) {},
+      dispose() {},
     }
   }
 
@@ -330,7 +332,15 @@ export function createGame(
   const { markers, zoneMeta, totalLen } = buildScene(scene, model)
 
   // Kasimir billboard
-  const tex = new THREE.TextureLoader().load(KASIMIR_TEX)
+  const tex = new THREE.TextureLoader().load(
+    KASIMIR_TEX,
+    undefined,
+    undefined,
+    (_err) => {
+      // Texture failed to load - scene already survives without it (transparent material)
+      try { console.warn('[app-space-game] Kasimir texture failed to load') } catch { /* silent */ }
+    }
+  )
   tex.colorSpace = THREE.SRGBColorSpace
   const kMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.3 })
   const kasimir = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 3.6), kMat)
@@ -364,6 +374,33 @@ export function createGame(
 
   const clock = new THREE.Clock()
 
+  // --- Player input state ---
+  const keys = { right: false, jump: false }
+
+  function onKeyDown(e: KeyboardEvent): void {
+    if (e.key === 'ArrowRight') keys.right = true
+    if (e.key === 'ArrowUp' || e.key === ' ') keys.jump = true
+  }
+
+  function onKeyUp(e: KeyboardEvent): void {
+    if (e.key === 'ArrowRight') keys.right = false
+    if (e.key === 'ArrowUp' || e.key === ' ') keys.jump = false
+  }
+
+  // Pointer/touch: tap anywhere on the canvas = jump; hold right half = run right
+  let pointerDown = false
+  let pointerRightHalf = false
+
+  function onPointerDown(e: PointerEvent): void {
+    pointerDown = true
+    pointerRightHalf = e.clientX > canvas.getBoundingClientRect().left + canvas.clientWidth / 2
+  }
+
+  function onPointerUp(): void {
+    pointerDown = false
+    pointerRightHalf = false
+  }
+
   function resizeToCanvas() {
     const w = canvas.clientWidth || canvas.width || 800
     const h = canvas.clientHeight || canvas.height || 600
@@ -377,8 +414,8 @@ export function createGame(
     const dt = Math.min(clock.getDelta(), 0.05)
     const t = clock.elapsedTime
 
-    // Attract auto-run: advance Kasimir forward, loop at end
     if (!playerControl) {
+      // Attract auto-run: advance Kasimir forward, loop at end
       kasX += SPEED * dt
       if (kasX > totalLen - 4) {
         kasX = 5
@@ -397,9 +434,21 @@ export function createGame(
         vy = JUMP
         onGround = false
       }
+    } else {
+      // Player-driven movement: keyboard + pointer/touch
+      const moveRight = keys.right || (pointerDown && pointerRightHalf)
+      if (moveRight) {
+        kasX += SPEED * dt
+      }
+      const doJump = keys.jump || (pointerDown && !pointerRightHalf)
+      if (doJump && onGround) {
+        vy = JUMP
+        onGround = false
+        keys.jump = false  // consume single-press so holding doesn't re-trigger
+      }
     }
 
-    // Physics
+    // Physics (shared between attract and player modes)
     vy += GRAV * dt
     let newY = kasY + vy * dt
     if (newY <= 1.8) {
@@ -432,7 +481,7 @@ export function createGame(
       }
     })
 
-    // Goal reach check (player-control mode only, for onPickTrack)
+    // Goal reach check - fires onPickTrack in player-control mode
     if (playerControl) {
       zoneMeta.forEach((zm, zi) => {
         const zone = model.zones[zi]
@@ -451,6 +500,26 @@ export function createGame(
     rafId = requestAnimationFrame(tick)
   }
 
+  function attachPlayerInput(): void {
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    canvas.addEventListener('pointerdown', onPointerDown)
+    canvas.addEventListener('pointerup', onPointerUp)
+    canvas.addEventListener('pointerleave', onPointerUp)
+  }
+
+  function detachPlayerInput(): void {
+    window.removeEventListener('keydown', onKeyDown)
+    window.removeEventListener('keyup', onKeyUp)
+    canvas.removeEventListener('pointerdown', onPointerDown)
+    canvas.removeEventListener('pointerup', onPointerUp)
+    canvas.removeEventListener('pointerleave', onPointerUp)
+    keys.right = false
+    keys.jump = false
+    pointerDown = false
+    pointerRightHalf = false
+  }
+
   return {
     start() {
       if (started) return
@@ -464,10 +533,37 @@ export function createGame(
         cancelAnimationFrame(rafId)
         rafId = 0
       }
+      detachPlayerInput()
+      playerControl = false
       started = false
     },
     setPlayerControl(on: boolean) {
       playerControl = on
+      if (on) {
+        attachPlayerInput()
+      } else {
+        detachPlayerInput()
+      }
+    },
+    dispose() {
+      // Dispose renderer and GPU resources
+      try {
+        renderer.dispose()
+        scene.traverse(obj => {
+          if (obj instanceof THREE.Mesh) {
+            obj.geometry?.dispose()
+            if (Array.isArray(obj.material)) {
+              obj.material.forEach(m => m.dispose())
+            } else {
+              (obj.material as THREE.Material)?.dispose()
+            }
+          }
+        })
+        kMat.dispose()
+        tex.dispose()
+      } catch {
+        // Best-effort - never throw on dispose
+      }
     },
   }
 }

@@ -1,34 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-// --- isGameEnabled ---
-describe('isGameEnabled', () => {
-  beforeEach(() => {
-    vi.resetAllMocks()
-  })
-
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  it('returns false when the flag endpoint responds 503', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, status: 503 }))
-    const { isGameEnabled } = await import('../feature')
-    expect(await isGameEnabled()).toBe(false)
-  })
-
-  it('returns false when the network request rejects', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('Network error')))
-    const { isGameEnabled } = await import('../feature')
-    expect(await isGameEnabled()).toBe(false)
-  })
-
-  it('returns true when the flag endpoint responds ok', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true, status: 200 }))
-    const { isGameEnabled } = await import('../feature')
-    expect(await isGameEnabled()).toBe(true)
-  })
-})
+// Note: isGameEnabled was removed in C2 fix (#3009). The game enable signal is
+// now carried by data.appSpaceGameEnabled from loadAppSpaceData(), which reads
+// the server-side ImsConfig flag APP_SPACE_GAME_ENABLED (default OFF).
 
 // --- isWebGLAvailable ---
 describe('isWebGLAvailable', () => {
