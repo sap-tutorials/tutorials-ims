@@ -61,25 +61,35 @@ export interface AppSpaceData {
   paths: AppSpaceTrack[]
 }
 
-// Task 2+ interfaces (declared here for future use, not implemented in Task 1)
-export interface Zone {
-  id: string
-  name: string
+// Task 2+ interfaces: Level model for app-space gameplay
+export interface Coin {
+  title: string
+  done: boolean
+  available: boolean
 }
 
-export interface Coin {
-  id: string
-  value: number
+export interface Gate {
+  afterCoinIndex: number
 }
 
 export interface Goal {
+  kind: 'prize' | 'checkpoint' | 'track'
+  label: string
+  prizeId: number | null
+  trackId: string
+}
+
+export interface Zone {
   id: string
-  description: string
+  title: string
+  colorIndex: number
+  cleared: boolean
+  locked: boolean
+  coins: Coin[]
+  gates: Gate[]
+  goal: Goal
 }
 
 export interface LevelModel {
-  id: string
   zones: Zone[]
-  coins: Coin[]
-  goals: Goal[]
 }
