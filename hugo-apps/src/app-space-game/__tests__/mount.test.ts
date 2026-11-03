@@ -18,10 +18,10 @@ describe('AppSpaceGame mount scaffold', () => {
     // Root element has the data attribute
     expect(wrapper.element.getAttribute('data-app-space-game')).toBe('')
 
-    // No canvas or game-related content is rendered
-    expect(wrapper.find('canvas').exists()).toBe(false)
+    // Task 4: canvas is present in the template (renderer mounts into it when gate passes)
+    expect(wrapper.find('canvas').exists()).toBe(true)
 
-    // The component is hidden/minimal
+    // No text content - the game canvas has no visible text nodes
     expect(wrapper.text()).toBe('')
   })
 })
