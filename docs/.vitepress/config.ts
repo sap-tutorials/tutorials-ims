@@ -179,6 +179,7 @@ export default defineConfig({
           { text: 'Deploy checklist',          link: '/developers/operations/deploy-checklist' },
           { text: 'Deployment',                link: '/developers/operations/deployment' },
           { text: 'Devtoberfest selfie art',   link: '/developers/operations/devtoberfest-selfie-assets' },
+          { text: 'Draft integrity re-enable', link: '/developers/operations/draft-integrity-reenable' },
           { text: 'Gameboard PROD data troubleshooting', link: '/developers/operations/gameboard-prod-data-troubleshooting' },
           { text: 'GitHub App setup',          link: '/developers/operations/github-app-setup' },
           { text: 'GitHub dispatch PAT rotation', link: '/developers/operations/github-dispatch-pat-rotation' },
