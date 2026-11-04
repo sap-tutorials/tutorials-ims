@@ -54,6 +54,7 @@ function makeGameHandle() {
 vi.mock('../feature', () => ({
   isWebGLAvailable: vi.fn(),
   loadAppSpaceData: vi.fn(),
+  isGameDisabled: vi.fn(),
 }))
 
 vi.mock('../renderer', () => ({
@@ -63,12 +64,13 @@ vi.mock('../renderer', () => ({
 // -- Helpers -----------------------------------------------------------------
 
 async function mountWithGatePass() {
-  const { isWebGLAvailable, loadAppSpaceData } = await import('../feature')
+  const { isWebGLAvailable, loadAppSpaceData, isGameDisabled } = await import('../feature')
   const { createGame } = await import('../renderer')
   const gameHandle = makeGameHandle()
 
   vi.mocked(isWebGLAvailable).mockReturnValue(true)
   vi.mocked(loadAppSpaceData).mockResolvedValue(MOCK_DATA)
+  vi.mocked(isGameDisabled).mockReturnValue(false)
   vi.mocked(createGame).mockReturnValue(gameHandle)
 
   const AppSpaceGame = (await import('../AppSpaceGame.vue')).default
@@ -80,11 +82,12 @@ async function mountWithGatePass() {
 }
 
 async function mountWithGateFail() {
-  const { isWebGLAvailable, loadAppSpaceData } = await import('../feature')
+  const { isWebGLAvailable, loadAppSpaceData, isGameDisabled } = await import('../feature')
   const { createGame } = await import('../renderer')
 
   vi.mocked(isWebGLAvailable).mockReturnValue(false)
   vi.mocked(loadAppSpaceData).mockResolvedValue(null)
+  vi.mocked(isGameDisabled).mockReturnValue(false)
   vi.mocked(createGame).mockReset()
 
   const AppSpaceGame = (await import('../AppSpaceGame.vue')).default
@@ -95,11 +98,12 @@ async function mountWithGateFail() {
 }
 
 async function mountWithFlagOff() {
-  const { isWebGLAvailable, loadAppSpaceData } = await import('../feature')
+  const { isWebGLAvailable, loadAppSpaceData, isGameDisabled } = await import('../feature')
   const { createGame } = await import('../renderer')
 
   vi.mocked(isWebGLAvailable).mockReturnValue(true)
   vi.mocked(loadAppSpaceData).mockResolvedValue({ ...MOCK_DATA, appSpaceGameEnabled: false })
+  vi.mocked(isGameDisabled).mockReturnValue(false)
   vi.mocked(createGame).mockReset()
 
   const AppSpaceGame = (await import('../AppSpaceGame.vue')).default
