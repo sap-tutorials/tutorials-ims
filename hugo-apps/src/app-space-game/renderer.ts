@@ -336,11 +336,11 @@ function buildScene(
       }
     }
 
-    // Build WorldHazards for this zone (coin-index → world units)
+    // Build WorldHazards for this zone (x: coin-index → world units; w/h already world units)
     const worldHazards: WorldHazards = {
       obstacles: zone.obstacles.map(o => ({
         x: zStart + o.x * COIN_SPACING,
-        w: o.w * COIN_SPACING,
+        w: o.w,
         h: o.h,
       })),
       pits: zone.pits.map(p => ({
