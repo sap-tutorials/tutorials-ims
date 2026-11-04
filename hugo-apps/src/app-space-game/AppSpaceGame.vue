@@ -29,9 +29,33 @@
         &#x2715; Close
       </button>
 
+      <!-- Ring count HUD (top-right overlay, pointer-events:none) -->
+      <div class="asg-rings" aria-live="polite" aria-label="Ring count">
+        &#9711; {{ ringCount }}
+      </div>
+
+      <!-- Hit scatter toast: shown briefly after a hit -->
+      <div
+        v-if="showScatterToast"
+        class="asg-scatter-toast"
+        aria-live="assertive"
+      >
+        &minus;{{ scatterCount }}
+      </div>
+
+      <!-- Mute toggle button -->
+      <button
+        data-mute-toggle
+        type="button"
+        :aria-label="soundEnabled ? 'Mute sound' : 'Unmute sound'"
+        @click="toggleMute"
+      >
+        {{ soundEnabled ? '&#128266;' : '&#128267;' }}
+      </button>
+
       <!-- Player control hint shown once player has taken over -->
       <div v-if="showPlayerHint" data-player-hint aria-live="polite">
-        Arrow keys or tap to move &rarr; &nbsp; Reach the flag to pick a track
+        Tap = jump &middot; Hold left/right = move &middot; Reach the flag to pick a track
       </div>
     </div>
 
@@ -54,6 +78,7 @@ import type { LevelModel } from './types'
 import { isGameDisabled, isWebGLAvailable, loadAppSpaceData } from './feature'
 import { buildLevelModel } from './level-model'
 import type { GameHandle } from './renderer'
+import { createSound } from './sound'
 
 // Default idle timeout before attract mode fires, in ms
 const IDLE_TIMEOUT_MS = 60_000
@@ -74,6 +99,25 @@ let inPlayerControl = false
 let game: GameHandle | null = null
 // Idle timer handle
 let idleTimer: ReturnType<typeof setTimeout> | null = null
+
+// --- HUD state ---
+const ringCount = ref(0)
+const showScatterToast = ref(false)
+const scatterCount = ref(0)
+let scatterToastTimer: ReturnType<typeof setTimeout> | null = null
+
+// --- Sound state ---
+const sound = createSound()
+const soundEnabled = ref(sound.enabled)
+
+function toggleMute(): void {
+  try {
+    sound.toggle()
+    soundEnabled.value = sound.enabled
+  } catch {
+    // fail-safe: never throw
+  }
+}
 
 /** Returns true when the user prefers reduced motion. */
 function prefersReducedMotion(): boolean {
@@ -102,6 +146,9 @@ async function startAttract(): Promise<void> {
   attractVisible.value = true
   showPlayerHint.value = false
   inPlayerControl = false
+  // Reset ring HUD
+  ringCount.value = 0
+  showScatterToast.value = false
   // The canvas is display:none until `attractVisible` flips it, and it is
   // position:fixed/full-viewport only while visible. Wait for Vue to flush the DOM
   // so the fixed canvas is laid out at its real viewport size before game.start()
@@ -207,6 +254,36 @@ onMounted(async () => {
 
   game = createGame(canvas, levelModel.value, { onPickTrack })
 
+  // Wire ring count HUD callback
+  try {
+    game.onRingCount((n: number) => {
+      const prev = ringCount.value
+      ringCount.value = n
+      // If count dropped (hit event), show scatter toast with the lost amount
+      if (n < prev) {
+        scatterCount.value = prev - n
+        showScatterToast.value = true
+        if (scatterToastTimer !== null) clearTimeout(scatterToastTimer)
+        scatterToastTimer = setTimeout(() => {
+          showScatterToast.value = false
+        }, 800)
+      }
+    })
+  } catch {
+    // fail-safe: if callback setup throws, continue without it
+  }
+
+  // Wire event callback (for sound pickup)
+  try {
+    game.onEvent((e: 'hit' | 'pickup' | 'goal') => {
+      if (e === 'pickup' || e === 'goal') {
+        sound.blip()
+      }
+    })
+  } catch {
+    // fail-safe
+  }
+
   // Arm input listeners for idle timer and player-control handoff
   for (const ev of INPUT_EVENTS) {
     window.addEventListener(ev, onUserInput, { passive: ev !== 'keydown' })
@@ -220,6 +297,10 @@ onUnmounted(() => {
   if (idleTimer !== null) {
     clearTimeout(idleTimer)
     idleTimer = null
+  }
+  if (scatterToastTimer !== null) {
+    clearTimeout(scatterToastTimer)
+    scatterToastTimer = null
   }
   for (const ev of INPUT_EVENTS) {
     window.removeEventListener(ev, onUserInput)
@@ -286,6 +367,62 @@ onUnmounted(() => {
 
 [data-game-close]:hover {
   background: rgba(60, 20, 20, 0.9);
+}
+
+.asg-rings {
+  position: absolute;
+  top: 16px;
+  right: 72px;
+  z-index: 10001;
+  padding: 4px 12px;
+  border-radius: 4px;
+  background: rgba(6, 8, 15, 0.75);
+  color: #ffd27a;
+  font-size: 14px;
+  font-family: system-ui, sans-serif;
+  pointer-events: none;
+  min-width: 3em;
+  text-align: center;
+}
+
+.asg-scatter-toast {
+  position: absolute;
+  top: 52px;
+  right: 72px;
+  z-index: 10002;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: rgba(200, 40, 40, 0.85);
+  color: #ffffff;
+  font-size: 13px;
+  font-family: system-ui, sans-serif;
+  pointer-events: none;
+  animation: asg-fade-out 0.8s forwards;
+}
+
+@keyframes asg-fade-out {
+  0% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 0.5; transform: translateY(-8px); }
+  100% { opacity: 0; transform: translateY(-12px); }
+}
+
+[data-mute-toggle] {
+  position: absolute;
+  top: 16px;
+  right: 120px;
+  z-index: 10001;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  background: rgba(6, 8, 15, 0.8);
+  color: #ffffff;
+  font-size: 16px;
+  font-family: system-ui, sans-serif;
+  cursor: pointer;
+}
+
+[data-mute-toggle]:hover {
+  background: rgba(30, 40, 70, 0.9);
 }
 
 [data-player-hint] {

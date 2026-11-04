@@ -46,6 +46,8 @@ function makeGameHandle() {
     stop: vi.fn(),
     setPlayerControl: vi.fn(),
     dispose: vi.fn(),
+    onRingCount: vi.fn(),
+    onEvent: vi.fn(),
   }
 }
 
@@ -312,6 +314,40 @@ describe('AppSpaceGame attract state machine', () => {
 
     expect(wrapper.find('[data-game-overlay]').exists()).toBe(false)
     expect(gameHandle.stop).toHaveBeenCalled()
+  })
+
+  // (i) onRingCount callback updates the ring-count HUD
+  it('(i) ring HUD shows count when onRingCount fires', async () => {
+    const { wrapper, gameHandle } = await mountWithGatePass()
+
+    // Trigger attract mode so the overlay (and HUD) is visible
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(wrapper.find('[data-game-overlay]').exists()).toBe(true)
+
+    // Capture the onRingCount callback registered on the game handle
+    // It is set up during onMounted after createGame is called
+    const onRingCountCb = gameHandle.onRingCount.mock.calls[0]?.[0] as ((n: number) => void) | undefined
+    expect(typeof onRingCountCb).toBe('function')
+
+    // Fire the callback with a count of 3
+    onRingCountCb!(3)
+    await flushPromises()
+
+    // The HUD div should be in the DOM showing the count
+    const hud = wrapper.find('.asg-rings')
+    expect(hud.exists()).toBe(true)
+    expect(hud.text()).toContain('3')
+  })
+
+  // (j) Mute toggle control is present in the mounted DOM
+  it('(j) mute toggle control is present in the mounted DOM', async () => {
+    const { wrapper } = await mountWithGatePass()
+
+    // Show the overlay so the mute toggle is visible
+    await vi.advanceTimersByTimeAsync(60000)
+
+    const muteBtn = wrapper.find('[data-mute-toggle]')
+    expect(muteBtn.exists()).toBe(true)
   })
 
   // prefers-reduced-motion: idle auto-start disabled, Demo button still works

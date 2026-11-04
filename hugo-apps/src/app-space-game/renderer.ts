@@ -9,6 +9,13 @@ import { fitLabel, coinLabelY } from './label-layout'
 import { SPEED, GRAV, JUMP } from './constants'
 import { selectClip, frameAt } from './anim'
 import type { ClipName, AnimContext } from './anim'
+import { GROUND_Y, stepPhysics, respawn } from './physics'
+import type { PhysicsState, WorldHazards } from './physics'
+import { autopilotInput, watchdog } from './autopilot'
+import type { ProgressTrack } from './autopilot'
+import { reset as ringsReset, collect as ringsCollect, onHit as ringsOnHit } from './rings'
+import type { RingState } from './rings'
+import { COIN_SPACING } from './obstacles'
 
 const ZONE_W = 26
 const GY = 0
@@ -63,6 +70,7 @@ interface ZoneMeta {
   goalX: number
   start: number
   coinCount: number
+  hazards: WorldHazards
 }
 
 // --- scene builder ---
@@ -70,9 +78,10 @@ interface ZoneMeta {
 function buildScene(
   scene: THREE.Scene,
   model: LevelModel
-): { markers: CoinMesh[]; zoneMeta: ZoneMeta[]; totalLen: number } {
+): { markers: CoinMesh[]; zoneMeta: ZoneMeta[]; totalLen: number; obstacleMeshes: THREE.Mesh[] } {
   const markers: CoinMesh[] = []
   const zoneMeta: ZoneMeta[] = []
+  const obstacleMeshes: THREE.Mesh[] = []
   let runningX = 5
 
   model.zones.forEach((zone: Zone) => {
@@ -275,6 +284,48 @@ function buildScene(
       }
     }
 
+    // Build WorldHazards for this zone (coin-index → world units)
+    const worldHazards: WorldHazards = {
+      obstacles: zone.obstacles.map(o => ({
+        x: zStart + o.x * COIN_SPACING,
+        w: o.w * COIN_SPACING,
+        h: o.h,
+      })),
+      pits: zone.pits.map(p => ({
+        x: zStart + p.x * COIN_SPACING,
+        w: p.w,
+      })),
+    }
+
+    // Render obstacle meshes (boxes sitting on the ground)
+    for (const obs of worldHazards.obstacles) {
+      const obsMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(obs.w, obs.h, 1.5),
+        new THREE.MeshStandardMaterial({
+          color: 0xff4444,
+          roughness: 0.6,
+          emissive: 0x330000,
+          emissiveIntensity: 0.4,
+        })
+      )
+      obsMesh.position.set(obs.x, GROUND_Y + obs.h / 2, 0.1)
+      obsMesh.castShadow = true
+      scene.add(obsMesh)
+      obstacleMeshes.push(obsMesh)
+    }
+
+    // Render pit markers (visible hazard indicator at pit edges — no ground segment)
+    for (const pit of worldHazards.pits) {
+      // Pit marker: a darker strip below the ground to signal the gap
+      const pitMark = new THREE.Mesh(
+        new THREE.BoxGeometry(pit.w, 0.3, 1.5),
+        new THREE.MeshBasicMaterial({ color: 0x110011 })
+      )
+      pitMark.position.set(pit.x, GROUND_Y - 0.6, 0.1)
+      scene.add(pitMark)
+      obstacleMeshes.push(pitMark)
+    }
+
     runningX = goalX + 6
 
     zoneMeta.push({
@@ -284,10 +335,22 @@ function buildScene(
       goalX,
       start: zStart,
       coinCount: zone.coins.length,
+      hazards: worldHazards,
     })
   })
 
-  return { markers, zoneMeta, totalLen: runningX }
+  return { markers, zoneMeta, totalLen: runningX, obstacleMeshes }
+}
+
+/** Merge all zone WorldHazards into a single flat WorldHazards for physics queries. */
+function mergeHazards(zoneMeta: ZoneMeta[]): WorldHazards {
+  const obstacles: WorldHazards['obstacles'] = []
+  const pits: WorldHazards['pits'] = []
+  for (const zm of zoneMeta) {
+    obstacles.push(...zm.hazards.obstacles)
+    pits.push(...zm.hazards.pits)
+  }
+  return { obstacles, pits }
 }
 
 // --- public API ---
@@ -296,6 +359,8 @@ export interface GameHandle {
   start(): void
   stop(): void
   setPlayerControl(on: boolean): void
+  onRingCount(cb: (n: number) => void): void
+  onEvent(cb: (e: 'hit' | 'pickup' | 'goal') => void): void
   dispose?(): void
 }
 
@@ -313,6 +378,8 @@ export function createGame(
       start() {},
       stop() {},
       setPlayerControl(_on: boolean) {},
+      onRingCount(_cb: (n: number) => void) {},
+      onEvent(_cb: (e: 'hit' | 'pickup' | 'goal') => void) {},
       dispose() {},
     }
   }
@@ -344,12 +411,15 @@ export function createGame(
   scene.add(kLight)
 
   // Build scene from model
-  const { markers, zoneMeta, totalLen } = buildScene(scene, model)
+  const { markers, zoneMeta, totalLen, obstacleMeshes } = buildScene(scene, model)
+
+  // Merged hazards for physics (all zones combined)
+  const allHazards = mergeHazards(zoneMeta)
 
   // Kasimir billboard — atlas-animated with static fallback
   const kMat = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.3 })
   const kasimir = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 3.6), kMat)
-  kasimir.position.set(5, 1.8, 0.3)
+  kasimir.position.set(5, GROUND_Y, 0.3)
   scene.add(kasimir)
 
   // Atlas animation state
@@ -464,16 +534,43 @@ export function createGame(
   blob.position.set(5, 0.03, 0)
   scene.add(blob)
 
-  // Game state
-  let kasX = 5
-  let kasY = 1.8
-  let vy = 0
-  let onGround = true
+  // --- Physics + ring state ---
+  let physState: PhysicsState = {
+    x: 5,
+    y: GROUND_Y,
+    vy: 0,
+    onGround: true,
+    facing: 1,
+    lastSafeX: 5,
+  }
+  let ringState: RingState = ringsReset()
+
+  // Progress tracking for autopilot watchdog
+  let progress: ProgressTrack = {
+    lastX: 5,
+    lastAdvanceT: 0,
+    nowT: 0,
+  }
+
+  // Animation event tracking for AnimContext
+  let lastEvent: AnimContext['lastEvent'] = 'none'
+  let sinceEventMs = 0
+
   let playerControl = false
   let rafId = 0
   let started = false
-  let facing: 1 | -1 = 1          // sprite facing direction
-  let lastMoveDir: -1 | 0 | 1 = 0 // for AnimContext
+
+  // --- Callbacks ---
+  let ringCountCb: ((n: number) => void) | null = null
+  let eventCb: ((e: 'hit' | 'pickup' | 'goal') => void) | null = null
+
+  function fireRingCount(n: number): void {
+    try { ringCountCb?.(n) } catch { /* never throw into the page */ }
+  }
+
+  function fireEvent(e: 'hit' | 'pickup' | 'goal'): void {
+    try { eventCb?.(e) } catch { /* never throw into the page */ }
+  }
 
   // Zone hit tracking for onPickTrack
   const goalHit = new Set<string>()
@@ -481,30 +578,51 @@ export function createGame(
   const clock = new THREE.Clock()
 
   // --- Player input state ---
-  const keys = { right: false, jump: false }
+  // Renderer owns the listeners when player-control is on.
+  const keys = { right: false, left: false, jump: false }
 
   function onKeyDown(e: KeyboardEvent): void {
     if (e.key === 'ArrowRight') keys.right = true
+    if (e.key === 'ArrowLeft') keys.left = true
     if (e.key === 'ArrowUp' || e.key === ' ') keys.jump = true
   }
 
   function onKeyUp(e: KeyboardEvent): void {
     if (e.key === 'ArrowRight') keys.right = false
+    if (e.key === 'ArrowLeft') keys.left = false
     if (e.key === 'ArrowUp' || e.key === ' ') keys.jump = false
   }
 
-  // Pointer/touch: tap anywhere on the canvas = jump; hold right half = run right
+  // Pointer/touch: tap anywhere on the canvas = jump; hold right half = run right; hold left = run left
   let pointerDown = false
-  let pointerRightHalf = false
+  let pointerHalf: 'left' | 'right' | null = null
 
   function onPointerDown(e: PointerEvent): void {
     pointerDown = true
-    pointerRightHalf = e.clientX > canvas.getBoundingClientRect().left + canvas.clientWidth / 2
+    const rect = canvas.getBoundingClientRect()
+    const relX = e.clientX - rect.left
+    const third = canvas.clientWidth / 3
+    if (relX < third) {
+      pointerHalf = 'left'
+    } else if (relX > canvas.clientWidth - third) {
+      pointerHalf = 'right'
+    } else {
+      pointerHalf = null // center tap = jump
+    }
   }
 
   function onPointerUp(): void {
     pointerDown = false
-    pointerRightHalf = false
+    pointerHalf = null
+  }
+
+  /** Derive moveDir and jump from current input state in player mode. */
+  function playerInput(): { moveDir: -1 | 0 | 1; jump: boolean } {
+    let moveDir: -1 | 0 | 1 = 0
+    if (keys.right || (pointerDown && pointerHalf === 'right')) moveDir = 1
+    else if (keys.left || (pointerDown && pointerHalf === 'left')) moveDir = -1
+    const jump = keys.jump || (pointerDown && pointerHalf === null)
+    return { moveDir, jump }
   }
 
   function resizeToCanvas() {
@@ -517,72 +635,128 @@ export function createGame(
   resizeToCanvas()
 
   // Keep camera aspect + drawing buffer in sync when the window resizes mid-attract
-  // (the overlay fills the viewport). Without this the aspect baked at start()
-  // stretches on resize. Armed in start(), removed in stop()/dispose().
   const onResize = () => resizeToCanvas()
+
+  /** Reset all run state (called at start + on wrap). */
+  function resetRunState(): void {
+    physState = {
+      x: 5,
+      y: GROUND_Y,
+      vy: 0,
+      onGround: true,
+      facing: 1,
+      lastSafeX: 5,
+    }
+    ringState = ringsReset()
+    progress = { lastX: 5, lastAdvanceT: 0, nowT: clock.elapsedTime }
+    lastEvent = 'none'
+    sinceEventMs = 0
+    animElapsedMs = 0
+    currentClip = 'idle'
+    goalHit.clear()
+    markers.forEach(m => {
+      m.userData.alive = true
+      m.visible = true
+    })
+    fireRingCount(0)
+  }
 
   function tick() {
     const dt = Math.min(clock.getDelta(), 0.05)
     const t = clock.elapsedTime
 
+    // Update progress time
+    progress = { ...progress, nowT: t }
+
+    // Derive input
+    let input: { moveDir: -1 | 0 | 1; jump: boolean }
+
     if (!playerControl) {
-      // Attract auto-run: advance Kasimir forward, loop at end
-      kasX += SPEED * dt
-      lastMoveDir = 1
-      facing = 1
-      if (kasX > totalLen - 4) {
-        kasX = 5
-        kasY = 1.8
-        vy = 0
-        onGround = true
-        animElapsedMs = 0
-        goalHit.clear()
-        // Reset coin visibility for attract loop
-        markers.forEach(m => {
-          m.userData.alive = true
-          m.visible = true
-        })
+      // Attract mode: autopilot
+      input = autopilotInput(physState, allHazards)
+
+      // Update progress tracking (x advance > 0.5 units resets wedge timer)
+      if (physState.x - progress.lastX > 0.5) {
+        progress = { ...progress, lastX: physState.x, lastAdvanceT: t }
       }
-      // Auto-jump
-      if (onGround && Math.sin(t * 2.1) > 0.8) {
-        vy = JUMP
-        onGround = false
+
+      // Watchdog: if stalled, forced-teleport
+      const wd = watchdog(progress, physState, allHazards)
+      if (wd.forced) {
+        physState = wd.next
+        // Resync progress after watchdog teleport
+        progress = { lastX: physState.x, lastAdvanceT: t, nowT: t }
       }
     } else {
-      // Player-driven movement: keyboard + pointer/touch
-      const moveRight = keys.right || (pointerDown && pointerRightHalf)
-      if (moveRight) {
-        kasX += SPEED * dt
-        lastMoveDir = 1
-        facing = 1
-      } else {
-        lastMoveDir = 0
-      }
-      const doJump = keys.jump || (pointerDown && !pointerRightHalf)
-      if (doJump && onGround) {
-        vy = JUMP
-        onGround = false
-        keys.jump = false  // consume single-press so holding doesn't re-trigger
+      // Player mode
+      input = playerInput()
+      // Consume jump so holding doesn't re-trigger
+      if (input.jump && physState.onGround) {
+        keys.jump = false
       }
     }
 
-    // Physics (shared between attract and player modes)
-    vy += GRAV * dt
-    let newY = kasY + vy * dt
-    if (newY <= 1.8) {
-      newY = 1.8
-      vy = 0
-      onGround = true
-    }
-    kasY = newY
+    // --- Physics step ---
+    const { next: nextState, event: physEvent } = stepPhysics(physState, input, allHazards, dt)
+    physState = nextState
 
-    // Animation clip selection
+    // --- Handle physics events ---
+    if (physEvent === 'hit' || physEvent === 'fell') {
+      const { next: nextRings } = ringsOnHit(ringState)
+      ringState = nextRings
+      fireRingCount(ringState.count)
+      fireEvent('hit')
+      lastEvent = physEvent === 'fell' ? 'fell' : 'hit'
+      sinceEventMs = 0
+      physState = respawn(physState)
+    }
+
+    // --- Wrap at end of level (attract mode loops; player mode resets) ---
+    if (physState.x > totalLen - 4) {
+      resetRunState()
+      return
+    }
+
+    // --- Coin collection ---
+    markers.forEach(coin => {
+      if (!coin.userData.alive) return
+      coin.rotation.y += dt * 3
+      if (Math.abs(coin.position.x - physState.x) < 1.2 && Math.abs(coin.position.y - physState.y) < 1.6) {
+        coin.userData.alive = false
+        coin.visible = false
+        ringState = ringsCollect(ringState)
+        fireRingCount(ringState.count)
+        fireEvent('pickup')
+        lastEvent = 'pickup'
+        sinceEventMs = 0
+      }
+    })
+
+    // --- Goal reach check ---
+    if (playerControl) {
+      zoneMeta.forEach((zm, zi) => {
+        const zone = model.zones[zi]
+        const zoneId = zone?.id
+        if (zoneId && !goalHit.has(zoneId) && !zm.locked && Math.abs(physState.x - zm.goalX) < 1.3) {
+          goalHit.add(zoneId)
+          const trackId = zone.goal.trackId ?? zoneId
+          fireEvent('goal')
+          lastEvent = 'goal'
+          sinceEventMs = 0
+          opts.onPickTrack(trackId)
+        }
+      })
+    }
+
+    // --- Animation ---
+    sinceEventMs += dt * 1000
+
     const animCtx: AnimContext = {
-      onGround,
-      moveDir: lastMoveDir,
-      vy,
-      lastEvent: 'none',
-      sinceEventMs: 0,
+      onGround: physState.onGround,
+      moveDir: (input.moveDir as -1 | 0 | 1),
+      vy: physState.vy,
+      lastEvent,
+      sinceEventMs,
     }
     const nextClip = selectClip(animCtx)
     if (nextClip !== currentClip) {
@@ -592,46 +766,20 @@ export function createGame(
       animElapsedMs += dt * 1000
     }
 
-    // Update Kasimir position
-    kasimir.position.set(kasX, kasY, 0.3)
-    // rotation.z sway removed — sprite sheet conveys motion
-    blob.position.set(kasX, 0.03, 0)
-    blob.scale.setScalar(1 - (kasY - 1.8) * 0.12)
-    kLight.position.set(kasX, kasY + 1, 3)
+    // --- Update Kasimir mesh ---
+    kasimir.position.set(physState.x, physState.y, 0.3)
+    blob.position.set(physState.x, 0.03, 0)
+    blob.scale.setScalar(1 - (physState.y - GROUND_Y) * 0.12)
+    kLight.position.set(physState.x, physState.y + 1, 3)
 
-    // Update atlas UV for current animation frame
-    updateKasimirUV(facing)
+    // Update atlas UV for current animation frame + facing
+    updateKasimirUV(physState.facing)
 
     // Camera follow
-    camera.position.x += (kasX - camera.position.x) * Math.min(1, dt * 4)
+    camera.position.x += (physState.x - camera.position.x) * Math.min(1, dt * 4)
     camera.position.y = 3.4 + Math.sin(t * 1.2) * 0.15
     camera.position.z = 13
     camera.lookAt(camera.position.x, 2.4, 0)
-
-    // Coin collection
-    markers.forEach(coin => {
-      if (!coin.userData.alive) return
-      coin.rotation.y += dt * 3
-      if (Math.abs(coin.position.x - kasX) < 1.2 && Math.abs(coin.position.y - kasY) < 1.6) {
-        coin.userData.alive = false
-        coin.visible = false
-      }
-    })
-
-    // Goal reach check - fires onPickTrack in player-control mode
-    if (playerControl) {
-      zoneMeta.forEach((zm, zi) => {
-        const zone = model.zones[zi]
-        const zoneId = zone?.id
-        if (zoneId && !goalHit.has(zoneId) && !zm.locked && Math.abs(kasX - zm.goalX) < 1.3) {
-          goalHit.add(zoneId)
-          // Prefer goal.trackId (set for all goal kinds per buildLevelModel);
-          // fall back to zone.id so every goal-reach always fires a usable id.
-          const trackId = zone.goal.trackId ?? zoneId
-          opts.onPickTrack(trackId)
-        }
-      })
-    }
 
     renderer.render(scene, camera)
     rafId = requestAnimationFrame(tick)
@@ -652,9 +800,10 @@ export function createGame(
     canvas.removeEventListener('pointerup', onPointerUp)
     canvas.removeEventListener('pointerleave', onPointerUp)
     keys.right = false
+    keys.left = false
     keys.jump = false
     pointerDown = false
-    pointerRightHalf = false
+    pointerHalf = null
   }
 
   return {
@@ -664,6 +813,7 @@ export function createGame(
       resizeToCanvas()
       window.addEventListener('resize', onResize)
       clock.start()
+      resetRunState()
       rafId = requestAnimationFrame(tick)
     },
     stop() {
@@ -684,6 +834,12 @@ export function createGame(
         detachPlayerInput()
       }
     },
+    onRingCount(cb: (n: number) => void) {
+      ringCountCb = cb
+    },
+    onEvent(cb: (e: 'hit' | 'pickup' | 'goal') => void) {
+      eventCb = cb
+    },
     dispose() {
       // Dispose renderer and GPU resources
       window.removeEventListener('resize', onResize)
@@ -701,6 +857,7 @@ export function createGame(
         })
         kMat.dispose()
         atlasTex?.dispose()
+        obstacleMeshes.length = 0
       } catch {
         // Best-effort - never throw on dispose
       }
