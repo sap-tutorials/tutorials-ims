@@ -51,7 +51,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import type { LevelModel } from './types'
-import { isWebGLAvailable, loadAppSpaceData } from './feature'
+import { isGameDisabled, isWebGLAvailable, loadAppSpaceData } from './feature'
 import { buildLevelModel } from './level-model'
 import type { GameHandle } from './renderer'
 
@@ -171,6 +171,9 @@ function onUserInput(e: Event): void {
 const INPUT_EVENTS: string[] = ['mousemove', 'touchstart', 'keydown']
 
 onMounted(async () => {
+  const safeStorage = (() => { try { return window.localStorage } catch { return null } })()
+  if (isGameDisabled(window.location.search, safeStorage)) return
+
   // WebGL must be available
   if (!isWebGLAvailable()) return
 
