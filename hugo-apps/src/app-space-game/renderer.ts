@@ -5,6 +5,7 @@
 import * as THREE from 'three'
 import type { LevelModel, Zone, Coin, Gate, Goal } from './types'
 import { zoneColor } from './level-model'
+import { fitLabel, coinLabelY } from './label-layout'
 
 const ZONE_W = 26
 const GY = 0
@@ -14,22 +15,31 @@ const KASIMIR_TEX = '/images/devtoberfest/selfie/thumbnails/Kasimir_Smiles.png'
 
 /** Build a canvas-texture sprite for floating text labels. */
 function makeLabel(text: string, color: string = '#ffffff'): THREE.Sprite {
+  const layout = fitLabel(text)
   const cv = document.createElement('canvas')
-  cv.width = 512
-  cv.height = 96
+  cv.width = layout.canvasW
+  cv.height = layout.canvasH
   const g = cv.getContext('2d')!
   g.font = 'bold 40px system-ui'
   g.textAlign = 'center'
   g.textBaseline = 'middle'
   g.lineWidth = 8
   g.strokeStyle = 'rgba(0,0,0,.75)'
-  g.strokeText(text, 256, 48)
   g.fillStyle = color
-  g.fillText(text, 256, 48)
+
+  // Draw each wrapped line
+  const lineHeight = 30
+  const verticalOffset = (layout.canvasH - layout.lines.length * lineHeight) / 2 + lineHeight / 2
+  layout.lines.forEach((line, index) => {
+    const y = verticalOffset + index * lineHeight
+    g.strokeText(line, layout.canvasW / 2, y)
+    g.fillText(line, layout.canvasW / 2, y)
+  })
+
   const tex = new THREE.CanvasTexture(cv)
   const mat = new THREE.SpriteMaterial({ map: tex, transparent: true })
   const sprite = new THREE.Sprite(mat)
-  sprite.scale.set(6, 1.1, 1)
+  sprite.scale.set(layout.worldW, layout.worldH, 1)
   return sprite
 }
 
@@ -151,7 +161,8 @@ function buildScene(
 
       const coinColor = isDone ? '#9fe7a8' : isAvailable ? '#ffe9a3' : '#888888'
       const tag = makeLabel(coin.title, coinColor)
-      tag.position.set(runningX, 3.5, 0)
+      const tagY = coinLabelY(3.5, k)
+      tag.position.set(runningX, tagY, 0)
       scene.add(tag)
 
       if (!isLocked && !isDone) markers.push(coinMesh)
