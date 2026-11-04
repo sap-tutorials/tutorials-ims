@@ -80,6 +80,9 @@ export interface Goal {
   trackId: string
 }
 
+export interface Obstacle { x: number; w: number; h: number }  // x in coin-index units
+export interface Pit { x: number; w: number }                  // x in coin-index units
+
 export interface Zone {
   id: string
   title: string
@@ -89,6 +92,8 @@ export interface Zone {
   coins: Coin[]
   gates: Gate[]
   goal: Goal
+  obstacles: Obstacle[]
+  pits: Pit[]
 }
 
 export interface LevelModel {

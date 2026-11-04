@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import type { LevelModel, Zone, Coin, Gate, Goal } from './types'
 import { zoneColor } from './level-model'
 import { fitLabel, coinLabelY } from './label-layout'
+import { SPEED, GRAV, JUMP } from './constants'
 
 const ZONE_W = 26
 const GY = 0
@@ -378,10 +379,6 @@ export function createGame(
 
   // Zone hit tracking for onPickTrack
   const goalHit = new Set<string>()
-
-  const SPEED = 6
-  const GRAV = -24
-  const JUMP = 10
 
   const clock = new THREE.Clock()
 
