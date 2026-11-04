@@ -12,7 +12,7 @@ The Kasimir Arcade island shipped to DEV (`hugo-apps/src/app-space-game/`, flag 
 
 Today Kasimir auto-runs rightward only, clips straight through every obstacle, can't fall, can't lose, can't turn around, and the floating text is cut off and overlapping to the point of being unreadable (see issue screenshots). There is no feedback when a ring is collected and no score. The result is motion without substance.
 
-This round makes the arcade **feel like a real little game**: obstacles that actually stop you and must be jumped, pits you fall into, a ring count that scatters when you get hit, readable labels, and two-way movement — while staying a short, forgiving, **unloseable** booth attractor whose whole purpose is still to hand the visitor off to the real grid. The word Tom used is **"simulate"**: it should *feel* like a game, not *become* a scored game. Nothing here escapes the overlay or touches the backend.
+This round makes the arcade **feel like a real little game**: an **animated Kasimir** (new multi-pose sprite sheets, replacing the single frozen billboard), obstacles that actually stop you and must be jumped, pits you fall into, a ring count that scatters when you get hit, readable labels, and two-way movement — while staying a short, forgiving, **unloseable** booth attractor whose whole purpose is still to hand the visitor off to the real grid. The word Tom used is **"simulate"**: it should *feel* like a game, not *become* a scored game. Nothing here escapes the overlay or touches the backend.
 
 ## What changes (the six asks)
 
@@ -56,7 +56,7 @@ Make it read as a real level across a crowded room, still zero-backend and still
 
 - Add **Left** movement: `ArrowLeft` / `a`, and the left half of a touch/pointer input, move Kasimir left; Right unchanged.
 - Current touch scheme (tap = jump, hold-right-half = run right) is reworked so left-half = run left, right-half = run right, and a distinct gesture (tap / swipe-up) = jump — documented in the player hint.
-- Kasimir's billboard **faces the direction of travel** (flip the sprite) so backward movement reads correctly.
+- Kasimir's billboard **faces the direction of travel** (flip the sprite / its UVs) so backward movement reads correctly — driven by the new animated sprite sheet (ask 7).
 - Camera and world bounds follow both directions; you can't walk off the left edge of the level.
 
 ### 5. Real obstacles + pits (the core of "feels like a game")
@@ -80,6 +80,27 @@ This is the substantive new system — collision + gravity + consequence:
 - **Pickup feedback**: collecting a ring triggers a visible pop / sparkle / flash at the ring and a short **pickup sound** (muted by default, unmute toggle, gated on first user gesture; fails silently where audio is blocked/unsupported), so it's obvious you got it — today the ring just silently vanishes.
 - **HUD ring counter**: a live count of rings collected this run, drawn as a DOM `<div>` HUD overlay (reactive, top corner), compositing above the Three.js canvas.
 - **Strictly ephemeral**: the count **resets every run**, **drops to 0 on a hit** (scatter), and is **never persisted and never carried over to the real App-Space page**. No backend, no gameboard, no per-user storage. The mute toggle is per-session UI state, not persisted. (Upholds the original design's "no scoring stored server-side" non-goal; Tom restated this explicitly.)
+
+### 7. Animated Kasimir sprite sheets (new art)
+
+Tom provided **two new hand-drawn sprite sheets** (2000×1116 RGBA each) replacing the single static `Kasimir_Smiles.png` billboard. They are the source of the "it feels unreal" fix as much as the physics are — a frozen cat reads as fake no matter how good the obstacles are. Committed raw into the repo at `hugo/static/images/app-space-game/sprite-src/`:
+
+- `kasimir-sheet-locomotion-raw.png` (image #2) — idle / walk / run strides.
+- `kasimir-sheet-actions-raw.png` (image #3) — jump & land arc **plus bonus action poses**: star-dazed **hit**, **celebrate** (arms up / stars), tail-swipe, a **ghost/KO** pit-death frame, **sleep**, and a **chest-opening** pose.
+
+**Two integration-prep facts established by inspecting the actual files** (not the description):
+
+- **Background is opaque cream (~#F4F3EE, alpha=255), not transparent.** As-is they render as cream rectangles in the 3D scene. A **cream→transparent alpha-key** prep step (keyed near #F4F3EE with an edge threshold, visually checked so it doesn't eat Kasimir's white chest/face) is required. Tom's call: **Claude processes this programmatically**, shows the result for confirmation, then commits the transparent atlas.
+- **The sheets are irregular galleries** (variable frames-per-row, inconsistent spacing) — **not** a uniform grid sliceable by fixed `floor(w/cols)` math. So prep also **extracts each pose's bounding box and repacks into a uniform game atlas** (fixed cell grid) + a **JSON frame-map** (`{clip: {frames:[...], fps, loop}}`). The renderer animates by swapping the texture UV offset per frame.
+
+**Animation system** (replaces the static plane + `rotation.z` wobble in `renderer.ts`):
+
+- A small **animation state machine** drives clips from physics state: `idle`, `walk`, `run`, `jump` (the 4 core cycles) + `hit` (stars, on obstacle collision), `ko` (ghost, on pit-fall), `celebrate` (ring pickup / zone milestone), `chest` (reaching a goal). Tom's call: **fold the bonus poses into the mechanics** this round.
+- **Facing**: flip UV / `scale.x` by travel direction (serves ask 4).
+- **Reduced motion**: attract stays suppressed under `prefers-reduced-motion` (unchanged), but if such a user **manually** starts the Demo the sprite **animates fully** (Tom's call).
+- **Fallback**: if the atlas fails to load, fall back to today's static `Kasimir_Smiles.png` so the game still runs (upholds the fail-safe anti-goal).
+
+The cream-key + atlas-repack is a **build/prep step** (a `scripts/` node tool) that outputs the committed transparent atlas + frame-map JSON; the raw sheets stay in the repo as the source of truth. Exact grid, per-frame boxes, and fps are measured from the real pixels during the plan, not guessed from the preview.
 
 ## How it gets made (decided)
 
@@ -122,7 +143,7 @@ A fresh builder reviewed this doc. The five below were **Tom's to decide** and c
 
 ## Goals
 
-- The arcade **feels like a game**: obstacles stop you, pits catch you, a botched jump has a visible cost, and you can move both ways.
+- The arcade **feels like a game**: an **animated Kasimir** (idle/walk/run/jump + hit/KO/celebrate/chest), obstacles stop you, pits catch you, a botched jump has a visible cost, and you can move both ways.
 - **Light challenge, never difficult, never a game-over** — anyone at the booth can get through; the run always continues.
 - **Autopilot plays the same game**, attempts obstacles, may fail occasionally, and **always self-recovers** — the kiosk never wedges.
 - **Readable** labels at booth distance; no cutoff or overlap.
@@ -136,7 +157,7 @@ A fresh builder reviewed this doc. The five below were **Tom's to decide** and c
 - Not a scored game. No persistence, no leaderboard, no gameboard/points integration, no per-user storage. Ring count never leaves the overlay.
 - Not lives/levels/enemies/health-bars/game-over. One continuous forgiving run.
 - No obstacle/pit data in the App-Space contract; no backend or CDS changes.
-- No commissioned art; reuse existing Kasimir PNGs.
+- No **new** commissioned art beyond the sprite sheets Tom already provided; no 3D model. Existing Kasimir PNGs remain the fallback.
 - Not a change to the grid's canonical login/pick/launch role — still the entry layer, still hands off.
 - Not a rewrite of the original design — additive only.
 
@@ -154,7 +175,7 @@ A fresh builder reviewed this doc. The five below were **Tom's to decide** and c
 - Feature flag `APP_SPACE_GAME_ENABLED` (DB, default OFF, DEV-only) unchanged; new disable layered on top.
 - Zero changes to CAP services, HANA model, `getAppSpaceProgress`/CDS return type, publish pipeline.
 - Must bundle through the existing `hugo-apps` Vite build; Three.js stays dynamically imported / code-split so non-App-Space pages aren't bloated. Island-manifest/hashing (`build:all`) must ship correct hashed JS/CSS.
-- Reuse existing Kasimir art (`hugo/static/images/devtoberfest/selfie/thumbnails/Kasimir_*.png`, `app/display-app-drawings/public/kasimir-tuxedo.png`).
+- Reuse existing Kasimir art for fallback (`hugo/static/images/devtoberfest/selfie/thumbnails/Kasimir_*.png`); the **new sprite sheets** (`hugo/static/images/app-space-game/sprite-src/*.png`) are the primary animated source, processed into a committed transparent atlas + frame-map at build/prep time.
 - WebGL2 preferred, graceful degradation / fallback-to-grid when absent; respect `prefers-reduced-motion` (today it suppresses attract entirely — keep that behavior).
 - PROD event cutover end of July 2026; this is additive and flag-gated, so it bakes on DEV without date pressure.
 - Targets DEV via PR (feature PRs target DEV, not main).
@@ -169,6 +190,7 @@ A fresh builder reviewed this doc. The five below were **Tom's to decide** and c
 - Label system rebuild: measurement, wrapping/ellipsis, resolution, anti-overlap spacing/stagger.
 - Scene polish: concrete parallax layer design, set-dressing, improved flag/chest geometry, per-zone color propagation — within perf budget.
 - Two-way input: keyboard + touch scheme, sprite facing/flip, world bounds, updated player hint text.
+- **Sprite-sheet prep + animation**: the cream→transparent alpha-key tool and its visual check; the gallery→uniform-atlas repack and frame-map JSON (measuring real per-frame boxes/fps from the two 2000×1116 sheets); the animation state machine wiring clips to physics state (idle/walk/run/jump/hit/ko/celebrate/chest); the static-PNG fallback. Decide where the prep script lives (`scripts/`) and whether it runs in `build:all` or is a one-shot that commits the atlas.
 - Disable param: exact precedence implementation, `localStorage` read/write, and gating it ahead of the Three.js dynamic import in `feature.ts`/`AppSpaceGame.vue`.
 - Test plan against the existing `__tests__/` suites for every deterministic piece above.
 
