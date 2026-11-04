@@ -410,6 +410,11 @@ export function createGame(
   }
   resizeToCanvas()
 
+  // Keep camera aspect + drawing buffer in sync when the window resizes mid-attract
+  // (the overlay fills the viewport). Without this the aspect baked at start()
+  // stretches on resize. Armed in start(), removed in stop()/dispose().
+  const onResize = () => resizeToCanvas()
+
   function tick() {
     const dt = Math.min(clock.getDelta(), 0.05)
     const t = clock.elapsedTime
@@ -525,6 +530,7 @@ export function createGame(
       if (started) return
       started = true
       resizeToCanvas()
+      window.addEventListener('resize', onResize)
       clock.start()
       rafId = requestAnimationFrame(tick)
     },
@@ -533,6 +539,7 @@ export function createGame(
         cancelAnimationFrame(rafId)
         rafId = 0
       }
+      window.removeEventListener('resize', onResize)
       detachPlayerInput()
       playerControl = false
       started = false
@@ -547,6 +554,7 @@ export function createGame(
     },
     dispose() {
       // Dispose renderer and GPU resources
+      window.removeEventListener('resize', onResize)
       try {
         renderer.dispose()
         scene.traverse(obj => {
