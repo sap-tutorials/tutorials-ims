@@ -1,7 +1,8 @@
 import type { Obstacle, Pit } from './types'
 import { JUMP_ARC } from './constants'
 
-const COIN_SPACING = 4.5 // 1 coin-index unit = 4.5 world units
+export const COIN_SPACING = 4.5 // 1 coin-index unit = 4.5 world units
+export const MIN_LANDING = 1.5  // world units — minimum clear landing strip between hazards
 
 /** Mulberry32 seeded PRNG. Returns a function that produces values in [0, 1). */
 function mulberry32(seed: number): () => number {
@@ -21,7 +22,7 @@ function mulberry32(seed: number): () => number {
  * - At most floor(coinCount / 3) hazards total
  * - Every pit w <= JUMP_ARC.maxGap (w is in world units)
  * - Every obstacle h <= JUMP_ARC.maxHeight, fixed w = 0.6 (world units)
- * - No two hazards within JUMP_ARC.maxGap world units of each other
+ * - Edge-to-edge gap between every adjacent pair of hazards >= MIN_LANDING
  * - x values are in coin-index units (between integer indices, e.g. 1.5, 3.5)
  */
 export function placeHazards(coinCount: number, zoneSeed: number): { obstacles: Obstacle[]; pits: Pit[] } {
@@ -50,30 +51,39 @@ export function placeHazards(coinCount: number, zoneSeed: number): { obstacles: 
     ;[candidates[i], candidates[j]] = [candidates[j], candidates[i]]
   }
 
-  // Track placed hazard x positions in world units for spacing check
-  const placedWorldX: number[] = []
+  // Track placed hazard [leftEdge, rightEdge] in world units for edge-to-edge spacing
+  const placedEdges: Array<{ left: number; right: number }> = []
 
   for (const cx of candidates) {
     if (obstacles.length + pits.length >= maxHazards) break
 
     const worldX = cx * COIN_SPACING
 
-    // Enforce minimum gap: no placed hazard within JUMP_ARC.maxGap world units
-    const tooClose = placedWorldX.some(px => Math.abs(worldX - px) < JUMP_ARC.maxGap)
+    // Randomly choose pit or obstacle (50/50) — decide width BEFORE spacing check
+    const isPit = rand() < 0.5
+    const candidateW = isPit
+      ? Math.min((0.3 + rand() * 0.7) * JUMP_ARC.maxGap, JUMP_ARC.maxGap)
+      : 0.6
+
+    const candLeft = worldX - candidateW / 2
+    const candRight = worldX + candidateW / 2
+
+    // Edge-to-edge check: reject unless gap to every already-placed hazard >= MIN_LANDING
+    const tooClose = placedEdges.some(e => {
+      const gapRight = candLeft - e.right  // gap when candidate is to the right
+      const gapLeft = e.left - candRight   // gap when candidate is to the left
+      const edgeGap = Math.max(gapRight, gapLeft)
+      return edgeGap < MIN_LANDING
+    })
     if (tooClose) continue
 
-    // Randomly choose pit or obstacle (50/50)
-    if (rand() < 0.5) {
-      // Pit: width in world units, clamped to JUMP_ARC.maxGap
-      const w = Math.min((0.3 + rand() * 0.7) * JUMP_ARC.maxGap, JUMP_ARC.maxGap)
-      pits.push({ x: cx, w })
-      placedWorldX.push(worldX)
+    if (isPit) {
+      pits.push({ x: cx, w: candidateW })
     } else {
-      // Obstacle: fixed w = 0.6, h clamped to JUMP_ARC.maxHeight
       const h = Math.min((0.5 + rand() * 0.5) * JUMP_ARC.maxHeight, JUMP_ARC.maxHeight)
       obstacles.push({ x: cx, w: 0.6, h })
-      placedWorldX.push(worldX)
     }
+    placedEdges.push({ left: candLeft, right: candRight })
   }
 
   return { obstacles, pits }

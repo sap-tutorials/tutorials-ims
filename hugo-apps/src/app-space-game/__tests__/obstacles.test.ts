@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { placeHazards } from '../obstacles'
+import { placeHazards, COIN_SPACING, MIN_LANDING } from '../obstacles'
 import { JUMP_ARC } from '../constants'
-
-const COIN_SPACING = 4.5 // 1 coin-index unit = 4.5 world units
 
 describe('placeHazards', () => {
   it('1: determinism — same args produce deep-equal output', () => {
@@ -35,18 +33,30 @@ describe('placeHazards', () => {
     }
   })
 
-  it('5: completable-path — no two consecutive hazards closer than maxGap in world units', () => {
-    const { obstacles, pits } = placeHazards(12, 3)
-    // Collect all hazard x positions in world units
-    const xs: number[] = [
-      ...obstacles.map(o => o.x * COIN_SPACING),
-      ...pits.map(p => p.x * COIN_SPACING),
-    ].sort((a, b) => a - b)
+  it('5: completable-path — edge-to-edge gap between every adjacent pair >= MIN_LANDING', () => {
+    // Check across multiple seeds and coin counts to confirm the invariant holds
+    for (let seed = 0; seed <= 20; seed++) {
+      for (let coinCount = 3; coinCount <= 15; coinCount++) {
+        const { obstacles, pits } = placeHazards(coinCount, seed)
 
-    for (let i = 1; i < xs.length; i++) {
-      const gap = xs[i] - xs[i - 1]
-      // Must be at least JUMP_ARC.maxGap apart (clear landing slot between each pair)
-      expect(gap).toBeGreaterThanOrEqual(JUMP_ARC.maxGap)
+        // Build [leftEdge, rightEdge] in world units for every hazard
+        type Edge = { left: number; right: number }
+        const edges: Edge[] = [
+          ...obstacles.map(o => ({
+            left: o.x * COIN_SPACING - o.w / 2,
+            right: o.x * COIN_SPACING + o.w / 2,
+          })),
+          ...pits.map(p => ({
+            left: p.x * COIN_SPACING - p.w / 2,
+            right: p.x * COIN_SPACING + p.w / 2,
+          })),
+        ].sort((a, b) => a.left - b.left)
+
+        for (let i = 1; i < edges.length; i++) {
+          const edgeGap = edges[i].left - edges[i - 1].right
+          expect(edgeGap).toBeGreaterThanOrEqual(MIN_LANDING)
+        }
+      }
     }
   })
 
