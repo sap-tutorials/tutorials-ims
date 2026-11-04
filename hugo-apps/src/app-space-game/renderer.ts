@@ -125,7 +125,37 @@ function buildScene(
     wall.position.set(x0 + ZONE_W / 2, 9, -10)
     scene.add(wall)
 
-    // Parallax pillars
+    // --- Parallax back-layers (A) ---
+    // Three depth layers of dark silhouette boxes behind the play plane.
+    // Static meshes — perspective parallax comes for free as the camera pans.
+    // No new lights. castShadow=false on all back-layer geometry.
+    const backLayerDefs = [
+      { z: -22, tint: 0x0b1430, h: 16, spacing: 10, offset: 0 },    // far dunes
+      { z: -14, tint: 0x121e40, h: 11, spacing: 8,  offset: 3 },    // mid ridges
+      { z: -8,  tint: 0x192850, h:  7, spacing: 6,  offset: 1.5 },  // near dressing (behind pillars at -6)
+    ]
+    for (const layer of backLayerDefs) {
+      // Stagger widths by segment index within zone so silhouettes vary
+      const segCount = Math.ceil(ZONE_W / layer.spacing) + 2
+      for (let s = 0; s < segCount; s++) {
+        const segW = 5 + ((s + zone.colorIndex) % 3) * 2
+        const segX = x0 + s * layer.spacing + layer.offset - layer.spacing
+        const bg = new THREE.Mesh(
+          new THREE.BoxGeometry(segW, layer.h, 1),
+          new THREE.MeshStandardMaterial({
+            color: layer.tint,
+            roughness: 1,
+            emissive: layer.tint,
+            emissiveIntensity: 0.06,
+          })
+        )
+        bg.position.set(segX, layer.h / 2 - 1, layer.z)
+        bg.castShadow = false
+        scene.add(bg)
+      }
+    }
+
+    // Parallax pillars (foreground accent columns, z=-6)
     for (let p = 0; p < 3; p++) {
       const pil = new THREE.Mesh(
         new THREE.BoxGeometry(1.2, 11, 1.2),
@@ -215,62 +245,84 @@ function buildScene(
     const isTrack = goal.kind === 'track'
 
     if (isTrack) {
-      // Flag pole for track-select goal
+      // Taller poled pennant for track-select goal (B: goal glow-up)
+      // Pole: CylinderGeometry, ~7 units tall — center at y=3.5 so base sits at GY=0
       const pole = new THREE.Mesh(
-        new THREE.BoxGeometry(0.2, 5, 0.2),
+        new THREE.CylinderGeometry(0.1, 0.12, 7, 8),
         new THREE.MeshStandardMaterial({
-          color: isLocked ? 0x444444 : 0xc0c0c0,
-          metalness: 0.7,
+          color: isLocked ? 0x444444 : 0x9fb0cc,
+          metalness: 0.6,
+          roughness: 0.3,
         })
       )
-      pole.position.set(goalX, 2.5, 0)
+      pole.position.set(goalX, 3.5, 0)
       pole.castShadow = true
       scene.add(pole)
-      const flag = new THREE.Mesh(
-        new THREE.PlaneGeometry(2, 1.2),
-        new THREE.MeshBasicMaterial({
+      // Pennant: larger emissive plane offset to fly off the pole top
+      const pennant = new THREE.Mesh(
+        new THREE.PlaneGeometry(2.6, 1.5),
+        new THREE.MeshStandardMaterial({
           color: isLocked ? 0x444444 : accentInt,
+          emissive: isLocked ? 0x111111 : accentInt,
+          emissiveIntensity: isLocked ? 0.1 : 0.55,
           side: THREE.DoubleSide,
+          transparent: isLocked,
+          opacity: isLocked ? 0.45 : 1,
         })
       )
-      flag.position.set(goalX + 1, 4.5, 0)
-      scene.add(flag)
+      // Position pennant so its left edge aligns with the pole top (y=7)
+      pennant.position.set(goalX + 1.3, 6.25, 0)
+      scene.add(pennant)
+      // Reuse/boost the existing goal glow PointLight (accent color; 0 intensity when locked)
       const glow = new THREE.PointLight(
         isLocked ? 0x333333 : accentInt,
         isLocked ? 0 : 2.5,
-        10
+        12
       )
-      glow.position.set(goalX, 4, 1)
+      glow.position.set(goalX, 5.5, 1.5)
       scene.add(glow)
       const pt = makeLabel(
         (isLocked ? 'LOCKED ' : '') + goal.label,
         isLocked ? '#ffb02e' : '#ffe9a3'
       )
-      pt.position.set(goalX, 5.2, 0)
+      pt.position.set(goalX, 7.6, 0)
       scene.add(pt)
     } else {
-      // Chest for prize / checkpoint goal
+      // Open treasure chest for prize / checkpoint goal (B: goal glow-up)
+      // Warmer emissive material; locked state keeps dim/closed
       const chestMat = new THREE.MeshStandardMaterial({
-        color: isLocked ? 0x444444 : 0xc98b3a,
-        metalness: 0.5,
+        color: isLocked ? 0x444444 : 0xffb648,
+        metalness: isLocked ? 0.3 : 0.5,
         roughness: 0.4,
-        emissive: isLocked ? 0 : 0x3a2608,
-        emissiveIntensity: 0.3,
+        emissive: isLocked ? 0 : 0xffa02a,
+        emissiveIntensity: isLocked ? 0 : 0.5,
       })
       const chest = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.8, 2), chestMat)
       chest.position.set(goalX, 1.4, 0)
       chest.castShadow = true
       scene.add(chest)
+      // Lid: open when unlocked (rotate back on x-axis, hinge at back edge of chest top)
+      // Chest top is at y = 1.4 + 0.9 = 2.3; back face at z = -1.0
+      // We translate lid to hinge position, then rotate so it swings open.
       const lid = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.7, 2.1), chestMat)
-      lid.position.set(goalX, 2.5, 0)
-      lid.castShadow = true
+      if (isLocked) {
+        // Closed lid sitting flat on top of the chest
+        lid.position.set(goalX, 2.5, 0)
+      } else {
+        // Open lid: hinge at the back top edge; rotate ≈-0.9 rad (≈52°) open
+        // Offset position to the hinge point (back of chest, lid half-depth back)
+        lid.position.set(goalX, 2.35, -0.75)
+        lid.rotation.x = -0.9
+      }
+      lid.castShadow = !isLocked
       scene.add(lid)
+      // Reuse the goal glow PointLight; boost intensity for open chest
       const glow = new THREE.PointLight(
         isLocked ? 0x333333 : 0xffcf6b,
-        isLocked ? 0 : 3,
-        10
+        isLocked ? 0 : 3.2,
+        12
       )
-      glow.position.set(goalX, 3, 1)
+      glow.position.set(goalX, 3, 1.5)
       scene.add(glow)
       const prizeLabel = (isLocked ? '[locked] ' : '') + goal.label
       const pt = makeLabel(prizeLabel, isLocked ? '#ffb02e' : '#ffe9a3')
