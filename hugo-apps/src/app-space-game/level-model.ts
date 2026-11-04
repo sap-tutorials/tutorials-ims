@@ -1,5 +1,6 @@
 import type { AppSpaceData, AppSpaceSegment, AppSpaceItem } from './types'
 import type { LevelModel, Zone, Coin, Gate, Goal } from './types'
+import { placeHazards } from './obstacles'
 
 // Palette of 11 distinct hex colors (SAP Horizon-inspired, on-brand-ish)
 const ZONE_COLOR_PALETTE = [
@@ -171,6 +172,8 @@ export function buildLevelModel(data: AppSpaceData): LevelModel {
     // Build goal
     const goal = findGoal(items, checkpointIndices, track.id)
 
+    const { obstacles, pits } = placeHazards(coins.length, trackIndex)
+
     const zone: Zone = {
       id: track.id,
       title: track.title,
@@ -180,6 +183,8 @@ export function buildLevelModel(data: AppSpaceData): LevelModel {
       coins,
       gates,
       goal,
+      obstacles,
+      pits,
     }
 
     zones.push(zone)

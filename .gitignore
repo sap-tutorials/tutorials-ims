@@ -54,6 +54,7 @@ hugo/static-qa/
 !hugo/static/images/devtoberfest/avatars/*.png
 !hugo/static/images/devtoberfest/arcade/**/*.png
 !hugo/static/images/devtoberfest/selfie/thumbnails/*.png
+!hugo/static/images/app-space-game/**/*.png
 !hugo/static/images/devtoberfest/selfie/stickers/*.png
 !hugo/static/images/devtoberfest/selfie/backgrounds/*.png
 !app/display-app-drawings/public/*.png
