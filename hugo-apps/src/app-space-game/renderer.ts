@@ -7,10 +7,13 @@ import type { LevelModel, Zone, Coin, Gate, Goal } from './types'
 import { zoneColor } from './level-model'
 import { fitLabel, coinLabelY } from './label-layout'
 import { SPEED, GRAV, JUMP } from './constants'
+import { selectClip, frameAt } from './anim'
+import type { ClipName, AnimContext } from './anim'
 
 const ZONE_W = 26
 const GY = 0
 const KASIMIR_TEX = '/images/devtoberfest/selfie/thumbnails/Kasimir_Smiles.png'
+const KASIMIR_ATLAS = '/images/app-space-game/kasimir-atlas.png'
 
 // --- helpers ---
 
@@ -343,21 +346,114 @@ export function createGame(
   // Build scene from model
   const { markers, zoneMeta, totalLen } = buildScene(scene, model)
 
-  // Kasimir billboard
-  const tex = new THREE.TextureLoader().load(
-    KASIMIR_TEX,
-    undefined,
-    undefined,
-    (_err) => {
-      // Texture failed to load - scene already survives without it (transparent material)
-      try { console.warn('[app-space-game] Kasimir texture failed to load') } catch { /* silent */ }
-    }
-  )
-  tex.colorSpace = THREE.SRGBColorSpace
-  const kMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.3 })
+  // Kasimir billboard — atlas-animated with static fallback
+  const kMat = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.3 })
   const kasimir = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 3.6), kMat)
   kasimir.position.set(5, 1.8, 0.3)
   scene.add(kasimir)
+
+  // Atlas animation state
+  type FrameRect = { x: number; y: number; w: number; h: number }
+  type ClipDef = { frames: FrameRect[]; fps: number; loop: boolean }
+  type FrameMap = { image: string; cell: { w: number; h: number }; clips: Record<ClipName, ClipDef> }
+
+  let atlasLoaded = false
+  let frameMap: FrameMap | null = null
+  let atlasTex: THREE.Texture | null = null
+  let totalCols = 1
+  let totalRows = 1
+  let animElapsedMs = 0
+  let currentClip: ClipName = 'idle'
+
+  // Load atlas texture, then fetch the frame-map JSON
+  const atlasLoader = new THREE.TextureLoader()
+  atlasLoader.load(
+    KASIMIR_ATLAS,
+    (loadedTex) => {
+      // Atlas texture loaded — now import the frame map
+      import('./kasimir-frames.json').then((mod) => {
+        try {
+          const fm = mod.default as FrameMap
+          // Compute atlas grid dimensions from cell size + max frame bounds
+          let maxX = 0
+          let maxY = 0
+          for (const clip of Object.values(fm.clips)) {
+            for (const f of (clip as ClipDef).frames) {
+              if (f.x + f.w > maxX) maxX = f.x + f.w
+              if (f.y + f.h > maxY) maxY = f.y + f.h
+            }
+          }
+          totalCols = Math.round(maxX / fm.cell.w)
+          totalRows = Math.round(maxY / fm.cell.h)
+          loadedTex.colorSpace = THREE.SRGBColorSpace
+          // UV wrapping: clamp so we never bleed between cells
+          loadedTex.wrapS = THREE.ClampToEdgeWrapping
+          loadedTex.wrapT = THREE.ClampToEdgeWrapping
+          // Enable UV offset/repeat sub-region selection
+          loadedTex.repeat.set(1 / totalCols, 1 / totalRows)
+          loadedTex.offset.set(0, 0)
+          frameMap = fm
+          atlasTex = loadedTex
+          kMat.map = loadedTex
+          kMat.needsUpdate = true
+          atlasLoaded = true
+        } catch (_e) {
+          // JSON parse or structure error — fall through to static sprite
+          try { console.warn('[app-space-game] kasimir-frames.json failed to parse') } catch { /* silent */ }
+          loadFallbackSprite()
+        }
+      }).catch((_e) => {
+        // Dynamic import failed — fall through to static sprite
+        try { console.warn('[app-space-game] kasimir-frames.json failed to import') } catch { /* silent */ }
+        loadFallbackSprite()
+      })
+    },
+    undefined,
+    (_err) => {
+      // Atlas texture load failed — fall through to static sprite
+      try { console.warn('[app-space-game] Kasimir atlas failed to load') } catch { /* silent */ }
+      loadFallbackSprite()
+    }
+  )
+
+  function loadFallbackSprite(): void {
+    const fallbackTex = new THREE.TextureLoader().load(
+      KASIMIR_TEX,
+      undefined,
+      undefined,
+      (_err) => {
+        try { console.warn('[app-space-game] Kasimir fallback texture also failed to load') } catch { /* silent */ }
+      }
+    )
+    fallbackTex.colorSpace = THREE.SRGBColorSpace
+    kMat.map = fallbackTex
+    kMat.needsUpdate = true
+  }
+
+  /** Update the atlas UV offset/repeat for the current frame, and facing flip. */
+  function updateKasimirUV(facing: 1 | -1): void {
+    if (!atlasLoaded || !frameMap || !atlasTex) return
+
+    const clip = frameMap.clips[currentClip]
+    if (!clip) return
+
+    const clips = frameMap.clips as Record<ClipName, { frames: unknown[]; fps: number; loop: boolean }>
+    const frameIdx = frameAt(currentClip, animElapsedMs, clips)
+    const frame = clip.frames[frameIdx]
+    if (!frame) return
+
+    const col = Math.round(frame.x / frameMap.cell.w)
+    const row = Math.round(frame.y / frameMap.cell.h)
+
+    atlasTex.repeat.set(1 / totalCols, 1 / totalRows)
+    // Three.js UV origin is bottom-left; row 0 in the atlas is the top.
+    atlasTex.offset.set(col / totalCols, 1 - (row + 1) / totalRows)
+    atlasTex.needsUpdate = true
+
+    // Flip scale.x for facing direction
+    const absScaleX = Math.abs(kasimir.scale.x)
+    kasimir.scale.x = facing === -1 ? -absScaleX : absScaleX
+  }
 
   // Kasimir shadow blob
   const blob = new THREE.Mesh(
@@ -376,6 +472,8 @@ export function createGame(
   let playerControl = false
   let rafId = 0
   let started = false
+  let facing: 1 | -1 = 1          // sprite facing direction
+  let lastMoveDir: -1 | 0 | 1 = 0 // for AnimContext
 
   // Zone hit tracking for onPickTrack
   const goalHit = new Set<string>()
@@ -430,11 +528,14 @@ export function createGame(
     if (!playerControl) {
       // Attract auto-run: advance Kasimir forward, loop at end
       kasX += SPEED * dt
+      lastMoveDir = 1
+      facing = 1
       if (kasX > totalLen - 4) {
         kasX = 5
         kasY = 1.8
         vy = 0
         onGround = true
+        animElapsedMs = 0
         goalHit.clear()
         // Reset coin visibility for attract loop
         markers.forEach(m => {
@@ -452,6 +553,10 @@ export function createGame(
       const moveRight = keys.right || (pointerDown && pointerRightHalf)
       if (moveRight) {
         kasX += SPEED * dt
+        lastMoveDir = 1
+        facing = 1
+      } else {
+        lastMoveDir = 0
       }
       const doJump = keys.jump || (pointerDown && !pointerRightHalf)
       if (doJump && onGround) {
@@ -471,12 +576,31 @@ export function createGame(
     }
     kasY = newY
 
+    // Animation clip selection
+    const animCtx: AnimContext = {
+      onGround,
+      moveDir: lastMoveDir,
+      vy,
+      lastEvent: 'none',
+      sinceEventMs: 0,
+    }
+    const nextClip = selectClip(animCtx)
+    if (nextClip !== currentClip) {
+      currentClip = nextClip
+      animElapsedMs = 0
+    } else {
+      animElapsedMs += dt * 1000
+    }
+
     // Update Kasimir position
     kasimir.position.set(kasX, kasY, 0.3)
-    kasimir.rotation.z = Math.sin(t * 11) * 0.04
+    // rotation.z sway removed — sprite sheet conveys motion
     blob.position.set(kasX, 0.03, 0)
     blob.scale.setScalar(1 - (kasY - 1.8) * 0.12)
     kLight.position.set(kasX, kasY + 1, 3)
+
+    // Update atlas UV for current animation frame
+    updateKasimirUV(facing)
 
     // Camera follow
     camera.position.x += (kasX - camera.position.x) * Math.min(1, dt * 4)
@@ -576,7 +700,7 @@ export function createGame(
           }
         })
         kMat.dispose()
-        tex.dispose()
+        atlasTex?.dispose()
       } catch {
         // Best-effort - never throw on dispose
       }
