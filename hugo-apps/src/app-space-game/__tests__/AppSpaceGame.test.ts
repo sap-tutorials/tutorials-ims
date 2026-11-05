@@ -48,6 +48,9 @@ function makeGameHandle() {
     dispose: vi.fn(),
     onRingCount: vi.fn(),
     onEvent: vi.fn(),
+    onZone: vi.fn(),
+    onGoalPrompt: vi.fn(),
+    activateGoal: vi.fn(() => true),
   }
 }
 
@@ -167,8 +170,8 @@ describe('AppSpaceGame attract state machine', () => {
     expect(gameHandle.start).toHaveBeenCalled()
   })
 
-  // (b) Input event while attract is showing -> setPlayerControl(true), overlay still up
-  it('(b) input event while attract is showing hands control but keeps overlay', async () => {
+  // (b) A deliberate key press while attract is showing hands control; mouse movement alone does not
+  it('(b) key press while attract is showing hands control but keeps overlay; mousemove does not', async () => {
     const { wrapper, gameHandle } = await mountWithGatePass()
 
     // Trigger idle timeout to show attract mode
@@ -176,14 +179,83 @@ describe('AppSpaceGame attract state machine', () => {
 
     expect(wrapper.find('[data-game-overlay]').exists()).toBe(true)
 
-    // Simulate a mousemove event while attract is showing
+    // A passer-by brushing the mouse must not stop the demo
     window.dispatchEvent(new MouseEvent('mousemove'))
     await flushPromises()
+    expect(gameHandle.setPlayerControl).not.toHaveBeenCalled()
+    expect(wrapper.find('.asg-attract-cta').exists()).toBe(true)
 
-    // setPlayerControl(true) should have been called
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    await flushPromises()
+
     expect(gameHandle.setPlayerControl).toHaveBeenCalledWith(true)
-    // Overlay stays up (still visible)
     expect(wrapper.find('[data-game-overlay]').exists()).toBe(true)
+    expect(wrapper.find('[data-player-hint]').exists()).toBe(true)
+  })
+
+  it('(b2) tap (pointerdown) also hands control to the player', async () => {
+    const { gameHandle } = await mountWithGatePass()
+    await vi.advanceTimersByTimeAsync(60000)
+    window.dispatchEvent(new Event('pointerdown'))
+    await flushPromises()
+    expect(gameHandle.setPlayerControl).toHaveBeenCalledWith(true)
+  })
+
+  it('(b3) a visitor who walks away hands control back to the autopilot after 30s', async () => {
+    const { wrapper, gameHandle } = await mountWithGatePass()
+    await vi.advanceTimersByTimeAsync(60000)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    await flushPromises()
+    expect(gameHandle.setPlayerControl).toHaveBeenLastCalledWith(true)
+
+    await vi.advanceTimersByTimeAsync(20000)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }))
+    await vi.advanceTimersByTimeAsync(20000)
+    expect(gameHandle.setPlayerControl).toHaveBeenLastCalledWith(true)
+
+    await vi.advanceTimersByTimeAsync(11000)
+    await flushPromises()
+    expect(gameHandle.setPlayerControl).toHaveBeenLastCalledWith(false)
+    expect(wrapper.find('[data-game-overlay]').exists()).toBe(true)
+    expect(wrapper.find('.asg-attract-cta').exists()).toBe(true)
+  })
+
+  it('(k) goal prompt appears when the renderer reports a goal and activates it on click', async () => {
+    const { wrapper, gameHandle } = await mountWithGatePass()
+    await vi.advanceTimersByTimeAsync(60000)
+    const promptCb = gameHandle.onGoalPrompt.mock.calls[0]?.[0] as (g: unknown) => void
+    expect(typeof promptCb).toBe('function')
+
+    promptCb({ trackId: 'track-alpha', title: 'Alpha Track', label: 'Complete Track', kind: 'track', locked: false })
+    await flushPromises()
+    const btn = wrapper.find('button[data-goal-prompt]')
+    expect(btn.exists()).toBe(true)
+    expect(btn.text()).toContain('Alpha Track')
+    await btn.trigger('click')
+    expect(gameHandle.activateGoal).toHaveBeenCalled()
+
+    promptCb({ trackId: 'track-beta', title: 'Beta Track', label: 'x', kind: 'track', locked: true })
+    await flushPromises()
+    expect(wrapper.find('button[data-goal-prompt]').exists()).toBe(false)
+    expect(wrapper.find('[data-goal-prompt]').text()).toContain('locked')
+  })
+
+  it('(l) zone banner shows the current zone', async () => {
+    const { wrapper, gameHandle } = await mountWithGatePass()
+    await vi.advanceTimersByTimeAsync(60000)
+    const zoneCb = gameHandle.onZone.mock.calls[0]?.[0] as (z: unknown) => void
+    zoneCb({ index: 1, total: 4, title: 'Beta Track', color: '#123456', locked: false })
+    await flushPromises()
+    const banner = wrapper.find('.asg-zone')
+    expect(banner.text()).toContain('Zone 2 / 4')
+    expect(banner.text()).toContain('Beta Track')
+  })
+
+  it('(m) renderer receives the label root and reduced-motion option', async () => {
+    const { createGame } = await mountWithGatePass()
+    const opts = createGame.mock.calls[0][2] as { labelRoot: HTMLElement | null; reducedMotion: boolean }
+    expect(opts.labelRoot).toBeInstanceOf(HTMLElement)
+    expect(opts.reducedMotion).toBe(false)
   })
 
   // (c) "Demo" button is present; clicking it starts the game immediately
@@ -199,6 +271,17 @@ describe('AppSpaceGame attract state machine', () => {
 
     expect(wrapper.find('[data-game-overlay]').exists()).toBe(true)
     expect(gameHandle.start).toHaveBeenCalled()
+  })
+
+  it('(c2) using the Demo button does not leave a stale idle timer that restarts the demo', async () => {
+    const { wrapper, gameHandle } = await mountWithGatePass()
+    window.dispatchEvent(new Event('pointerdown'))
+    await wrapper.find('[data-demo-trigger]').trigger('click')
+    await flushPromises()
+    expect(gameHandle.start).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(61000)
+    await flushPromises()
+    expect(gameHandle.start).toHaveBeenCalledTimes(1)
   })
 
   // (d) onPickTrack navigates via replaceState (NOT pushState) + dispatches popstate + hides overlay

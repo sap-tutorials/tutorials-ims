@@ -1,144 +1,101 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
+import { createRequire } from 'module'
 import path from 'path'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const ROOT = path.resolve(__dirname, '../../../..')
 const FRAMES_PATH = path.resolve(__dirname, '../kasimir-frames.json')
-
-interface FrameRect {
-  x: number
-  y: number
-  w: number
-  h: number
-}
-
-interface ClipDef {
-  frames: FrameRect[]
-  fps: number
-  loop: boolean
-}
+const ATLAS_PATH = path.join(ROOT, 'hugo/static/images/app-space-game/kasimir-atlas.png')
 
 interface FrameMap {
   image: string
+  atlas: { w: number; h: number; cols: number; rows: number }
   cell: { w: number; h: number }
-  clips: Record<string, ClipDef>
+  anchor: { x: number; y: number }
+  charH: number
+  clips: Record<string, { frames: { x: number; y: number; w: number; h: number }[]; fps: number; loop: boolean }>
 }
 
-const REQUIRED_CLIPS = ['idle', 'walk', 'run', 'jump', 'hit', 'ko', 'celebrate', 'chest', 'taunt'] as const
+const fm = JSON.parse(readFileSync(FRAMES_PATH, 'utf8')) as FrameMap
+const REQUIRED = ['idle', 'walk', 'trot', 'run', 'jump', 'hit', 'fall', 'ko', 'reach', 'chest', 'celebrate', 'taunt']
 
 describe('kasimir-frames.json', () => {
-  let frameMap: FrameMap
-  let atlasW: number
-  let atlasH: number
-
-  it('parses without error', () => {
-    const raw = readFileSync(FRAMES_PATH, 'utf8')
-    frameMap = JSON.parse(raw) as FrameMap
-    expect(frameMap).toBeTruthy()
-    expect(frameMap.image).toBeTruthy()
-    expect(frameMap.cell).toBeTruthy()
-    expect(frameMap.clips).toBeTruthy()
-  })
-
-  it('has required top-level fields', () => {
-    expect(typeof frameMap.image).toBe('string')
-    expect(frameMap.image.length).toBeGreaterThan(0)
-    expect(typeof frameMap.cell.w).toBe('number')
-    expect(typeof frameMap.cell.h).toBe('number')
-    expect(frameMap.cell.w).toBeGreaterThan(0)
-    expect(frameMap.cell.h).toBeGreaterThan(0)
-  })
-
-  it('contains all required clip keys', () => {
-    for (const key of REQUIRED_CLIPS) {
-      expect(frameMap.clips, `clip "${key}" must exist`).toHaveProperty(key)
+  it('has every clip the game uses, with frames, fps and loop', () => {
+    for (const k of REQUIRED) {
+      const c = fm.clips[k]
+      expect(c, k).toBeTruthy()
+      expect(c.frames.length, k).toBeGreaterThan(0)
+      expect(c.fps, k).toBeGreaterThan(0)
+      expect(typeof c.loop, k).toBe('boolean')
     }
+    expect(fm.clips.jump.frames).toHaveLength(10)
+    expect(fm.clips.run.frames.length).toBeGreaterThanOrEqual(8)
   })
 
-  it('each clip has at least 1 frame', () => {
-    for (const key of REQUIRED_CLIPS) {
-      const clip = frameMap.clips[key]
-      expect(clip.frames.length, `clip "${key}" must have ≥1 frame`).toBeGreaterThanOrEqual(1)
-    }
-  })
-
-  it('each clip has fps > 0', () => {
-    for (const key of REQUIRED_CLIPS) {
-      const clip = frameMap.clips[key]
-      expect(clip.fps, `clip "${key}" fps must be > 0`).toBeGreaterThan(0)
-    }
-  })
-
-  it('each clip has a boolean loop field', () => {
-    for (const key of REQUIRED_CLIPS) {
-      const clip = frameMap.clips[key]
-      expect(typeof clip.loop, `clip "${key}" loop must be boolean`).toBe('boolean')
-    }
-  })
-
-  it('atlas dimensions can be computed from clip frame positions', () => {
-    // Compute atlas bounds from frame positions + cell dimensions
-    let maxX = 0
-    let maxY = 0
-    for (const clip of Object.values(frameMap.clips)) {
-      for (const f of clip.frames) {
-        const right = f.x + f.w
-        const bottom = f.y + f.h
-        if (right > maxX) maxX = right
-        if (bottom > maxY) maxY = bottom
-      }
-    }
-    atlasW = maxX
-    atlasH = maxY
-    expect(atlasW).toBeGreaterThan(0)
-    expect(atlasH).toBeGreaterThan(0)
-  })
-
-  it('all frame boxes lie within atlas bounds', () => {
-    for (const [name, clip] of Object.entries(frameMap.clips)) {
-      for (let i = 0; i < clip.frames.length; i++) {
-        const f = clip.frames[i]
-        const msg = `clip "${name}" frame ${i}`
-        expect(f.x, `${msg}: x >= 0`).toBeGreaterThanOrEqual(0)
-        expect(f.y, `${msg}: y >= 0`).toBeGreaterThanOrEqual(0)
-        expect(f.w, `${msg}: w > 0`).toBeGreaterThan(0)
-        expect(f.h, `${msg}: h > 0`).toBeGreaterThan(0)
-        expect(f.x + f.w, `${msg}: right edge <= atlasW`).toBeLessThanOrEqual(atlasW)
-        expect(f.y + f.h, `${msg}: bottom edge <= atlasH`).toBeLessThanOrEqual(atlasH)
+  it('uses a uniform grid inside the atlas, no larger than 2048px', () => {
+    expect(fm.atlas.w).toBe(fm.atlas.cols * fm.cell.w)
+    expect(fm.atlas.h).toBe(fm.atlas.rows * fm.cell.h)
+    expect(Math.max(fm.atlas.w, fm.atlas.h)).toBeLessThanOrEqual(2048)
+    for (const [name, c] of Object.entries(fm.clips)) {
+      for (const f of c.frames) {
+        expect(f.w, name).toBe(fm.cell.w)
+        expect(f.h, name).toBe(fm.cell.h)
+        expect(f.x % fm.cell.w, name).toBe(0)
+        expect(f.y % fm.cell.h, name).toBe(0)
+        expect(f.x + f.w).toBeLessThanOrEqual(fm.atlas.w)
+        expect(f.y + f.h).toBeLessThanOrEqual(fm.atlas.h)
       }
     }
   })
 
-  it('frame boxes are consistent with cell dimensions', () => {
-    const { w: cw, h: ch } = frameMap.cell
-    for (const [name, clip] of Object.entries(frameMap.clips)) {
-      for (let i = 0; i < clip.frames.length; i++) {
-        const f = clip.frames[i]
-        const msg = `clip "${name}" frame ${i}`
-        expect(f.w, `${msg}: w matches cell.w`).toBe(cw)
-        expect(f.h, `${msg}: h matches cell.h`).toBe(ch)
+  it('anchors feet at the same point of every cell, horizontally centred (mirror-safe)', () => {
+    expect(fm.anchor.x).toBe(fm.cell.w / 2)
+    expect(fm.anchor.y).toBeGreaterThan(fm.cell.h * 0.9)
+    expect(fm.charH).toBeGreaterThan(100)
+  })
+})
+
+describe('kasimir-atlas.png pixels', () => {
+  type Img = { data: Buffer; width: number }
+  let img: Img
+
+  beforeAll(async () => {
+    const sharp = createRequire(import.meta.url)('sharp')
+    const { data, info } = await sharp(ATLAS_PATH).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+    img = { data, width: info.width }
+  })
+
+  function bbox(f: { x: number; y: number; w: number; h: number }) {
+    let top = Infinity, bottom = -1
+    for (let y = f.y; y < f.y + f.h; y++) {
+      for (let x = f.x; x < f.x + f.w; x++) {
+        if (img.data[(y * img.width + x) * 4 + 3] > 128) {
+          if (y < top) top = y
+          bottom = y
+        }
       }
+    }
+    return { top: top - f.y, bottom: bottom - f.y }
+  }
+
+  it('every frame stands on the shared baseline (no floating or sinking between clips)', () => {
+    for (const [name, c] of Object.entries(fm.clips)) {
+      c.frames.forEach((f, i) => {
+        const { bottom } = bbox(f)
+        expect(Math.abs(bottom + 1 - fm.anchor.y), `${name}[${i}]`).toBeLessThanOrEqual(3)
+      })
     }
   })
 
-  it('frame x coordinates align to cell grid', () => {
-    const { w: cw } = frameMap.cell
-    for (const [name, clip] of Object.entries(frameMap.clips)) {
-      for (let i = 0; i < clip.frames.length; i++) {
-        const f = clip.frames[i]
-        expect(f.x % cw, `clip "${name}" frame ${i}: x must be multiple of cell.w`).toBe(0)
-      }
-    }
-  })
-
-  it('frame y coordinates align to cell grid', () => {
-    const { h: ch } = frameMap.cell
-    for (const [name, clip] of Object.entries(frameMap.clips)) {
-      for (let i = 0; i < clip.frames.length; i++) {
-        const f = clip.frames[i]
-        expect(f.y % ch, `clip "${name}" frame ${i}: y must be multiple of cell.h`).toBe(0)
-      }
+  it('standing poses from both source sheets render at the same character height', () => {
+    const standing = [...fm.clips.idle.frames, fm.clips.celebrate.frames[0], fm.clips.chest.frames[0]]
+    const heights = standing.map(f => { const b = bbox(f); return b.bottom - b.top })
+    const min = Math.min(...heights), max = Math.max(...heights)
+    expect(max / min).toBeLessThan(1.3)
+    for (const h of fm.clips.idle.frames.map(f => { const b = bbox(f); return b.bottom - b.top })) {
+      expect(Math.abs(h - fm.charH) / fm.charH).toBeLessThan(0.05)
     }
   })
 })

@@ -2,10 +2,10 @@
 /**
  * build-kasimir-atlas.mjs
  *
- * Processes two hand-drawn Kasimir sprite sheets into a game-ready transparent
- * atlas PNG + JSON frame-map for the app-space-game Three.js island.
+ * Turns the two hand-drawn Kasimir sprite sheets into a game-ready atlas PNG +
+ * JSON frame-map for the app-space-game Three.js island.
  *
- * Inputs:
+ * Inputs (raw art, not committed — ask the DevRel team for the source sheets):
  *   hugo/static/images/app-space-game/sprite-src/kasimir-sheet-locomotion-raw.png
  *   hugo/static/images/app-space-game/sprite-src/kasimir-sheet-actions-raw.png
  *
@@ -14,12 +14,18 @@
  *   hugo-apps/src/app-space-game/kasimir-frames.json
  *
  * Algorithm:
- *   1. Cream-key each sheet (background ~#F4F3EE, threshold=24, Manhattan distance)
- *   2. Detect row bands (rows of fully/near-transparent pixels separate bands)
- *   3. Within each band, detect sprite columns using local-minimum separator search
- *   4. Compute tight bounding boxes for each detected sprite
- *   5. Pack all sprites into a uniform-cell atlas
- *   6. Emit JSON frame-map with clip definitions
+ *   1. Key out the cream paper background (distance from the sampled paper colour).
+ *   2. Label 8-connected ink components; attach small effect blobs (sparkles,
+ *      motion lines) to the nearest sprite; split sprites that touch a neighbour.
+ *   3. Cluster sprites into sheet rows by vertical centre, sort each row by x.
+ *   4. Fill enclosed holes (Kasimir's white chest is close to the paper colour).
+ *   5. Normalise scale: the actions sheet is drawn larger than the locomotion
+ *      sheet, so it is rescaled so a standing Kasimir has the same height in both.
+ *   6. Anchor every frame at its feet (bottom of ink, body centroid) and pack
+ *      into uniform cells whose anchor sits at the same point in every cell, so
+ *      switching clips never makes Kasimir jump, shrink or slide.
+ *
+ * Usage: node scripts/build-kasimir-atlas.mjs
  */
 
 import { createRequire } from 'module'
@@ -33,573 +39,381 @@ const sharp = require('sharp')
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 
-// --- Paths ---
-const LOCO_SRC = path.join(ROOT, 'hugo/static/images/app-space-game/sprite-src/kasimir-sheet-locomotion-raw.png')
-const ACTIONS_SRC = path.join(ROOT, 'hugo/static/images/app-space-game/sprite-src/kasimir-sheet-actions-raw.png')
+const SRC_DIR = path.join(ROOT, 'hugo/static/images/app-space-game/sprite-src')
+const SHEETS = {
+  loco: path.join(SRC_DIR, 'kasimir-sheet-locomotion-raw.png'),
+  actions: path.join(SRC_DIR, 'kasimir-sheet-actions-raw.png'),
+}
 const ATLAS_OUT = path.join(ROOT, 'hugo/static/images/app-space-game/kasimir-atlas.png')
 const FRAMES_OUT = path.join(ROOT, 'hugo-apps/src/app-space-game/kasimir-frames.json')
+const ATLAS_URL = '/images/app-space-game/kasimir-atlas.png'
 
-// --- Cream-key parameters ---
-// Cream background is #F4F3EE (warm off-white). Manhattan distance threshold 24
-// keeps Kasimir's cooler white chest/paws (which are brighter and more neutral)
-// while removing the warm cream background. Tuned empirically.
-const CREAM_R = 0xF4
-const CREAM_G = 0xF3
-const CREAM_B = 0xEE
-const CREAM_THRESHOLD = 24 // Manhattan distance
+const INK_THRESHOLD = 30 // Manhattan distance from paper colour that counts as ink
+const SOFT_LO = 8 // edge feather: below this distance → fully transparent
+const MIN_SPRITE_AREA = 2500
+const EFFECT_ATTACH_PX = 30
+const ROW_GAP = 55 // min vertical-centre gap between sheet rows
+const MAX_ATLAS_DIM = 2048
+const CELL_PAD = 4
 
-/**
- * Returns true if the pixel color matches the cream background.
- * Uses Manhattan distance for performance; cream is warm off-white.
- */
-function isCream(r, g, b, threshold = CREAM_THRESHOLD) {
-  return Math.abs(r - CREAM_R) + Math.abs(g - CREAM_G) + Math.abs(b - CREAM_B) <= threshold
+// Expected sprite count per sheet row — the build fails loudly if the art changes.
+const EXPECTED_ROWS = {
+  loco: [5, 9, 9, 10, 8, 10],
+  actions: [6, 6, 6, 6, 6],
 }
 
-/**
- * Load a PNG into RGBA raw buffer via sharp.
- * @returns {{ data: Buffer, width: number, height: number }}
- */
-async function loadRGBA(filePath) {
-  const { data, info } = await sharp(filePath)
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true })
+// Clip → source frames. Row/frame indices are into EXPECTED_ROWS.
+// Locomotion: 0 idle · 1 walk · 2 trot · 3 jump (crouch→rise→apex→fall→land) · 4 gallop · 5 alt walk
+// Actions:    0 swipe · 1 dizzy/flail/pounce/lie/sneak/dizzy-stand · 2 back-view reach (x5) + stand
+//             3 stretch/crawl/sleepy/KO/sleep/ghost · 4 chest push (x2) + stand + celebrate (x2) + stand
+const CLIPS = {
+  idle: { sheet: 'loco', row: 0, fps: 6, loop: true },
+  walk: { sheet: 'loco', row: 1, fps: 12, loop: true },
+  trot: { sheet: 'loco', row: 2, fps: 14, loop: true },
+  jump: { sheet: 'loco', row: 3, fps: 12, loop: false },
+  run: { sheet: 'loco', row: 4, fps: 14, loop: true },
+  taunt: { sheet: 'actions', row: 0, frames: [0, 1, 2, 3, 4, 5], fps: 10, loop: false },
+  hit: { sheet: 'actions', row: 1, frames: [0, 5], fps: 4, loop: false },
+  fall: { sheet: 'actions', row: 1, frames: [1], fps: 1, loop: false },
+  reach: { sheet: 'actions', row: 2, frames: [0, 1, 2, 3, 4], fps: 8, loop: true },
+  ko: { sheet: 'actions', row: 3, frames: [3], fps: 1, loop: false },
+  chest: { sheet: 'actions', row: 4, frames: [0, 1], fps: 4, loop: true },
+  celebrate: { sheet: 'actions', row: 4, frames: [3, 4], fps: 5, loop: true },
+}
+// Standing poses used to measure each sheet's drawing scale.
+const SCALE_REFS = {
+  loco: [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]],
+  actions: [[2, 5], [4, 2], [4, 5]],
+}
+
+async function loadRGBA(file) {
+  const { data, info } = await sharp(file).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
   return { data, width: info.width, height: info.height }
 }
 
-/**
- * Apply cream-key in-place: for each pixel matching cream, set alpha to 0.
- */
-function applyCreameKey(data, width, height) {
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4
-      const r = data[idx], g = data[idx + 1], b = data[idx + 2]
-      if (isCream(r, g, b)) {
-        data[idx + 3] = 0 // alpha = 0 → transparent
-      }
-    }
-  }
+function median(arr) {
+  const s = [...arr].sort((a, b) => a - b)
+  const m = Math.floor(s.length / 2)
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
 }
 
-/**
- * Detect row bands: contiguous rows with at least minContent visible pixels.
- * Returns array of { y0, y1 }.
- *
- * After initial detection, each band is checked for internal sub-band gaps:
- * if a band is tall (h > 200) and contains an internal row whose sum drops
- * below `subBandFraction` of the band's mean row-sum, that gap splits the
- * band into two sub-bands. This fixes cases where the artist stacked two
- * rows of sprites into one detected band (e.g. the LOCO run band).
- *
-/**
- * Detect row bands: contiguous rows with at least minContent visible pixels.
- * Returns array of { y0, y1 }.
- *
- * After initial detection, each band is checked for internal sub-band gaps:
- * if a band is tall (h > 200) and contains an internal row whose sum drops
- * below `subBandFraction` of the band's mean row-sum, that gap splits the
- * band into two sub-bands. This fixes cases where the artist stacked two
- * rows of sprites into one detected band (e.g. the LOCO run band).
- */
-function detectRowBands(data, width, height, minContent = 5) {
-  const rowSums = new Array(height).fill(0)
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (data[(y * width + x) * 4 + 3] > 0) rowSums[y]++
+function paperColour({ data, width }) {
+  const rs = [], gs = [], bs = []
+  for (let y = 0; y < 10; y++) {
+    for (let x = 0; x < width; x += 7) {
+      const i = (y * width + x) * 4
+      rs.push(data[i]); gs.push(data[i + 1]); bs.push(data[i + 2])
     }
   }
-
-  const bands = []
-  let inBand = false
-  let bandStart = 0
-  for (let y = 0; y < height; y++) {
-    if (rowSums[y] > minContent && !inBand) {
-      inBand = true
-      bandStart = y
-    } else if (rowSums[y] <= minContent && inBand) {
-      inBand = false
-      bands.push({ y0: bandStart, y1: y - 1 })
-    }
-  }
-  if (inBand) bands.push({ y0: bandStart, y1: height - 1 })
-  return bands
+  return [median(rs), median(gs), median(bs)]
 }
 
-/**
- * Find sprite column ranges within a row band using local-minimum separator detection.
- *
- * Strategy: build a column-content array (count of visible pixels per column).
- * Then find "valley" separators: columns where the content is a local minimum
- * AND the value is significantly lower than its neighbours (valleyRadius px).
- * Any run of columns all below `absThreshold` is treated as a gap.
- *
- * For TALL bands (h > 250px) the sprites are more densely packed and may share
- * column edges; in that case a higher valleyFraction detects the weak separators.
- *
- * @param {Buffer} data - RGBA raw buffer (after cream-key)
- * @param {number} width
- * @param {{ y0: number, y1: number }} band
- * @param {object} [opts]
- * @param {number} [opts.absThreshold=3] - columns with content <= this are always gaps
- * @param {number} [opts.valleyFraction] - auto-selected from band height when omitted
- * @param {number} [opts.valleyRadius=40] - radius for local max calculation
- * @param {number} [opts.minSpriteW=80] - discard detected sprites narrower than this
- * @returns {Array<{ x0: number, x1: number }>}
- */
-function detectSpriteColumns(data, width, band, opts = {}) {
-  const { y0, y1 } = band
-  const bandH = y1 - y0 + 1
-
-  // Auto-tune valleyFraction: tall/dense bands need a higher fraction to detect
-  // weak column minima where sprites almost touch.
-  const {
-    absThreshold = 3,
-    valleyFraction = bandH > 250 ? 0.25 : 0.12,
-    valleyRadius = 40,
-    minSpriteW = 80,
-  } = opts
-
-  // Build column content (visible pixel count in this row band)
-  const col = new Array(width).fill(0)
-  for (let y = y0; y <= y1; y++) {
-    for (let x = 0; x < width; x++) {
-      if (data[(y * width + x) * 4 + 3] > 0) col[x]++
-    }
+function distanceMap({ data, width, height }, bg) {
+  const d = new Float32Array(width * height)
+  for (let p = 0; p < width * height; p++) {
+    const i = p * 4
+    d[p] = Math.abs(data[i] - bg[0]) + Math.abs(data[i + 1] - bg[1]) + Math.abs(data[i + 2] - bg[2])
   }
+  return d
+}
 
-  // Determine which columns are "gaps": either below absThreshold OR
-  // clearly a local minimum compared to surroundings
-  const isGap = new Array(width).fill(false)
-  for (let x = 0; x < width; x++) {
-    if (col[x] <= absThreshold) {
-      isGap[x] = true
-      continue
-    }
-    // Local max within radius
-    const lo = Math.max(0, x - valleyRadius)
-    const hi = Math.min(width - 1, x + valleyRadius)
-    let localMax = 0
-    for (let nx = lo; nx <= hi; nx++) {
-      if (col[nx] > localMax) localMax = col[nx]
-    }
-    if (localMax > 0 && col[x] < localMax * valleyFraction) {
-      isGap[x] = true
-    }
-  }
-
-  // Extract runs of non-gap columns; discard narrow artifacts
-  const sprites = []
-  let inSprite = false
-  let spriteStart = 0
-  for (let x = 0; x < width; x++) {
-    if (!isGap[x] && !inSprite) {
-      inSprite = true
-      spriteStart = x
-    } else if (isGap[x] && inSprite) {
-      inSprite = false
-      if (x - 1 - spriteStart + 1 >= minSpriteW) {
-        sprites.push({ x0: spriteStart, x1: x - 1 })
+function labelComponents(ink, width, height) {
+  const labels = new Int32Array(width * height)
+  const comps = []
+  const stack = new Int32Array(width * height)
+  let next = 0
+  for (let p = 0; p < width * height; p++) {
+    if (!ink[p] || labels[p]) continue
+    next++
+    const c = { id: next, x0: width, y0: height, x1: 0, y1: 0, area: 0, sx: 0, sy: 0 }
+    let sp = 0
+    stack[sp++] = p
+    labels[p] = next
+    while (sp) {
+      const q = stack[--sp]
+      const x = q % width, y = (q / width) | 0
+      c.area++; c.sx += x; c.sy += y
+      if (x < c.x0) c.x0 = x
+      if (y < c.y0) c.y0 = y
+      if (x + 1 > c.x1) c.x1 = x + 1
+      if (y + 1 > c.y1) c.y1 = y + 1
+      for (let dy = -1; dy <= 1; dy++) {
+        const ny = y + dy
+        if (ny < 0 || ny >= height) continue
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx
+          if (nx < 0 || nx >= width) continue
+          const n = ny * width + nx
+          if (ink[n] && !labels[n]) { labels[n] = next; stack[sp++] = n }
+        }
       }
     }
+    comps.push(c)
   }
-  if (inSprite && width - 1 - spriteStart + 1 >= minSpriteW) {
-    sprites.push({ x0: spriteStart, x1: width - 1 })
-  }
+  return { labels, comps }
+}
 
+/** Group components into sprites: big ones seed sprites, small effects attach to the nearest. */
+function buildSprites(comps) {
+  const big = comps.filter(c => c.area >= MIN_SPRITE_AREA)
+  const sprites = big.map(c => ({
+    ids: new Set([c.id]), x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1,
+    xMin: -Infinity, xMax: Infinity, area: c.area, sx: c.sx, sy: c.sy,
+  }))
+  for (const c of comps) {
+    if (c.area >= MIN_SPRITE_AREA || c.area < 20) continue
+    const cx = (c.x0 + c.x1) / 2, cy = (c.y0 + c.y1) / 2
+    let best = null, bestD = Infinity
+    for (const s of sprites) {
+      const dx = Math.max(s.x0 - cx, 0, cx - s.x1)
+      const dy = Math.max(s.y0 - cy, 0, cy - s.y1)
+      const d = Math.hypot(dx, dy)
+      if (d < bestD) { bestD = d; best = s }
+    }
+    if (best && bestD <= EFFECT_ATTACH_PX) {
+      best.ids.add(c.id)
+      best.x0 = Math.min(best.x0, c.x0); best.y0 = Math.min(best.y0, c.y0)
+      best.x1 = Math.max(best.x1, c.x1); best.y1 = Math.max(best.y1, c.y1)
+    }
+  }
   return sprites
 }
 
-/**
- * Compute the tight bounding box of visible pixels within a region.
- * Returns { x0, y0, x1, y1 } relative to the FULL image coordinates,
- * or null if the region is empty.
- */
-function tightBBox(data, width, imgX0, imgY0, imgX1, imgY1) {
-  let minX = imgX1, maxX = imgX0, minY = imgY1, maxY = imgY0
-  for (let y = imgY0; y <= imgY1; y++) {
-    for (let x = imgX0; x <= imgX1; x++) {
-      if (data[(y * width + x) * 4 + 3] > 0) {
-        if (x < minX) minX = x
-        if (x > maxX) maxX = x
-        if (y < minY) minY = y
-        if (y > maxY) maxY = y
-      }
-    }
-  }
-  if (minX > maxX || minY > maxY) return null
-  return { x0: minX, y0: minY, x1: maxX, y1: maxY }
-}
-
-/**
- * Find the bounding box of the DOMINANT (largest-area) vertical blob within a region.
- *
- * Used to handle bands where the artist stacked two rows of sprites in one band:
- * each sprite column contains two disconnected blobs (one per sub-row), and this
- * function picks the larger of the two.
- *
- * Algorithm:
- *   1. Compute per-row visible-pixel count within [imgX0..imgX1].
- *   2. Split rows into connected "blobs" wherever a gap of `minBlobGap` zero-pixel
- *      rows is found.
- *   3. Return the tight bbox of the LARGEST blob (by pixel count).
- *
- * @param {number} minBlobGap - minimum number of empty rows to treat as a blob separator (default 8)
- * @returns {{ x0, y0, x1, y1 } | null}
- */
-function dominantBlobBBox(data, width, imgX0, imgY0, imgX1, imgY1, minBlobGap = 8) {
-  // Build per-row pixel counts
-  const rowCounts = []
-  for (let y = imgY0; y <= imgY1; y++) {
-    let count = 0
-    for (let x = imgX0; x <= imgX1; x++) {
-      if (data[(y * width + x) * 4 + 3] > 0) count++
-    }
-    rowCounts.push(count)
-  }
-
-  // Find blobs: runs of rows separated by gaps of >= minBlobGap zero rows
-  const blobs = []
-  let blobStart = -1
-  let zeroRun = 0
-
-  for (let i = 0; i < rowCounts.length; i++) {
-    if (rowCounts[i] > 0) {
-      if (blobStart < 0) blobStart = i
-      zeroRun = 0
+function clusterRows(sprites) {
+  const sorted = [...sprites].sort((a, b) => (a.sy / a.area) - (b.sy / b.area))
+  const rows = []
+  for (const s of sorted) {
+    const cy = s.sy / s.area
+    const last = rows[rows.length - 1]
+    if (last && cy - last.cy <= ROW_GAP) {
+      last.items.push(s)
+      last.cy = last.items.reduce((acc, it) => acc + it.sy / it.area, 0) / last.items.length
     } else {
-      zeroRun++
-      if (blobStart >= 0 && zeroRun >= minBlobGap) {
-        blobs.push({ startRow: blobStart, endRow: i - zeroRun })
-        blobStart = -1
-        zeroRun = 0
+      rows.push({ cy, items: [s] })
+    }
+  }
+  return rows.map(r => r.items.sort((a, b) => a.x0 - b.x0))
+}
+
+/** Split sprites that are much wider than their row-mates at the emptiest ink column. */
+function splitMerged(row, ink, labels, width) {
+  const widths = row.map(s => s.x1 - s.x0)
+  const typical = median(widths)
+  const out = []
+  for (const s of row) {
+    const w = s.x1 - s.x0
+    if (w < typical * 1.6) { out.push(s); continue }
+    let bestX = -1, bestInk = Infinity
+    for (let x = s.x0 + Math.floor(w * 0.3); x < s.x0 + Math.ceil(w * 0.7); x++) {
+      let n = 0
+      for (let y = s.y0; y < s.y1; y++) {
+        const p = y * width + x
+        if (ink[p] && s.ids.has(labels[p])) n++
       }
+      if (n < bestInk) { bestInk = n; bestX = x }
+    }
+    const left = { ...s, ids: s.ids, x1: bestX, xMax: bestX }
+    const right = { ...s, ids: s.ids, x0: bestX, xMin: bestX }
+    out.push(tighten(left, ink, labels, width), tighten(right, ink, labels, width))
+  }
+  return out
+}
+
+function tighten(s, ink, labels, width) {
+  let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1, area = 0, sx = 0, sy = 0
+  for (let y = s.y0; y < s.y1; y++) {
+    for (let x = Math.max(s.x0, s.xMin); x < Math.min(s.x1, s.xMax); x++) {
+      const p = y * width + x
+      if (!ink[p] || !s.ids.has(labels[p])) continue
+      area++; sx += x; sy += y
+      if (x < x0) x0 = x
+      if (y < y0) y0 = y
+      if (x + 1 > x1) x1 = x + 1
+      if (y + 1 > y1) y1 = y + 1
     }
   }
-  if (blobStart >= 0) {
-    blobs.push({ startRow: blobStart, endRow: rowCounts.length - 1 })
-  }
-
-  if (blobs.length === 0) return null
-  if (blobs.length === 1) return tightBBox(data, width, imgX0, imgY0, imgX1, imgY1)
-
-  // Multiple blobs: pick the one with the most pixels
-  let bestBlob = null
-  let bestCount = 0
-  for (const blob of blobs) {
-    let count = 0
-    for (let i = blob.startRow; i <= blob.endRow; i++) count += rowCounts[i]
-    if (count > bestCount) {
-      bestCount = count
-      bestBlob = blob
-    }
-  }
-
-  const blobY0 = imgY0 + bestBlob.startRow
-  const blobY1 = imgY0 + bestBlob.endRow
-  return tightBBox(data, width, imgX0, blobY0, imgX1, blobY1)
+  return { ...s, x0, y0, x1, y1, area, sx, sy }
 }
 
 /**
- * Extract a region from a source RGBA buffer into a new RGBA buffer.
+ * Cut one sprite out of its sheet as RGBA with transparent background.
+ * Enclosed paper-coloured regions (white chest, paws) are filled opaque.
  */
-function extractRegion(srcData, srcWidth, x0, y0, x1, y1) {
-  const w = x1 - x0 + 1
-  const h = y1 - y0 + 1
-  const out = Buffer.alloc(w * h * 4, 0)
+function extractSprite(sheet, dist, ink, labels, s) {
+  const pad = 2
+  const x0 = Math.max(0, s.x0 - pad), y0 = Math.max(0, s.y0 - pad)
+  const x1 = Math.min(sheet.width, s.x1 + pad), y1 = Math.min(sheet.height, s.y1 + pad)
+  const w = x1 - x0, h = y1 - y0
+  const member = new Uint8Array(w * h)
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const si = ((y0 + y) * srcWidth + (x0 + x)) * 4
-      const di = (y * w + x) * 4
-      out[di] = srcData[si]
-      out[di + 1] = srcData[si + 1]
-      out[di + 2] = srcData[si + 2]
-      out[di + 3] = srcData[si + 3]
+      const gx = x0 + x, gy = y0 + y
+      if (gx < s.xMin || gx >= s.xMax) continue
+      const p = gy * sheet.width + gx
+      if (ink[p] && s.ids.has(labels[p])) member[y * w + x] = 1
     }
   }
-  return { data: out, w, h }
-}
-
-/**
- * Copy a sprite into the atlas buffer at (destX, destY), centered within (cellW x cellH).
- */
-function blitSprite(atlas, atlasW, cellX, cellY, cellW, cellH, sprite) {
-  const { data, w, h } = sprite
-  const offX = Math.floor((cellW - w) / 2)
-  const offY = Math.floor((cellH - h) / 2)
-  for (let sy = 0; sy < h; sy++) {
-    for (let sx = 0; sx < w; sx++) {
-      const si = (sy * w + sx) * 4
-      const dx = cellX + offX + sx
-      const dy = cellY + offY + sy
-      if (dx < 0 || dx >= atlasW || dy < 0) continue
-      const di = (dy * atlasW + dx) * 4
-      atlas[di] = data[si]
-      atlas[di + 1] = data[si + 1]
-      atlas[di + 2] = data[si + 2]
-      atlas[di + 3] = data[si + 3]
+  // Flood the outside from the crop border; anything unreached and not ink is an enclosed hole.
+  const outside = new Uint8Array(w * h)
+  const stack = []
+  const push = (x, y) => {
+    const q = y * w + x
+    if (!member[q] && !outside[q]) { outside[q] = 1; stack.push(q) }
+  }
+  for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1) }
+  for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y) }
+  while (stack.length) {
+    const q = stack.pop()
+    const x = q % w, y = (q / w) | 0
+    if (x > 0) push(x - 1, y)
+    if (x < w - 1) push(x + 1, y)
+    if (y > 0) push(x, y - 1)
+    if (y < h - 1) push(x, y + 1)
+  }
+  const rgba = Buffer.alloc(w * h * 4)
+  let ax = 0, an = 0, footY = 0
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const q = y * w + x
+      const p = (y0 + y) * sheet.width + (x0 + x)
+      const si = p * 4, di = q * 4
+      let a
+      if (!outside[q]) {
+        a = 255
+      } else {
+        // Feather the outer edge only next to the sprite, so stray paper texture stays clear.
+        let near = false
+        for (let dy = -1; dy <= 1 && !near; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx, ny = y + dy
+            if (nx >= 0 && ny >= 0 && nx < w && ny < h && !outside[ny * w + nx]) { near = true; break }
+          }
+        }
+        a = near ? Math.round(Math.max(0, Math.min(1, (dist[p] - SOFT_LO) / (INK_THRESHOLD - SOFT_LO))) * 255) : 0
+      }
+      rgba[di] = sheet.data[si]; rgba[di + 1] = sheet.data[si + 1]; rgba[di + 2] = sheet.data[si + 2]; rgba[di + 3] = a
+      if (a === 255) {
+        ax += x; an++
+        if (y > footY) footY = y
+      }
     }
   }
+  return { rgba, w, h, anchorX: ax / an, anchorY: footY + 1 }
 }
 
-// ---------------------------------------------------------------------------
-// Clip-to-sprite mapping (hand-coded after empirical sheet analysis)
-//
-// Locomotion sheet bands (after cream-key detection):
-//   Band 0 (y ~37-209,  5 sprites): idle frames
-//   Band 1 (y ~222-389, 9 sprites): walk frames
-//   Band 2 (y ~409-745, 10 sprites): run frames (tall band; contains TWO stacked
-//            rows of running poses — dominantBlob:true extracts only the largest
-//            connected blob per sprite column, removing the second-row artifact)
-//   Band 3 (y ~765-910, 8 sprites): broader walk poses (not used)
-//   Band 4 (y ~929-1090,10 sprites): additional run poses (not used)
-//
-// Actions sheet bands:
-//   Band 0 (y ~38-259,  6 sprites): jump arc part 1 (crouch→apex)
-//   Band 1 (y ~262-501, 6 sprites): jump arc part 2 (descent→land)
-//   Band 2 (y ~506-1104, 6 sprites): bonus poses (full-height tall sprites)
-//     [0] = hit (star-dazed)
-//     [1] = celebrate (arms up)
-//     [2] = taunt (tail-swipe or second celebrate)   ← NEW clip
-//     [3] = ko (ghost/pit-death)
-//     [4] = chest (chest opening)
-//     [5] = (extra — not mapped)
-//
-// dominantBlob: true — for this band's sprites, use dominantBlobBBox() instead
-//   of tightBBox() to pick only the largest vertical blob per sprite column.
-//   This corrects the run band's two-row stacking artifact.
-//
-// medianFilter: true — after extraction, drop any sprite whose pixel-area
-//   (w*h) is < 50% of the median area. Kills outlier artifacts (e.g. the
-//   undersized last run frame caused by a lone lower-row fragment).
-// ---------------------------------------------------------------------------
-const CLIP_LAYOUT = {
-  idle:      { sheet: 'loco',    bands: [{ band: 0, sprites: 'all' }],                              fps: 8,  loop: true  },
-  walk:      { sheet: 'loco',    bands: [{ band: 1, sprites: 'all' }],                              fps: 12, loop: true  },
-  run:       { sheet: 'loco',    bands: [{ band: 2, sprites: 'all', yClamp: { y0: 560, y1: 745 } }], fps: 16, loop: true  },
-  jump:      { sheet: 'actions', bands: [{ band: 0, sprites: 'all' }, { band: 1, sprites: 'all' }], fps: 12, loop: false },
-  hit:       { sheet: 'actions', bands: [{ band: 2, sprites: [0] }],                                fps: 10, loop: false },
-  celebrate: { sheet: 'actions', bands: [{ band: 2, sprites: [1] }],                                fps: 10, loop: false },
-  taunt:     { sheet: 'actions', bands: [{ band: 2, sprites: [2] }],                                fps: 10, loop: false },
-  ko:        { sheet: 'actions', bands: [{ band: 2, sprites: [3] }],                                fps: 8,  loop: false },
-  chest:     { sheet: 'actions', bands: [{ band: 2, sprites: [4] }],                                fps: 8,  loop: false },
+async function scaleSprite(sp, k) {
+  if (Math.abs(k - 1) < 1e-3) return sp
+  const w = Math.max(1, Math.round(sp.w * k)), h = Math.max(1, Math.round(sp.h * k))
+  const rgba = await sharp(sp.rgba, { raw: { width: sp.w, height: sp.h, channels: 4 } })
+    .resize(w, h, { kernel: 'lanczos3' })
+    .raw()
+    .toBuffer()
+  return { rgba, w, h, anchorX: sp.anchorX * k, anchorY: sp.anchorY * k }
+}
+
+async function processSheet(name) {
+  const sheet = await loadRGBA(SHEETS[name])
+  const bg = paperColour(sheet)
+  const dist = distanceMap(sheet, bg)
+  const ink = new Uint8Array(dist.length)
+  for (let p = 0; p < dist.length; p++) ink[p] = dist[p] > INK_THRESHOLD ? 1 : 0
+  const { labels, comps } = labelComponents(ink, sheet.width, sheet.height)
+  const rows = clusterRows(buildSprites(comps)).map(r => splitMerged(r, ink, labels, sheet.width))
+  const counts = rows.map(r => r.length)
+  console.log(`${name}: paper rgb(${bg.join(',')}), rows ${JSON.stringify(counts)}`)
+  if (JSON.stringify(counts) !== JSON.stringify(EXPECTED_ROWS[name])) {
+    throw new Error(`${name}: expected rows ${JSON.stringify(EXPECTED_ROWS[name])}, got ${JSON.stringify(counts)}`)
+  }
+  return rows.map(r => r.map(s => extractSprite(sheet, dist, ink, labels, s)))
 }
 
 async function main() {
-  console.log('=== Kasimir Atlas Builder ===')
-  console.log('Cream-key threshold:', CREAM_THRESHOLD, '(Manhattan distance)')
-  console.log()
+  for (const f of Object.values(SHEETS)) {
+    if (!fs.existsSync(f)) throw new Error(`missing source sheet: ${f}`)
+  }
+  const sheets = { loco: await processSheet('loco'), actions: await processSheet('actions') }
 
-  // --- Load and cream-key both sheets ---
-  console.log('Loading locomotion sheet:', LOCO_SRC)
-  const loco = await loadRGBA(LOCO_SRC)
-  console.log(`  ${loco.width}x${loco.height}`)
-  applyCreameKey(loco.data, loco.width, loco.height)
+  const refH = {}
+  for (const [name, refs] of Object.entries(SCALE_REFS)) {
+    refH[name] = median(refs.map(([r, i]) => sheets[name][r][i].anchorY))
+  }
+  const sheetScale = { loco: 1, actions: refH.loco / refH.actions }
+  console.log(`standing height: loco ${refH.loco.toFixed(0)}px, actions ${refH.actions.toFixed(0)}px → actions ×${sheetScale.actions.toFixed(3)}`)
 
-  console.log('Loading actions sheet:', ACTIONS_SRC)
-  const actions = await loadRGBA(ACTIONS_SRC)
-  console.log(`  ${actions.width}x${actions.height}`)
-  applyCreameKey(actions.data, actions.width, actions.height)
-
-  const sheets = { loco, actions }
-
-  // --- Detect row bands for each sheet ---
-  const bands = {}
-  for (const [name, sheet] of Object.entries(sheets)) {
-    const detected = detectRowBands(sheet.data, sheet.width, sheet.height)
-    bands[name] = detected
-    console.log(`\n${name} row bands:`)
-    detected.forEach((b, i) => console.log(`  [${i}] y ${b.y0}-${b.y1} (h=${b.y1 - b.y0 + 1})`))
+  // Gather clip frames at sheet-normalised scale.
+  const clipFrames = {}
+  for (const [clip, def] of Object.entries(CLIPS)) {
+    const row = sheets[def.sheet][def.row]
+    const idx = def.frames ?? row.map((_, i) => i)
+    clipFrames[clip] = await Promise.all(idx.map(i => scaleSprite(row[i], sheetScale[def.sheet])))
   }
 
-  // --- Detect sprites within each band ---
-  const spriteCols = {}
-  for (const [name, sheet] of Object.entries(sheets)) {
-    spriteCols[name] = []
-    for (const band of bands[name]) {
-      const cols = detectSpriteColumns(sheet.data, sheet.width, band)
-      spriteCols[name].push(cols)
-      console.log(`\n${name} band y${band.y0}-${band.y1}: ${cols.length} sprites`)
-      cols.forEach((c, i) => console.log(`  [${i}] x ${c.x0}-${c.x1} (w=${c.x1 - c.x0 + 1})`))
+  // Uniform cell: symmetric around the anchor horizontally (so a UV mirror keeps the
+  // feet in place), feet on a shared baseline vertically.
+  const measure = () => {
+    let half = 0, up = 0
+    for (const frames of Object.values(clipFrames)) {
+      for (const f of frames) {
+        half = Math.max(half, f.anchorX, f.w - f.anchorX)
+        up = Math.max(up, f.anchorY)
+      }
+    }
+    return { cellW: Math.ceil(half * 2) + CELL_PAD * 2, cellH: Math.ceil(up) + CELL_PAD * 2 }
+  }
+  const total = Object.values(clipFrames).reduce((n, f) => n + f.length, 0)
+  let { cellW, cellH } = measure()
+  let cols = Math.max(1, Math.round(Math.sqrt((total * cellH) / cellW)))
+  let rowsN = Math.ceil(total / cols)
+  const fit = Math.min(1, MAX_ATLAS_DIM / (cols * cellW), MAX_ATLAS_DIM / (rowsN * cellH))
+  if (fit < 1) {
+    console.log(`downscaling all frames ×${fit.toFixed(3)} to fit ${MAX_ATLAS_DIM}px`)
+    for (const clip of Object.keys(clipFrames)) {
+      clipFrames[clip] = await Promise.all(clipFrames[clip].map(f => scaleSprite(f, fit)))
+    }
+    ;({ cellW, cellH } = measure())
+    cols = Math.max(1, Math.floor(MAX_ATLAS_DIM / cellW))
+    rowsN = Math.ceil(total / cols)
+  }
+  const atlasW = cols * cellW, atlasH = rowsN * cellH
+  const anchor = { x: cellW / 2, y: cellH - CELL_PAD }
+  console.log(`cell ${cellW}x${cellH}, grid ${cols}x${rowsN}, atlas ${atlasW}x${atlasH}, ${total} frames`)
+
+  const composites = []
+  const clipsOut = {}
+  let n = 0
+  for (const [clip, frames] of Object.entries(clipFrames)) {
+    clipsOut[clip] = { frames: [], fps: CLIPS[clip].fps, loop: CLIPS[clip].loop }
+    for (const f of frames) {
+      const cx = (n % cols) * cellW, cy = Math.floor(n / cols) * cellH
+      const left = Math.round(cx + anchor.x - f.anchorX)
+      const top = Math.round(cy + anchor.y - f.anchorY)
+      composites.push({ input: f.rgba, raw: { width: f.w, height: f.h, channels: 4 }, left, top })
+      clipsOut[clip].frames.push({ x: cx, y: cy, w: cellW, h: cellH })
+      n++
     }
   }
 
-  // --- Extract tight-bbox sprites for each clip ---
-  // Gather all sprites in order, keyed by clip name
-  const clipSprites = {}
-  for (const [clipName, layout] of Object.entries(CLIP_LAYOUT)) {
-    clipSprites[clipName] = []
-    const sheet = sheets[layout.sheet]
-    const sheetBands = bands[layout.sheet]
-    const sheetCols = spriteCols[layout.sheet]
-
-    for (const { band: bandIdx, sprites: spriteSpec, dominantBlob, yClamp } of layout.bands) {
-      const rawBand = sheetBands[bandIdx]
-      if (!rawBand) {
-        console.warn(`  WARN: ${clipName}: band ${bandIdx} not found on ${layout.sheet} sheet`)
-        continue
-      }
-
-      // yClamp: override the band's y extent for this clip's column detection + bbox extraction.
-      // Use this to restrict extraction to a specific sub-row within a multi-row band.
-      const band = yClamp ? { y0: yClamp.y0, y1: yClamp.y1 } : rawBand
-
-      // Re-detect sprite columns using the clamped band y extent if yClamp is set.
-      let cols
-      if (yClamp) {
-        cols = detectSpriteColumns(sheet.data, sheet.width, band)
-        console.log(`  yClamp [${band.y0}-${band.y1}]: re-detected ${cols.length} sprites`)
-      } else {
-        cols = sheetCols[bandIdx]
-      }
-
-      if (!cols || cols.length === 0) {
-        console.warn(`  WARN: ${clipName}: no sprites detected in band ${bandIdx}`)
-        continue
-      }
-
-      const indices = spriteSpec === 'all'
-        ? cols.map((_, i) => i)
-        : spriteSpec
-
-      for (const idx of indices) {
-        if (idx >= cols.length) {
-          console.warn(`  WARN: ${clipName}: sprite index ${idx} out of range (band has ${cols.length})`)
-          continue
-        }
-        const col = cols[idx]
-        // dominantBlob: pick the largest vertical blob per sprite column,
-        // discarding secondary blobs from adjacent stacked sprite rows.
-        const bbox = dominantBlob
-          ? dominantBlobBBox(sheet.data, sheet.width, col.x0, band.y0, col.x1, band.y1)
-          : tightBBox(sheet.data, sheet.width, col.x0, band.y0, col.x1, band.y1)
-        if (!bbox) {
-          console.warn(`  WARN: ${clipName}: sprite ${idx} bbox is empty`)
-          continue
-        }
-        const extracted = extractRegion(sheet.data, sheet.width, bbox.x0, bbox.y0, bbox.x1, bbox.y1)
-        clipSprites[clipName].push(extracted)
-      }
-    }
-
-    // medianFilter: drop any sprite whose area (w*h) is < 50% of the median.
-    // Kills undersized outlier frames from partial sub-row detections.
-    if (layout.medianFilter && clipSprites[clipName].length > 1) {
-      const areas = clipSprites[clipName].map(s => s.w * s.h).slice().sort((a, b) => a - b)
-      const mid = Math.floor(areas.length / 2)
-      const median = areas.length % 2 === 1 ? areas[mid] : (areas[mid - 1] + areas[mid]) / 2
-      const minArea = median * 0.5
-      const before = clipSprites[clipName].length
-      clipSprites[clipName] = clipSprites[clipName].filter(s => s.w * s.h >= minArea)
-      const dropped = before - clipSprites[clipName].length
-      if (dropped > 0) {
-        console.log(`  medianFilter: dropped ${dropped} small sprite(s) (minArea=${minArea.toFixed(0)})`)
-      }
-    }
-
-    console.log(`\n${clipName}: ${clipSprites[clipName].length} frames extracted`)
-    clipSprites[clipName].forEach((s, i) => console.log(`  [${i}] ${s.w}x${s.h}`))
-  }
-
-  // --- Determine cell size (max w and h across all sprites) ---
-  let cellW = 0, cellH = 0
-  for (const sprites of Object.values(clipSprites)) {
-    for (const s of sprites) {
-      if (s.w > cellW) cellW = s.w
-      if (s.h > cellH) cellH = s.h
-    }
-  }
-  // Add 4px padding each side
-  cellW += 8
-  cellH += 8
-  console.log(`\nCell size: ${cellW}x${cellH}`)
-
-  // --- Count total frames and determine atlas dimensions ---
-  let totalFrames = 0
-  for (const sprites of Object.values(clipSprites)) totalFrames += sprites.length
-  console.log(`Total frames: ${totalFrames}`)
-
-  // Layout: pack into a roughly-square grid
-  const cols = Math.ceil(Math.sqrt(totalFrames))
-  const rows = Math.ceil(totalFrames / cols)
-  const atlasW = cols * cellW
-  const atlasH = rows * cellH
-  console.log(`Atlas grid: ${cols}x${rows} cells`)
-  console.log(`Atlas size: ${atlasW}x${atlasH}`)
-
-  // --- Build atlas buffer ---
-  const atlas = Buffer.alloc(atlasW * atlasH * 4, 0)
-
-  let frameIdx = 0
-  const framePositions = {} // clipName -> [{x,y,w,h}]
-
-  for (const [clipName, sprites] of Object.entries(clipSprites)) {
-    framePositions[clipName] = []
-    for (const sprite of sprites) {
-      const col = frameIdx % cols
-      const row = Math.floor(frameIdx / cols)
-      const cx = col * cellW
-      const cy = row * cellH
-      blitSprite(atlas, atlasW, cx, cy, cellW, cellH, sprite)
-      // Record centered position: the frame rect is the full cell
-      framePositions[clipName].push({ x: cx, y: cy, w: cellW, h: cellH })
-      frameIdx++
-    }
-  }
-
-  // --- Write atlas PNG ---
   fs.mkdirSync(path.dirname(ATLAS_OUT), { recursive: true })
-  await sharp(atlas, {
-    raw: { width: atlasW, height: atlasH, channels: 4 }
-  })
-    .png()
+  await sharp({ create: { width: atlasW, height: atlasH, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite(composites)
+    .png({ compressionLevel: 9, palette: true, quality: 95, effort: 10 })
     .toFile(ATLAS_OUT)
-  console.log(`\nAtlas written: ${ATLAS_OUT}`)
 
-  // --- Build frame-map JSON ---
-  const clips = {}
-  for (const [clipName, layout] of Object.entries(CLIP_LAYOUT)) {
-    const frames = (framePositions[clipName] || []).map(f => ({
-      x: f.x, y: f.y, w: f.w, h: f.h
-    }))
-    if (frames.length === 0) {
-      console.warn(`WARN: clip ${clipName} has 0 frames — inserting placeholder at (0,0)`)
-      frames.push({ x: 0, y: 0, w: cellW, h: cellH })
-    }
-    clips[clipName] = {
-      frames,
-      fps: layout.fps,
-      loop: layout.loop,
-    }
-  }
-
+  const charH = Math.round(refH.loco * fit)
   const frameMap = {
-    image: '/images/app-space-game/kasimir-atlas.png',
+    image: ATLAS_URL,
+    atlas: { w: atlasW, h: atlasH, cols, rows: rowsN },
     cell: { w: cellW, h: cellH },
-    clips,
+    anchor,
+    charH,
+    clips: clipsOut,
   }
-
-  // Write with LF endings
-  const json = JSON.stringify(frameMap, null, 2).replace(/\r\n/g, '\n')
-  fs.mkdirSync(path.dirname(FRAMES_OUT), { recursive: true })
-  fs.writeFileSync(FRAMES_OUT, json + '\n', 'utf8')
-  console.log(`Frame-map written: ${FRAMES_OUT}`)
-
-  // --- Summary ---
-  console.log('\n=== Summary ===')
-  console.log(`Atlas: ${atlasW}x${atlasH}`)
-  console.log(`Cell:  ${cellW}x${cellH}`)
-  console.log(`Cream threshold: ${CREAM_THRESHOLD} (Manhattan)`)
-  console.log('Per-clip frame counts:')
-  for (const [clipName, data] of Object.entries(clips)) {
-    console.log(`  ${clipName}: ${data.frames.length} frames (fps=${data.fps}, loop=${data.loop})`)
-  }
-  console.log('\nDone. Review the atlas visually before committing.')
-  console.log('Atlas path:', ATLAS_OUT)
+  fs.writeFileSync(FRAMES_OUT, JSON.stringify(frameMap, null, 2) + '\n')
+  const kb = (fs.statSync(ATLAS_OUT).size / 1024).toFixed(0)
+  console.log(`wrote ${path.relative(ROOT, ATLAS_OUT)} (${kb} KB) and ${path.relative(ROOT, FRAMES_OUT)}`)
 }
 
 main().catch(err => {
-  console.error('Fatal:', err)
+  console.error(err)
   process.exit(1)
 })

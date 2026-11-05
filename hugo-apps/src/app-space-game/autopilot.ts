@@ -1,23 +1,12 @@
-import { SPEED, JUMP_ARC } from './constants'
-import type { PhysicsState, WorldHazards } from './physics'
+// Attract-mode driver: runs right and times jumps from the hazard geometry and the
+// current speed so Kasimir clears every crate, spike and pit. Pure and deterministic.
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────────────────────
+import { GRAV, JUMP, BODY_HW } from './constants'
+import type { PhysicsState, PhysicsInput } from './physics'
+import type { WorldHazards } from './layout'
 
-/** Seconds of no x-advance before the watchdog teleports Kasimir forward. */
 const WEDGE_TIMEOUT = 3
-
-/**
- * Default lookahead distance (world units ahead of s.x to scan for hazards).
- * 60 % of horizontal reach of a full jump arc — jump when the hazard is this
- * close, giving time to arc over while occasionally mis-timing (adds life).
- */
-const DEFAULT_LOOKAHEAD = SPEED * JUMP_ARC.airtime * 0.6
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────────────────
+const RISE_T = JUMP / Math.abs(GRAV)
 
 export interface ProgressTrack {
   lastX: number
@@ -25,146 +14,49 @@ export interface ProgressTrack {
   nowT: number
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
+interface Ahead { x0: number; x1: number }
 
-/**
- * Return the x coordinate of the nearest hazard edge AHEAD of `px`
- * (i.e. the left/near edge of obstacles, left edge of pits) that falls
- * within [px, px + lookahead], or null if the runway is clear.
- */
-function nearestHazardEdge(
-  px: number,
-  hazards: WorldHazards,
-  lookahead: number
-): number | null {
-  let nearest: number | null = null
-
-  for (const obs of hazards.obstacles) {
-    // Near (left) edge of obstacle
-    const edge = obs.x - obs.w / 2
-    if (edge >= px && edge <= px + lookahead) {
-      if (nearest === null || edge < nearest) nearest = edge
-    }
+/** Nearest hazard whose far edge is still ahead of Kasimir's centre. */
+function nextHazard(x: number, h: WorldHazards): Ahead | null {
+  let best: Ahead | null = null
+  const consider = (x0: number, x1: number) => {
+    if (x1 <= x) return
+    if (!best || x0 < best.x0) best = { x0, x1 }
   }
-
-  for (const pit of hazards.pits) {
-    // Near (left) edge of pit
-    const edge = pit.x - pit.w / 2
-    if (edge >= px && edge <= px + lookahead) {
-      if (nearest === null || edge < nearest) nearest = edge
-    }
-  }
-
-  return nearest
+  for (const c of h.crates) consider(c.x0, c.x1)
+  for (const s of h.spikes) consider(s.x0, s.x1)
+  for (const p of h.pits) consider(p.x0, p.x1)
+  return best
 }
 
 /**
- * Return the far (right) edge of the nearest hazard at or ahead of `px`,
- * or null if no hazard is found.
+ * Jump so the apex lands over the hazard's middle. Holds the button while rising
+ * (full-height jump), releases on the way down so the next press registers.
  */
-function nearestHazardFarEdge(
-  px: number,
-  hazards: WorldHazards
-): number | null {
-  let nearestEdge: number | null = null
-  let farEdge: number | null = null
-
-  for (const obs of hazards.obstacles) {
-    const edge = obs.x - obs.w / 2
-    if (edge >= px) {
-      if (nearestEdge === null || edge < nearestEdge) {
-        nearestEdge = edge
-        farEdge = obs.x + obs.w / 2
-      }
-    }
-    // Also handle the case where Kasimir is already inside the obstacle
-    const far = obs.x + obs.w / 2
-    if (far > px && edge < px) {
-      if (nearestEdge === null || edge < nearestEdge) {
-        nearestEdge = edge
-        farEdge = far
-      }
-    }
-  }
-
-  for (const pit of hazards.pits) {
-    const edge = pit.x - pit.w / 2
-    if (edge >= px) {
-      if (nearestEdge === null || edge < nearestEdge) {
-        nearestEdge = edge
-        farEdge = pit.x + pit.w / 2
-      }
-    }
-    // Inside a pit
-    const far = pit.x + pit.w / 2
-    if (far > px && edge < px) {
-      if (nearestEdge === null || edge < nearestEdge) {
-        nearestEdge = edge
-        farEdge = far
-      }
-    }
-  }
-
-  return farEdge
+export function autopilotInput(s: PhysicsState, h: WorldHazards): PhysicsInput {
+  const holding = !s.onGround && s.vy > 0
+  const hz = nextHazard(s.x, h)
+  if (!hz || !s.onGround) return { moveDir: 1, jump: holding }
+  const front = s.x + BODY_HW
+  const d = hz.x0 - front
+  const speed = Math.max(Math.abs(s.vx), 3)
+  const halfW = (hz.x1 - hz.x0) / 2
+  const launchAt = Math.min(2.6, Math.max(0.25, speed * RISE_T - (halfW + BODY_HW)))
+  const launch = d <= launchAt
+  return { moveDir: 1, jump: launch || holding }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Public API
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Autopilot input decision for one game tick.
- *
- * - `moveDir` is ALWAYS `1` (moving right; stopping risks a wedge).
- * - `jump: true` when a hazard near-edge is within `lookahead` world units
- *   AND the character is on the ground (no double-jumps).
- *
- * Pure and deterministic — never throws.
- */
-export function autopilotInput(
-  s: PhysicsState,
-  hazards: WorldHazards,
-  lookahead?: number
-): { moveDir: 1; jump: boolean } {
-  const la = lookahead !== undefined ? lookahead : DEFAULT_LOOKAHEAD
-  const hazardEdge = nearestHazardEdge(s.x, hazards, la)
-  const shouldJump = hazardEdge !== null && s.onGround
-  return { moveDir: 1, jump: shouldJump }
-}
-
-/**
- * Hard watchdog: if x hasn't advanced > 0.5 world units in WEDGE_TIMEOUT
- * seconds, teleport Kasimir forward past the nearest blocking hazard.
- *
- * - `forced: true`  → state was reset; `next` is the teleported state.
- * - `forced: false` → no action; `next` is the original `s` unchanged.
- *
- * Pure and deterministic — never throws.
- */
+/** Furthest-right x Kasimir has safely reached is tracked by the caller; this frees a wedge. */
 export function watchdog(
   progress: ProgressTrack,
   s: PhysicsState,
-  hazards: WorldHazards
+  h: WorldHazards,
 ): { forced: boolean; next: PhysicsState } {
-  const stalled = progress.nowT - progress.lastAdvanceT > WEDGE_TIMEOUT
-
-  if (!stalled) {
-    return { forced: false, next: s }
+  if (progress.nowT - progress.lastAdvanceT <= WEDGE_TIMEOUT) return { forced: false, next: s }
+  const hz = nextHazard(s.x, h)
+  const x = hz ? hz.x1 + 1.5 : s.x + 6
+  return {
+    forced: true,
+    next: { ...s, x: Math.min(x, h.maxX - 1), y: 0, vx: 0, vy: 0, onGround: true, lastSafeX: Math.min(x, h.maxX - 1) },
   }
-
-  // Find the far edge of the nearest hazard ahead (or overlapping)
-  const far = nearestHazardFarEdge(s.x, hazards)
-  const newX = far !== null ? far + 0.1 : s.x + 8
-
-  const next: PhysicsState = {
-    ...s,
-    x: newX,
-    y: 1.8,  // GROUND_Y
-    vy: 0,
-    onGround: true,
-  }
-
-  return { forced: true, next }
 }

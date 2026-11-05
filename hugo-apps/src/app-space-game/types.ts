@@ -80,8 +80,10 @@ export interface Goal {
   trackId: string
 }
 
-export interface Obstacle { x: number; w: number; h: number }  // x in coin-index units
-export interface Pit { x: number; w: number }                  // x in coin-index units
+// x in coin-index units (hazards sit between coins, e.g. 1.5); w/h in world units.
+// crate = solid block you must jump over or onto; spike = low hazard that costs rings.
+export interface Obstacle { x: number; w: number; h: number; kind: 'crate' | 'spike' }
+export interface Pit { x: number; w: number }
 
 export interface Zone {
   id: string

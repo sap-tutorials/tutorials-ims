@@ -67,32 +67,27 @@ function buildCoinsAndGates(
 ): { coins: Coin[]; gates: Gate[] } {
   const coins: Coin[] = []
   const gates: Gate[] = []
+  // Coins are tutorials only; a PRIZE is the zone's goal (the chest), not a ring to collect.
+  // Track each item's position in the coin list so checkpoint gates stay aligned.
+  const coinIndexOfItem: number[] = []
 
-  items.forEach((item, idx) => {
+  items.forEach(item => {
     if (item.type === 'TUTORIAL') {
-      const coin: Coin = {
+      coins.push({
         title: item.title,
         done: isAuthenticated && item.status === 'COMPLETED',
         available: !isLocked,
-      }
-      coins.push(coin)
-    } else if (item.type === 'PRIZE') {
-      // PRIZE items are represented as coins
-      const coin: Coin = {
-        title: item.title,
-        done: isAuthenticated && item.status === 'COMPLETED',
-        available: !isLocked,
-      }
-      coins.push(coin)
+      })
     }
+    coinIndexOfItem.push(coins.length - 1)
   })
 
   // Process checkpoints: if they have prizeId, they become goals (handled elsewhere)
   // Otherwise they become gates
-  checkpointIndices.forEach((checkpointItem, coinIndex) => {
+  checkpointIndices.forEach((checkpointItem, itemIndex) => {
     if (!checkpointItem.prizeId) {
       gates.push({
-        afterCoinIndex: coinIndex,
+        afterCoinIndex: itemIndex >= 0 ? coinIndexOfItem[itemIndex] : -1,
       })
     }
   })
@@ -172,7 +167,7 @@ export function buildLevelModel(data: AppSpaceData): LevelModel {
     // Build goal
     const goal = findGoal(items, checkpointIndices, track.id)
 
-    const { obstacles, pits } = placeHazards(coins.length, trackIndex)
+    const { obstacles, pits } = placeHazards(coins.length, trackIndex, gates.map(g => g.afterCoinIndex))
 
     const zone: Zone = {
       id: track.id,

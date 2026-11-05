@@ -1,77 +1,74 @@
-// Pure animation state machine for Kasimir sprite.
-// No DOM, no Three.js, no canvas — only clip-selection and frame-index math.
-// The renderer owns all UV updates.
+// Pure animation state machine for the Kasimir sprite. No DOM, no Three.js.
 
-export type ClipName = 'idle' | 'walk' | 'run' | 'jump' | 'hit' | 'ko' | 'celebrate' | 'taunt' | 'chest'
+import { JUMP, SPEED } from './constants'
+
+export type ClipName =
+  | 'idle' | 'walk' | 'trot' | 'run' | 'jump'
+  | 'hit' | 'fall' | 'ko' | 'reach' | 'chest' | 'celebrate' | 'taunt'
+
+export type AnimEvent = 'none' | 'hit' | 'fell' | 'land' | 'jump' | 'respawn'
 
 export interface AnimContext {
   onGround: boolean
-  moveDir: -1 | 0 | 1       // from autopilot or player input
+  vx: number
   vy: number
-  lastEvent: 'none' | 'hit' | 'fell' | 'goal' | 'pickup'
-  sinceEventMs: number       // ms since lastEvent fired
+  lastEvent: AnimEvent
+  sinceEventMs: number
+  /** Scripted pose (standing at a goal, celebrating) — overrides locomotion. */
+  pose?: 'reach' | 'chest' | 'celebrate' | 'taunt' | null
 }
 
-/**
- * Select the appropriate clip name from the current animation context.
- * Priority is strict highest-first; event overrides (ko/hit/celebrate) beat
- * locomotion/jump even when airborne.
- */
+/** Strict priority: scripted pose > fall > hit > airborne > ground locomotion by speed. */
 export function selectClip(ctx: AnimContext): ClipName {
-  const { onGround, moveDir, vy, lastEvent, sinceEventMs } = ctx
-
-  // Priority 1: fell event — KO override
-  if (lastEvent === 'fell' && sinceEventMs < 800) {
-    return 'ko'
-  }
-
-  // Priority 2: hit event
-  if (lastEvent === 'hit' && sinceEventMs < 600) {
-    return 'hit'
-  }
-
-  // Priority 3: goal event → celebrate
-  if (lastEvent === 'goal' && sinceEventMs < 800) {
-    return 'celebrate'
-  }
-
-  // Priority 4: pickup event → celebrate
-  if (lastEvent === 'pickup' && sinceEventMs < 400) {
-    return 'celebrate'
-  }
-
-  // Priority 5: airborne
-  if (!onGround) {
-    return 'jump'
-  }
-
-  // Priority 6: moving on ground (no walk/run distinction in v1 — always run; YAGNI)
-  if (moveDir !== 0 && vy === 0 && onGround) {
-    return 'run'
-  }
-
-  // Default
-  return 'idle'
+  const { onGround, vx, lastEvent, sinceEventMs } = ctx
+  if (ctx.pose) return ctx.pose
+  if (lastEvent === 'fell') return 'fall'
+  if (lastEvent === 'respawn' && sinceEventMs < 700) return 'hit'
+  if (lastEvent === 'hit' && sinceEventMs < 700) return onGround ? 'hit' : 'fall'
+  if (!onGround) return 'jump'
+  if (lastEvent === 'land' && sinceEventMs < 90) return 'jump'
+  const speed = Math.abs(vx)
+  if (speed < 0.35) return 'idle'
+  if (speed < SPEED * 0.45) return 'walk'
+  if (speed < SPEED * 0.8) return 'trot'
+  return 'run'
 }
 
 /**
- * Returns the 0-based frame index within a clip for the given elapsed time.
- * - Loop clips wrap around.
- * - Non-loop clips clamp to the last frame.
+ * Jump frames are chosen by the arc, not by time, so the pose always matches the motion.
+ * Sheet order: 0 crouch · 1 push-off · 2–4 rise · 5 apex stretch · 6–7 descend · 8 land · 9 stand.
  */
+export function jumpFrame(ctx: AnimContext, frameCount: number): number {
+  const last = frameCount - 1
+  if (ctx.onGround) return Math.min(8, last)
+  if (ctx.lastEvent === 'jump' && ctx.sinceEventMs < 60) return Math.min(1, last)
+  const v = ctx.vy / JUMP
+  let f: number
+  if (v > 0.7) f = 2
+  else if (v > 0.4) f = 3
+  else if (v > 0.12) f = 4
+  else if (v > -0.2) f = 5
+  else if (v > -0.6) f = 6
+  else f = 7
+  return Math.min(f, last)
+}
+
+/** Frame index within a time-driven clip. Loops wrap; one-shots hold the last frame. */
 export function frameAt(
   clipName: ClipName,
   elapsedMs: number,
-  clips: Record<ClipName, { frames: unknown[]; fps: number; loop: boolean }>
+  clips: Partial<Record<ClipName, { frames: unknown[]; fps: number; loop: boolean }>>,
 ): number {
   const clip = clips[clipName]
-  const frameCount = clip.frames.length
-  const msPerFrame = 1000 / clip.fps
-  const rawIndex = Math.floor(elapsedMs / msPerFrame)
+  if (!clip || clip.frames.length === 0) return 0
+  const raw = Math.floor((elapsedMs * clip.fps) / 1000)
+  return clip.loop ? raw % clip.frames.length : Math.min(raw, clip.frames.length - 1)
+}
 
-  if (clip.loop) {
-    return rawIndex % frameCount
-  } else {
-    return Math.min(rawIndex, frameCount - 1)
-  }
+/** Locomotion clips play faster the faster Kasimir moves, so feet don't skate. */
+export function playbackRate(clip: ClipName, vx: number): number {
+  const ref: Partial<Record<ClipName, number>> = { walk: SPEED * 0.3, trot: SPEED * 0.62, run: SPEED }
+  const r = ref[clip]
+  if (!r) return 1
+  return Math.min(1.4, Math.max(0.6, Math.abs(vx) / r))
 }
