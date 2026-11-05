@@ -8,8 +8,12 @@ export interface SoundHandle {
   enabled: boolean
   /** Toggle enabled state. */
   toggle(): void
-  /** Play a short blip sound. No-op if disabled or no AudioContext. */
+  /** Play a short blip sound (ring pickup). No-op if disabled or no AudioContext. */
   blip(): void
+  jump(): void
+  hit(): void
+  fall(): void
+  goal(): void
 }
 
 export function createSound(): SoundHandle {
@@ -66,29 +70,51 @@ export function createSound(): SoundHandle {
     },
     toggle() {
       enabled = !enabled
+      // Toggling is itself a user gesture.
+      gestureReceived = true
     },
     blip() {
-      // No-op unless enabled AND a user gesture has occurred
-      if (!enabled || !gestureReceived) return
-      try {
-        const c = getCtx()
-        if (!c) return
-        if (c.state === 'suspended') return
-        // Short sine blip: ~50ms, 880Hz → 440Hz
+      tone([[880, 440]], 0.08, 'sine', 0.18)
+    },
+    jump() {
+      tone([[320, 640]], 0.12, 'square', 0.06)
+    },
+    hit() {
+      tone([[220, 90]], 0.25, 'sawtooth', 0.12)
+    },
+    fall() {
+      tone([[600, 120]], 0.5, 'triangle', 0.14)
+    },
+    goal() {
+      tone([[523, 523], [659, 659], [784, 784], [1047, 1047]], 0.1, 'square', 0.07, 0.09)
+    },
+  }
+
+  /**
+   * Plays a short sequence of sweeps. Each entry is [startHz, endHz].
+   * No-op unless enabled AND a user gesture has occurred. NEVER throws.
+   */
+  function tone(sweeps: Array<[number, number]>, dur: number, type: OscillatorType, vol: number, gap = 0): void {
+    if (!enabled || !gestureReceived) return
+    try {
+      const c = getCtx()
+      if (!c || c.state === 'suspended') return
+      sweeps.forEach(([f0, f1], i) => {
+        const t0 = c.currentTime + i * (gap || dur)
         const osc = c.createOscillator()
         const gain = c.createGain()
         osc.connect(gain)
         gain.connect(c.destination)
-        osc.type = 'sine'
-        osc.frequency.setValueAtTime(880, c.currentTime)
-        osc.frequency.exponentialRampToValueAtTime(440, c.currentTime + 0.05)
-        gain.gain.setValueAtTime(0.18, c.currentTime)
-        gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.08)
-        osc.start(c.currentTime)
-        osc.stop(c.currentTime + 0.09)
-      } catch {
-        // NEVER throw — audio is best-effort
-      }
-    },
+        osc.type = type
+        osc.frequency.setValueAtTime(f0, t0)
+        if (f1 !== f0) osc.frequency.exponentialRampToValueAtTime(f1, t0 + dur * 0.8)
+        gain.gain.setValueAtTime(vol, t0)
+        gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur)
+        osc.start(t0)
+        osc.stop(t0 + dur + 0.02)
+      })
+    } catch {
+      // audio is best-effort
+    }
   }
 }

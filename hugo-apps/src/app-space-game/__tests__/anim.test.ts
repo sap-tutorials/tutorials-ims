@@ -1,82 +1,80 @@
 import { describe, it, expect } from 'vitest'
-import { selectClip, frameAt } from '../anim'
+import { selectClip, frameAt, jumpFrame, playbackRate } from '../anim'
 import type { AnimContext } from '../anim'
+import { JUMP, SPEED } from '../constants'
 
-// Minimal clip map for frameAt tests (loop + non-loop)
-const testClips = {
-  idle: { frames: [0, 1, 2, 3, 4].map(() => ({})), fps: 8, loop: true },
-  walk: { frames: [0, 1, 2].map(() => ({})), fps: 12, loop: true },
-  run: { frames: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(() => ({})), fps: 16, loop: true },
-  jump: { frames: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(() => ({})), fps: 12, loop: false },
-  hit: { frames: [{}], fps: 10, loop: false },
-  ko: { frames: [{}], fps: 8, loop: false },
-  celebrate: { frames: [{}], fps: 10, loop: false },
-  taunt: { frames: [{}], fps: 10, loop: false },
-  chest: { frames: [{}], fps: 8, loop: false },
-} as Parameters<typeof frameAt>[2]
+const ctx = (p: Partial<AnimContext> = {}): AnimContext => ({
+  onGround: true, vx: 0, vy: 0, lastEvent: 'none', sinceEventMs: 10_000, pose: null, ...p,
+})
 
 describe('selectClip', () => {
-  // Test 1: Airborne → 'jump'
-  it('returns jump when airborne (onGround:false, vy non-zero, no event)', () => {
-    const ctx: AnimContext = { onGround: false, moveDir: 0, vy: -5, lastEvent: 'none', sinceEventMs: 0 }
-    expect(selectClip(ctx)).toBe('jump')
+  it('idle → walk → trot → run as speed rises', () => {
+    expect(selectClip(ctx({ vx: 0 }))).toBe('idle')
+    expect(selectClip(ctx({ vx: SPEED * 0.3 }))).toBe('walk')
+    expect(selectClip(ctx({ vx: -SPEED * 0.6 }))).toBe('trot')
+    expect(selectClip(ctx({ vx: SPEED }))).toBe('run')
   })
 
-  // Test 2: fell event overrides even if airborne
-  it('returns ko when lastEvent:fell and sinceEventMs < 800 (overrides locomotion)', () => {
-    const ctx: AnimContext = { onGround: false, moveDir: 0, vy: -5, lastEvent: 'fell', sinceEventMs: 200 }
-    expect(selectClip(ctx)).toBe('ko')
+  it('airborne → jump', () => {
+    expect(selectClip(ctx({ onGround: false, vy: 3, vx: SPEED }))).toBe('jump')
   })
 
-  // Test 3: fell event expired → falls through to locomotion
-  it('does NOT return ko when lastEvent:fell but sinceEventMs >= 800', () => {
-    const ctx: AnimContext = { onGround: false, moveDir: 0, vy: -5, lastEvent: 'fell', sinceEventMs: 2000 }
-    expect(selectClip(ctx)).not.toBe('ko')
+  it('holds the landing crouch briefly after touching down', () => {
+    expect(selectClip(ctx({ vx: SPEED, lastEvent: 'land', sinceEventMs: 40 }))).toBe('jump')
+    expect(selectClip(ctx({ vx: SPEED, lastEvent: 'land', sinceEventMs: 200 }))).toBe('run')
   })
 
-  // Test 4: hit event within window
-  it('returns hit when lastEvent:hit and sinceEventMs < 600', () => {
-    const ctx: AnimContext = { onGround: true, moveDir: 0, vy: 0, lastEvent: 'hit', sinceEventMs: 300 }
-    expect(selectClip(ctx)).toBe('hit')
+  it('fell → fall pose; hit → dizzy on ground, flail in the air', () => {
+    expect(selectClip(ctx({ lastEvent: 'fell', onGround: false }))).toBe('fall')
+    expect(selectClip(ctx({ lastEvent: 'hit', sinceEventMs: 100, onGround: true }))).toBe('hit')
+    expect(selectClip(ctx({ lastEvent: 'hit', sinceEventMs: 100, onGround: false }))).toBe('fall')
+    expect(selectClip(ctx({ lastEvent: 'hit', sinceEventMs: 900, vx: SPEED }))).toBe('run')
   })
 
-  // Test 5: pickup event → celebrate
-  it('returns celebrate when lastEvent:pickup and sinceEventMs < 400', () => {
-    const ctx: AnimContext = { onGround: true, moveDir: 0, vy: 0, lastEvent: 'pickup', sinceEventMs: 200 }
-    expect(selectClip(ctx)).toBe('celebrate')
+  it('a scripted pose overrides everything', () => {
+    expect(selectClip(ctx({ pose: 'reach', lastEvent: 'hit', sinceEventMs: 0 }))).toBe('reach')
+    expect(selectClip(ctx({ pose: 'celebrate', onGround: false }))).toBe('celebrate')
+  })
+})
+
+describe('jumpFrame', () => {
+  it('follows the arc: rise → apex → descend, crouch on the ground', () => {
+    const f = (vy: number, extra: Partial<AnimContext> = {}) => jumpFrame(ctx({ onGround: false, vy, ...extra }), 10)
+    expect(f(JUMP)).toBe(2)
+    expect(f(0)).toBe(5)
+    expect(f(-JUMP)).toBe(7)
+    expect(f(JUMP, { lastEvent: 'jump', sinceEventMs: 10 })).toBe(1)
+    expect(jumpFrame(ctx({ onGround: true }), 10)).toBe(8)
+    const seq = [JUMP, JUMP * 0.5, JUMP * 0.2, 0, -JUMP * 0.4, -JUMP].map(v => f(v))
+    expect([...seq].sort((a, b) => a - b)).toEqual(seq)
   })
 
-  // Test 6: goal event → celebrate
-  it('returns celebrate when lastEvent:goal and sinceEventMs < 800', () => {
-    const ctx: AnimContext = { onGround: true, moveDir: 0, vy: 0, lastEvent: 'goal', sinceEventMs: 600 }
-    expect(selectClip(ctx)).toBe('celebrate')
-  })
-
-  // Test 7: grounded + moving → 'run'
-  it('returns run when grounded and moving (moveDir:1, vy:0)', () => {
-    const ctx: AnimContext = { onGround: true, moveDir: 1, vy: 0, lastEvent: 'none', sinceEventMs: 0 }
-    expect(selectClip(ctx)).toBe('run')
-  })
-
-  // Test 8: grounded + still → 'idle'
-  it('returns idle when grounded and still (moveDir:0, vy:0)', () => {
-    const ctx: AnimContext = { onGround: true, moveDir: 0, vy: 0, lastEvent: 'none', sinceEventMs: 0 }
-    expect(selectClip(ctx)).toBe('idle')
+  it('never exceeds the clip length', () => {
+    expect(jumpFrame(ctx({ onGround: true }), 3)).toBe(2)
   })
 })
 
 describe('frameAt', () => {
-  // Test 9: loop clip at elapsedMs=1000, fps=8, frames.length=5
-  // Math.floor(1000 / (1000/8)) % 5 = Math.floor(8) % 5 = 8 % 5 = 3
-  it('returns correct frame index for a loop clip (elapsedMs=1000, fps=8, 5 frames → 3)', () => {
-    expect(frameAt('idle', 1000, testClips)).toBe(3)
+  const clips = {
+    idle: { frames: [1, 2, 3, 4], fps: 4, loop: true },
+    taunt: { frames: [1, 2, 3], fps: 10, loop: false },
+  }
+  it('loops looping clips', () => {
+    expect(frameAt('idle', 0, clips)).toBe(0)
+    expect(frameAt('idle', 1250, clips)).toBe(1)
   })
+  it('clamps one-shot clips on the last frame', () => {
+    expect(frameAt('taunt', 5000, clips)).toBe(2)
+  })
+  it('returns 0 for unknown clips', () => {
+    expect(frameAt('run', 500, clips)).toBe(0)
+  })
+})
 
-  // Test 10: non-loop clip past end clamps to frames.length - 1
-  it('clamps to last frame index for a non-loop clip past the end', () => {
-    // jump clip has 12 frames, fps=12, non-loop
-    // at elapsedMs=10000, floor(10000/83.33) = 120 which is well past 11 (frames.length-1)
-    const lastIdx = testClips.jump.frames.length - 1
-    expect(frameAt('jump', 10000, testClips)).toBe(lastIdx)
+describe('playbackRate', () => {
+  it('scales locomotion with speed, clamped', () => {
+    expect(playbackRate('run', SPEED)).toBeCloseTo(1)
+    expect(playbackRate('run', 0.1)).toBe(0.6)
+    expect(playbackRate('idle', 0)).toBe(1)
   })
 })

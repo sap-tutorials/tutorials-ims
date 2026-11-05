@@ -1,142 +1,153 @@
 import { describe, it, expect } from 'vitest'
-import { stepPhysics, respawn } from '../physics'
-import type { PhysicsState, WorldHazards } from '../physics'
+import { stepPhysics, respawn, initialState, GROUND_Y } from '../physics'
+import type { PhysicsState, PhysicsInput } from '../physics'
+import type { WorldHazards } from '../layout'
+import { FIXED_DT, JUMP_ARC, BODY_HW, INVULN_S } from '../constants'
 
-// Helper: build a PhysicsState with sane defaults
-function mk(partial: Partial<PhysicsState> = {}): PhysicsState {
-  return {
-    x: 5,
-    y: 1.8,
-    vy: 0,
-    onGround: true,
-    facing: 1,
-    lastSafeX: 5,
-    ...partial,
+const world = (h: Partial<WorldHazards> = {}): WorldHazards => ({
+  crates: [], spikes: [], pits: [], minX: 0, maxX: 200, ...h,
+})
+const idle: PhysicsInput = { moveDir: 0, jump: false }
+
+function run(s: PhysicsState, input: PhysicsInput | ((s: PhysicsState, i: number) => PhysicsInput), h: WorldHazards, seconds: number) {
+  const events: string[] = []
+  const n = Math.round(seconds / FIXED_DT)
+  for (let i = 0; i < n; i++) {
+    const inp = typeof input === 'function' ? input(s, i) : input
+    const r = stepPhysics(s, inp, h, FIXED_DT)
+    if (r.event !== 'none') events.push(r.event)
+    s = r.next
   }
+  return { s, events }
 }
 
-const noHazards: WorldHazards = { obstacles: [], pits: [] }
-
 describe('stepPhysics', () => {
-  // Test 1: Gravity + land
-  it('gravity: airborne state drops and eventually lands at ground (y=1.8, onGround true)', () => {
-    let s = mk({ y: 5, vy: 0, onGround: false })
-    const dt = 0.05
-    // Run up to 200 steps (10 seconds) to let it fall
-    let landed = false
-    let prevY = s.y
-    for (let i = 0; i < 200; i++) {
-      const { next } = stepPhysics(s, { moveDir: 0, jump: false }, noHazards, dt)
-      if (i > 0) {
-        expect(next.y).toBeLessThanOrEqual(prevY + 0.001) // y should be decreasing or at ground
-      }
-      s = next
-      if (s.onGround) {
-        landed = true
-        break
-      }
-      prevY = s.y
-    }
-    expect(landed).toBe(true)
-    expect(s.y).toBeCloseTo(1.8, 4)
+  it('feet rest on the ground at y = 0', () => {
+    const { s } = run({ ...initialState(5), y: 4, onGround: false }, idle, world(), 2)
+    expect(s.y).toBe(GROUND_Y)
     expect(s.onGround).toBe(true)
   })
 
-  // Test 2: Jump
-  it('jump: grounded + jump:true -> next.vy > 0, next.onGround false', () => {
-    const s = mk()
-    const { next } = stepPhysics(s, { moveDir: 0, jump: true }, noHazards, 0.016)
-    expect(next.vy).toBeGreaterThan(0)
-    expect(next.onGround).toBe(false)
+  it('accelerates smoothly instead of snapping to full speed', () => {
+    const first = stepPhysics(initialState(5), { moveDir: 1, jump: false }, world(), FIXED_DT).next
+    expect(first.vx).toBeGreaterThan(0)
+    expect(first.vx).toBeLessThan(1)
+    const { s } = run(initialState(5), { moveDir: 1, jump: false }, world(), 1)
+    expect(s.vx).toBeCloseTo(7, 5)
   })
 
-  // Test 3: Jump consumed — second step while airborne does NOT add velocity
-  it('jump consumed: airborne + jump:true does NOT re-apply jump velocity', () => {
-    const s = mk()
-    const dt = 0.016
-    // First step: jump
-    const { next: after1 } = stepPhysics(s, { moveDir: 0, jump: true }, noHazards, dt)
-    expect(after1.onGround).toBe(false)
-    const vyAfterJump = after1.vy
-    // Second step: still holding jump but airborne
-    const { next: after2 } = stepPhysics(after1, { moveDir: 0, jump: true }, noHazards, dt)
-    // vy should have DECREASED due to gravity (not increased by another JUMP)
-    expect(after2.vy).toBeLessThan(vyAfterJump)
+  it('moves left and faces left', () => {
+    const { s } = run(initialState(50), { moveDir: -1, jump: false }, world(), 0.5)
+    expect(s.x).toBeLessThan(50)
+    expect(s.facing).toBe(-1)
   })
 
-  // Test 4: Move right and left
-  it('move right: moveDir:1 -> next.x > s.x, facing 1', () => {
-    const s = mk()
-    const { next } = stepPhysics(s, { moveDir: 1, jump: false }, noHazards, 0.016)
-    expect(next.x).toBeGreaterThan(s.x)
-    expect(next.facing).toBe(1)
+  it('a full held jump reaches JUMP_ARC.maxHeight; a tap is lower (variable jump)', () => {
+    const peak = (hold: number) => {
+      let s = initialState(5)
+      let max = 0
+      for (let i = 0; i < 200; i++) {
+        s = stepPhysics(s, { moveDir: 0, jump: i < hold }, world(), FIXED_DT).next
+        max = Math.max(max, s.y)
+      }
+      return max
+    }
+    const full = peak(200)
+    expect(full).toBeGreaterThan(JUMP_ARC.maxHeight * 0.95)
+    expect(full).toBeLessThanOrEqual(JUMP_ARC.maxHeight + 1e-6)
+    expect(peak(6)).toBeLessThan(JUMP_ARC.maxHeight * 0.6)
   })
 
-  it('move left: moveDir:-1 -> next.x < s.x, facing -1', () => {
-    const s = mk()
-    const { next } = stepPhysics(s, { moveDir: -1, jump: false }, noHazards, 0.016)
-    expect(next.x).toBeLessThan(s.x)
-    expect(next.facing).toBe(-1)
+  it('holding jump does not re-jump on landing (needs a fresh press)', () => {
+    const { events } = run(initialState(5), { moveDir: 0, jump: true }, world(), 2)
+    expect(events.filter(e => e === 'jump')).toHaveLength(1)
   })
 
-  // Test 5: Obstacle blocks (grounded, moving right into obstacle)
-  it('obstacle blocks: grounded moving right into obstacle -> x clamped to near edge, event hit', () => {
-    // Kasimir at x=5, obstacle at x=7 with w=1 -> left edge = 6.5
-    // Moving right with large dt should be blocked at near edge
-    const obs = { x: 7, w: 1, h: 2 }
-    const hazards: WorldHazards = { obstacles: [obs], pits: [] }
-    const s = mk({ x: 5, y: 1.8, onGround: true })
-    // Use a large dt so move would overshoot
-    const { next, event } = stepPhysics(s, { moveDir: 1, jump: false }, hazards, 0.5)
-    const nearEdge = obs.x - obs.w / 2  // 6.5
-    expect(next.x).toBeLessThanOrEqual(nearEdge + 0.001)
-    expect(event).toBe('hit')
+  it('jump buffer: a press shortly before landing still jumps', () => {
+    let s: PhysicsState = { ...initialState(5), y: 0.3, vy: -6, onGround: false }
+    s = stepPhysics(s, { moveDir: 0, jump: true }, world(), FIXED_DT).next
+    const { events } = run(s, { moveDir: 0, jump: true }, world(), 0.1)
+    expect(events).toContain('jump')
   })
 
-  // Test 6: Obstacle cleared by jump (airborne above obstacle top)
-  it('obstacle cleared: airborne above obstacle top -> not blocked, event none', () => {
-    // Obstacle h=2, top = 1.8 + 2 = 3.8
-    // Kasimir at y=5 (above top), moving right
-    const obs = { x: 7, w: 1, h: 2 }
-    const hazards: WorldHazards = { obstacles: [obs], pits: [] }
-    const s = mk({ x: 5, y: 5, vy: 0, onGround: false })
-    const { next, event } = stepPhysics(s, { moveDir: 1, jump: false }, hazards, 0.5)
-    // Should pass through, x should have moved right
-    const nearEdge = obs.x - obs.w / 2  // 6.5
-    expect(next.x).toBeGreaterThan(nearEdge)
-    expect(event).toBe('none')
+  it('coyote time: can still jump just after walking off a ledge', () => {
+    const pit = { x0: 10, x1: 14 }
+    let s: PhysicsState = { ...initialState(10.1), vx: 7 }
+    s = stepPhysics(s, { moveDir: 1, jump: false }, world({ pits: [pit] }), FIXED_DT).next
+    expect(s.onGround).toBe(false)
+    const r = stepPhysics(s, { moveDir: 1, jump: true }, world({ pits: [pit] }), FIXED_DT)
+    expect(r.event).toBe('jump')
   })
 
-  // Test 7: Pit fall — grounded walking over pit
-  it('pit fall: grounded walking over pit -> event fell, y drops below 1.8', () => {
-    // Pit at x=8, w=2 -> [7, 9]
-    // Kasimir at x=8 (center of pit), onGround
-    const pit = { x: 8, w: 2 }
-    const hazards: WorldHazards = { obstacles: [], pits: [pit] }
-    const s = mk({ x: 8, y: 1.8, onGround: true })
-    const { next, event } = stepPhysics(s, { moveDir: 0, jump: false }, hazards, 0.016)
-    expect(event).toBe('fell')
-    // After falling, y should drop below ground
-    expect(next.y).toBeLessThan(1.8)
+  it('crates block from the side with NO penalty event', () => {
+    const crate = { x0: 8, x1: 9.3, top: 1.2 }
+    const { s, events } = run(initialState(5), { moveDir: 1, jump: false }, world({ crates: [crate] }), 2)
+    expect(s.x).toBeCloseTo(crate.x0 - BODY_HW, 5)
+    expect(events).not.toContain('hit')
   })
 
-  // Test 8: Pit cleared — airborne over pit
-  it('pit cleared: airborne over pit -> no fell event, passes', () => {
-    const pit = { x: 8, w: 2 }
-    const hazards: WorldHazards = { obstacles: [], pits: [pit] }
-    // Airborne above pit
-    const s = mk({ x: 8, y: 4, vy: 2, onGround: false })
-    const { event } = stepPhysics(s, { moveDir: 1, jump: false }, hazards, 0.016)
-    expect(event).not.toBe('fell')
+  it('can land on top of a crate', () => {
+    const crate = { x0: 8, x1: 9.3, top: 1.2 }
+    const s0: PhysicsState = { ...initialState(8.6), y: 3, onGround: false }
+    const { s } = run(s0, idle, world({ crates: [crate] }), 1)
+    expect(s.y).toBeCloseTo(1.2, 5)
+    expect(s.onGround).toBe(true)
   })
 
-  // Test 9: respawn
-  it('respawn: lastSafeX:12, fallen (y:-3) -> x:12, y:1.8, onGround:true, vy:0', () => {
-    const s = mk({ x: 8, y: -3, vy: -10, onGround: false, lastSafeX: 12 })
-    const result = respawn(s)
-    expect(result.x).toBe(12)
-    expect(result.y).toBe(1.8)
-    expect(result.onGround).toBe(true)
-    expect(result.vy).toBe(0)
+  it('falls into a pit and reports fell', () => {
+    const pit = { x0: 10, x1: 13 }
+    const { s, events } = run(initialState(9), { moveDir: 1, jump: false }, world({ pits: [pit] }), 2)
+    expect(events).toContain('fell')
+    expect(s.x).toBeGreaterThan(pit.x0)
+    expect(s.x).toBeLessThan(pit.x1)
+  })
+
+  it('clears a max-width pit with a running jump', () => {
+    const pit = { x0: 12, x1: 12 + JUMP_ARC.maxGap * 0.5 }
+    const { s, events } = run(
+      { ...initialState(5), vx: 7 },
+      (st) => ({ moveDir: 1, jump: st.x > pit.x0 - 1.4 && st.x < pit.x0 }),
+      world({ pits: [pit] }),
+      2,
+    )
+    expect(events).not.toContain('fell')
+    expect(s.x).toBeGreaterThan(pit.x1)
+  })
+
+  it('spikes cost a hit with knock-back and brief invulnerability', () => {
+    const spike = { x0: 8, x1: 9.5, top: 0.55 }
+    let s: PhysicsState = { ...initialState(6), vx: 7 }
+    let hit = false
+    for (let i = 0; i < 120 && !hit; i++) {
+      const r = stepPhysics(s, { moveDir: 1, jump: false }, world({ spikes: [spike] }), FIXED_DT)
+      s = r.next
+      hit = r.event === 'hit'
+    }
+    expect(hit).toBe(true)
+    expect(s.vx).toBeLessThan(0)
+    expect(s.vy).toBeGreaterThan(0)
+    expect(s.invuln).toBeCloseTo(INVULN_S, 5)
+  })
+
+  it('level walls stop Kasimir at both ends', () => {
+    const { s } = run(initialState(2), { moveDir: -1, jump: false }, world({ minX: 0, maxX: 30 }), 2)
+    expect(s.x).toBeCloseTo(BODY_HW, 5)
+    const r = run(initialState(28), { moveDir: 1, jump: false }, world({ minX: 0, maxX: 30 }), 2)
+    expect(r.s.x).toBeCloseTo(30 - BODY_HW, 5)
+  })
+
+  it('lastSafeX stays away from hazard edges', () => {
+    const pit = { x0: 10, x1: 13 }
+    const { s } = run(initialState(5), { moveDir: 1, jump: false }, world({ pits: [pit] }), 2)
+    expect(s.lastSafeX).toBeLessThanOrEqual(pit.x0 - 1.2)
+  })
+})
+
+describe('respawn', () => {
+  it('returns to lastSafeX on the ground, stopped and briefly invulnerable', () => {
+    const s: PhysicsState = { ...initialState(8), y: -4, vy: -10, vx: 3, onGround: false, lastSafeX: 4 }
+    const r = respawn(s)
+    expect(r).toMatchObject({ x: 4, y: 0, vx: 0, vy: 0, onGround: true })
+    expect(r.invuln).toBeGreaterThan(0)
   })
 })
