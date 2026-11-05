@@ -916,3 +916,108 @@ export function expandDirectives(body: string, ctx: ExpandDirectivesContext): st
 
   return lines.join('\n');
 }
+
+// ─── renderDirectivesAsText ──────────────────────────────────────────────────
+
+/**
+ * Parse all directives in `markdown` and replace each REGISTERED directive
+ * with its `def.toText(node, ctx)` output.  Unknown directives are left
+ * verbatim (byte-for-byte unchanged).  Directive-looking text inside code
+ * fences / indented code / inline code spans is never touched — parseDirectives
+ * already skips those contexts so no nodes are produced for them.
+ *
+ * Replacements are applied back-to-front by source offset (matching the
+ * expandDirectives pattern) so earlier positions remain valid after splicing.
+ *
+ * @param markdown - Raw tutorial markdown (may include fences, frontmatter, etc.)
+ * @param opts     - Optional: `registry` override (defaults to global registry).
+ * @returns Plain text / plain markdown with directive syntax removed.
+ */
+export function renderDirectivesAsText(
+  markdown: string,
+  opts?: { registry?: ReadonlyMap<string, DirectiveDef> },
+): string {
+  const registry = opts?.registry ?? getRegistry();
+  const { nodes } = parseDirectives(markdown, { slug: 'text', registry });
+
+  if (nodes.length === 0) {
+    return markdown;
+  }
+
+  const lines = markdown.split('\n');
+
+  // Sort nodes back-to-front: descending line, then descending column
+  const sortedNodes = [...nodes].sort((a, b) => {
+    if (b.line !== a.line) return b.line - a.line;
+    return (b.column || 0) - (a.column || 0);
+  });
+
+  for (const node of sortedNodes) {
+    const def = registry.get(node.name);
+    if (!def) continue; // unknown → leave verbatim
+
+    const text = def.toText(node, { slug: 'text' });
+    const lineIdx = node.line - 1; // 0-based
+
+    if (lineIdx < 0 || lineIdx >= lines.length) continue;
+
+    if (node.kind === 'leaf') {
+      lines[lineIdx] = text;
+    } else if (node.kind === 'container') {
+      // Find the closing fence to know how many lines to splice out
+      const openingLine = lines[lineIdx];
+      const fenceMatch = openingLine.match(/^( {0,3})(:{2,})/);
+      const fenceLen = fenceMatch ? fenceMatch[2].length : 3;
+
+      let closeLineIdx = lineIdx + 1;
+      const closingFenceRe = new RegExp(`^[ ]{0,3}:${'{' + fenceLen + '}'}[ \\t]*$`);
+      while (closeLineIdx < lines.length) {
+        if (lines[closeLineIdx].match(closingFenceRe)) {
+          break;
+        }
+        closeLineIdx++;
+      }
+      if (closeLineIdx >= lines.length) closeLineIdx = lines.length - 1;
+
+      const textLines = text.split('\n');
+      lines.splice(lineIdx, closeLineIdx - lineIdx + 1, ...textLines);
+    } else if (node.kind === 'inline') {
+      const line = lines[lineIdx];
+      const namePrefix = `:${node.name}[`;
+      let atStart = -1;
+
+      for (let i = Math.max(0, (node.column || 0) - 5); i < line.length; i++) {
+        if (line.substring(i).startsWith(namePrefix)) {
+          atStart = i;
+          break;
+        }
+      }
+      if (atStart === -1) continue;
+
+      // Find end of inline directive: skip label [ ... ]
+      let i = atStart + namePrefix.length - 1;
+      let bracketDepth = 1;
+      i++;
+      while (i < line.length && bracketDepth > 0) {
+        if (line[i] === '[') bracketDepth++;
+        else if (line[i] === ']') bracketDepth--;
+        i++;
+      }
+
+      // Skip optional {attrs}
+      if (i < line.length && line[i] === '{') {
+        let braceDepth = 1;
+        i++;
+        while (i < line.length && braceDepth > 0) {
+          if (line[i] === '{') braceDepth++;
+          else if (line[i] === '}') braceDepth--;
+          i++;
+        }
+      }
+
+      lines[lineIdx] = line.slice(0, atStart) + text + line.slice(i);
+    }
+  }
+
+  return lines.join('\n');
+}
