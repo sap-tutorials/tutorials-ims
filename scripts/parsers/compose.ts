@@ -18,6 +18,7 @@ import { parseAssertBlocks, attachAssertSpecs } from './assert.js'
 import type { TutorialStep, TutorialFrontmatter } from './types.js'
 import { validateVariables, wrapTokens } from './variables.js'
 import type { TutorialVariable } from './variables.js'
+import { expandDirectives } from './directives.js'
 
 /**
  * Normalize line endings to LF. Catches CRLF (Windows / GitHub-via-Windows-
@@ -152,6 +153,16 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   if (tutorialVariables && tutorialVariables.length > 0) {
     processedBody = wrapTokens(processedBody, tutorialVariables)
   }
+
+  // Expand CommonMark-style directives (:name[label]{attrs}) to Hugo shortcodes.
+  // Runs AFTER wrapTokens so {{var:X}} tokens in directive labels have already
+  // been wrapped into tut-var spans/sentinels, and BEFORE convertOptionBlocks
+  // so directives inside [OPTION BEGIN …] panels are expanded before content
+  // is relocated into tab shortcodes. Empty registry → identity transform.
+  processedBody = expandDirectives(processedBody, {
+    slug: opts.slug,
+    variables: tutorialVariables,
+  })
 
   // [#1637] Prerequisites bypassed the body's image-URL rewriter and, because
   // its content is markdownified as-is, markdown images/links inside a raw
