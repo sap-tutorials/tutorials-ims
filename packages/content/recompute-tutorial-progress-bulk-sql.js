@@ -34,6 +34,7 @@
 
 import cds from '@sap/cds';
 import { recomputeTutorialProgress } from '@tutorials/core/recompute-tutorial-progress.js';
+import { parseOptionalSteps } from '@tutorials/core/optional-steps.js';
 
 const LOG = cds.log('content-publish');
 
@@ -144,9 +145,16 @@ export async function recomputeTutorialProgressBulkSQL(db, namespace, tutorialId
     for (const tutorialId of cleaned) {
       const tutorial = await SELECT.one.from(Tutorials)
         .where({ ID: tutorialId })
-        .columns('ID', 'stepCount');
+        .columns('ID', 'stepCount', 'optionalSteps');
       if (!tutorial?.stepCount) continue;
-      const result = await recomputeTutorialProgress(db, namespace, tutorialId, tutorial.stepCount);
+      // [tutorial-step-pacing] Same required-step denominator as the live
+      // completion path in srv/developer-service.js — subtract optional
+      // steps so a republish doesn't recompute an already-earned completion
+      // back down to IN_PROGRESS.
+      const optionalCount = parseOptionalSteps(tutorial.optionalSteps).size;
+      const requiredStepCount = Math.max(0, tutorial.stepCount - optionalCount);
+      if (!requiredStepCount) continue;
+      const result = await recomputeTutorialProgress(db, namespace, tutorialId, requiredStepCount);
       totalRechecked += result.rechecked || 0;
       totalUpdated += result.updated || 0;
     }
@@ -155,6 +163,19 @@ export async function recomputeTutorialProgressBulkSQL(db, namespace, tutorialId
 
   // HANA fast path: single set-based MERGE. The same tutorialIds list is bound
   // twice (inner aggregate scope + outer MERGE scope).
+  //
+  // [tutorial-step-pacing] KNOWN LIMITATION: this set-based MERGE still
+  // divides by the raw Tutorials.stepCount, not stepCount-minus-optional —
+  // unlike the SQLite path above and the live completion path in
+  // srv/developer-service.js, both of which are optional-step-aware. This is
+  // a deliberate smallest-safe-change scoping call: this job only RECHECKS
+  // already-cached progress after a content republish (a secondary
+  // consistency pass, not the write path a reader hits when clicking Done),
+  // and a tutorial using `{optional}` is a small, opt-in minority of content.
+  // Net effect until this SQL is revisited: a reader of such a tutorial whose
+  // TaskRecords.progress is rechecked by this job (not by live completeStep)
+  // sees the pre-tutorial-step-pacing (all-steps-required) percentage rather
+  // than the optional-aware one. Follow-up tracked for a future PR.
   //
   // [#382 phase C finding] @cap-js/hana does NOT support array binding for
   // `IN (:tutorialIds)` parameter placeholders — every attempt errored with

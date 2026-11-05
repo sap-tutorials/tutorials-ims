@@ -113,3 +113,29 @@ describe('parseMarkdownSteps', () => {
     expect(parseMarkdownSteps(null)).toEqual([]);
   });
 });
+
+describe('parseMarkdownSteps — tutorial-step-pacing heading attributes', () => {
+  it('strips {time=…}/{optional} from the title and exposes timeMinutes/optional', () => {
+    const body = [
+      '### Deploy the app {time=5m optional}',
+      'body one',
+      '### Second step',
+      'body two',
+    ].join('\n');
+    const steps = parseMarkdownSteps(body);
+    expect(steps[0].title).toBe('Deploy the app');
+    expect(steps[0].markdown.startsWith('### Deploy the app\n')).toBe(true);
+    expect(steps[0].timeMinutes).toBe(5);
+    expect(steps[0].optional).toBe(true);
+    expect(steps[1].timeMinutes).toBeUndefined();
+    expect(steps[1].optional).toBeUndefined();
+  });
+
+  it('fails open (title unchanged) on an invalid duration rather than throwing', () => {
+    const body = '### Deploy the app {time=5x}\nbody';
+    expect(() => parseMarkdownSteps(body)).not.toThrow();
+    const steps = parseMarkdownSteps(body);
+    expect(steps[0].title).toBe('Deploy the app {time=5x}');
+    expect(steps[0].timeMinutes).toBeUndefined();
+  });
+});

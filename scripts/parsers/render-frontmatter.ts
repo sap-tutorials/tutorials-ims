@@ -152,6 +152,12 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
       if (s.skipIf)              entry.skipIf        = s.skipIf
       if (s.skipLabel)           entry.skipLabel     = s.skipLabel
       if (s.skipReason)          entry.skipReason    = s.skipReason
+      // [tutorial-step-pacing] Per-step time/optional metadata parsed from a
+      // `{time=5m optional}` heading attribute block. Consumed by the
+      // tutorial-step.html shortcode (chip/badge/skip) and by client JS
+      // (remaining-time indicator).
+      if (s.timeSeconds !== undefined) entry.timeSeconds = s.timeSeconds
+      if (s.optional)            entry.optional      = true
       // [#2362] json-render challenge widget — the answer-stripped public spec
       // attached by fetch-tutorials' challenge pass. Must be serialized here or
       // .Params.steps[].challenge is dropped and the widget never renders.
@@ -182,6 +188,13 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
 
   if (hasOsOptions) fm.hasOsOptions = true
   if (osList && osList.length) fm.osList = osList
+
+  // [tutorial-step-pacing] Optional-step numbers, mirrored at the top level
+  // (in addition to each step's own `optional: true`) so the publish pipeline
+  // can thread `optionalSteps` straight into Tutorials without re-walking
+  // `steps` — see packages/content/content-publish-session.js.
+  const optionalSteps = steps.filter(s => s.optional).map(s => s.number)
+  if (optionalSteps.length > 0) fm.optionalSteps = optionalSteps
 
   // [#655] Preview path: pass through verbatim rules.vr source + precomputed
   // AI-involved flag so Hugo's baseof.html can emit a <script id="rules-vr-source">

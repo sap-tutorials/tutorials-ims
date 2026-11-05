@@ -284,6 +284,11 @@
         </span>
       </span>
       {{ end }}
+      {{/* [tutorial-step-pacing] Populated client-side by tutorial.ts
+           (updateRemainingTime) — hidden by default, only shown once at
+           least half the steps declare a time. Not server-rendered because
+           it depends on live completed/skipped state. */}}
+      {{ if gt (int .Params.stepCount) 0 }}<span id="remaining-time" class="op-chip op-chip--remaining-time" hidden></span>{{ end }}
     </div>
 
     <div class="op-anchor">
@@ -514,6 +519,15 @@
 {{ $js := resources.Get "js/tutorial.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $js.RelPermalink }}" defer></script>
 {{ end }}
+{{/* [tutorial-step-pacing] Interactive checklists — progressive-enhances any
+     GFM task list (`- [ ]`) inside step content. Runs on every tutorial page
+     (cheap no-op scan when a tutorial has no task lists); gated the same as
+     tutorial.ts (not in previewMode, which has no progress-bar/#tutorial-data
+     slug to key localStorage off of). */}}
+{{ if not site.Params.previewMode }}
+{{ $taskLists := resources.Get "js/task-lists.ts" | js.Build (dict "minify" true) }}
+<script src="{{ $taskLists.RelPermalink }}" defer></script>
+{{ end }}
 {{/* Issue #173: load the OS-picker runtime only when the page has OS-flavored
      option blocks (hasOsOptions=true) — matches the picker guard above. Without
      this, os-toggle.ts never mounts, the picker stays inert, and every OS panel
@@ -594,13 +608,19 @@
   }
 
   // Mirror existing progress segments into the ring.
+  // [tutorial-step-pacing] Required-step denominator: stepCount minus any
+  // steps marked {optional} (data-optional="true" on .tutorial-step), and
+  // only non-optional steps count toward "completed" — mirrors the
+  // server-side completion calc in srv/developer-service.js.
   function updateRing() {
     const ring = document.getElementById('op-progress-ring');
     const label = document.getElementById('op-progress-label');
     const wrap = document.getElementById('op-progress');
     if (!ring || !label || !wrap) return;
-    const total = parseInt(wrap.dataset.stepCount || '0', 10) || 0;
-    const completed = document.querySelectorAll('.tutorial-step.completed').length;
+    const rawTotal = parseInt(wrap.dataset.stepCount || '0', 10) || 0;
+    const optionalCount = document.querySelectorAll('.tutorial-step[data-optional="true"]').length;
+    const total = Math.max(0, rawTotal - optionalCount);
+    const completed = document.querySelectorAll('.tutorial-step.completed:not([data-optional="true"])').length;
     const pct = total ? Math.round((completed / total) * 100) : 0;
     ring.style.setProperty('--pct', String(pct));
     label.textContent = `${completed}/${total}`;

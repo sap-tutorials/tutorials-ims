@@ -52,6 +52,12 @@ entity Tutorials : TaskBase, LinkHealth {
   // that step-progress doesn't depend on whichever Step rows happen to exist
   // in the DB at the moment a user clicks "mark complete" (issue #89).
   stepCount                 : Integer;
+  // [tutorial-step-pacing] Comma-joined step numbers marked `{optional}` in
+  // the source heading (e.g. "2,5"), set by publish-content alongside
+  // stepCount. Null/empty when the tutorial has no optional steps. Read by
+  // the progress-completion calc in srv/developer-service.js so completion
+  // only requires the remaining (non-optional) steps.
+  optionalSteps             : String(1000);
   redirectTo                : Association to Tutorials;
   // External redirect target (#2690). Mutually exclusive with redirectTo.
   // Only an https:// URL on the curated SAP host allowlist is accepted

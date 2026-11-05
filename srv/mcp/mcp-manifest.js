@@ -43,7 +43,9 @@ function buildMcpManifest({ baseUrl } = {}) {
             description:
               "Return a single published tutorial step in the requested format " +
               "(markdown by default, or html) plus metadata (step title, text " +
-              "length, total steps). Public content.",
+              "length, total steps, and — when the step declares a {time=…}/" +
+              "{optional} heading attribute and format=markdown — timeMinutes/" +
+              "optional). Public content.",
           },
           {
             name: 'search_events',

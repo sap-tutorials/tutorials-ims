@@ -185,6 +185,50 @@ Rules of thumb:
 - Step content is plain Markdown: lists, code fences, images, links, bold/italic.
 - Inline HTML is escaped for safety. Stick to Markdown.
 
+#### 3.3.1 Step time and optional steps ★ NEW
+
+Add a trailing `{…}` attribute block to a step heading to declare a per-step time estimate
+and/or mark the step optional:
+
+```markdown
+### Deploy the app {time=5m}
+
+### Enable the trial entitlement {time=2m optional}
+```
+
+- `time=<duration>` — `5m`, `90s`, `1h`, or `1h30m` (max 8h). Renders a `⏱ N min` chip on the
+  step and contributes to the tutorial's total time (the page's frontmatter `time:` still wins
+  when both are set; the parser warns in the build log when the two disagree by more than 25%).
+  Readers also see a live "≈ N min left" estimate above the steps once at least half the steps
+  declare a time.
+- `optional` — renders an "Optional" badge and a "Skip" button next to "Done". **Completing a
+  tutorial never requires an optional step** — mark a step optional when it only applies to some
+  readers (e.g. "if you don't already have a trial account"). At least one step must stay
+  required; a tutorial where every step is optional fails the build.
+- The attribute block is stripped before the title is shown or slugged, so adding `{time=5m}`
+  to an existing heading is a safe, non-breaking edit — it does not change the step's anchor,
+  any `osOverrides` key, or existing readers' progress.
+- Unrecognised content in the braces (e.g. `{status: ok}` that isn't step-pacing syntax) is left
+  in the title untouched and reported as a lint warning — it never silently disappears.
+
+#### 3.3.2 Interactive checklists ★ NEW
+
+A standard GFM task list inside a step renders as live, checkable checkboxes instead of plain
+bullets:
+
+```markdown
+- [ ] Create a subaccount
+- [ ] Enable the entitlement
+- [x] Already have a BTP account (pre-checked — shown checked, doesn't count toward the counter)
+```
+
+Each unchecked item becomes a clickable checkbox; a small "x/y" counter above the list tracks
+how many the reader has ticked, and the state persists in the reader's browser across reloads.
+`[x]` items are rendered checked but excluded from that counter — use them for "already done"
+context items, not for things you want the reader to actually tick off. Checking every
+toggleable item in a step visually highlights that step's **Done** button, but never marks the
+step done automatically — the reader still clicks Done.
+
 ### 3.4 Images
 
 Place images alongside the Markdown file in a folder named after the slug:

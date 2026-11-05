@@ -24,6 +24,9 @@ extend service SearchService {
     contentFormat : String;
     textLength    : Integer;
     totalSteps    : Integer;
+    // [tutorial-step-pacing] see srv/developer-service-mcp.cds.
+    timeMinutes   : Integer;
+    optional      : Boolean;
   };
 
   /** Search the public SAP community events catalog — CodeJams, Devtoberfest,

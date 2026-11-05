@@ -121,7 +121,7 @@ export async function handleGetTutorialStep(req) {
 
     const slice = await sliceStepMarkdown(lcSlug, stepNumber);
     if (!slice) return req.reject(404, 'step not found');
-    return {
+    const result = {
       slug: lcSlug,
       stepNumber,
       stepTitle: slice.stepTitle,
@@ -130,6 +130,13 @@ export async function handleGetTutorialStep(req) {
       textLength: slice.text.length,
       totalSteps: slice.totalSteps,
     };
+    // [tutorial-step-pacing] spec "Pacing data in machine consumers" — parsed
+    // from the step's `{time=… optional}` heading attribute block by
+    // packages/core/tutorial-markdown-steps.js. Omitted (not false/0) when
+    // the step doesn't use the syntax.
+    if (slice.timeMinutes !== undefined) result.timeMinutes = slice.timeMinutes;
+    if (slice.optional) result.optional = true;
+    return result;
   });
 }
 

@@ -1,6 +1,7 @@
 import { classifyGroup, forceClassify, type OS, type ClassifyResult } from './os-classifier';
 import { slugify } from '../../srv/lib/slug-utils.js';
 import { classifyLines } from './md-grammar.js';
+import { parseStepHeadingAttrs } from './step-attrs.js';
 
 interface OptionEntry {
   matchIndex: number
@@ -55,7 +56,12 @@ function priorStepSlug(content: string, index: number): string | undefined {
   let last: string | undefined;
   for (let i = 0; i < lines.length; i++) {
     if (classes[i]?.kind === 'heading' && classes[i].level === 3) {
-      last = lines[i].replace(/^###\s+/, '').replace(/\s*$/, '');
+      const rawTitle = lines[i].replace(/^###\s+/, '').replace(/\s*$/, '');
+      // [tutorial-step-pacing] Strip the same `{time=… optional}` attribute
+      // block v2.ts strips before computing the step slug, so an osOverrides
+      // key keyed on a step heading using the new syntax still resolves
+      // (D1 — slug stability is independent of the attribute block).
+      last = parseStepHeadingAttrs(rawTitle).title;
     }
   }
   return last ? slugify(last) : undefined;
