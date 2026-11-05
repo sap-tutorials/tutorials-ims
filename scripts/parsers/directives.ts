@@ -283,6 +283,7 @@ function validateAttrs(
   slug: string,
   line: number,
   column: number,
+  label: string | undefined,
 ): { attrs: Record<string, string | number | boolean>; id?: string; classes: string[] } {
   const name = def.name;
 
@@ -295,6 +296,18 @@ function validateAttrs(
       column,
       name,
       'invalid-kind',
+    );
+  }
+
+  // Validate label requirement
+  if (def.label?.required && (label === undefined || label === '')) {
+    throw new DirectiveParseError(
+      `Directive "${name}" requires a label`,
+      slug,
+      line,
+      column,
+      name,
+      'missing-attr',
     );
   }
 
@@ -467,7 +480,7 @@ export function parseDirectives(
           continue;
         }
         const parsed = tokenizeAttrs(rawAttrs ?? '', slug, lineNum, name);
-        const validated = validateAttrs(parsed, def, 'leaf', slug, lineNum, column);
+        const validated = validateAttrs(parsed, def, 'leaf', slug, lineNum, column, label);
         const node: DirectiveNode = {
           name,
           kind: 'leaf',
@@ -515,7 +528,7 @@ export function parseDirectives(
         }
 
         const parsed = tokenizeAttrs(rawAttrs ?? '', slug, lineNum, name);
-        const validated = validateAttrs(parsed, def, 'container', slug, lineNum, column);
+        const validated = validateAttrs(parsed, def, 'container', slug, lineNum, column, label);
 
         // Body: raw lines between opening and closing fence (preserves nested directives as source)
         const bodyLines = lines.slice(i + 1, bodyEnd);
@@ -609,7 +622,7 @@ export function parseDirectives(
       }
 
       const parsed = tokenizeAttrs(rawAttrs, slug, lineNum, name);
-      const validated = validateAttrs(parsed, def, 'inline', slug, lineNum, column);
+      const validated = validateAttrs(parsed, def, 'inline', slug, lineNum, column, label);
 
       const node: DirectiveNode = {
         name,

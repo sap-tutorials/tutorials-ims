@@ -106,6 +106,19 @@ describe('parseDirectives — error handling', () => {
     );
   });
 
+  it('throws DirectiveParseError with code missing-attr when required label is absent', () => {
+    resetRegistry();
+    registerDirective({
+      ...ECHO_DEF,
+      name: 'required-label-directive',
+      label: { required: true, markdown: false },
+    });
+    const md = '::required-label-directive';
+    expect(() => parseDirectives(md, { slug: 'test' })).toThrowError(
+      expect.objectContaining({ code: 'missing-attr' }),
+    );
+  });
+
   it('DirectiveParseError is a real Error subclass with slug/line/column/directive/code', () => {
     const err = new DirectiveParseError('test error', 'my-slug', 5, 0, 'echo', 'unclosed');
     expect(err).toBeInstanceOf(Error);
@@ -225,16 +238,18 @@ describe('parseDirectives — container directives', () => {
     });
   });
 
-  it('parses nested containers: outer body contains inner container in source order', () => {
+  it('parses nested containers: exactly 1 top-level node, inner container in body source order', () => {
     const md = '::::echo\n:::echo\ninner\n:::\n::::';
     const { nodes, warnings } = parseDirectives(md, { slug: 'test' });
     expect(warnings).toHaveLength(0);
-    // Should return both the outer and inner nodes (both parsed)
-    // Outer body includes the inner container source
-    expect(nodes.length).toBeGreaterThanOrEqual(1);
+    // Recursive parse of nested containers is deferred to later tasks; only the
+    // outer container is returned as a top-level node.
+    expect(nodes).toHaveLength(1);
     const outer = nodes[0];
     expect(outer.kind).toBe('container');
+    // Body must contain the inner container fence in source order
     expect(outer.body).toContain(':::echo');
+    expect(outer.body).toContain('inner');
   });
 });
 
