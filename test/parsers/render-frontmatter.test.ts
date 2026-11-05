@@ -142,3 +142,33 @@ describe('renderHugoFrontmatter', () => {
     expect(fm).toContain('- SAP CAP');
   });
 });
+
+describe('renderHugoFrontmatter — tutorial-step-pacing', () => {
+  it('emits per-step timeSeconds/optional and the top-level optionalSteps list', () => {
+    const steps: TutorialStep[] = [
+      { number: 1, title: 'Required step', content: 'c1' } as TutorialStep,
+      { number: 2, title: 'Optional step', content: 'c2', timeSeconds: 300, optional: true } as TutorialStep,
+    ];
+    const out = renderHugoFrontmatter({
+      slug: 's', title: 't', description: 'd', time: 5, level: 'beginner',
+      tags: [], primaryTag: '', author: '', authorProfile: '',
+      youWillLearn: [], prerequisites: '',
+      steps, nav: stubNav,
+      lastUpdated: '', createdAt: '', contributors: [],
+    });
+    expect(out).toContain('optionalSteps:');
+    expect(out).toContain('timeSeconds: 300');
+    expect(out).toMatch(/optional:\s*true/);
+  });
+
+  it('omits optionalSteps entirely when no step is optional', () => {
+    const out = renderHugoFrontmatter({
+      slug: 's', title: 't', description: 'd', time: 5, level: 'beginner',
+      tags: [], primaryTag: '', author: '', authorProfile: '',
+      youWillLearn: [], prerequisites: '',
+      steps: [stubStep(1)], nav: stubNav,
+      lastUpdated: '', createdAt: '', contributors: [],
+    });
+    expect(out).not.toContain('optionalSteps:');
+  });
+});

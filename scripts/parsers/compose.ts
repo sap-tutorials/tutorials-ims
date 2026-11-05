@@ -220,7 +220,38 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
       throw err
     }
   }
-  const steps = isV2 ? parseV2Steps(v2Body) : parseV1Steps(processedBody)
+  const stepAttrWarnings: string[] = []
+  const steps = isV2 ? parseV2Steps(v2Body, stepAttrWarnings) : parseV1Steps(processedBody)
+  for (const w of stepAttrWarnings) console.warn(`[compose] ${opts.slug}: ${w}`)
+
+  // [tutorial-step-pacing] Derive the tutorial's total time when frontmatter
+  // `time:` is absent, from the sum of step `timeSeconds` (rounded to whole
+  // minutes, minimum 1 when any step time exists). Lint-warn (not a hard
+  // failure) when a declared frontmatter `time:` differs from the step-time
+  // sum by more than 25% (spec "Step time display").
+  const stepTimeSecondsSum = steps.reduce((sum, s) => sum + (s.timeSeconds ?? 0), 0)
+  if (stepTimeSecondsSum > 0) {
+    const derivedMinutes = Math.max(1, Math.round(stepTimeSecondsSum / 60))
+    if (typeof frontmatter.time === 'number' && frontmatter.time > 0) {
+      const diffRatio = Math.abs(frontmatter.time - derivedMinutes) / frontmatter.time
+      if (diffRatio > 0.25) {
+        console.warn(
+          `[compose] ${opts.slug}: step-attr/time-mismatch — frontmatter time (${frontmatter.time}m) ` +
+          `differs from the sum of step times (${derivedMinutes}m) by more than 25%`
+        )
+      }
+    } else {
+      frontmatter.time = derivedMinutes
+    }
+  }
+  // "Optional steps" requirement: a tutorial in which EVERY step is optional
+  // fails lint (treated as a hard build error — there is nothing left to
+  // require for completion, which is almost certainly an authoring mistake).
+  if (steps.length > 0 && steps.every(s => s.optional)) {
+    throw new Error(
+      `[compose] ${opts.slug}: every step is marked {optional} — at least one step must be required`
+    )
+  }
 
   const intro = extractIntro(isV2 ? v2Body : processedBody, isV2)
 

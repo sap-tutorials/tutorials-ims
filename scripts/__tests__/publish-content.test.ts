@@ -283,6 +283,33 @@ describe('extractMetadata', () => {
     const result = extractMetadata(META_DIR, ['my-tutorial', 'minimal', 'nonexistent-slug']);
     expect(Object.keys(result).sort()).toEqual(['minimal', 'my-tutorial']);
   });
+
+  it('extracts optionalSteps from per-step optional flags and the top-level field', () => {
+    writeFileSync(join(META_DIR, 'optional-steps.md'), [
+      '---',
+      'title: Has Optional Steps',
+      'optionalSteps:',
+      '  - 2',
+      'steps:',
+      '  - number: 1',
+      '    title: Required Step',
+      '  - number: 2',
+      '    title: Optional Step',
+      '    optional: true',
+      '---',
+      '',
+      'Body.',
+    ].join('\n'));
+
+    const result = extractMetadata(META_DIR, ['optional-steps']);
+    expect(result['optional-steps'].optionalSteps).toEqual([2]);
+    expect(result['optional-steps'].steps[1]).toEqual({ number: 2, title: 'Optional Step', optional: true });
+  });
+
+  it('defaults optionalSteps to [] when absent', () => {
+    const result = extractMetadata(META_DIR, ['minimal']);
+    expect(result['minimal'].optionalSteps).toEqual([]);
+  });
 });
 
 describe('validateProductionBuild', () => {

@@ -132,6 +132,14 @@ export interface TutorialStep {
   validation?: ValidationQuestion[]
   codeCheck?: PublicCodeCheckSpec
 
+  // [tutorial-step-pacing] Parsed from a trailing `{time=5m optional}` heading
+  // attribute block (scripts/parsers/step-attrs.ts), stripped from `title`
+  // before slug computation. `timeSeconds` powers the per-step time chip +
+  // tutorial total-time derivation; `optional` powers the Optional badge/Skip
+  // control and excludes the step from the tutorial-completion requirement.
+  timeSeconds?: number
+  optional?: boolean
+
   // [#2800] Source discriminator for video-quiz steps: 'captions' when the
   // quiz was generated from YouTube caption tracks (uploaded or auto-generated);
   // 'description' when generated from the video description fallback tier.
