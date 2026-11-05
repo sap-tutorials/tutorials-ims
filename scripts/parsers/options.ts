@@ -169,24 +169,39 @@ function indentWrapperLines(block: string, indent: string): string {
 /** Built-in preset key names. Used for undeclared-key validation. */
 const BUILT_IN_PRESET_KEYS = Object.keys(SYNC_PRESETS)
 
+/** Return the 1-based line number of `index` within `content` by counting newlines. */
+function lineOfIndex(content: string, index: number): number {
+  let n = 1
+  for (let i = 0; i < index; i++) {
+    if (content[i] === '\n') n++
+  }
+  return n
+}
+
 /**
  * Resolve the sync key that applies to an option group, given:
  * - explicit `sync=` keys from the group's OPTION BEGIN markers
  * - per-step `syncOverrides` from frontmatter
  * - auto-classification via `syncTabs: 'auto'`
  *
- * Returns the resolved key string, `'none'` to suppress sync, or `undefined`
- * when no sync applies.
+ * Returns the resolved key string or `undefined` when no sync applies.
  *
  * Throws `OptionSyncError` for:
  * - conflicting explicit keys within the same group
  * - an undeclared key (not a built-in preset AND not in `syncGroups`)
+ *   NOTE: an explicit `sync=<key>` is ALWAYS validated even if the step's
+ *   `syncOverrides` entry is `'none'` — a typo'd undeclared key must fail
+ *   the build regardless of whether that step's sync is suppressed.
  */
 function resolveGroupSyncKey(
   group: OptionEntry[],
   stepSlug: string | undefined,
   opts: ConvertOptions,
+  content: string,
+  firstMatchIndex: number,
 ): string | undefined {
+  const line = lineOfIndex(content, firstMatchIndex)
+
   // 1. Collect explicit sync= keys from the group (only first block is required
   //    to carry it; others may omit it, but MUST NOT carry a different one).
   const explicitKeys = group.map(e => e.syncKey).filter((k): k is string => !!k)
@@ -194,12 +209,28 @@ function resolveGroupSyncKey(
     const uniqueKeys = [...new Set(explicitKeys)]
     if (uniqueKeys.length > 1) {
       throw new OptionSyncError(
-        `[options] conflicting sync= keys in one option group: ${uniqueKeys.join(', ')}. ` +
+        `[options] conflicting sync= keys in one option group at line ${line}: ${uniqueKeys.join(', ')}. ` +
         `Only the first block needs sync=; other blocks must omit it or use the same key.`
       )
     }
   }
   const explicitKey = explicitKeys[0] // first explicit key if any
+
+  // 1b. Validate explicit key BEFORE applying syncOverrides.
+  //     A typo'd undeclared key (e.g. sync=db) must always fail the build even
+  //     when the step's syncOverrides entry is 'none' (suppresses the group).
+  //     Auto-classified keys don't have this pre-validation — they only arise
+  //     from built-in presets and so are always valid by construction.
+  if (explicitKey) {
+    const isBuiltIn = BUILT_IN_PRESET_KEYS.includes(explicitKey)
+    const isDeclared = !!opts.syncGroups?.[explicitKey]
+    if (!isBuiltIn && !isDeclared) {
+      throw new OptionSyncError(
+        `[options] sync key "${explicitKey}" at line ${line} is not a built-in preset (${BUILT_IN_PRESET_KEYS.join(', ')}) ` +
+        `and is not declared in syncGroups. Declare it in frontmatter syncGroups or use a built-in preset key.`
+      )
+    }
+  }
 
   // 2. Apply syncOverrides for this step
   const stepOverride = stepSlug ? opts.syncOverrides?.[stepSlug] : undefined
@@ -220,12 +251,15 @@ function resolveGroupSyncKey(
 
   if (!effectiveKey) return undefined
 
-  // 4. Validate: key must be a built-in preset or declared in syncGroups
+  // 4. Validate the final effective key (handles forced keys from syncOverrides).
+  //    Explicit keys already validated above; auto-classified keys are always
+  //    built-in presets. This catches a forced key from syncOverrides that names
+  //    an undeclared custom key.
   const isBuiltIn = BUILT_IN_PRESET_KEYS.includes(effectiveKey)
   const isDeclared = !!opts.syncGroups?.[effectiveKey]
   if (!isBuiltIn && !isDeclared) {
     throw new OptionSyncError(
-      `[options] sync key "${effectiveKey}" is not a built-in preset (${BUILT_IN_PRESET_KEYS.join(', ')}) ` +
+      `[options] sync key "${effectiveKey}" at line ${line} is not a built-in preset (${BUILT_IN_PRESET_KEYS.join(', ')}) ` +
       `and is not declared in syncGroups. Declare it in frontmatter syncGroups or use a built-in preset key.`
     )
   }
@@ -360,7 +394,7 @@ export function convertOptionBlocks(
         replacement = `{{< os-options >}}\n${panels.join('\n')}\n{{< /os-options >}}`;
       } else {
         // Resolve sync key for this group (throws OptionSyncError on conflicts/undeclared keys)
-        const syncKey = resolveGroupSyncKey(group, stepSlug, opts)
+        const syncKey = resolveGroupSyncKey(group, stepSlug, opts, content, firstMatch.index!)
 
         // Track used keys
         if (syncKey && opts.syncKeysUsedOut) {

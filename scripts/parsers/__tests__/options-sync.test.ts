@@ -99,7 +99,7 @@ describe('options-sync: conflicting sync= keys in same group', () => {
     expect(() => convertOptionBlocks(content, 'hugo', {})).toThrow(OptionSyncError)
   })
 
-  it('includes both conflicting keys in the error message', () => {
+  it('includes both conflicting keys AND a line number in the error message', () => {
     const content = [
       '[OPTION BEGIN [Node.js] sync=runtime]\nContent A.\n[OPTION END]',
       '[OPTION BEGIN [BAS] sync=ide]\nContent B.\n[OPTION END]',
@@ -113,6 +113,8 @@ describe('options-sync: conflicting sync= keys in same group', () => {
     expect(err).toBeDefined()
     expect(err!.message).toContain('runtime')
     expect(err!.message).toContain('ide')
+    // Error must include a line number (any digit)
+    expect(err!.message).toMatch(/line \d+/)
   })
 })
 
@@ -129,7 +131,7 @@ describe('options-sync: undeclared sync key causes build error', () => {
     expect(() => convertOptionBlocks(content, 'hugo', {})).toThrow(OptionSyncError)
   })
 
-  it('names the undeclared key in the error message', () => {
+  it('names the undeclared key AND a line number in the error message', () => {
     const content = makeContent([
       { tab: 'HANA', syncKey: 'db' },
       { tab: 'PostgreSQL' },
@@ -137,6 +139,30 @@ describe('options-sync: undeclared sync key causes build error', () => {
     let err: OptionSyncError | undefined
     try {
       convertOptionBlocks(content, 'hugo', {})
+    } catch (e) {
+      if (e instanceof OptionSyncError) err = e
+    }
+    expect(err).toBeDefined()
+    expect(err!.message).toContain('db')
+    // Error must include a line number
+    expect(err!.message).toMatch(/line \d+/)
+  })
+
+  it('throws OptionSyncError for undeclared key even when syncOverrides disables that step (sync=db + none)', () => {
+    // sync=db is undeclared and not a preset. Even if the step's syncOverrides
+    // entry is 'none' (which would suppress sync for that step), the explicit
+    // sync= key must still be validated — a typo'd key must always fail the build.
+    const content = [
+      '### Install Libraries',
+      '',
+      makeContent([{ tab: 'HANA', syncKey: 'db' }, { tab: 'PostgreSQL' }]),
+    ].join('\n')
+    const opts: ConvertOptions = {
+      syncOverrides: { 'install-libraries': 'none' },
+    }
+    let err: OptionSyncError | undefined
+    try {
+      convertOptionBlocks(content, 'hugo', opts)
     } catch (e) {
       if (e instanceof OptionSyncError) err = e
     }
@@ -276,11 +302,23 @@ describe('options-sync: backward compatibility — no sync attrs emitted when un
     // Must match current output exactly — no sync attr anywhere
     expect(out).not.toContain('sync=')
     expect(out).not.toContain('syncValue=')
-    // The structural shape remains correct
-    expect(out).toContain('{{% option-tabs tabs="Option A,Option B" %}}')
-    expect(out).toContain('{{% tab index="0" name="Option A" %}}')
-    expect(out).toContain('{{% tab index="1" name="Option B" %}}')
-    expect(out).toContain('{{% /option-tabs %}}')
+    // Exact full-output assertion: catches group-numbering regressions (e.g.
+    // body capture-group index shifting from 2→3 when sync= was added to regex).
+    const expected = [
+      '{{% option-tabs tabs="Option A,Option B" %}}',
+      '{{% tab index="0" name="Option A" %}}',
+      '',
+      'Content.',
+      '',
+      '{{% /tab %}}',
+      '{{% tab index="1" name="Option B" %}}',
+      '',
+      'Content.',
+      '',
+      '{{% /tab %}}',
+      '{{% /option-tabs %}}',
+    ].join('\n')
+    expect(out).toBe(expected)
   })
 
   it('does not classify into a preset without syncTabs:auto even when labels match', () => {
