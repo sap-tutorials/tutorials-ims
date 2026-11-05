@@ -523,3 +523,37 @@ describe('group/mission rollup (via completeStep)', () => {
     expect(mis?.status).toBe('COMPLETED');
   });
 });
+
+// [tutorial-step-pacing] Tutorial completion requires only non-optional steps.
+describe('completeStep — optional steps (tutorial-step-pacing)', () => {
+  beforeAll(async () => {
+    const e = cds.entities('com.sap.developers.ims');
+    await INSERT.into(e.Tutorials).entries({
+      ID: 'op000000-0000-0000-0000-000000000001',
+      slug: 'optional-step-tut', title: 'Optional Step Tut', legacyId: 9101,
+      status: 'ACTIVE', stepCount: 3, optionalSteps: '2',
+    });
+    await INSERT.into(e.Steps).entries([
+      { ID: 'os000000-0000-0000-0000-000000000001', tutorial_ID: 'op000000-0000-0000-0000-000000000001', stepOrder: 1, title: 'S1', legacyId: 9201 },
+      { ID: 'os000000-0000-0000-0000-000000000002', tutorial_ID: 'op000000-0000-0000-0000-000000000001', stepOrder: 2, title: 'S2 (optional)', legacyId: 9202 },
+      { ID: 'os000000-0000-0000-0000-000000000003', tutorial_ID: 'op000000-0000-0000-0000-000000000001', stepOrder: 3, title: 'S3', legacyId: 9203 },
+    ]);
+  });
+
+  it('completes the tutorial once all NON-optional steps are done, without the optional step', async () => {
+    await project.post('/api/completeStep', { slug: 'optional-step-tut', stepNumber: 1 },
+      { auth: { username: 'developer', password: 'developer' } });
+    const { data } = await project.post('/api/completeStep', { slug: 'optional-step-tut', stepNumber: 3 },
+      { auth: { username: 'developer', password: 'developer' } });
+
+    expect(data.completedSteps).toEqual([1, 3]);
+
+    const { TaskRecords, Users } = cds.entities('com.sap.developers.ims');
+    const u = await SELECT.one.from(Users).where({ sapId: 'developer' });
+    const rec = await SELECT.one.from(TaskRecords).where({
+      user_ID: u.ID, taskLegacyId: 9101, taskType: 'TUTORIAL', status: { '!=': 'SUPERSEDED' },
+    });
+    expect(rec?.status).toBe('COMPLETED');
+    expect(rec?.progress).toBe(100);
+  });
+});

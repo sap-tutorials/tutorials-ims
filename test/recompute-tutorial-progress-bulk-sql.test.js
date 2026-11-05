@@ -75,6 +75,47 @@ describe('recomputeTutorialProgressBulkSQL — SQLite fallback parity (#382 phas
     expect(await recomputeTutorialProgressBulkSQL(db, NS, undefined)).toEqual({ rechecked: 0, updated: 0 });
   });
 
+  // [tutorial-step-pacing] SQLite path denominator excludes optional steps —
+  // mirrors the live completion calc in srv/developer-service.js so a
+  // republish doesn't recompute an already-earned completion back down.
+  it('excludes optional steps from the recompute denominator', async () => {
+    const { Users, Tutorials, Steps, TaskRecords } = cds.entities(NS);
+
+    const userId = cds.utils.uuid();
+    const tutorialId = cds.utils.uuid();
+    const tutorialLegacyId = 11500001;
+    const stepLegacyIds = [11500002, 11500003, 11500004];
+
+    await INSERT.into(Users).entries({ ID: userId, uuid: 'fixture-user-optional', legacyId: 11599001 });
+    await INSERT.into(Tutorials).entries({
+      ID: tutorialId, legacyId: tutorialLegacyId, slug: 'fixture-tutorial-optional',
+      title: 'Fixture Optional', stepCount: 3, optionalSteps: '2', status: 'ACTIVE'
+    });
+    for (let i = 0; i < 3; i++) {
+      await INSERT.into(Steps).entries({
+        ID: cds.utils.uuid(), tutorial_ID: tutorialId, stepOrder: i + 1,
+        title: `Step ${i + 1}`, legacyId: stepLegacyIds[i]
+      });
+    }
+    // Both non-optional steps (1, 3) completed; optional step 2 untouched.
+    await INSERT.into(TaskRecords).entries([
+      { ID: cds.utils.uuid(), user_ID: userId, taskType: 'STEP', status: 'COMPLETED', taskLegacyId: stepLegacyIds[0], progress: 100, legacyId: 11599100 },
+      { ID: cds.utils.uuid(), user_ID: userId, taskType: 'STEP', status: 'COMPLETED', taskLegacyId: stepLegacyIds[2], progress: 100, legacyId: 11599101 },
+    ]);
+    const tutRecId = cds.utils.uuid();
+    await INSERT.into(TaskRecords).entries({
+      ID: tutRecId, user_ID: userId, taskType: 'TUTORIAL',
+      status: 'IN_PROGRESS', taskLegacyId: tutorialLegacyId, progress: 0,
+      legacyId: 11599110
+    });
+
+    await recomputeTutorialProgressBulkSQL(db, NS, [tutorialId]);
+
+    const updated = await SELECT.one.from(TaskRecords).where({ ID: tutRecId });
+    expect(updated.progress).toBe(100); // 2/2 required steps, NOT 2/3
+    expect(updated.status).toBe('COMPLETED');
+  });
+
   it('handles multiple tutorialIds in one call (cross-tutorial isolation)', async () => {
     const { Users, Tutorials, Steps, TaskRecords } = cds.entities(NS);
 

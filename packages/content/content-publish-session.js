@@ -1039,6 +1039,17 @@ async function upsertTutorialMetadata(namespace, metadata) {
   // Phase 4a: Write Tutorials (multi-row INSERT for new; per-row UPDATE for
   // existing). Chunk-level try/catch for INSERT; per-row catch for UPDATE.
   // -----------------------------------------------------------------------
+  // [tutorial-step-pacing] optionalSteps is stored as a comma-joined string
+  // of step numbers (e.g. "2,5") — mirrors the existing low-cardinality
+  // scalar-column convention on this table (no new composition/child table
+  // needed for a handful of step numbers). Null when the tutorial has no
+  // optional steps. Read back + parsed in srv/developer-service.js's
+  // completion calc.
+  const serializeOptionalSteps = (meta) =>
+    Array.isArray(meta.optionalSteps) && meta.optionalSteps.length > 0
+      ? meta.optionalSteps.join(',')
+      : null;
+
   const tutorialInsertRows = [];
   for (const { slug, meta, tutorialId } of toInsert) {
     tutorialInsertRows.push({
@@ -1050,6 +1061,7 @@ async function upsertTutorialMetadata(namespace, metadata) {
       experienceTag: meta.level || null,
       primaryTag: meta.primaryTag || null,
       stepCount: Array.isArray(meta.steps) ? meta.steps.length : null,
+      optionalSteps: serializeOptionalSteps(meta),
       status: 'ACTIVE',
       legacyId: await getTutLegacyId(),  // [#431]
     });
@@ -1080,6 +1092,7 @@ async function upsertTutorialMetadata(namespace, metadata) {
         experienceTag: meta.level || null,
         primaryTag: meta.primaryTag || null,
         stepCount: Array.isArray(meta.steps) ? meta.steps.length : null,
+        optionalSteps: serializeOptionalSteps(meta),
         status: 'ACTIVE',
       };
       // [#431] Self-heal: fill NULL legacyId on existing rows.
