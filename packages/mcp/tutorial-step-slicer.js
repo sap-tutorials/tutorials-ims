@@ -17,6 +17,7 @@ import * as metrics from '@tutorials/core/metrics.js';
 import { isFlagEnabled } from '@tutorials/core/feature-flags/db-flags.js';
 import { parseMarkdownSteps } from '@tutorials/core/tutorial-markdown-steps.js';
 import { absolutizeImagePaths } from '@tutorials/core/tutorial-markdown.js';
+import { renderDirectivesAsText } from '../../scripts/parsers/directives.js';
 
 const NS = 'com.sap.developers.ims';
 const LOG = cds.log('mcp-slicer');
@@ -255,7 +256,7 @@ async function loadAndParseMarkdown(slug) {
   const { repo, branch } = await getRepoProvenance(slug);
   const steps = new Map();
   for (const s of parsedSteps) {
-    const md = absolutizeImagePaths(s.markdown, { slug, repo, branch });
+    const md = renderDirectivesAsText(absolutizeImagePaths(s.markdown, { slug, repo, branch }));
     const entry = { markdown: md, text: s.text, title: s.title };
     // [tutorial-step-pacing] carried through to handleGetTutorialStep's
     // response (spec "Pacing data in machine consumers").

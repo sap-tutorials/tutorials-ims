@@ -13,6 +13,7 @@ import { hashKey, type AiQuizCache, type AiQuizCacheEntry } from './ai-quiz-cach
 import { youtubeId } from './youtube-id.js'
 import type { ValidationQuestion } from '../parsers/types.js'
 import { QUESTION_TYPE_TEXT } from '../parsers/types.js'
+import { renderDirectivesAsText } from '../parsers/directives.js'
 
 // [#2345] Transcript fetcher signature. Injected so the build path can supply
 // an in-process impl and unit tests can mock it. Mirrors the return shape of
@@ -202,7 +203,9 @@ export async function expandAiAuthoredQuestions(
     // placeholder we fetch the transcript and generate from THAT instead; the
     // step markdown is irrelevant to a video quiz.
     const source: 'step' | 'video' = placeholder.__videoUrl ? 'video' : 'step'
-    let stepBody = stepBodies.get(stepNum) ?? ''
+    // Strip directive syntax (:::details, :kbd[, etc.) so word-count and the LLM
+    // see plain prose. Video path overwrites stepBody below; no-op there.
+    let stepBody = renderDirectivesAsText(stepBodies.get(stepNum) ?? '')
     let videoContext: string | undefined
     let videoId: string | undefined
     // [#2800] Per-step questionSource discriminator; set inside the video branch.
