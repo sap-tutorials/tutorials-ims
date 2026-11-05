@@ -425,6 +425,93 @@ Key behaviors:
 
 Full worked walkthrough (self-demonstrating): **[Use Variables to Personalize Your Tutorials](https://developers.sap.com/tutorials/use-variables-in-tutorials)** (source: `sap-tutorials/meta-tutorials`).
 
+### 3.8 Directives ★ NEW
+
+Directives are a generic structured-content syntax for tutorials. They allow you to mark up passages that will be handled by specialized components, added to the platform in follow-up features. The directive system ships with **no concrete directives yet** — it is the foundation only. Examples here use hypothetical directive names to show the syntax; they will not render as live components until those features land.
+
+Directives have three forms:
+
+**Inline directives** (mid-sentence):
+
+```markdown
+This feature is available in `:menu[Production]{edition="prod"}` only.
+```
+
+A directive spans from the opening `:` through the closing `}`. It has a **name** (kebab-case), an optional **label** in brackets, and optional **attributes** in braces.
+
+**Leaf directives** (standalone, block-level):
+
+```markdown
+Some text above.
+
+::code-sample[Download the SDK]{url="https://example.com/sdk.zip" filename="sdk.zip"}
+
+More text below.
+```
+
+Leaf directives are alone on a line, prefixed with `::`, and render as a self-contained block.
+
+**Container directives** (wrapping other content):
+
+```markdown
+:::details[Click to expand]
+This content is hidden until the reader clicks the heading.
+More paragraphs and **markdown** all work here.
+:::
+```
+
+Container directives open with `:::` and close with `:::`. Content between them is Markdown, rendered normally. Nesting uses extra colons — an outer container uses more colons than its inner content:
+
+```markdown
+::::compare
+Outer container (four colons).
+
+:::figure[Screenshot A]{align="left"}
+Inner figure (three colons).
+:::
+
+:::figure[Screenshot B]{align="right"}
+Another inner figure.
+:::
+::::
+```
+
+**Attribute syntax:**
+
+- **Quoted values:** `key="value"` or `key='value'` — use double or single quotes around values with spaces.
+- **Unquoted values:** `key=value` (no spaces in the value itself).
+- **Bare flags:** `open` → treated as `open=true`.
+- **CSS classes:** `.classname` — shorthand for `class="classname"`. The directive's implementation controls which classes are allowed (you will get a build warning if you use a class not in its allowlist).
+- **Element IDs:** `#id` — shorthand for `id="id"`.
+- **Duplicate keys:** an error; each key must appear once.
+
+Examples:
+
+```markdown
+:::panel[Expandable section]{open .highlight #my-panel}
+
+This is a container with `open=true`, class `highlight`, and id `my-panel`.
+
+:::
+
+:code[JavaScript]{lang="js" theme='dark'}
+
+:::details[Learn more]{class="advanced"}
+For advanced users only.
+:::
+```
+
+**Escaping and safety:**
+
+- Attribute values are **always HTML-escaped** by the framework — you never need to escape manually, and HTML injection through attributes is not possible.
+- Directives inside code fences, inline code, indented code blocks, HTML blocks, or YAML frontmatter are **never interpreted** — they render literally as text. This keeps your Markdown safe when it happens to contain colons and braces that look like a directive but aren't.
+
+**Unknown directive names:**
+
+If you use a directive name that doesn't exist (e.g. `:menu[...]` before the `menu` feature ships), the text is left as-is (rendered literally) and you'll see a **lint warning** `directive-unknown` during the build. This warning never stops a build — it's informational only. The intent is to make it safe to write Markdown that *coincidentally* looks like `:something[...]` without risking a hard failure.
+
+When a concrete directive is added to the platform, the warning will stop and the directive will render as a styled component.
+
 ---
 
 ## 4. The author workflow today
