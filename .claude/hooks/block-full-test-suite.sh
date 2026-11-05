@@ -38,6 +38,8 @@ is_scoped() {
   if printf '%s' "$norm" | grep -Eq '(npm (run )?test|run test:[a-z:]*) +-- +[^ -]'; then return 0; fi
   # vitest run <path or -t pattern>
   if printf '%s' "$norm" | grep -Eq 'vitest run +(-t|--testNamePattern|[^ -])'; then return 0; fi
+  # vitest run --project unit <file>  (project flag followed by a file/pattern)
+  if printf '%s' "$norm" | grep -Eq 'vitest( run)? +--project +[a-z0-9-]+ +(-t|--testNamePattern|[^ -])'; then return 0; fi
   return 1
 }
 

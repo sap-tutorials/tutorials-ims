@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "command": "node .github/hooks/block-full-test-suite.cjs",
+        "timeoutSec": 10
+      }
+    ]
+  }
+}

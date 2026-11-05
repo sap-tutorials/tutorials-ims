@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "GitHub.copilot-chat",
+    "SAPSE.vscode-cds",
+    "SAPSE.sap-ux-fiori-tools-extension-pack",
+    "Vue.volar",
+    "vitest.explorer",
+    "ms-playwright.playwright",
+    "budparr.language-hugo-vscode",
+    "redhat.vscode-yaml"
+  ]
+}
