@@ -75,6 +75,19 @@ export interface ComposeResult {
    * Undefined when no variables are declared (tutorial behaves as before).
    */
   variables?: TutorialVariable[]
+  /**
+   * [synced-tabs] Sync keys actually used (emitted) in this tutorial's option
+   * groups. Empty set when no sync groups are present. Caller emits this as
+   * `syncKeysUsed` in Hugo frontmatter so the template can skip sync-group
+   * bootstrapping for tutorials that don't use it.
+   */
+  syncKeysUsed: Set<string>
+  /**
+   * [synced-tabs] Custom syncGroups declared in frontmatter, forwarded to Hugo
+   * frontmatter when non-empty so the client runtime knows value→canonical
+   * mappings for custom keys.
+   */
+  syncGroups?: TutorialFrontmatter['syncGroups']
 }
 
 export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult {
@@ -192,11 +205,16 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   const hasOsOptionsFlag = { value: false }
   const osListSet = new Set<OS>()
   const resolvedStepSlugs = new Set<string>()
+  const syncKeysUsedSet = new Set<string>()
   processedBody = convertOptionBlocks(processedBody, opts.target, {
     osOverrides: frontmatter.osOverrides,
     hasOsOptionsOut: hasOsOptionsFlag,
     osListOut: osListSet,
     resolvedStepSlugsOut: resolvedStepSlugs,
+    syncTabs: frontmatter.syncTabs,
+    syncOverrides: frontmatter.syncOverrides,
+    syncGroups: frontmatter.syncGroups,
+    syncKeysUsedOut: syncKeysUsedSet,
   })
 
   // Warn on osOverrides keys that never matched any step heading on the page.
@@ -324,5 +342,9 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     osList: OS_VALUES.filter((os) => osListSet.has(os)),
     intro,
     ...(tutorialVariables ? { variables: tutorialVariables } : {}),
+    syncKeysUsed: syncKeysUsedSet,
+    ...(frontmatter.syncGroups && Object.keys(frontmatter.syncGroups).length > 0
+      ? { syncGroups: frontmatter.syncGroups }
+      : {}),
   }
 }

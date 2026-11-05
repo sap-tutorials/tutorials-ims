@@ -78,6 +78,24 @@ export interface RenderHugoFrontmatterArgs {
    * variables panel island. Omitted (key absent) when no variables are declared.
    */
   variables?: TutorialVariable[]
+  /**
+   * [synced-tabs] Sync keys used in this tutorial's option groups.
+   * Emitted as `syncKeysUsed: string[]` in Hugo frontmatter so the template
+   * can skip sync-group bootstrapping for tutorials without sync groups.
+   * Omitted/empty → key not emitted.
+   */
+  syncKeysUsed?: Set<string>
+  /**
+   * [synced-tabs] Custom sync group declarations forwarded from frontmatter.
+   * Emitted as `syncGroups:` so the client runtime has value→canonical
+   * mappings for non-preset keys. Omitted when empty or undefined.
+   */
+  syncGroups?: Record<string, {
+    label: string
+    values: string[]
+    aliases?: Record<string, string[]>
+    default?: string
+  }>
 }
 
 export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
@@ -109,6 +127,8 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     video,
     semaphoreMap,
     variables,
+    syncKeysUsed,
+    syncGroups,
   } = args
 
   const cleanTags = tags.map(t => t.replace(/\\/g, ''))
@@ -209,6 +229,15 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
   if (video) fm.video = { embedUrl: video.embedUrl, title: video.title, provider: video.provider }
 
   if (variables && variables.length > 0) fm.variables = variables
+
+  // [synced-tabs] Emit sync metadata so the client runtime can bootstrap
+  // sync group state. Only emitted when the tutorial actually uses syncing.
+  if (syncKeysUsed && syncKeysUsed.size > 0) {
+    fm.syncKeysUsed = [...syncKeysUsed]
+  }
+  if (syncGroups && Object.keys(syncGroups).length > 0) {
+    fm.syncGroups = syncGroups
+  }
 
   const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
 
