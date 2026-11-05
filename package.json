@@ -142,6 +142,7 @@
     "test:all": "cds bind --exec -- npx vitest run",
     "validate-api-docs-yaml": "node scripts/validate-api-docs-yaml.cjs",
     "build:sdl": "tsx scripts/emit-graphql-sdl.ts",
+    "build:directive-schema": "tsx scripts/emit-directive-schema.ts",
     "check:graphql-breaking": "tsx scripts/check-graphql-breaking.ts",
     "install-notify-workflows": "tsx scripts/install-notify-workflows.ts",
     "lint:boundaries": "node scripts/lint-package-boundaries.cjs",
