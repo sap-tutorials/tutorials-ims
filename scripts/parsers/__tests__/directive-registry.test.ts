@@ -16,7 +16,7 @@ const ECHO_DEF: DirectiveDef = {
     flag: { type: 'boolean' },
   },
   classes: ['big'],
-  render: () => '',
+  render: () => ({ params: {} }),
   toText: () => '',
   since: '1.0.0',
 };

@@ -18,6 +18,16 @@ export interface AttrDef {
   pattern?: string;
 }
 
+/** Render output for a directive — either structured shortcode params or raw markdown. */
+export interface DirectiveRenderOutput {
+  /** Shortcode parameters. Framework handles escaping. */
+  params?: Record<string, string | number | boolean>;
+  /** Container body (markdown, not escaped — Hugo re-renders). */
+  body?: string;
+  /** Plain markdown to emit unwrapped (no shortcode). */
+  markdown?: string;
+}
+
 /** Full directive definition registered in the registry. */
 export interface DirectiveDef {
   /** Lowercase kebab-case name, e.g. 'code-block', 'note'. */
@@ -37,8 +47,8 @@ export interface DirectiveDef {
   classes?: string[];
   /** Optional expander: rewrite the node before rendering. */
   expand?(node: unknown, ctx: unknown): string;
-  /** Render the node to HTML. */
-  render(node: unknown, ctx: unknown): string;
+  /** Render the node. Returns structured output; framework builds shortcodes with safe escaping. */
+  render(node: unknown, ctx: unknown): DirectiveRenderOutput;
   /** Render the node to plain text. */
   toText(node: unknown, ctx: unknown): string;
   /** Semver of the platform version that introduced this directive. */

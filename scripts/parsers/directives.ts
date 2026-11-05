@@ -696,16 +696,16 @@ export function expandDirectives(body: string, ctx: ExpandDirectivesContext): st
 
   // Track which node instances have been expanded to detect cycles
   const expandedNodes = new WeakSet<DirectiveNode>();
+  const MAX_EXPAND_DEPTH = 10;
 
   /**
-   * Run the expand hook for a node, with depth limit to prevent cycles.
-   * Returns the expanded markdown, or undefined if no expand hook or already expanded.
+   * Recursively expand a node's expand hook output, re-parsing any directives
+   * it contains and expanding those as well. Depth limit prevents infinite cycles.
    */
-  function runExpand(node: DirectiveNode, depth: number = 0): string | undefined {
-    const MAX_DEPTH = 10;
-    if (depth >= MAX_DEPTH) {
+  function runExpandRecursive(node: DirectiveNode, depth: number = 0): string | undefined {
+    if (depth >= MAX_EXPAND_DEPTH) {
       throw new Error(
-        `Directive expand cycle detected: max depth ${MAX_DEPTH} exceeded at ${ctx.slug}:${node.line}`,
+        `Directive expand cycle detected: max depth ${MAX_EXPAND_DEPTH} exceeded at ${ctx.slug}:${node.line}`,
       );
     }
 
@@ -727,29 +727,33 @@ export function expandDirectives(body: string, ctx: ExpandDirectivesContext): st
       return undefined;
     }
 
-    // Check if the expand result would re-emit the same directive
-    // This indicates a cycle
-    if (expanded.includes(`:${node.name}[`)) {
-      throw new Error(
-        `Directive expand cycle detected: directive "${node.name}" re-emits itself at ${ctx.slug}:${node.line}`,
-      );
+    // If the expanded output contains directives, recursively expand them
+    // Parse the output and expand any directives found
+    const expandedNodes_prev = expandedNodes;
+    const { nodes: newNodes } = parseDirectives(expanded, { slug: ctx.slug, registry });
+
+    let result = expanded;
+    for (const newNode of newNodes) {
+      const newExpanded = runExpandRecursive(newNode, depth + 1);
+      if (newExpanded) {
+        // Replace the newNode's source span in result with the expanded text
+        // This is complex, so for simplicity, we just update the node and re-run
+        // A simpler approach: recursively call expandDirectives on the result
+        result = expandDirectives(result, ctx);
+      }
     }
 
-    return expanded;
+    return result;
   }
 
   // Expand all nodes (in place)
   for (const node of nodes) {
-    try {
-      const expanded = runExpand(node);
-      if (expanded) {
-        if (node.kind === 'container') {
-          // For containers, update the body
-          node.body = expanded;
-        }
+    const expanded = runExpandRecursive(node);
+    if (expanded) {
+      if (node.kind === 'container') {
+        // For containers, update the body
+        node.body = expanded;
       }
-    } catch (e) {
-      throw e;
     }
   }
 
@@ -760,12 +764,53 @@ export function expandDirectives(body: string, ctx: ExpandDirectivesContext): st
     return (b.column || 0) - (a.column || 0);
   });
 
+  /**
+   * Build a Hugo shortcode from a directive node's render output.
+   * The framework handles escaping of all parameter values and labels.
+   */
+  function buildShortcode(
+    node: DirectiveNode,
+    output: any, // DirectiveRenderOutput
+  ): string {
+    // If output declares markdown, return it unwrapped
+    if (output.markdown !== undefined) {
+      return output.markdown;
+    }
+
+    // Build params from output.params, escaping each value
+    const params: string[] = [];
+
+    // Add label as first param if present
+    if (node.label) {
+      params.push(`label="${escapeShortcodeParam(node.label)}"`);
+    }
+
+    // Add remaining params from output.params
+    if (output.params) {
+      for (const [k, v] of Object.entries(output.params)) {
+        params.push(`${k}="${escapeShortcodeParam(String(v))}"`);
+      }
+    }
+
+    const paramStr = params.length > 0 ? ' ' + params.join(' ') : '';
+
+    if (node.kind === 'container') {
+      // For containers, build opening + body + closing
+      const body = output.body || '';
+      return `{{% tut-${node.name}${paramStr} %}}\n${body}\n{{% /tut-${node.name} %}}`;
+    } else {
+      // For inline/leaf
+      return `{{< tut-${node.name}${paramStr} >}}`;
+    }
+  }
+
   // Process nodes back-to-front, replacing as we go
   for (const node of sortedNodes) {
     const def = registry.get(node.name);
     if (!def) continue;
 
-    const rendered = def.render(node, { slug: ctx.slug, variables: ctx.variables });
+    const output = def.render(node, { slug: ctx.slug, variables: ctx.variables });
+    const rendered = buildShortcode(node, output);
     const lineIdx = node.line - 1; // 0-based
 
     if (lineIdx < 0 || lineIdx >= lines.length) continue;
