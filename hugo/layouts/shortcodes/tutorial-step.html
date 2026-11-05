@@ -2,12 +2,30 @@
 {{ $title := .Get "title" }}
 {{ $isFirst := eq $number "1" }}
 
-<div id="step-{{ $number }}" class="tutorial-step" data-step="{{ $number }}">
+{{- /* [tutorial-step-pacing] Resolved once, by step number, from
+       .Page.Params.steps (single source: render-frontmatter.ts) — same
+       lookup pattern as codeCheck/branchPointId/etc. further down. */ -}}
+{{- $timeSeconds := 0 -}}
+{{- $stepOptional := false -}}
+{{- range $.Page.Params.steps -}}
+  {{- if eq (print .number) $number -}}
+    {{- with .timeSeconds }}{{ $timeSeconds = . }}{{ end -}}
+    {{- if .optional }}{{ $stepOptional = true }}{{ end -}}
+  {{- end -}}
+{{- end -}}
+
+<div id="step-{{ $number }}" class="tutorial-step" data-step="{{ $number }}"{{ if $stepOptional }} data-optional="true"{{ end }}{{ if gt $timeSeconds 0 }} data-time-seconds="{{ $timeSeconds }}"{{ end }}>
   <div class="step-header" data-action="toggle-step">
     <span class="step-check-circle"></span>
     <div class="step-header-text">
       <span class="step-label">Step {{ $number }}</span>
       <span class="step-title-text">{{ $title }}</span>
+      {{- if gt $timeSeconds 0 }}
+      <span class="step-time-chip" aria-label="Approximately {{ div (add $timeSeconds 59) 60 }} minutes">⏱ {{ div (add $timeSeconds 59) 60 }} min</span>
+      {{- end -}}
+      {{- if $stepOptional }}
+      <span class="step-optional-badge">Optional</span>
+      {{- end }}
     </div>
     <span class="step-toggle-icon">{{ if $isFirst }}—{{ else }}+{{ end }}</span>
   </div>
@@ -56,6 +74,12 @@
     {{- end }}
     <div class="step-actions">
       <button class="fd-button fd-button--emphasized" data-action="mark-done" data-step="{{ $number }}">Done</button>
+      {{- /* [tutorial-step-pacing] Optional-step Skip control — client-side
+             UI state only (tutorial.ts), NOT a completion record. Distinct
+             from the branches "skip recommendation" mount above (#172). */ -}}
+      {{- if $stepOptional }}
+      <button class="fd-button" data-action="skip-step" data-step="{{ $number }}">Skip</button>
+      {{- end }}
     </div>
   </div>
 </div>

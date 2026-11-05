@@ -1259,6 +1259,33 @@ ui5-li .step-badge-row {
   line-height: 1.3;
 }
 
+/* [tutorial-step-pacing] Per-step time chip + Optional badge, rendered by
+   hugo/layouts/shortcodes/tutorial-step.html next to the step title. */
+.step-time-chip,
+.step-optional-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.0625rem 0.5rem;
+  border-radius: 999px;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+.step-time-chip {
+  background: var(--sapInfobar_Background, var(--sapList_Background, #f5f6f7));
+  color: var(--sapContent_LabelColor, #556b82);
+  border: 1px solid var(--sapList_BorderColor, #e5e5e5);
+}
+
+.step-optional-badge {
+  background: var(--sapWarningBackground, #fef7f1);
+  color: var(--sapWarningColor, #e76500);
+  border: 1px solid var(--sapWarningBorderColor, #e9730c);
+}
+
 .step-toggle-icon {
   font-size: 1.25rem;
   font-weight: 400;
@@ -1466,6 +1493,46 @@ ui5-li .step-badge-row {
   color: #fff;
   cursor: default;
   opacity: 1;
+}
+
+/* [tutorial-step-pacing] Checklist "all checked" emphasis — visual nudge
+   only, never auto-marks the step done (design D4 "All checked" scenario). */
+.step-actions button.is-checklist-complete:not(.is-completed) {
+  box-shadow: 0 0 0 2px var(--sapPositiveColor, #30914c);
+}
+
+.tutorial-step.skipped .step-header {
+  opacity: 0.6;
+}
+
+/* Interactive checklists (task-lists.ts) */
+.task-list-counter {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--sapContent_LabelColor, #556b82);
+  margin: 0.5rem 0 0.25rem;
+}
+
+.step-content li.task-list-item {
+  list-style: none;
+  margin-left: -1.5rem;
+}
+
+.step-content li.task-list-item .task-list-checkbox {
+  margin-right: 0.5rem;
+}
+
+.step-content li.task-list-item .task-list-item-label {
+  cursor: pointer;
+}
+
+/* [tutorial-step-pacing] Remaining-time indicator — populated + shown by
+   tutorial.ts's updateRemainingTime(); hidden by default in markup. */
+.op-chip--remaining-time,
+.tutorial-remaining-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .step-validation-mount:empty {
