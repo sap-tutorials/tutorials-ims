@@ -642,3 +642,206 @@ export function parseDirectives(
 
   return { nodes, warnings };
 }
+
+// ─── escapeShortcodeParam ────────────────────────────────────────────────────
+
+/**
+ * HTML-escape a string for safe use as a shortcode parameter value.
+ *
+ * Escapes: & < > "
+ * This prevents attribute value injection and breaking out of quoted params.
+ *
+ * Example:
+ *   escapeShortcodeParam('foo" bar')  → 'foo&quot; bar'
+ *   escapeShortcodeParam('a & b')     → 'a &amp; b'
+ */
+export function escapeShortcodeParam(v: string): string {
+  return v
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ─── expandDirectives ────────────────────────────────────────────────────────
+
+export interface ExpandDirectivesContext {
+  slug: string;
+  variables?: Array<{ name: string }>;
+  registry?: ReadonlyMap<string, DirectiveDef>;
+}
+
+/**
+ * Parse and render all directives in `body`, returning the expanded markdown.
+ *
+ * Algorithm:
+ *   1. Parse directives from body
+ *   2. Run expand hooks (with cycle/depth guard) to transform nodes in-place
+ *   3. Render each node to its Hugo shortcode equivalent
+ *   4. Replace nodes back-to-front by line+column to preserve positions
+ *   5. Return the expanded markdown
+ *
+ * Directives whose render function returns plain markdown (not a shortcode)
+ * are emitted unwrapped.
+ */
+export function expandDirectives(body: string, ctx: ExpandDirectivesContext): string {
+  const registry = ctx.registry ?? getRegistry();
+  const { nodes } = parseDirectives(body, { slug: ctx.slug, registry });
+
+  if (nodes.length === 0) {
+    return body;
+  }
+
+  const lines = body.split('\n');
+
+  // Track which node instances have been expanded to detect cycles
+  const expandedNodes = new WeakSet<DirectiveNode>();
+
+  /**
+   * Run the expand hook for a node, with depth limit to prevent cycles.
+   * Returns the expanded markdown, or undefined if no expand hook or already expanded.
+   */
+  function runExpand(node: DirectiveNode, depth: number = 0): string | undefined {
+    const MAX_DEPTH = 10;
+    if (depth >= MAX_DEPTH) {
+      throw new Error(
+        `Directive expand cycle detected: max depth ${MAX_DEPTH} exceeded at ${ctx.slug}:${node.line}`,
+      );
+    }
+
+    if (expandedNodes.has(node)) {
+      throw new Error(
+        `Directive expand cycle detected: node at ${ctx.slug}:${node.line} re-emits itself`,
+      );
+    }
+
+    const def = registry.get(node.name);
+    if (!def || !def.expand) {
+      return undefined;
+    }
+
+    expandedNodes.add(node);
+
+    const expanded = def.expand(node, { slug: ctx.slug, variables: ctx.variables });
+    if (!expanded) {
+      return undefined;
+    }
+
+    // Check if the expand result would re-emit the same directive
+    // This indicates a cycle
+    if (expanded.includes(`:${node.name}[`)) {
+      throw new Error(
+        `Directive expand cycle detected: directive "${node.name}" re-emits itself at ${ctx.slug}:${node.line}`,
+      );
+    }
+
+    return expanded;
+  }
+
+  // Expand all nodes (in place)
+  for (const node of nodes) {
+    try {
+      const expanded = runExpand(node);
+      if (expanded) {
+        if (node.kind === 'container') {
+          // For containers, update the body
+          node.body = expanded;
+        }
+      }
+    } catch (e) {
+      throw e;
+    }
+  }
+
+  // Render each node and prepare replacements
+  // Sort nodes back-to-front: by line (descending), then by column (descending)
+  const sortedNodes = [...nodes].sort((a, b) => {
+    if (b.line !== a.line) return b.line - a.line;
+    return (b.column || 0) - (a.column || 0);
+  });
+
+  // Process nodes back-to-front, replacing as we go
+  for (const node of sortedNodes) {
+    const def = registry.get(node.name);
+    if (!def) continue;
+
+    const rendered = def.render(node, { slug: ctx.slug, variables: ctx.variables });
+    const lineIdx = node.line - 1; // 0-based
+
+    if (lineIdx < 0 || lineIdx >= lines.length) continue;
+
+    if (node.kind === 'leaf') {
+      // Replace the entire leaf line
+      lines[lineIdx] = rendered;
+    } else if (node.kind === 'container') {
+      // Find the closing fence - need to track fence length
+      // The fence length is determined by how many colons in the opening line
+      const openingLine = lines[lineIdx];
+      const fenceMatch = openingLine.match(/^( {0,3})(:{2,})/);
+      const fenceLen = fenceMatch ? fenceMatch[2].length : 3;
+
+      let closeLineIdx = lineIdx + 1;
+      const closingFenceRe = new RegExp(`^[ ]{0,3}:${'{' + fenceLen + '}'}[ \\t]*$`);
+      while (closeLineIdx < lines.length) {
+        if (lines[closeLineIdx].match(closingFenceRe)) {
+          break;
+        }
+        closeLineIdx++;
+      }
+
+      if (closeLineIdx >= lines.length) closeLineIdx = lines.length - 1;
+
+      // Replace lines from lineIdx to closeLineIdx with the rendered output
+      const newLines = rendered.split('\n');
+      lines.splice(lineIdx, closeLineIdx - lineIdx + 1, ...newLines);
+    } else if (node.kind === 'inline') {
+      // Find and replace the inline directive on this line
+      const line = lines[lineIdx];
+
+      // Build the pattern: :name[label]{attrs}
+      // Start search from node.column
+      const namePrefix = `:${node.name}[`;
+      let atStart = -1;
+
+      // Find the start position by scanning from the expected column
+      for (let i = Math.max(0, (node.column || 0) - 5); i < line.length; i++) {
+        if (line.substring(i).startsWith(namePrefix)) {
+          atStart = i;
+          break;
+        }
+      }
+
+      if (atStart === -1) continue;
+
+      // Find the end of this directive (closing brace or end of inline construct)
+      let i = atStart + namePrefix.length - 1; // position after :name[
+
+      // Skip label - find closing ]
+      let bracketDepth = 1;
+      i++;
+      while (i < line.length && bracketDepth > 0) {
+        if (line[i] === '[') bracketDepth++;
+        else if (line[i] === ']') bracketDepth--;
+        i++;
+      }
+
+      // Now check for {attrs}
+      if (i < line.length && line[i] === '{') {
+        let braceDepth = 1;
+        i++;
+        while (i < line.length && braceDepth > 0) {
+          if (line[i] === '{') braceDepth++;
+          else if (line[i] === '}') braceDepth--;
+          i++;
+        }
+      }
+
+      const atEnd = i;
+
+      // Replace the span [atStart, atEnd) with rendered
+      lines[lineIdx] = line.slice(0, atStart) + rendered + line.slice(atEnd);
+    }
+  }
+
+  return lines.join('\n');
+}
