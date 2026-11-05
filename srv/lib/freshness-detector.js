@@ -24,6 +24,7 @@ import { extractCodeBlocks, extractTutorialContext } from './freshness-extract.j
 import { groundCodeBlock } from './freshness-grounding.js';
 import { resolveChatLlmSettings } from './chat-settings-resolver.js';
 import { tokensToCents } from './_token-cost.js';
+import { renderDirectivesAsText } from '../../scripts/parsers/directives.js';
 
 const LOG = cds.log('freshness-detector');
 const TOOL_NAME = 'submit_freshness_findings';
@@ -225,15 +226,19 @@ export async function detectFreshness({ db, tutorialId }) {
     const src = await getTutorialSource(t.slug);
     if (!src || !src.markdown) return { ok: true, model: null, costCents: 0, findings: [] };
 
+    // Strip directive syntax (:::details, :kbd[, etc.) so the model sees
+    // plain prose rather than raw CommonMark directive fences.
+    const markdown = renderDirectivesAsText(src.markdown);
+
     // Feed whole-tutorial markdown as ONE pseudo-step so extractCodeBlocks
     // yields a global codeBlockIndex (0..N). Per-step attribution deferred.
     // No code blocks — genuine clean run, NOT a fault → ok:true.
-    const blocks = extractCodeBlocks([{ number: 1, content: src.markdown }]);
+    const blocks = extractCodeBlocks([{ number: 1, content: markdown }]);
     if (!blocks.length) return { ok: true, model: null, costCents: 0, findings: [] };
 
     // Document-wide orientation (frontmatter + prerequisites) fed once at the top
     // so the model judges blocks in the tutorial's real context, not in isolation.
-    const tutContext = extractTutorialContext(src.markdown);
+    const tutContext = extractTutorialContext(markdown);
 
     const groundingByBlock = await Promise.all(
       blocks.map(b => groundCodeBlock({ db, code: b.code }).catch(() => []))

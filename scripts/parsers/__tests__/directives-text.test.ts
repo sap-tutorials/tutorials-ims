@@ -70,4 +70,36 @@ describe('renderDirectivesAsText', () => {
     const result = renderDirectivesAsText(md);
     expect(result).toBe('```\n:::details[Why]\ncontent\n:::\n```');
   });
+
+  // MCP/AI read-path contract (Task 6): a step body containing :::details and
+  // :kbd[ must come back with readable text and NO raw directive syntax so
+  // models/clients see plain prose.
+  it('MCP read-path: step body with :::details[Why] and :kbd[Mod+S] yields readable text, no ::: or :kbd[', () => {
+    const stepBody = [
+      '### Save the file',
+      '',
+      ':::details[Why]',
+      'Saving writes your changes to disk.',
+      ':::',
+      '',
+      'Press :kbd[Mod+S] to save.',
+    ].join('\n');
+
+    const result = renderDirectivesAsText(stepBody);
+
+    // No raw directive syntax remains
+    expect(result).not.toContain(':::');
+    expect(result).not.toContain(':kbd[');
+
+    // Readable equivalents present
+    expect(result).toContain('**Why**');
+    expect(result).toContain('Mod+S');
+    expect(result).toContain('Press');
+  });
+
+  // Identity contract: directive-free content must pass through unchanged.
+  it('is a no-op for directive-free markdown', () => {
+    const md = '### Install CAP\n\nRun `npm install -g @sap/cds-dk` to install.\n';
+    expect(renderDirectivesAsText(md)).toBe(md);
+  });
 });
