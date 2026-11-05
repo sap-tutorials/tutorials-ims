@@ -701,6 +701,7 @@ export function expandDirectives(body: string, ctx: ExpandDirectivesContext): st
   /**
    * Recursively expand a node's expand hook output, re-parsing any directives
    * it contains and expanding those as well. Depth limit prevents infinite cycles.
+   * Threads the same visitedNodes set and depth counter through the recursion.
    */
   function runExpandRecursive(node: DirectiveNode, depth: number = 0): string | undefined {
     if (depth >= MAX_EXPAND_DEPTH) {
@@ -728,18 +729,43 @@ export function expandDirectives(body: string, ctx: ExpandDirectivesContext): st
     }
 
     // If the expanded output contains directives, recursively expand them
-    // Parse the output and expand any directives found
-    const expandedNodes_prev = expandedNodes;
     const { nodes: newNodes } = parseDirectives(expanded, { slug: ctx.slug, registry });
 
+    // Process each nested directive through the same expansion context
     let result = expanded;
     for (const newNode of newNodes) {
       const newExpanded = runExpandRecursive(newNode, depth + 1);
-      if (newExpanded) {
-        // Replace the newNode's source span in result with the expanded text
-        // This is complex, so for simplicity, we just update the node and re-run
-        // A simpler approach: recursively call expandDirectives on the result
-        result = expandDirectives(result, ctx);
+      if (newExpanded !== undefined) {
+        // Replace newNode's source span with its expanded text
+        // Find the node's source span in result and replace it
+        // This is the directive source pattern: :name[label]{attrs} or ::name or :::name
+        let searchStart = 0;
+        const pattern = `:${newNode.name}\\[`;
+        const match = result.substring(searchStart).match(new RegExp(pattern));
+        if (match) {
+          const matchPos = searchStart + match.index!;
+          // Find the end of the directive
+          let i = matchPos + pattern.length - 1; // after :name[
+          let bracketDepth = 1;
+          i++;
+          while (i < result.length && bracketDepth > 0) {
+            if (result[i] === '[') bracketDepth++;
+            else if (result[i] === ']') bracketDepth--;
+            i++;
+          }
+          // Check for {attrs}
+          if (i < result.length && result[i] === '{') {
+            let braceDepth = 1;
+            i++;
+            while (i < result.length && braceDepth > 0) {
+              if (result[i] === '{') braceDepth++;
+              else if (result[i] === '}') braceDepth--;
+              i++;
+            }
+          }
+          // Replace [matchPos, i) with newExpanded
+          result = result.slice(0, matchPos) + newExpanded + result.slice(i);
+        }
       }
     }
 
