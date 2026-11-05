@@ -305,6 +305,21 @@ describe('resolveChoice — resolution order', () => {
     expect(result).toBe('');
   });
 
+  it('a stored empty string "" falls through to detected/groupDefault/firstTab', async () => {
+    // An empty write must NOT strand resolution at the stored step — it must
+    // continue down to the next priority so Task-3 OPTION groups can't get
+    // stuck with a permanently blank selection.
+    seedUnified({ os: '' });
+    const { __test__ } = await import('../../hugo/assets/js/sync-groups');
+
+    // Falls through "" → detected
+    expect(__test__.resolveChoice('os', { detected: 'Linux', groupDefault: 'macOS', firstTab: 'Windows' })).toBe('Linux');
+    // Falls through "" + no detected → groupDefault
+    expect(__test__.resolveChoice('os', { groupDefault: 'macOS', firstTab: 'Windows' })).toBe('macOS');
+    // Falls through "" + no detected + no groupDefault → firstTab
+    expect(__test__.resolveChoice('os', { firstTab: 'Windows' })).toBe('Windows');
+  });
+
   it('resolveChoice("runtime", …) works the same for a non-os key', async () => {
     seedUnified({ runtime: 'Java' });
     const { __test__ } = await import('../../hugo/assets/js/sync-groups');

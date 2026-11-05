@@ -127,9 +127,9 @@ export function resolveChoice(key: string, opts: ResolveChoiceOptions): string {
     }
   }
 
-  // 2. Stored choice
+  // 2. Stored choice (guard empty string — a stored "" must not strand resolution)
   const stored = getChoice(key);
-  if (stored !== null) return stored;
+  if (stored !== null && stored !== '') return stored;
 
   // 3. Detected
   if (opts.detected !== undefined && opts.detected !== '') return opts.detected;
