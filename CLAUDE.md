@@ -27,7 +27,7 @@ npm run bind:setup     # First-time hybrid env binding setup
 npm run setup-dev-data # Populate slugs + clean autotest data (needs cds bind)
 
 # Tests
-npm test               # Unit (in-memory SQLite, fast)
+npm test               # Unit (in-memory SQLite). Agents: scoped only — `npm test -- <file>`; full suite is hook-blocked locally, runs in CI
 npm run test:hybrid    # Hybrid (real HANA via cds bind --exec; requires cf login)
 npm run test:smoke     # Smoke (HTTP against deployed; set SMOKE_BASE_URL/SMOKE_SRV_URL)
 npm run test:e2e       # Admin-UI Playwright smoke (post-deploy; set SMOKE_BASE_URL + SMOKE_TECH_USER/PASSWORD; self-skips when absent)
@@ -124,7 +124,7 @@ Subsystem one-liners:
 
 These are load-bearing habits for keeping AI-agent token usage down without reducing output. Ignoring them wastes tokens re-sending output the agent never uses.
 
-- **Never paste raw deploy/test/log scrollback into the main context.** Any command whose output can exceed ~50 lines (`mbt build`, `cf deploy`, `npm run build:all`, `npm test`, `cf logs`) MUST be wrapped in `scripts/quiet-run.sh <cmd…>` — it keeps the full log on disk under `.quiet-logs/` and prints only exit code + matched error lines + last N lines. Drill into the full log path only when the summary is insufficient.
+- **Never paste raw deploy/test/log scrollback into the main context.** Any command whose output can exceed ~50 lines (`mbt build`, `cf deploy`, `npm run build:all`, `npm test`, `cf logs`) MUST be wrapped in `scripts/quiet-run.sh <cmd…>` (bash) or `scripts/quiet-run.ps1 <cmd…>` (PowerShell, same contract) — it keeps the full log on disk under `.quiet-logs/` and prints only exit code + matched error lines + last N lines. Drill into the full log path only when the summary is insufficient.
 - **Delegate noisy investigation to a subagent.** Grep sweeps, "which files import X", log trawls, broad multi-file reads — dispatch to `Explore`/`general-purpose` so the raw output stays out of the main context and only the findings return.
 - **Don't read a whole file for a few lines.** Prefer cds-mcp / hana-cli / `Grep` with line ranges over full-file `Read`; read only the slice you need.
 - **Short sessions.** One deploy or one debugging thread per session; `/clear` between them so stale build output doesn't ride on every subsequent request.
