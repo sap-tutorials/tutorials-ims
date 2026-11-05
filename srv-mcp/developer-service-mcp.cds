@@ -81,6 +81,12 @@ extend service DeveloperService {
     contentFormat : String;
     textLength    : Integer;
     totalSteps    : Integer;
+    // [tutorial-step-pacing] Present only when the step's heading declared
+    // `{time=… optional}` and format='markdown'. Absent (not 0/false) on
+    // plain steps and on format='html' (not yet threaded through the HTML
+    // slicer — see packages/mcp/tutorial-step-slicer.js).
+    timeMinutes   : Integer;
+    optional      : Boolean;
   };
 
   /** Mark a step of a tutorial as completed for the signed-in user.

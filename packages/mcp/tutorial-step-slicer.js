@@ -256,7 +256,12 @@ async function loadAndParseMarkdown(slug) {
   const steps = new Map();
   for (const s of parsedSteps) {
     const md = absolutizeImagePaths(s.markdown, { slug, repo, branch });
-    steps.set(s.number, { markdown: md, text: s.text, title: s.title });
+    const entry = { markdown: md, text: s.text, title: s.title };
+    // [tutorial-step-pacing] carried through to handleGetTutorialStep's
+    // response (spec "Pacing data in machine consumers").
+    if (s.timeMinutes !== undefined) entry.timeMinutes = s.timeMinutes;
+    if (s.optional) entry.optional = true;
+    steps.set(s.number, entry);
   }
 
   const result = { steps, totalSteps: steps.size };
@@ -281,7 +286,10 @@ export async function sliceStepMarkdown(slug, stepNumber) {
   if (!parsed) return null;
   const step = parsed.steps.get(stepNumber);
   if (!step) return null;
-  return { markdown: step.markdown, text: step.text, stepTitle: step.title, totalSteps: parsed.totalSteps };
+  const result = { markdown: step.markdown, text: step.text, stepTitle: step.title, totalSteps: parsed.totalSteps };
+  if (step.timeMinutes !== undefined) result.timeMinutes = step.timeMinutes;
+  if (step.optional) result.optional = true;
+  return result;
 }
 
 export async function sliceAllSteps(slug) {
