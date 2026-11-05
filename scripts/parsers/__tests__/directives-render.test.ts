@@ -149,6 +149,13 @@ describe('escapeShortcodeParam', () => {
     expect(escapeShortcodeParam('&lt;')).toBe('&amp;lt;');
   });
 
+  it('escapes backslash before other characters (backslash first to prevent double-escape)', () => {
+    // A trailing backslash before a closing " must not escape the quote
+    expect(escapeShortcodeParam('foo\\')).toBe('foo&#92;');
+    // Backslash followed by quote: both must be escaped
+    expect(escapeShortcodeParam('foo\\"')).toBe('foo&#92;&quot;');
+  });
+
   it('escapes complex values for shortcode safety', () => {
     const input = 'hello & <world> "q"';
     const expected = 'hello &amp; &lt;world&gt; &quot;q&quot;';
@@ -183,32 +190,65 @@ describe('expandDirectives', () => {
     });
 
     it('prevents attribute injection via quote escaping (C-2 real spec vector)', () => {
-      // Real spec vector from brief: title containing a quote character that should be escaped
-      // Use a value that, if not escaped, could break out of the HTML attribute
-      const md = ':echo[Save]{title="test\\"quote"}';
+      // Real spec injection vector: title="\" onmouseover=alert(1) x=\""
+      // With the fixed tokenizer, the backslash-escaped quote inside a
+      // double-quoted span does NOT close it — the value is a SINGLE title attr
+      // containing the literal: " onmouseover=alert(1) x="  (quotes as chars)
+      // When rendered through escapeShortcodeParam: " → &quot;
+      // So the result is a valid title="..." param — no SEPARATE onmouseover= param.
+      const md = ':echo[Save]{title="\\" onmouseover=alert(1) x=\\""}';
+      let result: string | undefined;
+      let threw = false;
       try {
-        const result = expandDirectives(md, { slug: 'test' });
-        // If it parses, the quote must be escaped
-        expect(result).toContain('&quot;');
-      } catch (e) {
-        // Also acceptable: parser rejects malformed attr
-        expect(e.message).toMatch(/parse|attr|directive|duplicate/i);
+        result = expandDirectives(md, { slug: 'test' });
+      } catch (_e) {
+        threw = true;
       }
+
+      if (!threw && result !== undefined) {
+        // The &quot; entity must be present (the literal " chars are HTML-escaped)
+        expect(result).toContain('&quot;');
+        // No unescaped quote that could break out of the title param boundary
+        // i.e., the title param must be a single, properly closed "..." value
+        // Check that there is no SEPARATE onmouseover= parameter (outside quotes)
+        // The value may contain the literal text "onmouseover=" but it must be
+        // inside the title="..." value, not a standalone shortcode parameter.
+        // A standalone param would look like: ...title="..." onmouseover=...
+        expect(result).not.toMatch(/"\s+onmouseover=/);
+        // No trailing unescaped backslash before a closing quote in the output
+        expect(result).not.toMatch(/\\"/);
+      }
+      // Either a clean render (injection prevented by escaping) or a parse error
+      // are both acceptable outcomes.
     });
 
-    it('demonstrates injection attempt is prevented (C-2 injection vector)', () => {
-      // The parser tokenizes quoted attr values as complete units
-      // So an injection attempt like: title="\" onmouseover=alert(1) x=\""}
-      // Would result in a SINGLE title value of: " onmouseover=alert(1) x="
-      // Which, when rendered, is escaped so no attribute injection occurs
-
-      // Test with a simpler injection attempt: unescaped quote in unquoted value
-      // The parser should handle this gracefully
-      const md = ':echo[x]{title=simple}';
-      const result = expandDirectives(md, { slug: 'test' });
-      // Verify the render completes and produces valid output
-      expect(result).toContain('{{< tut-echo');
-      expect(result).toContain('title=');
+    it('demonstrates injection attempt is prevented (C-2 injection vector — real assertion)', () => {
+      // The injection vector: title="\" onmouseover=alert(1) x=\""
+      // The fixed tokenizer treats \" inside "..." as an escaped quote (not a closer),
+      // so this tokenizes as a SINGLE title attribute whose value contains the literal
+      // " onmouseover=alert(1) x="  (after unquoting and unescape).
+      // When rendered, escapeShortcodeParam HTML-escapes " → &quot;
+      // The result is a valid title="..." shortcode param — the value may contain
+      // the literal text "onmouseover=" but it is safely inside the escaped value,
+      // not a standalone shortcode parameter that Hugo would interpret separately.
+      const md = ':echo[x]{title="\\" onmouseover=alert(1) x=\\""}';
+      let result: string | undefined;
+      try {
+        result = expandDirectives(md, { slug: 'test' });
+      } catch (_e) {
+        // Parse error is also acceptable
+        return;
+      }
+      if (result !== undefined) {
+        // Shortcode is present
+        expect(result).toContain('{{< tut-echo');
+        // The quotes inside the value are HTML-escaped
+        expect(result).toContain('&quot;');
+        // No standalone onmouseover= parameter (would appear after a closing quote + space)
+        expect(result).not.toMatch(/"\s+onmouseover=/);
+        // No unescaped backslash-quote sequence in the output
+        expect(result).not.toMatch(/\\"/);
+      }
     });
 
 

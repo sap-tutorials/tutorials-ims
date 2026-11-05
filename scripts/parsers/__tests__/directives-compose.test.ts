@@ -214,4 +214,32 @@ describe('directives-compose: expandDirectives is wired into composeTutorial', (
     expect(result.body).toBe(result2.body);
     expect(result.steps[0].content).toBe(result2.steps[0].content);
   });
+
+  // ── 6. Empty registry: bare :::foo line is byte-identical (I-1 container fix) ──
+
+  it('a bare :::foo line (no closing fence) composes identically with empty registry — no throw, line preserved', () => {
+    resetRegistry();
+    // Registry is empty — :::foo is unknown, has no closing fence
+
+    const md = makeFm() + [
+      '# Directive Compose Test',
+      '',
+      '### Step 1 — Container no-close',
+      '',
+      ':::foo',
+      '',
+      'Some text after.',
+    ].join('\n');
+
+    // Must not throw
+    let result: ReturnType<typeof composeTutorial>;
+    expect(() => {
+      result = composeTutorial(md, BASE_OPTS);
+    }).not.toThrow();
+
+    // The :::foo line must be preserved as literal text (byte-identity)
+    expect(result!.body).toContain(':::foo');
+    // No shortcode should have been emitted
+    expect(result!.body).not.toContain('tut-foo');
+  });
 });

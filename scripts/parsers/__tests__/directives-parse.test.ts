@@ -253,6 +253,60 @@ describe('parseDirectives — container directives', () => {
   });
 });
 
+describe('tokenizeAttrs — single-quote and backslash-escape support', () => {
+  it("parses single-quoted value with spaces: os='mac os'", () => {
+    const result = tokenizeAttrs("os='mac os'");
+    expect(result).toEqual({ attrs: { os: 'mac os' }, classes: [] });
+  });
+
+  it('parses double-quoted value with spaces: msg="hello world"', () => {
+    const result = tokenizeAttrs('msg="hello world"');
+    expect(result).toEqual({ attrs: { msg: 'hello world' }, classes: [] });
+  });
+
+  it('unescapes backslash-escaped double quote inside double-quoted value', () => {
+    // key="foo\"bar" → value is foo"bar
+    const result = tokenizeAttrs('key="foo\\"bar"');
+    expect(result).toEqual({ attrs: { key: 'foo"bar' }, classes: [] });
+  });
+
+  it("unescapes backslash-escaped single quote inside single-quoted value", () => {
+    // key='it\'s fine' → value is it's fine
+    const result = tokenizeAttrs("key='it\\'s fine'");
+    expect(result).toEqual({ attrs: { key: "it's fine" }, classes: [] });
+  });
+
+  it('single-quoted value does not split on spaces', () => {
+    // os='mac os' should produce exactly one attr, not two tokens
+    const result = tokenizeAttrs("os='mac os' flag");
+    expect(result.attrs.os).toBe('mac os');
+    expect(result.attrs.flag).toBe(true);
+    expect(Object.keys(result.attrs)).toHaveLength(2);
+  });
+});
+
+describe('parseDirectives — empty-registry byte-identity (I-1 container fix)', () => {
+  beforeEach(() => {
+    resetRegistry();
+    // Registry is intentionally EMPTY
+  });
+
+  it('does NOT throw for bare :::foo with no closing fence when registry is empty', () => {
+    expect(() => parseDirectives('intro\n:::foo', { slug: 't' })).not.toThrow();
+  });
+
+  it('returns zero nodes for bare :::foo with empty registry', () => {
+    const { nodes } = parseDirectives('intro\n:::foo', { slug: 't' });
+    expect(nodes).toHaveLength(0);
+  });
+
+  it('emits a directive/unknown warning for bare :::foo with empty registry', () => {
+    const { warnings } = parseDirectives('intro\n:::foo', { slug: 't' });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ code: 'directive/unknown' });
+  });
+});
+
 describe('parseDirectives — fenced code skipping', () => {
   beforeEach(() => {
     resetRegistry();

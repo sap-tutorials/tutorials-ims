@@ -137,10 +137,14 @@ export function tokenizeAttrs(
           'duplicate-attr',
         );
       }
-      // Unquote if wrapped in double quotes
+      // Unquote if wrapped in double or single quotes; unescape \" and \'
       let val: string | number | boolean;
-      if (rawVal.startsWith('"') && rawVal.endsWith('"')) {
-        val = rawVal.slice(1, -1);
+      if (
+        (rawVal.startsWith('"') && rawVal.endsWith('"')) ||
+        (rawVal.startsWith("'") && rawVal.endsWith("'"))
+      ) {
+        const inner = rawVal.slice(1, -1);
+        val = inner.replace(/\\"/g, '"').replace(/\\'/g, "'");
       } else if (/^-?\d+(\.\d+)?$/.test(rawVal)) {
         val = Number(rawVal);
       } else {
@@ -169,7 +173,7 @@ export function tokenizeAttrs(
   return { attrs, classes };
 }
 
-/** Split attr string into tokens respecting double-quoted strings. */
+/** Split attr string into tokens respecting double- and single-quoted strings. */
 function splitAttrTokens(raw: string): string[] {
   const tokens: string[] = [];
   let i = 0;
@@ -179,15 +183,25 @@ function splitAttrTokens(raw: string): string[] {
     if (i >= raw.length) break;
 
     // Start of a token: could be quoted value after key=
-    // We need to handle key="value with spaces"
+    // We need to handle key="value with spaces" and key='value with spaces'
     let token = '';
     while (i < raw.length && !/\s/.test(raw[i])) {
-      if (raw[i] === '"') {
-        // Include from here until closing quote (inclusive)
+      if (raw[i] === '"' || raw[i] === "'") {
+        // Include from here until closing quote (inclusive), respecting backslash escapes
+        const quoteChar = raw[i];
         const start = i;
         i++;
-        while (i < raw.length && raw[i] !== '"') i++;
-        if (i < raw.length) i++; // consume closing quote
+        while (i < raw.length) {
+          if (raw[i] === '\\' && i + 1 < raw.length && raw[i + 1] === quoteChar) {
+            // Backslash-escaped quote: skip both characters
+            i += 2;
+          } else if (raw[i] === quoteChar) {
+            i++; // consume closing quote
+            break;
+          } else {
+            i++;
+          }
+        }
         token += raw.slice(start, i);
       } else {
         token += raw[i];
@@ -495,7 +509,21 @@ export function parseDirectives(
         i++;
         continue;
       } else if (fenceLen >= 3) {
-        // Container directive — find matching closing fence
+        // Container directive — check registry FIRST (mirrors leaf branch).
+        // An unknown name with no closing fence must NOT throw; leave the line
+        // as literal text and emit a directive/unknown warning (byte-identity).
+        const def = registry.get(name);
+        if (!def) {
+          warnings.push({
+            code: 'directive/unknown',
+            line: lineNum,
+            message: `Unknown directive ":${name}" at ${slug}:${lineNum}`,
+          });
+          i++;
+          continue;
+        }
+
+        // Registered container — now search for the closing fence (may throw).
         const closingFenceRe = new RegExp(`^[ ]{0,3}:{${fenceLen}}[ \\t]*$`);
         let bodyEnd = -1;
         for (let j = i + 1; j < lines.length; j++) {
@@ -513,18 +541,6 @@ export function parseDirectives(
             name,
             'unclosed',
           );
-        }
-
-        const def = registry.get(name);
-        if (!def) {
-          warnings.push({
-            code: 'directive/unknown',
-            line: lineNum,
-            message: `Unknown directive ":${name}" at ${slug}:${lineNum}`,
-          });
-          // Still skip over the container body
-          i = bodyEnd + 1;
-          continue;
         }
 
         const parsed = tokenizeAttrs(rawAttrs ?? '', slug, lineNum, name);
@@ -648,19 +664,27 @@ export function parseDirectives(
 /**
  * HTML-escape a string for safe use as a shortcode parameter value.
  *
- * Escapes: & < > "
- * This prevents attribute value injection and breaking out of quoted params.
+ * Escapes: & < > " \
+ * Order matters: & is escaped first so the entities produced by later
+ * replacements are not double-escaped.  Backslash is escaped last (as &#92;,
+ * which is now safe because all prior `&` have already become `&amp;`) to
+ * prevent a trailing backslash from being read as escaping the closing `"` in
+ * Hugo shortcode params, e.g. `param="foo\"` would otherwise let the `"` be
+ * interpreted as escaped.
  *
  * Example:
  *   escapeShortcodeParam('foo" bar')  → 'foo&quot; bar'
  *   escapeShortcodeParam('a & b')     → 'a &amp; b'
+ *   escapeShortcodeParam('foo\\')     → 'foo&#92;'
+ *   escapeShortcodeParam('foo\\"')    → 'foo&#92;&quot;'
  */
 export function escapeShortcodeParam(v: string): string {
   return v
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/\\/g, '&#92;');
 }
 
 // ─── expandDirectives ────────────────────────────────────────────────────────
