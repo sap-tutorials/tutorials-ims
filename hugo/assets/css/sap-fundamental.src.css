@@ -2958,6 +2958,14 @@ html.dark .diff-added  { background: rgba(0,200,80,.18); }
 html.dark .diff-removed { background: rgba(220,50,50,.18); }
 html.dark .diff-highlight { background: rgba(200,160,0,.18); }
 
+/* Tree fences */
+[data-tree] [role="tree"] { list-style: none; padding-left: 0; margin: 0; font-family: var(--sapFontCodeFamily, monospace); font-size: .9em; }
+[data-tree] [role="treeitem"] { display: block; padding: .1rem 0; white-space: pre; }
+.tree-new      { color: var(--sapPositiveColor, #256f3a); }
+.tree-modified { color: var(--sapInformativeColor, #0064d9); }
+.tree-deleted  { color: var(--sapNegativeColor, #aa0808); opacity: .65; text-decoration: line-through; }
+.tree-annotation { opacity: .55; font-size: .85em; margin-left: .75rem; font-style: italic; }
+
 /* Chroma readability overrides (dark mode).
  * Hugo's `gen chromastyles --style=github-dark` emits empty rules for
  * unstyled tokens (.p, .n, .nx, .x, .na, .nb, .bp), expecting them to
