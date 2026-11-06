@@ -25,7 +25,6 @@ import { extractCodeBlocks, extractTutorialContext } from './freshness-extract.j
 import { groundCodeBlock } from './freshness-grounding.js';
 import { resolveChatLlmSettings } from './chat-settings-resolver.js';
 import { tokensToCents } from './_token-cost.js';
-import { renderDirectivesAsText } from '../../scripts/parsers/directives.js';
 
 const LOG = cds.log('freshness-detector');
 const TOOL_NAME = 'submit_freshness_findings';
@@ -286,6 +285,13 @@ export async function detectFreshness({ db, tutorialId }) {
 
     // Strip directive syntax (:::details, :kbd[, etc.) so the model sees
     // plain prose rather than raw CommonMark directive fences.
+    // Workspace-first / bundle fallback: directives.ts is not compiled to .js;
+    // the CF deploy copies only srv/ (not scripts/parsers/), so we fall back to
+    // the pre-built bundle at _shared/parsers.bundle.mjs.
+    let _directivesMod;
+    try { _directivesMod = await import('../../scripts/parsers/directives.js'); }
+    catch { _directivesMod = await import('./_shared/parsers.bundle.mjs'); }
+    const renderDirectivesAsText = _directivesMod.renderDirectivesAsText;
     const markdown = renderDirectivesAsText(src.markdown);
 
     // Feed whole-tutorial markdown as ONE pseudo-step so extractCodeBlocks
