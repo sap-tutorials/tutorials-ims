@@ -358,6 +358,138 @@ export function wrapTokens(markdown: string, vars: TutorialVariable[]): string {
   return out.join('\n')
 }
 
+// ---------------------------------------------------------------------------
+// PlaceholderDef — fill-in placeholder token type
+// ---------------------------------------------------------------------------
+
+/**
+ * A placeholder token declared via `placeholders:` frontmatter.
+ * In `auto` mode, tokens are detected by the regex below.
+ * In explicit mode, authors declare them in frontmatter.
+ */
+export interface PlaceholderDef {
+  token: string
+  label: string
+}
+
+/**
+ * Regex matching placeholder tokens in `auto` mode.
+ * Matches: <YOUR_SOMETHING>, <MY-something>, <BTP_TRIAL> (3+ uppercase chars)
+ * Does NOT match: <String>, <div>, <T>, <AB>, generics, HTML tags.
+ */
+const PLACEHOLDER_RE = /(?<![A-Za-z])<(?:YOUR[-_]|MY[-_])[A-Za-z0-9_-]+>|<[A-Z][A-Z0-9_]{2,}>/g
+
+/**
+ * Humanise a placeholder token into a label.
+ * <YOUR_SUBACCOUNT> → "Your Subaccount"
+ * <MY-space-name> → "My Space Name"
+ * <BTP_TRIAL> → "Btp Trial"
+ */
+function humaniseToken(token: string): string {
+  const inner = token.replace(/^<|>$/g, '')
+  return inner
+    .replace(/[-_]/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+/**
+ * Derive a NAME_RE-safe variable name from a placeholder token.
+ * <YOUR_SUBACCOUNT> → YOUR_SUBACCOUNT
+ * <MY-space-name> → MY_space_name
+ */
+function tokenToName(token: string): string {
+  return token.replace(/^<|>$/g, '').replace(/-/g, '_')
+}
+
+/**
+ * Validate a `placeholders:` frontmatter value.
+ *
+ * @param raw   The raw `placeholders:` value: the string `"auto"` or an array
+ *              of `{ token, label? }` objects.
+ * @param body  The tutorial body; used for auto-detection.
+ * @returns     Array of PlaceholderDef objects (deduplicated).
+ */
+export function validatePlaceholders(raw: unknown, body: string): PlaceholderDef[] {
+  if (raw === 'auto') {
+    // Scan the body for placeholder-shaped tokens
+    const seen = new Set<string>()
+    const result: PlaceholderDef[] = []
+    PLACEHOLDER_RE.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = PLACEHOLDER_RE.exec(body)) !== null) {
+      const token = m[0]
+      if (!seen.has(token)) {
+        seen.add(token)
+        result.push({ token, label: humaniseToken(token) })
+      }
+    }
+    return result
+  }
+
+  if (!Array.isArray(raw)) {
+    throw new VariablesValidationError(
+      `tutorial placeholders: expected "auto" or an array of {token, label?} objects`
+    )
+  }
+
+  const seen = new Set<string>()
+  const result: PlaceholderDef[] = []
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null || typeof (entry as Record<string, unknown>)['token'] !== 'string') {
+      throw new VariablesValidationError(
+        `tutorial placeholders: each entry must have a "token" string field`
+      )
+    }
+    const token = (entry as Record<string, unknown>)['token'] as string
+    const labelRaw = (entry as Record<string, unknown>)['label']
+    const label = typeof labelRaw === 'string' ? labelRaw : humaniseToken(token)
+    if (!seen.has(token)) {
+      seen.add(token)
+      result.push({ token, label })
+    }
+  }
+  return result
+}
+
+/**
+ * Convert each placeholder token in `markdown` to the existing variable sentinel,
+ * so the `tut-var` island picks it up automatically.
+ *
+ * Inside fenced code: `TUTVARxNAMEx`
+ * In prose: `<span class="tut-var tut-placeholder" data-tut-var="NAME">TOKEN</span>`
+ *
+ * Reuses `wrapTokens` internally by converting tokens to `{{var:NAME}}` form
+ * and then delegating fence/prose distinction to wrapTokens.
+ */
+export function wrapPlaceholders(markdown: string, placeholders: PlaceholderDef[]): string {
+  if (placeholders.length === 0) return markdown
+
+  // Build synthetic TutorialVariable entries
+  const synthVars: TutorialVariable[] = placeholders.map((p) => ({
+    name: tokenToName(p.token),
+    label: p.label,
+    type: 'string' as const,
+    placeholder: p.token,
+    display: true,
+  }))
+
+  // Replace the exact token text with `{{var:NAME}}` syntax, then call wrapTokens.
+  // This is the cleanest approach: we convert tokens to the existing {{var:X}} form
+  // and then let wrapTokens handle the fence/prose distinction.
+  let transformed = markdown
+  for (const p of placeholders) {
+    const name = tokenToName(p.token)
+    // Escape regex special chars in token (angle brackets, hyphens etc.)
+    const escaped = p.token.replace(/[<>[\]{}()*+?.,\\^$|#\s]/g, '\\$&')
+    transformed = transformed.replace(new RegExp(escaped, 'g'), `{{var:${name}}}`)
+  }
+
+  return wrapTokens(transformed, synthVars)
+}
+
+// ---------------------------------------------------------------------------
+
 /**
  * Processes a single non-fenced line, replacing {{var:NAME}} tokens:
  *  - inside an open backtick run (inline-code span) → sentinel

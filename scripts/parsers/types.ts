@@ -81,6 +81,13 @@ export interface TutorialFrontmatter {
     aliases?: Record<string, string[]>
     default?: string
   }>
+  /**
+   * [task3] Opt-in fill-in placeholder detection.
+   * `'auto'` — automatically detect `<YOUR_X>`, `<MY_X>`, and `<UPPER_CASE>` tokens.
+   * Array — explicit list of `{ token, label? }` objects; only those tokens are wrapped.
+   * Absent — placeholder wrapping is skipped entirely (default behavior).
+   */
+  placeholders?: 'auto' | Array<{ token: string; label?: string }>
 }
 
 /**
