@@ -22,7 +22,8 @@ import {
   isNonDelimiterLine,
 } from './md-grammar.js';
 import type { DirectiveDef } from './directive-registry.js';
-import { getRegistry } from './directive-registry.js';
+import { getRegistry, registerDirective } from './directive-registry.js';
+import { walkthroughDef } from './directives/tut-walkthrough.js';
 
 // ─── Error class ────────────────────────────────────────────────────────────
 
@@ -1047,3 +1048,6 @@ export function renderDirectivesAsText(
 
   return lines.join('\n');
 }
+
+// [task5] Register walkthrough container directive
+registerDirective(walkthroughDef);

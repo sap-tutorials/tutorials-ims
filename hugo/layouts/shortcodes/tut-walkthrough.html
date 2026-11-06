@@ -1,0 +1,11 @@
+{{/*
+  tut-walkthrough — renders a paired code+notes walkthrough.
+  Receives: code (fenced code block markdown), notes (numbered list markdown).
+  Emitted by expandDirectives when a :::walkthrough container directive is expanded.
+  Security note: .Get values are HTML-escaped by escapeShortcodeParam before arriving here.
+  The | markdownify call is safe — Hugo's Goldmark renders markdown to HTML.
+*/}}
+<div class="tut-walkthrough" data-walkthrough>
+  <div class="tut-walkthrough-code">{{ .Get "code" | markdownify }}</div>
+  <div class="tut-walkthrough-notes">{{ .Get "notes" | markdownify }}</div>
+</div>

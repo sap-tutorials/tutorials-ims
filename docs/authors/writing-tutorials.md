@@ -524,6 +524,133 @@ entity Books : managed {
 \`\`\`
 ```
 
+The platform extends standard fenced code blocks with five additional features described below.
+
+#### 3.6.1 Console blocks
+
+Tag a fence `console`, `shell-session`, or `terminal-session` — or add `{prompt}` to any language fence — to enable **prompt/output separation**. Lines starting with a recognised prompt (`$`, `>`, `PS>`, `#`) are commands; all other lines are visually dimmed output. The copy button copies **only the command lines**, with prompts stripped.
+
+Continuation: a command line ending with `\` folds with the next continuation line into one copyable command.
+
+```markdown
+\`\`\`console
+$ cf login -a https://api.cf.eu10.hana.ondemand.com
+API endpoint: https://api.cf.eu10.hana.ondemand.com
+$ cf target -s dev
+org: myorg  space: dev
+\`\`\`
+```
+
+Copied text: `cf login -a https://api.cf.eu10.hana.ondemand.com\ncf target -s dev`
+
+Existing `bash` fences **without** `{prompt}` are unchanged.
+
+#### 3.6.2 Diff and focus markers
+
+Add trailing comment markers to individual lines to annotate diffs without changing the code itself. The markers are stripped from the rendered display.
+
+| Marker | Effect |
+|--------|--------|
+| `// [!code ++]` | Line is **added** (green highlight) |
+| `// [!code --]` | Line is **removed** (red, struck-through, excluded from copy) |
+| `// [!code focus]` | Line is **focused** (non-focused lines dimmed until hover) |
+| `// [!code highlight]` | Line is **highlighted** (yellow accent) |
+
+Comment syntax adapts to the language: `//` for JS/TS/Go/Java, `#` for Python/YAML/Bash, `<!--` for HTML/XML.
+
+```markdown
+\`\`\`js
+function greet(name) { // [!code --]
+function greet(name = 'World') { // [!code ++]
+  return \`Hello, \${name}!\`
+}
+\`\`\`
+```
+
+Copy default: the **final code** (removed lines excluded, markers stripped). Use `{copy=raw}` to copy source with markers intact, useful for teaching diffs.
+
+#### 3.6.3 Fill-in placeholders
+
+When a tutorial uses values that are **different for every reader but not a personalised variable** (e.g. `<YOUR_SUBACCOUNT_ID>`), opt in to placeholder detection. The platform converts each token into a fillable chip backed by the variables system — filling it once updates every occurrence and the value persists across page refreshes.
+
+**Auto-detect** (recommended):
+
+```yaml
+placeholders: auto
+```
+
+The parser scans for tokens matching `<YOUR_…>`, `<MY_…>`, or `<THREE_OR_MORE_UPPERCASE_CHARS>`. It skips TypeScript/Java generics such as `Array<T>` or `List<String>`.
+
+**Explicit list** (when auto-detection finds false positives):
+
+```yaml
+placeholders:
+  - token: <YOUR_SUBACCOUNT_ID>
+    label: Your BTP subaccount ID
+  - token: <MY_CF_SPACE>
+    label: Your Cloud Foundry space name
+```
+
+Unfilled placeholders display and copy as the original token text (e.g. `<YOUR_SUBACCOUNT_ID>`).
+
+#### 3.6.4 File tree fences
+
+Tag a fence `tree` to render a directory structure as an accessible, collapsible tree:
+
+```markdown
+\`\`\`tree
+my-project/
+  package.json
+  src/
+    index.ts
++ srv/
++   cat-service.ts  # new: CAP service handler
+~ db/schema.cds     # modified: added new entity
+- old-handler.js    # deleted
+\`\`\`
+```
+
+**Syntax:**
+- Indentation (2-space) or standard box-drawing characters (`├──`, `└──`, `│`) indicate hierarchy.
+- Trailing `/` marks a folder.
+- Leading `+` / `~` / `-` prefixes mark new / modified / deleted items (rendered in green / blue / red).
+- `  # text` (two or more spaces then `#`) adds an inline annotation.
+
+The copy button returns the **plain ASCII tree source**.
+
+#### 3.6.5 Walkthroughs (`:::walkthrough`)
+
+A **walkthrough** pairs a code fence with an ordered list of notes. Each note starts with a line range in braces. Clicking or keyboard-navigating a note highlights the corresponding lines in the code.
+
+```markdown
+:::walkthrough
+\`\`\`js
+import cds from '@sap/cds'
+
+const app = cds.connect.to('catalog')
+const { Books } = app.entities
+
+app.on('READ', Books, req => {
+  return app.read(Books).where({ ID: req.data.ID })
+})
+\`\`\`
+
+1. {1} Import the CAP SDK
+2. {3} Connect to the catalog service
+3. {4} Destructure the `Books` entity
+4. {6-8} Register a READ handler and return the result
+:::
+```
+
+**Rules:**
+- The body must contain **exactly one** fenced code block followed by a numbered list.
+- Each list item must start with `{N}` or `{N-M}` where N and M are 1-based line numbers within the fence.
+- Line references out of bounds fail the **build** with `directive/invalid-attr`.
+
+For plain-text consumers (MCP, AI tools), the walkthrough renders as the raw code fence followed by notes prefixed `(lines N–M) `.
+
+---
+
 ### 3.7 Personalize with variables
 
 When a tutorial contains a value that is **different for every reader** — most often a workshop group or seat number — declare it as a *variable*. The reader types it once into a field at the top of the page and the platform substitutes it **live** into every marked occurrence: prose, inline code, and copy-pasteable fenced code blocks alike. No more "replace `XXX` everywhere" instructions.

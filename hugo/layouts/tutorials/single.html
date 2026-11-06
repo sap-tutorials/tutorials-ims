@@ -57,6 +57,10 @@
 <script src="{{ $taskLists.RelPermalink }}" defer></script>
 {{ $hints := resources.Get "js/callout-hints.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $hints.RelPermalink }}" defer></script>
+{{- if .Params.hasWalkthrough -}}
+{{ $wt := resources.Get "js/code-walkthrough.ts" | js.Build (dict "minify" true) }}
+<script src="{{ $wt.RelPermalink }}" defer></script>
+{{- end -}}
 <script type="module" src="{{ partial "island-src.html" "nav-dropdown" }}"></script>
 {{ if not site.Params.qa }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip-launcher" }}"></script>{{ end }}
 {{ end }}

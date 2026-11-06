@@ -2941,6 +2941,44 @@ html.dark .code-block-body .chroma .err {
   background-color: transparent;
 }
 
+/* Console blocks — prompt/output/continuation line styling */
+.cl-out { opacity: 0.5; user-select: none; }
+.cl-cmd { /* default: inherit */ }
+.cl-cont { padding-left: 1.5em; }
+html.dark .cl-out { opacity: 0.4; }
+
+/* Diff markers */
+.diff-added  { background: rgba(0,200,80,.12); display: block; }
+.diff-removed { background: rgba(220,50,50,.12); display: block; text-decoration: line-through; opacity: .6; }
+.diff-highlight { background: rgba(200,160,0,.12); display: block; }
+.diff-legend { font-size: .75em; opacity: .6; margin-left: auto; padding-right: .25rem; }
+/* Focus: dim all lines until block is hovered */
+.code-block-body:has(.diff-focus):not(:hover) .line:not(.diff-focus) { opacity: .35; }
+html.dark .diff-added  { background: rgba(0,200,80,.18); }
+html.dark .diff-removed { background: rgba(220,50,50,.18); }
+html.dark .diff-highlight { background: rgba(200,160,0,.18); }
+
+/* Tree fences */
+[data-tree] [role="tree"] { list-style: none; padding-left: 0; margin: 0; font-family: var(--sapFontCodeFamily, monospace); font-size: .9em; }
+[data-tree] [role="treeitem"] { display: block; padding: .1rem 0; white-space: pre; }
+.tree-new      { color: var(--sapPositiveColor, #256f3a); }
+.tree-modified { color: var(--sapInformativeColor, #0064d9); }
+.tree-deleted  { color: var(--sapNegativeColor, #aa0808); opacity: .65; text-decoration: line-through; }
+.tree-annotation { opacity: .55; font-size: .85em; margin-left: .75rem; font-style: italic; }
+
+/* Walkthrough directive */
+.tut-walkthrough { display: grid; grid-template-columns: 1fr; gap: 1rem; margin: 1.5rem 0; }
+@media (min-width: 1024px) {
+  .tut-walkthrough { grid-template-columns: 1fr 1fr; align-items: start; }
+  .tut-walkthrough-code { position: sticky; top: 4rem; }
+}
+.tut-walkthrough-notes ol, .tut-walkthrough-notes ul { padding-left: 1.25rem; }
+.tut-walkthrough-notes li { cursor: pointer; padding: .25rem .5rem; border-radius: .25rem; transition: background .15s; }
+.tut-walkthrough-notes li.wt-active,
+.tut-walkthrough-notes li:hover { background: var(--sapHighlightColor, #0064d9); color: #fff; }
+.wt-hl { background: rgba(0,100,220,.15); display: block; }
+html.dark .wt-hl { background: rgba(100,180,255,.2); }
+
 /* Chroma readability overrides (dark mode).
  * Hugo's `gen chromastyles --style=github-dark` emits empty rules for
  * unstyled tokens (.p, .n, .nx, .x, .na, .nb, .bp), expecting them to
