@@ -333,3 +333,191 @@ describe('resolveChoice — resolution order', () => {
     expect(result).toBe('Node.js');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Picker bar — DOM-driven tests (Task 5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a minimal DOM representing two sync-group strips, each with
+ * Node.js and Java panels, and a picker bar with two buttons.
+ *
+ * Strip HTML structure mirrors what Task 4 shortcodes emit:
+ *   <div class="option-tabs" data-sync-key="runtime">
+ *     <div class="option-tabs__bar">
+ *       <button class="option-tabs__btn" data-sync-value="Node.js" is-selected>Node.js</button>
+ *       <button class="option-tabs__btn" data-sync-value="Java">Java</button>
+ *     </div>
+ *     <div class="option-tabs__panel" data-sync-value="Node.js">…</div>
+ *     <div class="option-tabs__panel" data-sync-value="Java" hidden>…</div>
+ *   </div>
+ *
+ * Picker bar structure (what Task 5 adds to the Hugo template):
+ *   <div class="sync-picker" data-sync-picker data-sync-key="runtime">
+ *     <ui5-segmented-button>
+ *       <ui5-segmented-button-item data-sync-value="Node.js" pressed>Node.js</ui5-segmented-button-item>
+ *       <ui5-segmented-button-item data-sync-value="Java">Java</ui5-segmented-button-item>
+ *     </ui5-segmented-button>
+ *   </div>
+ *   <div aria-live="polite" aria-atomic="true" class="sync-announce" data-sync-announce></div>
+ */
+function buildTwoStripDOM(opts: {
+  strip1Values?: string[];
+  strip2Values?: string[];
+  pickerValues?: string[];
+  initialChoice?: string;
+  oneStripOnly?: boolean;
+} = {}) {
+  const {
+    strip1Values = ['Node.js', 'Java'],
+    strip2Values = ['Node.js', 'Java'],
+    pickerValues = ['Node.js', 'Java'],
+    initialChoice = 'Node.js',
+    oneStripOnly = false,
+  } = opts;
+
+  function makeStrip(values: string[], active: string): string {
+    const buttons = values.map(v =>
+      `<button class="option-tabs__btn" data-sync-value="${v}"${v === active ? ' is-selected' : ''}>${v}</button>`
+    ).join('');
+    const panels = values.map(v =>
+      `<div class="option-tabs__panel" data-sync-value="${v}"${v === active ? '' : ' hidden'}>Content for ${v}</div>`
+    ).join('');
+    return `<div class="option-tabs" data-sync-key="runtime">
+      <div class="option-tabs__bar">${buttons}</div>
+      ${panels}
+    </div>`;
+  }
+
+  const pickerItems = pickerValues.map(v =>
+    `<ui5-segmented-button-item data-sync-value="${v}"${v === initialChoice ? ' pressed' : ''}>${v}</ui5-segmented-button-item>`
+  ).join('');
+
+  const strip1 = makeStrip(strip1Values, initialChoice);
+  const strip2 = oneStripOnly ? '' : makeStrip(strip2Values, initialChoice);
+
+  const picker = `<div class="sync-picker" data-sync-picker data-sync-key="runtime">
+    <ui5-segmented-button>
+      ${pickerItems}
+    </ui5-segmented-button>
+  </div>`;
+
+  const liveRegion = `<div aria-live="polite" aria-atomic="true" class="sync-announce" data-sync-announce></div>`;
+
+  document.body.innerHTML = `${picker}${liveRegion}${strip1}${strip2}`;
+}
+
+describe('picker bar — DOM integration (Task 5)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    document.body.innerHTML = '';
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('changing picker to Java activates Java panels in both strips', async () => {
+    buildTwoStripDOM({ initialChoice: 'Node.js' });
+
+    const { __test__ } = await import('../../hugo/assets/js/sync-groups');
+
+    // Bootstrap the picker bar runtime
+    __test__.initPickerBars();
+
+    // Simulate clicking "Java" in the picker bar
+    const javaItem = document.querySelector('[data-sync-picker] [data-sync-value="Java"]') as HTMLElement;
+    expect(javaItem).not.toBeNull();
+    javaItem.click();
+
+    // All strips for "runtime" should now show Java (only content strips, not picker bars)
+    const strips = document.querySelectorAll('.option-tabs[data-sync-key="runtime"]');
+    expect(strips).toHaveLength(2);
+
+    for (const strip of strips) {
+      // Java button should be is-selected
+      const javaBtn = strip.querySelector('[data-sync-value="Java"]') as HTMLElement;
+      expect(javaBtn).not.toBeNull();
+      expect(javaBtn.hasAttribute('is-selected')).toBe(true);
+      // Node.js button should NOT be is-selected
+      const nodeBtn = strip.querySelector('[data-sync-value="Node.js"]') as HTMLElement;
+      expect(nodeBtn?.hasAttribute('is-selected')).toBe(false);
+      // Java panel should be visible (no hidden attr)
+      const javaPanel = strip.querySelector('.option-tabs__panel[data-sync-value="Java"]') as HTMLElement;
+      expect(javaPanel?.hasAttribute('hidden')).toBe(false);
+      // Node.js panel should be hidden
+      const nodePanel = strip.querySelector('.option-tabs__panel[data-sync-value="Node.js"]') as HTMLElement;
+      expect(nodePanel?.hasAttribute('hidden')).toBe(true);
+    }
+  });
+
+  it('a strip lacking the active sync value shows a placeholder (no silent substitution)', async () => {
+    // Strip 1 has Node.js + Java; Strip 2 only has Node.js (missing Java)
+    buildTwoStripDOM({
+      strip1Values: ['Node.js', 'Java'],
+      strip2Values: ['Node.js'],         // Java is absent here
+      pickerValues: ['Node.js', 'Java'],
+      initialChoice: 'Node.js',
+    });
+
+    const { __test__ } = await import('../../hugo/assets/js/sync-groups');
+    __test__.initPickerBars();
+
+    // Switch to Java
+    const javaItem = document.querySelector('[data-sync-picker] [data-sync-value="Java"]') as HTMLElement;
+    javaItem.click();
+
+    // Strip 2 should show a placeholder element (not silently switch to Node.js)
+    // Use class-scoped selector to exclude the picker bar itself (which also has data-sync-key)
+    const strips = document.querySelectorAll('.option-tabs[data-sync-key="runtime"]');
+    const strip2 = strips[1] as HTMLElement;
+    const placeholder = strip2.querySelector('[data-sync-missing-placeholder]');
+    expect(placeholder).not.toBeNull();
+    // Placeholder must name the missing variant
+    expect(placeholder!.textContent).toMatch(/Java/);
+    // Placeholder must list available values
+    expect(placeholder!.textContent).toMatch(/Node\.js/);
+    // Strip 2 should NOT have activated a Java panel (no Java panel exists to activate)
+    const javaPanel = strip2.querySelector('.option-tabs__panel[data-sync-value="Java"]');
+    expect(javaPanel).toBeNull();
+  });
+
+  it('picker bar is hidden when only one strip has the sync key', async () => {
+    buildTwoStripDOM({ oneStripOnly: true });
+
+    const { __test__ } = await import('../../hugo/assets/js/sync-groups');
+    __test__.initPickerBars();
+
+    const picker = document.querySelector('[data-sync-picker]') as HTMLElement;
+    expect(picker).not.toBeNull();
+    // Should be hidden: either hidden attr or display:none style or aria-hidden
+    const isHidden =
+      picker.hasAttribute('hidden') ||
+      picker.style.display === 'none' ||
+      picker.getAttribute('aria-hidden') === 'true';
+    expect(isHidden).toBe(true);
+  });
+
+  it('aria-live region is announced after a choice change', async () => {
+    buildTwoStripDOM({ initialChoice: 'Node.js' });
+
+    const { __test__ } = await import('../../hugo/assets/js/sync-groups');
+    __test__.initPickerBars();
+
+    const liveRegion = document.querySelector('[data-sync-announce]') as HTMLElement;
+    expect(liveRegion).not.toBeNull();
+
+    // Before any change, region may be empty
+    const before = liveRegion.textContent ?? '';
+
+    // Switch to Java
+    const javaItem = document.querySelector('[data-sync-picker] [data-sync-value="Java"]') as HTMLElement;
+    javaItem.click();
+
+    // After change, live region must have non-empty text (announces the selection)
+    const after = liveRegion.textContent ?? '';
+    expect(after).not.toBe(before);
+    expect(after.trim().length).toBeGreaterThan(0);
+    expect(after).toMatch(/Java/i);
+  });
+});

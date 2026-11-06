@@ -375,6 +375,30 @@
             </ui5-segmented-button>
           </div>
           {{ end }}
+          {{/* [synced-tabs] Page-level sync-group picker bars — one per sync key.
+               Rendered only when the tutorial declares at least one sync group key
+               (syncKeysUsed is a non-empty slice). Each picker shows the union of
+               canonical values for that key, sourced from .Params.syncGroups.
+               sync-groups.ts hides the picker when fewer than 2 strips on the page
+               share that key, so rendering extra pickers for single-strip tutorials
+               is safe — they are hidden client-side without layout shift. */}}
+          {{ if .Params.syncKeysUsed }}
+          <div aria-live="polite" aria-atomic="true" class="sync-announce" data-sync-announce></div>
+          {{ range .Params.syncKeysUsed }}
+          {{ $key := . }}
+          {{ $group := index $.Params.syncGroups $key }}
+          {{ if $group }}
+          <div class="sync-picker" data-sync-picker data-sync-key="{{ $key }}">
+            <span class="sync-picker__label">{{ $key | title }}:</span>
+            <ui5-segmented-button accessible-name="{{ $key | title }}">
+              {{ range $group.values }}
+              <ui5-segmented-button-item data-sync-value="{{ . }}">{{ . }}</ui5-segmented-button-item>
+              {{ end }}
+            </ui5-segmented-button>
+          </div>
+          {{ end }}
+          {{ end }}
+          {{ end }}
           {{/* U2: Fiori-native wizard step indicator. Renders only for ≥3-step tutorials
                (per ui5-wizard guidelines). The wizard's content slots stay empty — the
                accordion below holds the actual content. step-change scrolls to anchor. */}}
@@ -536,6 +560,14 @@
 {{ if and .Params.hasOsOptions (not site.Params.previewMode) }}
 {{ $osToggle := resources.Get "js/os-toggle.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $osToggle.RelPermalink }}" defer></script>
+{{ end }}
+{{/* [synced-tabs] Load the sync-groups runtime when the tutorial uses sync groups.
+     Gated on syncKeysUsed (set by the content parser) so tutorial pages without
+     option sync groups ship no extra script fetch. Also excluded from previewMode
+     where client-side interactivity is suppressed. */}}
+{{ if and .Params.syncKeysUsed (not site.Params.previewMode) }}
+{{ $syncGroups := resources.Get "js/sync-groups.ts" | js.Build (dict "minify" true) }}
+<script src="{{ $syncGroups.RelPermalink }}" defer></script>
 {{ end }}
 <script type="module" src="{{ partial "island-src.html" "nav-dropdown" }}"></script>
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip-launcher" }}"></script>{{ end }}
