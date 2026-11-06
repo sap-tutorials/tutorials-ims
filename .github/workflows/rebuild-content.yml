@@ -383,6 +383,90 @@ jobs:
             prod) echo "srv_url=${{ secrets.CAP_SRV_URL_PROD }}" >> "$GITHUB_OUTPUT" ;;
           esac
 
+      # Expand _snippets/ file changes to the affected tutorial slugs so a
+      # single-snippet edit triggers a slug-targeted (~2 min) rebuild instead
+      # of a full-corpus (~10 min) one. Runs only on repository_dispatch (the
+      # real author hotfix trigger); workflow_dispatch never carries changed_files.
+      #
+      # The manifest is keyed by snippet path → [slug, …] and is published by
+      # fetch-tutorials under the reserved key `_manifest_snippet-deps`. The
+      # deployed srv exposes it at GET /content/manifest/snippet-deps. Fail-open:
+      # any error (missing SRV_URL, network, empty manifest) skips expansion and
+      # the upstream mode step's effective value is used unchanged.
+      - name: Expand snippet dependencies to affected slugs
+        id: snippet-deps
+        if: github.event_name == 'repository_dispatch'
+        env:
+          CHANGED_FILES: ${{ github.event.client_payload.changed_files }}
+          SRV_URL: ${{ steps.srv.outputs.srv_url }}
+        run: |
+          # Only act when _snippets/ files changed
+          if [ -z "$CHANGED_FILES" ] || ! echo "$CHANGED_FILES" | grep -qE '_snippets/[^/]+\.md$'; then
+            echo "No snippet file changes detected — skipping dep expansion"
+            exit 0
+          fi
+
+          SNIPPET_FILES=$(echo "$CHANGED_FILES" | grep -E '_snippets/[^/]+\.md$' || true)
+          echo "Snippet changes detected in: $SNIPPET_FILES"
+
+          # Fetch snippet-deps manifest from deployed srv
+          if [ -z "$SRV_URL" ]; then
+            echo "::warning title=snippet-deps::SRV_URL not set — falling back to upstream mode"
+            exit 0
+          fi
+
+          DEPS_JSON=$(curl -sf --max-time 10 "${SRV_URL}/content/manifest/snippet-deps" || echo "")
+          if [ -z "$DEPS_JSON" ] || [ "$DEPS_JSON" = "null" ] || [ "$DEPS_JSON" = "{}" ]; then
+            echo "::warning title=snippet-deps::Manifest unavailable or empty — falling back to upstream mode"
+            exit 0
+          fi
+
+          # Map changed snippet paths to affected tutorial slugs using jq.
+          # The manifest keys are snippet paths (e.g. sap-tutorials/repo/_snippets/foo.md);
+          # we match by suffix so any path form resolves correctly.
+          AFFECTED=$(echo "$DEPS_JSON" | jq -r --arg files "$CHANGED_FILES" '
+            ($files | gsub("[\\t\\r\\n ]+";" ") | split(" ") | map(select(length > 0))) as $changed |
+            [to_entries[] | select(.key as $k | $changed[] | test($k | @sh | ltrimstr("'"'"'") | rtrimstr("'"'"'"); "g")) | .value[]] |
+            unique | join(",")
+          ' 2>/dev/null || echo "")
+
+          # Validate: only accept slug-clean output (a-z0-9,-)
+          case "$AFFECTED" in
+            *[!a-z0-9,-]* | *,,* | ,* | *, ) AFFECTED="" ;;
+          esac
+
+          if [ -n "$AFFECTED" ]; then
+            echo "snippet_affected_slugs=$AFFECTED" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Snippet dep expansion::Snippet changes affect tutorials: $AFFECTED"
+          else
+            echo "::notice title=Snippet dep expansion::No tutorial deps found for changed snippets (or jq parse error)"
+          fi
+
+      # Apply snippet dep expansion to the effective rebuild mode. When the
+      # snippet-deps step found affected slugs, this step either unions them
+      # with an existing slug-targeted set or promotes a full/catalog-only run
+      # to slug-targeted. Downstream steps prefer these outputs when set.
+      - name: Override mode from snippet deps
+        id: mode-override
+        if: steps.snippet-deps.outputs.snippet_affected_slugs != ''
+        env:
+          SNIPPET_SLUGS: ${{ steps.snippet-deps.outputs.snippet_affected_slugs }}
+          CURRENT_EFFECTIVE: ${{ steps.mode.outputs.effective_mode }}
+          CURRENT_DISPATCH_SLUGS: ${{ steps.mode.outputs.dispatch_slugs || '' }}
+        run: |
+          if [ "$CURRENT_EFFECTIVE" = 'slug-targeted' ] && [ -n "$CURRENT_DISPATCH_SLUGS" ]; then
+            # Union existing dispatch slugs with snippet-affected slugs (deduplicate via sort -u)
+            MERGED=$(echo "${CURRENT_DISPATCH_SLUGS},${SNIPPET_SLUGS}" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')
+            echo "effective_mode=slug-targeted" >> "$GITHUB_OUTPUT"
+            echo "dispatch_slugs=${MERGED}" >> "$GITHUB_OUTPUT"
+            echo "::notice title=mode-override::Merged snippet slugs with dispatch slugs: $MERGED"
+          else
+            # Promote to slug-targeted
+            echo "effective_mode=slug-targeted" >> "$GITHUB_OUTPUT"
+            echo "dispatch_slugs=${SNIPPET_SLUGS}" >> "$GITHUB_OUTPUT"
+            echo "::notice title=mode-override::Promoted to slug-targeted via snippet deps: $SNIPPET_SLUGS"
+          fi
+
       # Cache the *materialized* node_modules (root + hugo-apps), not just the
       # npm download cache. `setup-node` `cache: npm` already warms ~/.npm, but
       # `npm ci` still spends ~48s extracting/linking 1680 packages + running
@@ -512,7 +596,7 @@ jobs:
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
           TUTORIAL_SLUG: ${{ inputs.slug || steps.mode.outputs.dispatch_slug }}
-          TUTORIAL_SLUGS: ${{ inputs.slugs || steps.mode.outputs.dispatch_slugs }}
+          TUTORIAL_SLUGS: ${{ inputs.slugs || steps.mode-override.outputs.dispatch_slugs || steps.mode.outputs.dispatch_slugs }}
           # [retired-slug-noop] Lets fetch-tutorials distinguish a human manual
           # dispatch (typo → fail-fast) from an auto-dispatched admin-write /
           # scheduled run (a retired-slug filter is "nothing to publish", exit 0).
@@ -1008,7 +1092,7 @@ jobs:
             --concurrency "${{ inputs.publish-concurrency || '4' }}" \
             --batch-size "${{ inputs.publish-batch-size || '25' }}" \
             ${{ inputs.force-publish == true && '--force' || '' }} \
-            ${{ (inputs.allow-revert == true && steps.mode.outputs.effective_mode == 'slug-targeted') && '--allow-revert' || '' }} \
+            ${{ (inputs.allow-revert == true && (steps.mode-override.outputs.effective_mode || steps.mode.outputs.effective_mode) == 'slug-targeted') && '--allow-revert' || '' }} \
             --verbose
         env:
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
@@ -1019,14 +1103,15 @@ jobs:
           # so the slug value never lands in the shell string. Empty in every
           # other mode → whole-catalog delta, unchanged. TUTORIAL_SLUG is the
           # already-resolved slug (inputs.slug || dispatch_slug).
-          PUBLISH_SLUG: ${{ steps.mode.outputs.effective_mode == 'slug-targeted' && (inputs.slug || steps.mode.outputs.dispatch_slug) || '' }}
+          PUBLISH_SLUG: ${{ (steps.mode-override.outputs.effective_mode || steps.mode.outputs.effective_mode) == 'slug-targeted' && (inputs.slug || steps.mode.outputs.dispatch_slug) || '' }}
           # Multi-slug variant of PUBLISH_SLUG. In slug-targeted mode, scope the
           # publish to exactly the changed slugs (publish-content.ts reads
           # PUBLISH_SLUGS as the --slugs fallback and keeps those N files via
           # filterToSlugs) instead of a whole-catalog delta. Empty in every
           # other mode. TUTORIAL_SLUGS is the already-resolved list
-          # (inputs.slugs || dispatch_slugs).
-          PUBLISH_SLUGS: ${{ steps.mode.outputs.effective_mode == 'slug-targeted' && (inputs.slugs || steps.mode.outputs.dispatch_slugs) || '' }}
+          # (inputs.slugs || dispatch_slugs). Prefers mode-override slugs (snippet
+          # dep expansion) over the original mode dispatch_slugs when set.
+          PUBLISH_SLUGS: ${{ (steps.mode-override.outputs.effective_mode || steps.mode.outputs.effective_mode) == 'slug-targeted' && (inputs.slugs || steps.mode-override.outputs.dispatch_slugs || steps.mode.outputs.dispatch_slugs) || '' }}
 
       # #1373 — synthetic watchdog. A green publish step is not proof rows
       # landed (the #1372 render-concepts 404 aborted AFTER an earlier
@@ -1106,14 +1191,14 @@ jobs:
       # needs its own key.
 
       - name: Refresh tutorial images (slug-targeted)
-        if: ${{ steps.publish.outcome == 'success' && steps.mode.outputs.effective_mode == 'slug-targeted' }}
+        if: ${{ steps.publish.outcome == 'success' && (steps.mode-override.outputs.effective_mode || steps.mode.outputs.effective_mode) == 'slug-targeted' }}
         continue-on-error: true
         env:
           CAP_BASE_URL:    ${{ steps.srv.outputs.srv_url }}
           CONTENT_API_KEY: ${{ steps.env.outputs.target == 'qa' && secrets.CONTENT_API_KEY_QA || secrets.CONTENT_API_KEY }}
           GITHUB_TOKEN:    ${{ steps.app-token.outputs.token || secrets.TUTORIALS_GITHUB_TOKEN }}
           REFRESH_SLUG:    ${{ inputs.slug || steps.mode.outputs.dispatch_slug }}
-          REFRESH_SLUGS:   ${{ inputs.slugs || steps.mode.outputs.dispatch_slugs }}
+          REFRESH_SLUGS:   ${{ inputs.slugs || steps.mode-override.outputs.dispatch_slugs || steps.mode.outputs.dispatch_slugs }}
         run: npx tsx scripts/backfill-images.ts --slug "$REFRESH_SLUG" --slugs "$REFRESH_SLUGS"
 
       - name: Refresh tutorial images (full catalog)

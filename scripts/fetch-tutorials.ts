@@ -6,7 +6,7 @@ import { hugoFrontmatterStringify as yamlStringify } from './lib/hugo-yaml.js'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
 import { composeTutorial } from './parsers/compose.js'
 import './parsers/directives/register-all.js' // side-effect: registers all content-reuse directives
-import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial, type DiscoverySource } from './parsers/github.js'
+import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, buildSnippetDeps, EXCLUDED_REPOS, type DiscoveredTutorial, type DiscoverySource } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache, type BrowseFeaturedEntry } from './parsers/cap.js'
 import {
   computeFeedFingerprint,
@@ -1928,6 +1928,35 @@ async function main() {
   mkdirSync(navJsonDir, { recursive: true })
   const navPath = join(navJsonDir, '_nav.json')
   writeFileSync(navPath, JSON.stringify(navData, null, 2), 'utf-8')
+
+  // ── Snippet-deps manifest (Task 7) ──────────────────────────────────────
+  // Build and cache a snippet-key → [dependent slugs] map so the rebuild
+  // workflow can expand _snippets/ file changes to only the affected tutorials
+  // (slug-targeted O(N)) rather than triggering a full ~10-min rebuild.
+  //
+  // This runs post-Phase-4 so navEntries is complete. The actual per-tutorial
+  // rawMd is not kept in memory after compose(); for now we pass an empty
+  // snippetMap (stub — buildSnippetDeps returns {} until the full impl lands
+  // in a later task). The cache file is picked up by publish-content.ts and
+  // uploaded to HANA as `_manifest_snippet-deps` for the workflow to fetch
+  // via GET /content/manifest/snippet-deps.
+  // TODO: pass real snippetMap from fetchSnippets() + rawMd per slug once
+  //       snippet pre-fetch is wired (content-reuse Task 8+).
+  try {
+    const snippetDeps = buildSnippetDeps(
+      new Map<string, string>(),
+      navEntries.map(n => ({ slug: n.slug, rawMd: '' })),
+    )
+    mkdirSync(CACHE_DIR, { recursive: true })
+    writeFileSync(
+      join(CACHE_DIR, 'snippet-deps.json'),
+      JSON.stringify(snippetDeps, null, 2),
+      'utf-8',
+    )
+    console.log(`[snippet-deps] wrote snippet-deps.json (${Object.keys(snippetDeps).length} snippet keys)`)
+  } catch (err) {
+    console.warn(`[snippet-deps] failed to build/write snippet-deps.json: ${err instanceof Error ? err.message : err}`)
+  }
 
   // ── Content-cache sidecar (Workstream C) ──
   // Persist the full post-Phase-4 navEntries + author rows + the feed fingerprint
