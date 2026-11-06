@@ -1129,11 +1129,51 @@ export async function fetchSnippets(
  * @returns SnippetDeps: snippet key → list of dependent slugs
  */
 export function buildSnippetDeps(
-  _snippetMap: Map<string, string>,
-  _tutorials: Array<{ slug: string; rawMd: string }>,
+  snippetMap: Map<string, string>,
+  tutorials: Array<{ slug: string; rawMd: string }>,
 ): Record<string, string[]> {
-  // Stub: full implementation in later tasks
-  return {}
+  const INCLUDE_RE = /:?:include\[([^\]]+)\]/g
+  const depsMap = new Map<string, Set<string>>()
+
+  for (const { slug, rawMd } of tutorials) {
+    if (!rawMd) continue
+
+    INCLUDE_RE.lastIndex = 0
+    let match: RegExpExecArray | null
+    while ((match = INCLUDE_RE.exec(rawMd)) !== null) {
+      const label = match[1]
+
+      // Resolve label to a snippet key using the same logic as resolveSnippetKey in include.ts
+      let key: string
+      if (label.startsWith('shared:')) {
+        // shared: prefix → shared/<name>
+        key = 'shared/' + label.slice(7)
+      } else if (snippetMap.has(label)) {
+        // Exact key match
+        key = label
+      } else {
+        // Suffix match: find a key ending with /_snippets/<label>
+        const suffix = `/_snippets/${label}`
+        const found = [...snippetMap.keys()].find(k => k.endsWith(suffix))
+        key = found ?? label
+      }
+
+      // Add slug to the dep set for this key (deduplicates automatically)
+      let slugSet = depsMap.get(key)
+      if (!slugSet) {
+        slugSet = new Set<string>()
+        depsMap.set(key, slugSet)
+      }
+      slugSet.add(slug)
+    }
+  }
+
+  // Convert Map<string, Set<string>> → Record<string, string[]>
+  const result: Record<string, string[]> = {}
+  for (const [key, slugSet] of depsMap) {
+    result[key] = [...slugSet]
+  }
+  return result
 }
 
 // ---------------------------------------------------------------------------
