@@ -1010,3 +1010,32 @@ export async function fetchRulesVr(slug: string, repo: string, branch: string): 
     return existsSync(cacheFile) ? readFileSync(cacheFile, 'utf-8') : null
   }
 }
+
+/**
+ * Fetch _snippets/ directory contents from GitHub repos.
+ * Returns Map<snippetKey, markdownSource>.
+ * Key format: `<repo>/_snippets/<name>` or `shared/<name>` for the shared repo.
+ * @returns Empty map (stub — full implementation in later tasks when SNIPPETS_ENABLED_REPOS is set)
+ */
+export async function fetchSnippets(
+  _repoNames: string[],
+  _token: string,
+): Promise<Map<string, string>> {
+  // Stub: full implementation fetches from GitHub API
+  // Set SNIPPETS_ENABLED_REPOS env var to enable per-repo snippet fetching
+  return new Map()
+}
+
+/**
+ * Scan tutorial sources for ::include[] references and build a dep map.
+ * @param snippetMap - snippet key → source map
+ * @param tutorials - array of { slug, rawMd }
+ * @returns SnippetDeps: snippet key → list of dependent slugs
+ */
+export function buildSnippetDeps(
+  _snippetMap: Map<string, string>,
+  _tutorials: Array<{ slug: string; rawMd: string }>,
+): Record<string, string[]> {
+  // Stub: full implementation in later tasks
+  return {}
+}

@@ -5,6 +5,7 @@ import { performance } from 'node:perf_hooks'
 import { hugoFrontmatterStringify as yamlStringify } from './lib/hugo-yaml.js'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
 import { composeTutorial } from './parsers/compose.js'
+import './parsers/directives/register-all.js' // side-effect: registers all content-reuse directives
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial, type DiscoverySource } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache, type BrowseFeaturedEntry } from './parsers/cap.js'
 import {
@@ -1256,6 +1257,9 @@ async function main() {
 
       const composed = composeTutorial(rawMd, {
         repo: t.repo, branch: t.branch, slug: t.slug, target, rewriteImages: true,
+        // TODO Task 6: pass real snippetMap from fetchSnippets() and catalogBySlug after navBySlug is built
+        snippetMap: new Map(),
+        catalogBySlug: undefined,
       })
       const { title, description, youWillLearn, prerequisites, level, frontmatter } = composed
 

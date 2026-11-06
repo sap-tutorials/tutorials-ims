@@ -26,6 +26,7 @@ import './directives/qa-only.js' // side-effect: registers qa-only directive
 import './directives/callout-directives.js' // side-effect: registers callout container + spoiler directives
 import './directives/index.js' // side-effect: registers rich-media directive barrel
 import './directives/ui.js' // side-effect: registers menu/kbd/icon/ui/ask directives
+import './directives/register-all.js' // side-effect: registers all content-reuse directives
 
 /**
  * Normalize line endings to LF. Catches CRLF (Windows / GitHub-via-Windows-
@@ -60,6 +61,17 @@ export interface ComposeOpts {
    * because it also writes sidecar JSON files. Preview is the only consumer.
    */
   rulesVr?: string
+  /**
+   * Snippet source map: snippetKey → raw markdown source.
+   * Populated by the fetch pipeline before `composeTutorial` is called.
+   * Forwarded to `expandDirectives` for the ::include directive.
+   */
+  snippetMap?: Map<string, string>
+  /**
+   * Slim catalog index keyed by tutorial slug. Used by :ref and similar
+   * directives to resolve titles and metadata without loading the full nav JSON.
+   */
+  catalogBySlug?: Map<string, { title: string; time: number; level?: string }>
 }
 
 export interface ComposeResult {
@@ -240,6 +252,8 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     channel,
     repo: opts.repo,
     branch: opts.branch,
+    snippetMap: opts.snippetMap,
+    catalogBySlug: opts.catalogBySlug,
   })
 
   const hasCompare = processedBody.includes('{{< tut-compare')

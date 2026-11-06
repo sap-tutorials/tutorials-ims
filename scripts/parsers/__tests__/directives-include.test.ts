@@ -7,8 +7,11 @@ import { extractFrontmatter } from '../frontmatter.js'
 import { expandDirectives } from '../directives.js'
 import type { ExpandDirectivesContext } from '../directives.js'
 import type { SnippetDeps } from '../types.js'
-import { resetRegistry, registerDirective } from '../directive-registry.js'
+import { resetRegistry, registerDirective, getRegistry } from '../directive-registry.js'
 import { INCLUDE_DEF } from '../directives/include.js'
+
+// Alias for use in tests that need to inspect the registry after registerAllDirectives
+const registryRef = getRegistry()
 
 describe('testedWith frontmatter parsing', () => {
   it('parses testedWith map from frontmatter', () => {
@@ -316,5 +319,54 @@ describe('::include expand hook', () => {
     }
     const result = expandDirectives('::include[shared:install-cf-cli]', ctx)
     expect(result).toContain('Install: cf CLI')
+  })
+})
+
+// ─── Task 6: ::include integration via registerAllDirectives ─────────────────
+
+import { registerAllDirectives } from '../directives/register-all.js'
+
+describe('::include integration via registerAllDirectives', () => {
+  beforeEach(() => {
+    resetRegistry()
+    registerAllDirectives()
+  })
+
+  it('inlines snippet content when snippetMap key is exact match', () => {
+    const snippetMap = new Map([['setup', 'Run: npm install']])
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test',
+      snippetMap,
+    }
+    const result = expandDirectives('::include[setup]', ctx)
+    expect(result).toContain('Run: npm install')
+    expect(result).not.toContain('::include')
+  })
+
+  it('inlines snippet via suffix match (repo/_snippets/name)', () => {
+    const snippetMap = new Map([['myrepo/_snippets/setup', 'Run: npm install']])
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test',
+      snippetMap,
+    }
+    const result = expandDirectives('::include[setup]', ctx)
+    expect(result).toContain('Run: npm install')
+  })
+
+  it('all directive names are registered', () => {
+    // After registerAllDirectives, all content-reuse directives should be in the registry
+    const reg = getRegistry()
+    expect(reg.has('include')).toBe(true)
+    expect(reg.has('tutorial-ref')).toBe(true)
+    expect(reg.has('note-ref')).toBe(true)
+    expect(reg.has('help-ref')).toBe(true)
+    expect(reg.has('api-ref')).toBe(true)
+    expect(reg.has('since')).toBe(true)
+    expect(reg.has('requires')).toBe(true)
+  })
+
+  it('registerAllDirectives is idempotent (no throw on double call)', () => {
+    // First call happened in beforeEach. A second call must not throw.
+    expect(() => registerAllDirectives()).not.toThrow()
   })
 })
