@@ -1,4 +1,5 @@
 import cds from '@sap/cds';
+import { spawnSync } from 'node:child_process';
 import { computePathBuckets, buildTrackMap, resolveEventMissionId } from '../srv/lib/event-path-buckets.js';
 
 const NS = 'com.sap.developers.ims';
@@ -197,6 +198,136 @@ export function renderAbandonmentSection(rows) {
   return lines.join('\n').trimEnd();
 }
 
+/**
+ * Email-domain + SAP-vs-external breakdown of the event's windowed TUTORIAL
+ * completers. Counts completions (COMPLETED/SUPERSEDED) in window for the
+ * event's tutorials, joined to Users.email.
+ * @param {object} event resolved Events row (needs startDate/endDate)
+ * @param {Array<{legacyId:number}>} tutorials
+ * @param {object} db
+ * @returns {Promise<{domains:Array<{domain:string,users:number,completions:number,perUser:number}>,sap:{users:number,completions:number},external:{users:number,completions:number}}>}
+ */
+export async function computeDomainBreakdown(event, tutorials, db) {
+  const { TaskRecords, Users } = cds.entities(NS);
+  const legacyIds = tutorials.map((t) => t.legacyId);
+  if (legacyIds.length === 0) {
+    return { domains: [], sap: { users: 0, completions: 0 }, external: { users: 0, completions: 0 } };
+  }
+
+  const records = await db.run(
+    SELECT.from(TaskRecords)
+      .columns('user_ID')
+      .where({ taskType: 'TUTORIAL', status: { in: ['COMPLETED', 'SUPERSEDED'] }, taskLegacyId: { in: legacyIds } })
+      .and(`completionDate >=`, event.startDate)
+      .and(`completionDate <=`, event.endDate),
+  );
+  if (records.length === 0) {
+    return { domains: [], sap: { users: 0, completions: 0 }, external: { users: 0, completions: 0 } };
+  }
+
+  const userIds = [...new Set(records.map((r) => r.user_ID).filter(Boolean))];
+  const users = await db.run(SELECT.from(Users).columns('ID', 'email').where({ ID: { in: userIds } }));
+  const emailById = new Map(users.map((u) => [u.ID, (u.email || '').toLowerCase()]));
+
+  // per-domain: user set + completion count
+  const byDomain = new Map(); // domain → { users:Set, completions:number }
+  const sapUsers = new Set();
+  let sapCompletions = 0;
+  const extUsers = new Set();
+  let extCompletions = 0;
+
+  for (const r of records) {
+    const email = emailById.get(r.user_ID) || '';
+    const domain = email.includes('@') ? email.slice(email.indexOf('@') + 1) : '(unknown)';
+    if (!byDomain.has(domain)) byDomain.set(domain, { users: new Set(), completions: 0 });
+    const d = byDomain.get(domain);
+    d.users.add(r.user_ID);
+    d.completions += 1;
+    if (domain === 'sap.com') {
+      sapUsers.add(r.user_ID);
+      sapCompletions += 1;
+    } else {
+      extUsers.add(r.user_ID);
+      extCompletions += 1;
+    }
+  }
+
+  const domains = [...byDomain.entries()]
+    .map(([domain, v]) => ({
+      domain,
+      users: v.users.size,
+      completions: v.completions,
+      perUser: Math.round((v.completions / v.users.size) * 10) / 10,
+    }))
+    .sort((a, b) => b.users - a.users || b.completions - a.completions);
+
+  return {
+    domains,
+    sap: { users: sapUsers.size, completions: sapCompletions },
+    external: { users: extUsers.size, completions: extCompletions },
+  };
+}
+
+/** Markdown for section 3 — top domains by user count + most-engaged by per-user. */
+export function renderDomainSection(breakdown) {
+  const { domains } = breakdown;
+  const lines = ['## Completer email domains', ''];
+  if (domains.length === 0) {
+    lines.push('_No completers in the event window._');
+    return lines.join('\n');
+  }
+  const totalUsers = domains.reduce((s, d) => s + d.users, 0);
+  const totalCompletions = domains.reduce((s, d) => s + d.completions, 0);
+  lines.push(`${nf.format(totalUsers)} distinct completers across ${nf.format(domains.length)} email domains.`, '');
+  lines.push('### Top domains by user count', '', '| Domain | Users | Completions | Avg/user |', '| --- | --- | --- | --- |');
+  for (const d of domains.slice(0, 15)) {
+    lines.push(`| ${d.domain} | ${nf.format(d.users)} | ${nf.format(d.completions)} | ${d.perUser} |`);
+  }
+  lines.push('', '### Most engaged by completions/user', '', '| Domain | Completions/user |', '| --- | --- |');
+  const engaged = [...domains].filter((d) => d.users >= 3).sort((a, b) => b.perUser - a.perUser).slice(0, 10);
+  for (const d of engaged) lines.push(`| ${d.domain} | ${d.perUser} |`);
+  lines.push('', `_Total completions across domains: ${nf.format(totalCompletions)}._`);
+  return lines.join('\n');
+}
+
+/** Markdown for section 4 — SAP employees vs external. */
+export function renderAudienceSection(breakdown) {
+  const { sap, external } = breakdown;
+  const totalUsers = sap.users + external.users;
+  const totalCompletions = sap.completions + external.completions;
+  const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
+  return [
+    '## SAP employees vs external',
+    '',
+    '| Audience | Users | Completions |',
+    '| --- | --- | --- |',
+    `| SAP employees (@sap.com) | ${nf.format(sap.users)} | ${nf.format(sap.completions)} |`,
+    `| External | ${nf.format(external.users)} | ${nf.format(external.completions)} |`,
+    '',
+    `SAP ${pct(sap.users, totalUsers)}% of users / ${pct(sap.completions, totalCompletions)}% of completions; external the rest.`,
+  ].join('\n');
+}
+
+/**
+ * Refuse unless `cf target` reports the prod space. Ports deploy-mta.cjs
+ * guardCfTarget: parse `space:` from `cf target`, compare case-insensitively.
+ * @param {() => {status:number,stdout:string,stderr?:string}} [runCf] injectable cf runner (for tests)
+ */
+export function assertCfTargetProd(runCf) {
+  const run = runCf ?? (() => {
+    const r = spawnSync('cf', ['target'], { encoding: 'utf8' });
+    return { status: r.status ?? 1, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+  });
+  const t = run();
+  if (t.status !== 0) {
+    throw new Error(`\`cf target\` failed — are you logged in? Run \`cf login\`.\n${t.stdout}${t.stderr ?? ''}`);
+  }
+  const space = (t.stdout.match(/space:\s*(\S+)/i) || [])[1] || '';
+  if (space.toLowerCase() !== 'prod') {
+    throw new Error(`cf target space is "${space || '(unknown)'}", expected "prod". Fix: cf target -s prod`);
+  }
+}
+
 function renderHeader(event) {
   const win = event.startDate && event.endDate
     ? `${event.startDate} → ${event.endDate}`
@@ -237,6 +368,10 @@ export async function buildReport(eventId, db) {
   const abandonment = await computeAbandonment(event, tutorials, db);
   parts.push(renderAbandonmentSection(abandonment));
 
+  const breakdown = await computeDomainBreakdown(event, tutorials, db);
+  parts.push(renderDomainSection(breakdown));
+  parts.push(renderAudienceSection(breakdown));
+
   return parts.join('\n');
 }
 
@@ -245,6 +380,7 @@ async function main() {
   const wantJson = argv.includes('--json');
   const input = argv.find((a) => !a.startsWith('--'));
   const eventId = parseEventId(input);
+  assertCfTargetProd(); // fail closed before touching the DB
   const { db } = await bootstrap();
   const md = await buildReport(eventId, db);
   console.log(md);
