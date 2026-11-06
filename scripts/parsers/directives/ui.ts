@@ -10,10 +10,14 @@
 // Side-effect: call registerUiDirectives() once at startup.
 // In tests: resetRegistry(); registerUiDirectives()
 
+import { createRequire } from 'node:module';
 import { registerDirective, getRegistry } from '../directive-registry.js';
 import { DirectiveParseError } from '../directives.js';
 import type { DirectiveNode } from '../directives.js';
-import iconAllowlist from './icon-allowlist.json' with { type: 'json' };
+
+const _require = createRequire(import.meta.url);
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const iconAllowlist: string[] = _require('./icon-allowlist.json') as string[];
 
 // ─── Key token constants ──────────────────────────────────────────────────────
 

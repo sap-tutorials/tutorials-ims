@@ -8,12 +8,17 @@
 //   - when the line already contains :kbd[ (author already migrated)
 //   - when the line is inside a fenced code block (arrives as a blank line
 //     per the lint-tutorial-markdown fence-redaction contract)
+//   - when the match appears after a URL separator (?, /, =, &) to avoid
+//     false-positives on URLs with query parameters
 //
 // Severity: 'notice' — purely advisory, does not block the build.
 
 import type { LintFinding } from '../lint-tutorial-markdown.js'
 
-const PATTERN = /\b(Ctrl|Cmd|Command|Alt|Option|Shift|Win)\+\S+/gi
+// Negative lookbehind on URL separators avoids matching query-string fragments
+// like "?Shift+something" or "path/Win+32". The `\b` word boundary ensures we
+// don't match mid-word (e.g. "unshift+1").
+const PATTERN = /(?<![?/=&])\b(Ctrl|Cmd|Command|Alt|Option|Shift|Win)\+\S+/gi
 
 export const directiveSuggestKbdRule = {
   id: 'directive-suggest-kbd',

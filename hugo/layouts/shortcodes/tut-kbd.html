@@ -16,4 +16,4 @@
 
   Security note: .Get uses Hugo's default HTML auto-escaping.
 */}}
-<kbd class="tut-kbd" data-kbd data-win="{{ .Get "win" }}" data-mac="{{ .Get "mac" }}" data-linux="{{ .Get "linux" }}">{{ .Get "win" }}</kbd>
+<kbd class="tut-kbd" data-kbd data-win="{{ .Get "win" }}" data-mac="{{ .Get "mac" }}" data-linux="{{ .Get "linux" }}" aria-label="{{ .Get "win" }}">{{ .Get "win" }}</kbd>
