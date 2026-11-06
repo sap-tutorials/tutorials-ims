@@ -77,6 +77,8 @@ export interface ComposeResult {
   osList: string[]
   /** True when the tutorial body contains at least one tut-compare shortcode. */
   hasCompare?: boolean
+  /** True when the tutorial body contains at least one tut-cast shortcode. */
+  hasCast?: boolean
   intro: string
   /**
    * [#2811] Validated tutorial variables declared in source frontmatter.
@@ -227,6 +229,7 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   })
 
   const hasCompare = processedBody.includes('{{< tut-compare')
+  const hasCast = processedBody.includes('{{< tut-cast')
 
   // [#1637] Prerequisites bypassed the body's image-URL rewriter and, because
   // its content is markdownified as-is, markdown images/links inside a raw
@@ -398,6 +401,7 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     // Linux, BAS — never author-label order.
     osList: OS_VALUES.filter((os) => osListSet.has(os)),
     ...(hasCompare ? { hasCompare: true } : {}),
+    ...(hasCast ? { hasCast: true } : {}),
     intro,
     ...(tutorialVariables ? { variables: tutorialVariables } : {}),
     syncKeysUsed: syncKeysUsedSet,
