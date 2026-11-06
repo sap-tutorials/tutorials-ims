@@ -70,7 +70,7 @@ Relative `src` values are resolved to raw GitHub URLs by the same rules as block
 
 ## Before/After Compare
 
-Use `::compare{before=… after=…}` to render a drag-handle slider that reveals one image on the left and another on the right. Both images must have the same intrinsic dimensions (a lint warning is emitted if they differ).
+Use `::compare{before=… after=…}` to render a drag-handle slider that reveals one image on the left and another on the right. For the best result, both images should have the same intrinsic dimensions.
 
 **Syntax:**
 
@@ -136,9 +136,9 @@ Use `::cast[file.cast]{…}` to embed an interactive asciinema terminal recordin
 | `poster` | `"0:0"` | Time (mm:ss) of the frame shown before play |
 | `idle-limit` | _(none)_ | Collapse gaps longer than this many seconds |
 
-**Recording tools:** use `asciinema rec` or `agg` to produce `.cast` files (asciicast v2 format). The build validates that the file exists and is valid asciicast v2. **File size limit: 2 MB.**
+**Recording tools:** use `asciinema rec` or `agg` to produce `.cast` files (asciicast v2 format). Keep files small — very large recordings will slow page load. **Recommended maximum: 2 MB.**
 
-**Accessibility fallback:** the final terminal text is extracted at build time and linked as "Show transcript", which is readable by screen readers and search indexers.
+**Accessibility fallback:** a static placeholder is shown before the player loads. For screen-reader accessibility, describe the recording's content in the surrounding text.
 
 ---
 
@@ -163,7 +163,7 @@ Use `::diagram[file.svg]{alt="…"}` to embed an SVG diagram. The diagram opens 
 
 **Recommended source formats:** draw.io SVG (export as SVG from draw.io), Excalidraw SVG. Plain SVG is also accepted.
 
-**SVG security:** SVGs are served through the image proxy with `Content-Type: image/svg+xml` and rendered via `<img>` (scripts are never executed). Do not attempt to embed SVGs with `<script>` tags — they will not run, and the proxy sets `Content-Security-Policy: script-src 'none'` on SVG responses.
+**SVG security:** SVGs are served through the image proxy and rendered via `<img>` (scripts are never executed in `<img>`-embedded SVGs). Do not attempt to embed SVGs with `<script>` tags — they will not run.
 
 **Dark-mode tip:** if your diagram has colourful fills, the auto-invert filter can make colours look wrong. Preferred approach: export a separate dark-mode version and pass it as `src-dark=dark-variant.svg`.
 
@@ -199,6 +199,5 @@ Classes can be combined: `{.sortable .filterable .sticky}`.
 - No merged header cells (colspan/rowspan) — sorting and filtering assume a single-row header.
 - No multi-column sort.
 - The filter input matches any column; per-column filtering is not supported.
-- A lint warning is emitted if `.sortable` is applied to a table with empty or ambiguous header cells.
 
 **Accessibility:** sort state is communicated via `aria-sort` on column headers; the filter input has `aria-controls` pointing to the table. Without JavaScript the table renders as a plain static Markdown table — fully readable.

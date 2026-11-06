@@ -50,7 +50,7 @@ function initFilterable(table: HTMLTableElement): void {
   const input = document.createElement('input');
   input.type = 'search';
   input.setAttribute('aria-label', 'Filter table');
-  input.setAttribute('aria-controls', table.id || '');
+  if (table.id) input.setAttribute('aria-controls', table.id);
   input.placeholder = 'Filter…';
   table.parentNode?.insertBefore(input, table);
   input.addEventListener('input', () => {
