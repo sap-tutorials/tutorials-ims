@@ -377,7 +377,7 @@ export interface PlaceholderDef {
  * Matches: <YOUR_SOMETHING>, <MY-something>, <BTP_TRIAL> (3+ uppercase chars)
  * Does NOT match: <String>, <div>, <T>, <AB>, generics, HTML tags.
  */
-const PLACEHOLDER_RE = /(?<![A-Za-z])<(?:YOUR[-_]|MY[-_])[A-Za-z0-9_-]+>|<[A-Z][A-Z0-9_]{2,}>/g
+const PLACEHOLDER_RE = /(?<![A-Za-z])(?:<(?:YOUR[-_]|MY[-_])[A-Za-z0-9_-]+>|<[A-Z][A-Z0-9_]{2,}>)/g
 
 /**
  * Humanise a placeholder token into a label.

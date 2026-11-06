@@ -24,10 +24,15 @@ describe('validatePlaceholders', () => {
     expect(result).toHaveLength(0)
   })
 
-  it('auto: matches <BTP_TRIAL> (3+ uppercase)', () => {
-    const result = validatePlaceholders('auto', '```\nuse <BTP_TRIAL>\n```')
+  it('auto: does not match <BTP_TRIAL> when preceded by a letter (generic context)', () => {
+    // Regression test for F1: second branch of PLACEHOLDER_RE must have lookbehind
+    const result = validatePlaceholders('auto', '```ts\ntype Foo = Array<BTP_TRIAL>\n```')
+    expect(result).toHaveLength(0)
+  })
+
+  it('auto: matches <BTP_TRIAL> when standalone (not preceded by letter)', () => {
+    const result = validatePlaceholders('auto', '```\nuse <BTP_TRIAL> here\n```')
     expect(result).toHaveLength(1)
-    expect(result[0].token).toBe('<BTP_TRIAL>')
   })
 
   it('explicit list: uses declared tokens', () => {
