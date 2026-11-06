@@ -1,0 +1,20 @@
+{{/*
+  tut-ui — renders a UI element name (button, field, tab, link, etc.).
+
+  Consumes:
+    label — UI element name to display (e.g. "Save", "User Name")
+    type  — optional element type: button | field | tab | link (or empty)
+
+  Produces: <span> with semantic class and optional type modifier.
+  When type is provided, adds tut-ui--<type> class and data-ui-type attribute.
+
+  Usage (inline/leaf):
+    {{< tut-ui label="Save" type="button" >}}
+    {{< tut-ui label="User Name" type="field" >}}
+    {{< tut-ui label="Overview" type="tab" >}}
+    {{< tut-ui label="Learn more" type="link" >}}
+    {{< tut-ui label="Dashboard" >}}
+
+  Security note: .Get uses Hugo's default HTML auto-escaping.
+*/}}
+<span class="tut-ui{{ if .Get "type" }} tut-ui--{{ .Get "type" }}{{ end }}"{{ if .Get "type" }} data-ui-type="{{ .Get "type" }}"{{ end }}>{{ .Get "label" }}</span>
