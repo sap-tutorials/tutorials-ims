@@ -2941,6 +2941,12 @@ html.dark .code-block-body .chroma .err {
   background-color: transparent;
 }
 
+/* Console blocks — prompt/output/continuation line styling */
+.cl-out { opacity: 0.5; user-select: none; }
+.cl-cmd { /* default: inherit */ }
+.cl-cont { padding-left: 1.5em; }
+html.dark .cl-out { opacity: 0.4; }
+
 /* Chroma readability overrides (dark mode).
  * Hugo's `gen chromastyles --style=github-dark` emits empty rules for
  * unstyled tokens (.p, .n, .nx, .x, .na, .nb, .bp), expecting them to

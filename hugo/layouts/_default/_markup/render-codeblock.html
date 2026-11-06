@@ -22,7 +22,6 @@
   "code" "text"
   "output" "text"
   "log" "text"
-  "console" "bash"
   "csv" "text"
   "env" "bash"
   "dotenv" "bash"
@@ -75,6 +74,9 @@
   "http" "HTTP"
   "ini" "INI"
   "i18n" "Properties"
+  "console" "Terminal"
+  "shell-session" "Terminal"
+  "terminal-session" "Terminal"
 -}}
 
 {{- $lower := $raw | lower -}}
@@ -110,6 +112,12 @@
 {{- $lineCount := len (split (trim .Inner "\n") "\n") -}}
 {{- $isLong := gt $lineCount 25 -}}
 
+{{/* Console block detection: triggered by lang tag or {prompt} attribute.
+     Guard: ONLY activates for console/shell-session/terminal-session langs or the
+     explicit {prompt} attribute. All other langs (including bash) are byte-identical
+     to before — they take the existing highlight path below. */}}
+{{- $isConsole := or (eq $lower "console") (eq $lower "shell-session") (eq $lower "terminal-session") (index $attrs "prompt") -}}
+
 <div class="code-block{{ if $isLong }} code-block-long{{ end }}"{{ if eq $lower "cds" }} data-lang="cds"{{ end }}>
   <div class="code-block-header">
     {{- if ne $filename "" -}}
@@ -118,11 +126,24 @@
     {{- else -}}
       <span class="code-block-lang">{{ $displayName }}</span>
     {{- end -}}
-    <button type="button" class="code-block-copy" onclick="copyCodeBlock(this)" aria-label="Copy code">
+    <button type="button" class="code-block-copy" onclick="copyCodeBlock(this)" aria-label="Copy code"{{ if $isConsole }} title="Copies commands only"{{ end }}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4V1.5C4 1.22 4.22 1 4.5 1H13.5C13.78 1 14 1.22 14 1.5V10.5C14 10.78 13.78 11 13.5 11H11" stroke="currentColor" stroke-width="1.2"/><rect x="2" y="5" width="9" height="10" rx=".5" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
       <span class="copy-label">Copy</span>
     </button>
   </div>
+  {{- if $isConsole -}}
+  {{/* Console branch: split lines into prompt/output/continuation spans.
+       Prompt patterns: $, >, #, ❯, or PS...> (PowerShell).
+       Each command line gets class="cl-cmd" data-prompt="<token>" data-cmd-text="<text after prompt>".
+       Continuation lines (after a line ending in \ ` ^) get class="cl-cont" data-continuation="true".
+       Output lines get class="cl-out".
+       security-reviewed: .Inner is Goldmark-escaped markdown code content; line text is
+       HTML-attribute-escaped via Hugo template auto-escaping; only fixed class/attribute names emitted. */}}
+  <div class="code-block-body"{{ if $isLong }} data-collapsed="true"{{ end }} data-console="true"><pre>{{- $lines := split .Inner "\n" -}}{{- $prevWasContinuation := false -}}{{- range $i, $line := $lines -}}{{- $trimmed := trim $line " \t" -}}{{/* Skip empty trailing line that split() produces */}}{{- if and (eq $i (sub (len $lines) 1)) (eq $trimmed "") -}}{{- else -}}{{/* Detect prompt: $, >, #, ❯, or PS...> */}}{{- $isPrompt := false -}}{{- $promptToken := "" -}}{{- $cmdText := "" -}}{{- if and (hasPrefix $trimmed "PS") (or (hasPrefix $trimmed "PS>") (hasPrefix $trimmed "PS ")) -}}{{- $isPrompt = true -}}{{- $gtIdx := index (split $trimmed ">") 0 -}}{{- $promptToken = printf "%s>" $gtIdx -}}{{- $afterPrompt := strings.TrimPrefix (printf "%s>" $gtIdx) $trimmed -}}{{- $cmdText = trim $afterPrompt " \t" -}}{{- else if hasPrefix $trimmed "$ " -}}{{- $isPrompt = true -}}{{- $promptToken = "$" -}}{{- $cmdText = strings.TrimPrefix "$ " $trimmed -}}{{- else if hasPrefix $trimmed "> " -}}{{- $isPrompt = true -}}{{- $promptToken = ">" -}}{{- $cmdText = strings.TrimPrefix "> " $trimmed -}}{{- else if hasPrefix $trimmed "# " -}}{{- $isPrompt = true -}}{{- $promptToken = "#" -}}{{- $cmdText = strings.TrimPrefix "# " $trimmed -}}{{- else if hasPrefix $trimmed "❯ " -}}{{- $isPrompt = true -}}{{- $promptToken = "❯" -}}{{- $cmdText = strings.TrimPrefix "❯ " $trimmed -}}{{- end -}}{{/* Determine if this line ends in a continuation character */}}{{- $trimmedLen := len $trimmed -}}{{- $lineEndsInCont := false -}}{{- if gt $trimmedLen 0 -}}{{- $lastChar := substr $trimmed (sub $trimmedLen 1) 1 -}}{{- $lineEndsInCont = or (eq $lastChar "\\") (eq $lastChar "`") (eq $lastChar "^") -}}{{- end -}}{{/* Classify line */}}{{- if $prevWasContinuation -}}<span class="cl-cont" data-continuation="true" data-cmd-text="{{ $trimmed }}">{{ $line }}</span>
+{{- $prevWasContinuation = $lineEndsInCont -}}{{- else if $isPrompt -}}<span class="cl-cmd" data-prompt="{{ $promptToken }}" data-cmd-text="{{ $cmdText }}">{{ $line }}</span>
+{{- $prevWasContinuation = $lineEndsInCont -}}{{- else -}}<span class="cl-out">{{ $line }}</span>
+{{- $prevWasContinuation = false -}}{{- end -}}{{- end -}}{{- end -}}</pre></div>
+  {{- else -}}
   <div class="code-block-body"{{ if $isLong }} data-collapsed="true"{{ end }}>
     {{- if eq $lang "text" -}}
       {{/* security-reviewed: .Inner is Goldmark-escaped markdown code content; printf wraps it in a fixed pre/code scaffold */}}
@@ -137,6 +158,7 @@
       {{ $replaced | safeHTML }}
     {{- end -}}
   </div>
+  {{- end -}}
   {{- if $isLong -}}
     <button type="button" class="code-block-toggle" data-action="toggle-code" aria-expanded="false">
       <span class="toggle-show">Show all {{ $lineCount }} lines</span>

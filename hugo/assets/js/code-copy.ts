@@ -9,11 +9,26 @@
 //
 // This module defines window.copyCodeBlock unconditionally and is loaded on
 // every page from baseof.html, so the button works everywhere it renders.
-import { stripPrompts } from './copy-clean'
+import { stripPrompts, copyConsoleCommands } from './copy-clean'
 
 ;(window as any).copyCodeBlock = function (btn: HTMLButtonElement) {
   const block = btn.closest('.code-block')
   if (!block) return
+
+  // Console blocks: .code-block-body[data-console] — copy commands only (no output).
+  const consoleBody = block.querySelector<HTMLElement>('.code-block-body[data-console]')
+  if (consoleBody) {
+    const text = copyConsoleCommands(consoleBody)
+    navigator.clipboard.writeText(text).then(() => {
+      const label = btn.querySelector('.copy-label')
+      if (label) {
+        label.textContent = 'Copied!'
+        setTimeout(() => { label.textContent = 'Copy' }, 2000)
+      }
+    })
+    return
+  }
+
   const code = block.querySelector('.code-block-body code, .code-block-body pre')
   if (!code) return
   let text = code.textContent || ''
