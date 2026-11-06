@@ -18,7 +18,7 @@
 {{- $firstPass := split $raw " > " -}}
 {{- $segments := slice -}}
 {{- range $firstPass -}}
-  {{- if contains . "→" -}}
+  {{- if strings.Contains . "→" -}}
     {{- range split . "→" -}}
       {{- $segments = $segments | append (trim . " ") -}}
     {{- end -}}

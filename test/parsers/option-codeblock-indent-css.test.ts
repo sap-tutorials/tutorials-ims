@@ -34,7 +34,7 @@ describe('#2820 — trailing code-box indent after OPTION blocks', () => {
       '.step-content > .os-options ~ p',
       '.step-content > .os-options ~ figure',
       '.step-content > .os-options ~ pre',
-      '.step-content > .os-options ~ blockquote',
+      '.step-content > .os-options ~ :is(blockquote, aside, details)',
     ]) {
       expect(t).toContain(sel)
     }

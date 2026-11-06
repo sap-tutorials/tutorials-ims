@@ -155,9 +155,12 @@ describe('OPTION group followed by shared prose/image/tips (#2820 regression)', 
     expect(text).not.toContain('[!TIP]');
   });
 
-  it('renders both TIPs as alert-tip blockquotes', () => {
+  it('renders both TIPs as alert-tip callouts', () => {
+    // #2595/#71a8d70bc: `> [!TIP]` alerts now render via the tut-alert partial
+    // as non-collapsible <aside class="alert alert-tip" role="note">, not as
+    // <blockquote class="alert-tip">.
     const $ = load(rendered);
-    expect($('blockquote.alert-tip').length).toBe(2);
+    expect($('aside.alert.alert-tip').length).toBe(2);
   });
 
   it('renders the trailing image as a tutorial-figure', () => {
