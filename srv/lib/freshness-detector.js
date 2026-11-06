@@ -19,6 +19,7 @@
 // (tutorial not found, no code blocks, null legacy markdown) — returns ok:true.
 
 import cds from '@sap/cds';
+import { createRequire } from 'node:module';
 import { OrchestrationClient } from '@sap-ai-sdk/orchestration';
 import { extractCodeBlocks, extractTutorialContext } from './freshness-extract.js';
 import { groundCodeBlock } from './freshness-grounding.js';
@@ -30,6 +31,63 @@ const LOG = cds.log('freshness-detector');
 const TOOL_NAME = 'submit_freshness_findings';
 const MAX_TOKENS = 2000;
 const TEMPERATURE = 0;
+
+// ─── CLI Deprecation scan (deterministic pre-pass) ────────────────────────────
+
+const _require = createRequire(import.meta.url);
+/** @type {Array<{tool:string,match:string,severity:string,since:string,message:string,replacement:string,docs:string}>} */
+const CLI_DEPRECATIONS = _require('../../scripts/lint-rules/data/cli-deprecations.json');
+
+const SHELL_LANGS = /^(bash|sh|shell|console|terminal|powershell|cmd)$/i;
+const PROMPT_RE = /^(\$ |PS> |> |# )/;
+
+/**
+ * Deterministic pre-pass: scan markdown for deprecated CLI commands in shell fences.
+ * Returns findings in the same shape as LLM freshness findings.
+ * @param {string} markdown
+ * @returns {Array<{category:string,severity:string,confidence:string,stepRef:number,codeBlockIndex:number,evidence:string,summary:string,suggestedFix:string,groundingSource:string}>}
+ */
+export function scanCliDeprecations(markdown) {
+  const findings = [];
+  const lines = markdown.split('\n');
+  let inFence = false;
+  let fenceLang = '';
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const fenceMatch = line.match(/^[ \t]{0,3}(```|~~~)(\S*)/);
+    if (fenceMatch) {
+      if (!inFence) {
+        inFence = true;
+        fenceLang = fenceMatch[2] ?? '';
+      } else {
+        inFence = false;
+        fenceLang = '';
+      }
+      continue;
+    }
+    if (!inFence || !SHELL_LANGS.test(fenceLang)) continue;
+
+    const stripped = line.replace(PROMPT_RE, '');
+    for (const dep of CLI_DEPRECATIONS) {
+      const re = new RegExp(dep.match);
+      if (re.test(stripped)) {
+        findings.push({
+          category: 'deprecated-api',
+          severity: 'Medium',
+          confidence: 'High',
+          stepRef: 0,
+          codeBlockIndex: -1,
+          evidence: line.trim(),
+          summary: dep.message,
+          suggestedFix: dep.replacement,
+          groundingSource: dep.docs,
+        });
+      }
+    }
+  }
+  return findings;
+}
 
 // ─── Tool schema ──────────────────────────────────────────────────────────────
 
@@ -267,7 +325,8 @@ export async function detectFreshness({ db, tutorialId }) {
       // Enforce: a finding with empty groundingSource must be confidence:Low.
       .map(f => (f.groundingSource ? f : { ...f, confidence: 'Low' }));
 
-    return { ok: true, model: r.modelName, costCents, findings };
+    const cliFindings = scanCliDeprecations(src.markdown);
+    return { ok: true, model: r.modelName, costCents, findings: [...findings, ...cliFindings] };
   } catch (err) {
     LOG.error('detection failed — failing open (non-destructive)', err);
     return { ok: false, model: null, costCents: 0, findings: [] };
