@@ -1,6 +1,6 @@
 import { initMermaid } from './mermaid-bootstrap'
 import { csrfFetch } from './csrf-fetch'
-import { getChoice, setChoice, onChange } from './sync-groups'
+import { getChoice, setChoice, onChange, resolveChoice } from './sync-groups'
 
 // NOTE: copyCodeBlock (the "Copy code" button handler) now lives in the
 // site-wide code-copy.ts, loaded on every page from baseof.html. The
@@ -185,10 +185,31 @@ function activateTab(btn: HTMLButtonElement, notifySync: boolean) {
   }
 }
 
-/** Select the tab whose data-sync-value matches `value`; no-op when not found. */
+/** Select the tab whose data-sync-value matches `value`; injects a placeholder when not found. */
 function applyChoiceToStrip(strip: Element, value: string) {
   const btn = strip.querySelector<HTMLButtonElement>(`[role="tab"][data-sync-value="${CSS.escape(value)}"]`)
-  if (btn) activateTab(btn, false)
+  if (btn) {
+    activateTab(btn, false)
+    // Remove any placeholder left from a prior missing-value state
+    strip.querySelector('[data-sync-missing]')?.remove()
+  } else {
+    // #2820: no silent substitution — inject a placeholder naming the missing value
+    const existing = strip.querySelector('[data-sync-missing]')
+    if (!existing) {
+      const available = Array.from(
+        strip.querySelectorAll<HTMLElement>('[role="tab"][data-sync-value]')
+      ).map(b => b.dataset.syncValue ?? '').filter(Boolean)
+
+      const placeholder = document.createElement('div')
+      placeholder.setAttribute('data-sync-missing', '')
+      placeholder.setAttribute('data-sync-missing-placeholder', '')
+      placeholder.className = 'option-tabs__missing-placeholder'
+      placeholder.textContent =
+        `"${value}" is not available in this section. ` +
+        (available.length > 0 ? `Available options: ${available.join(', ')}.` : 'No options available.')
+      strip.appendChild(placeholder)
+    }
+  }
 }
 
 /** Keydown handler for roving tabindex in tab strips (ArrowLeft/Right/Home/End). */
@@ -215,16 +236,32 @@ document.addEventListener('keydown', (e) => {
 
 /** Wire all synced strips: apply stored choice on load and subscribe to changes. */
 function initSyncedTabs() {
+  const urlParams = new URLSearchParams(location.search)
+
   document.querySelectorAll('[data-sync-key]').forEach(list => {
     const syncKey = (list as HTMLElement).dataset.syncKey!
     const container = list.closest('[data-component="tabs"]')
     if (!container) return
 
-    // Apply stored choice (if any) on page load
-    const stored = getChoice(syncKey)
-    if (stored) applyChoiceToStrip(container, stored)
+    // Collect available values for this strip (needed for resolveChoice firstTab)
+    const availableBtns = list.querySelectorAll<HTMLElement>('[role="tab"][data-sync-value]')
+    const values = Array.from(availableBtns).map(b => b.dataset.syncValue ?? '').filter(Boolean)
 
-    // Subscribe: when another browser tab/strip writes the same key, follow
+    // Resolve with URL param taking priority over stored choice
+    const urlValue = urlParams.get(syncKey) ?? undefined
+    const choice = resolveChoice(syncKey, {
+      urlParam: urlValue,
+      stored: getChoice(syncKey) || undefined,
+      firstTab: values[0],
+    })
+
+    if (choice) {
+      applyChoiceToStrip(container, choice)
+      // Persist the URL-driven choice so sibling strips on the same page pick it up
+      if (urlValue) setChoice(syncKey, choice)
+    }
+
+    // Subscribe: when any strip (same page or another tab) writes the same key, follow
     onChange(syncKey, (value) => applyChoiceToStrip(container, value))
   })
 }

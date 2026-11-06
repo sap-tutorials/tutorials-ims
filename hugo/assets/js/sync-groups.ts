@@ -45,6 +45,9 @@ function writeObject(obj: Record<string, string>): void {
 // Public API
 // ---------------------------------------------------------------------------
 
+/** Name of the custom DOM event used for same-document fan-out. */
+const SYNC_EVENT = 'sync-groups:change';
+
 /** Read the stored choice for `key` from the unified object.
  *  Falls back to the legacy per-key `localStorage` entry for "os" and
  *  "codetabs" so existing preferences are honoured during the transition. */
@@ -69,13 +72,23 @@ export function setChoice(key: string, value: string): void {
   const obj = readObject();
   obj[key] = value;
   writeObject(obj);
+  // Emit an in-page event so same-document subscribers fire immediately.
+  // (The native `storage` event only fires in OTHER documents.)
+  window.dispatchEvent(new CustomEvent(SYNC_EVENT, { detail: { key, value } }));
 }
 
-/** Register a callback that fires when another tab writes a new value for
- *  `key` to the unified object (via the native `storage` event).
+/** Register a callback that fires when any document writes a new value for
+ *  `key` — either this document (via the custom in-page event) or another
+ *  browser tab (via the native `storage` event).
  *  Returns an unsubscribe function. */
 export function onChange(key: string, cb: (value: string) => void): () => void {
-  function handler(e: StorageEvent): void {
+  // Same-document path: custom event dispatched by setChoice().
+  function inPageHandler(e: Event): void {
+    const { key: k, value } = (e as CustomEvent<{ key: string; value: string }>).detail;
+    if (k === key) cb(value);
+  }
+  // Cross-tab path: native storage event from another document.
+  function storageHandler(e: StorageEvent): void {
     if (e.key !== STORAGE_KEY) return;
     if (!e.newValue) return;
     try {
@@ -87,8 +100,12 @@ export function onChange(key: string, cb: (value: string) => void): () => void {
       // corrupt value — ignore
     }
   }
-  window.addEventListener('storage', handler);
-  return () => window.removeEventListener('storage', handler);
+  window.addEventListener(SYNC_EVENT, inPageHandler);
+  window.addEventListener('storage', storageHandler);
+  return () => {
+    window.removeEventListener(SYNC_EVENT, inPageHandler);
+    window.removeEventListener('storage', storageHandler);
+  };
 }
 
 /** Resolution options for `resolveChoice`. */
@@ -152,10 +169,11 @@ export function resolveChoice(key: string, opts: ResolveChoiceOptions): string {
 const PICKER_ATTR = 'data-sync-picker';
 const PICKER_KEY_ATTR = 'data-sync-key';
 const PICKER_VALUE_ATTR = 'data-sync-value';
-/** Selector for content strips — excludes picker bars themselves. */
-const CONTENT_STRIP_CLASS = '.option-tabs';
-const STRIP_BTN_SELECTOR = '.option-tabs__btn[data-sync-value]';
-const STRIP_PANEL_SELECTOR = '.option-tabs__panel[data-sync-value]';
+/** Selector for content strips — the inner tablist div that carries data-sync-key.
+ *  Panels (.tab-panel) are siblings of .fd-tabs inside the outer [data-component="tabs"] wrapper. */
+const CONTENT_STRIP_SELECTOR = `.fd-tabs[${PICKER_KEY_ATTR}]`;
+const STRIP_BTN_SELECTOR = '[role="tab"][data-sync-value]';
+const STRIP_PANEL_SELECTOR = '.tab-panel[data-sync-value]';
 const PLACEHOLDER_ATTR = 'data-sync-missing-placeholder';
 const ANNOUNCE_ATTR = 'data-sync-announce';
 
@@ -163,14 +181,21 @@ const ANNOUNCE_ATTR = 'data-sync-announce';
  *  Strips that lack the chosen `value` get a missing-variant placeholder
  *  instead of silently switching to another tab. */
 function applyChoiceToStrips(key: string, value: string): void {
-  // Only target content strips (not picker bars, which also carry data-sync-key)
-  const strips = document.querySelectorAll<HTMLElement>(`${CONTENT_STRIP_CLASS}[${PICKER_KEY_ATTR}="${key}"]`);
+  // Target .fd-tabs[data-sync-key="<key>"] — the inner tablist that carries the key.
+  // Picker bars also carry data-sync-key but are [data-sync-picker], not .fd-tabs,
+  // so they are naturally excluded.
+  const strips = document.querySelectorAll<HTMLElement>(`.fd-tabs[${PICKER_KEY_ATTR}="${key}"]`);
 
   for (const strip of strips) {
+    // Walk up to the [data-component="tabs"] wrapper which contains BOTH buttons
+    // (inside .fd-tabs) and panels (inside .tab-panels, a sibling of .fd-tabs).
+    const tabsContainer = strip.closest<HTMLElement>('[data-component="tabs"]') ?? strip;
+
     // Remove any existing placeholder from a prior activation
-    const oldPlaceholder = strip.querySelector<HTMLElement>(`[${PLACEHOLDER_ATTR}]`);
+    const oldPlaceholder = tabsContainer.querySelector<HTMLElement>(`[${PLACEHOLDER_ATTR}]`);
     if (oldPlaceholder) oldPlaceholder.remove();
 
+    // Check whether the requested value exists among the buttons (buttons live inside .fd-tabs = strip)
     const hasValue = strip.querySelector(`[${PICKER_VALUE_ATTR}="${value}"]`) !== null;
 
     if (!hasValue) {
@@ -184,6 +209,7 @@ function applyChoiceToStrips(key: string, value: string): void {
       // Build placeholder element
       const placeholder = document.createElement('div');
       placeholder.setAttribute(PLACEHOLDER_ATTR, '');
+      placeholder.setAttribute('data-sync-missing', '');
       placeholder.className = 'option-tabs__missing-placeholder';
       placeholder.textContent =
         `"${value}" is not available in this section. ` +
@@ -191,29 +217,34 @@ function applyChoiceToStrips(key: string, value: string): void {
           ? `Available options: ${available.join(', ')}.`
           : 'No options available.');
 
-      // Hide all panels so nothing stale remains visible
-      for (const panel of strip.querySelectorAll<HTMLElement>(STRIP_PANEL_SELECTOR)) {
+      // Hide all panels so nothing stale remains visible (panels are inside tabsContainer)
+      for (const panel of tabsContainer.querySelectorAll<HTMLElement>(STRIP_PANEL_SELECTOR)) {
         panel.hidden = true;
       }
       for (const btn of strip.querySelectorAll<HTMLElement>(STRIP_BTN_SELECTOR)) {
-        btn.removeAttribute('is-selected');
+        btn.setAttribute('aria-selected', 'false');
+        btn.tabIndex = -1;
       }
 
-      // Insert placeholder at the top of the strip content area
-      strip.appendChild(placeholder);
+      // Insert placeholder inside the tabs container
+      tabsContainer.appendChild(placeholder);
       continue;
     }
 
-    // Normal activation: toggle buttons and panels
+    // Normal activation: toggle buttons (inside .fd-tabs) and panels (inside tabsContainer)
     for (const btn of strip.querySelectorAll<HTMLElement>(STRIP_BTN_SELECTOR)) {
       const v = btn.getAttribute(PICKER_VALUE_ATTR);
       if (v === value) {
         btn.setAttribute('is-selected', '');
+        btn.setAttribute('aria-selected', 'true');
+        btn.tabIndex = 0;
       } else {
         btn.removeAttribute('is-selected');
+        btn.setAttribute('aria-selected', 'false');
+        btn.tabIndex = -1;
       }
     }
-    for (const panel of strip.querySelectorAll<HTMLElement>(STRIP_PANEL_SELECTOR)) {
+    for (const panel of tabsContainer.querySelectorAll<HTMLElement>(STRIP_PANEL_SELECTOR)) {
       const v = panel.getAttribute(PICKER_VALUE_ATTR);
       panel.hidden = v !== value;
     }
@@ -256,7 +287,7 @@ export function initPickerBars(): void {
     if (!key) continue;
 
     // Count only content strips (not picker bars themselves)
-    const stripCount = document.querySelectorAll<HTMLElement>(`${CONTENT_STRIP_CLASS}[${PICKER_KEY_ATTR}="${key}"]`).length;
+    const stripCount = document.querySelectorAll<HTMLElement>(`.fd-tabs[${PICKER_KEY_ATTR}="${key}"]`).length;
 
     // Hide picker when fewer than 2 strips share this key
     if (stripCount < 2) {

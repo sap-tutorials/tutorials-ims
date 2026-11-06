@@ -128,7 +128,7 @@ describe('migration — legacy os-preference fallback', () => {
 });
 
 // ---------------------------------------------------------------------------
-// onChange — fires on cross-tab storage events
+// onChange — fires on cross-tab storage events AND same-page events
 // ---------------------------------------------------------------------------
 
 describe('onChange — cross-tab storage events', () => {
@@ -213,6 +213,29 @@ describe('onChange — cross-tab storage events', () => {
     }
 
     expect(calls).toEqual(['Linux', 'macOS', 'Windows']);
+  });
+
+  it('fires the callback on the same-page custom event when setChoice is called', async () => {
+    const { __test__ } = await import('../../hugo/assets/js/sync-groups');
+    const calls: string[] = [];
+    __test__.onChange('runtime', (v) => calls.push(v));
+
+    // setChoice dispatches the in-page CustomEvent directly
+    __test__.setChoice('runtime', 'Java');
+
+    expect(calls).toContain('Java');
+  });
+
+  it('unsubscribe stops both storage and in-page callbacks', async () => {
+    const { __test__ } = await import('../../hugo/assets/js/sync-groups');
+    const calls: string[] = [];
+    const unsub = __test__.onChange('runtime', (v) => calls.push(v));
+
+    unsub();
+
+    __test__.setChoice('runtime', 'Node.js');
+
+    expect(calls).toHaveLength(0);
   });
 });
 
@@ -339,20 +362,21 @@ describe('resolveChoice — resolution order', () => {
 // ---------------------------------------------------------------------------
 
 /**
- * Build a minimal DOM representing two sync-group strips, each with
- * Node.js and Java panels, and a picker bar with two buttons.
+ * Build a minimal DOM representing two sync-group strips using the real
+ * shortcode DOM structure (option-tabs.html / tab.html):
  *
- * Strip HTML structure mirrors what Task 4 shortcodes emit:
- *   <div class="option-tabs" data-sync-key="runtime">
- *     <div class="option-tabs__bar">
- *       <button class="option-tabs__btn" data-sync-value="Node.js" is-selected>Node.js</button>
- *       <button class="option-tabs__btn" data-sync-value="Java">Java</button>
+ *   <div class="option-tabs" data-component="tabs">
+ *     <div class="fd-tabs" role="tablist" data-sync-key="runtime">
+ *       <button class="fd-tabs__item" role="tab" data-sync-value="Node.js" ...>Node.js</button>
+ *       <button class="fd-tabs__item" role="tab" data-sync-value="Java" ...>Java</button>
  *     </div>
- *     <div class="option-tabs__panel" data-sync-value="Node.js">…</div>
- *     <div class="option-tabs__panel" data-sync-value="Java" hidden>…</div>
+ *     <div class="tab-panels">
+ *       <div class="tab-panel" data-sync-value="Node.js">…</div>
+ *       <div class="tab-panel" data-sync-value="Java" hidden>…</div>
+ *     </div>
  *   </div>
  *
- * Picker bar structure (what Task 5 adds to the Hugo template):
+ * Picker bar structure:
  *   <div class="sync-picker" data-sync-picker data-sync-key="runtime">
  *     <ui5-segmented-button>
  *       <ui5-segmented-button-item data-sync-value="Node.js" pressed>Node.js</ui5-segmented-button-item>
@@ -378,14 +402,18 @@ function buildTwoStripDOM(opts: {
 
   function makeStrip(values: string[], active: string): string {
     const buttons = values.map(v =>
-      `<button class="option-tabs__btn" data-sync-value="${v}"${v === active ? ' is-selected' : ''}>${v}</button>`
+      `<button class="fd-tabs__item" role="tab" data-sync-value="${v}" aria-selected="${v === active ? 'true' : 'false'}" tabindex="${v === active ? '0' : '-1'}">${v}</button>`
     ).join('');
     const panels = values.map(v =>
-      `<div class="option-tabs__panel" data-sync-value="${v}"${v === active ? '' : ' hidden'}>Content for ${v}</div>`
+      `<div class="tab-panel" data-sync-value="${v}"${v === active ? '' : ' hidden'}>Content for ${v}</div>`
     ).join('');
-    return `<div class="option-tabs" data-sync-key="runtime">
-      <div class="option-tabs__bar">${buttons}</div>
-      ${panels}
+    return `<div class="option-tabs" data-component="tabs">
+      <div class="fd-tabs" role="tablist" data-sync-key="runtime">
+        ${buttons}
+      </div>
+      <div class="tab-panels">
+        ${panels}
+      </div>
     </div>`;
   }
 
@@ -430,23 +458,25 @@ describe('picker bar — DOM integration (Task 5)', () => {
     expect(javaItem).not.toBeNull();
     javaItem.click();
 
-    // All strips for "runtime" should now show Java (only content strips, not picker bars)
-    const strips = document.querySelectorAll('.option-tabs[data-sync-key="runtime"]');
+    // All .fd-tabs strips for "runtime" should now show Java
+    const strips = document.querySelectorAll('.fd-tabs[data-sync-key="runtime"]');
     expect(strips).toHaveLength(2);
 
     for (const strip of strips) {
-      // Java button should be is-selected
+      const tabsContainer = strip.closest('[data-component="tabs"]') ?? strip;
+
+      // Java button should be is-selected (inside .fd-tabs = strip)
       const javaBtn = strip.querySelector('[data-sync-value="Java"]') as HTMLElement;
       expect(javaBtn).not.toBeNull();
       expect(javaBtn.hasAttribute('is-selected')).toBe(true);
       // Node.js button should NOT be is-selected
       const nodeBtn = strip.querySelector('[data-sync-value="Node.js"]') as HTMLElement;
       expect(nodeBtn?.hasAttribute('is-selected')).toBe(false);
-      // Java panel should be visible (no hidden attr)
-      const javaPanel = strip.querySelector('.option-tabs__panel[data-sync-value="Java"]') as HTMLElement;
+      // Java panel should be visible (no hidden attr) — panels are in tabsContainer
+      const javaPanel = tabsContainer.querySelector('.tab-panel[data-sync-value="Java"]') as HTMLElement;
       expect(javaPanel?.hasAttribute('hidden')).toBe(false);
       // Node.js panel should be hidden
-      const nodePanel = strip.querySelector('.option-tabs__panel[data-sync-value="Node.js"]') as HTMLElement;
+      const nodePanel = tabsContainer.querySelector('.tab-panel[data-sync-value="Node.js"]') as HTMLElement;
       expect(nodePanel?.hasAttribute('hidden')).toBe(true);
     }
   });
@@ -468,17 +498,17 @@ describe('picker bar — DOM integration (Task 5)', () => {
     javaItem.click();
 
     // Strip 2 should show a placeholder element (not silently switch to Node.js)
-    // Use class-scoped selector to exclude the picker bar itself (which also has data-sync-key)
-    const strips = document.querySelectorAll('.option-tabs[data-sync-key="runtime"]');
+    const strips = document.querySelectorAll('.fd-tabs[data-sync-key="runtime"]');
     const strip2 = strips[1] as HTMLElement;
-    const placeholder = strip2.querySelector('[data-sync-missing-placeholder]');
+    const strip2Container = strip2.closest('[data-component="tabs"]') ?? strip2;
+    const placeholder = strip2Container.querySelector('[data-sync-missing-placeholder]');
     expect(placeholder).not.toBeNull();
     // Placeholder must name the missing variant
     expect(placeholder!.textContent).toMatch(/Java/);
     // Placeholder must list available values
     expect(placeholder!.textContent).toMatch(/Node\.js/);
     // Strip 2 should NOT have activated a Java panel (no Java panel exists to activate)
-    const javaPanel = strip2.querySelector('.option-tabs__panel[data-sync-value="Java"]');
+    const javaPanel = strip2Container.querySelector('.tab-panel[data-sync-value="Java"]');
     expect(javaPanel).toBeNull();
   });
 
