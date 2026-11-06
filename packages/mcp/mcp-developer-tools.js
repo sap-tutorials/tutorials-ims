@@ -93,7 +93,11 @@ export async function handleGetMyCompletedSteps(req) {
  *  `format` selects a single representation — 'markdown' (default, agent-first,
  *  token-efficient source markdown consistent with /tutorials/<slug>.md) or the
  *  legacy sliced 'html'. Exactly one body field (`content`) is ever returned;
- *  `contentFormat` echoes which representation it is (#2244). */
+ *  `contentFormat` echoes which representation it is (#2244).
+ *  `variants` is an optional JSON-encoded map of sync-key→preferred-value
+ *  (e.g. `{"runtime":"java"}`). When provided and the step contains OPTION
+ *  blocks tagged with the matching sync= key, only the preferred variant's
+ *  content is returned (only applies to format='markdown'). */
 export async function handleGetTutorialStep(req) {
   return withToolMetrics(req, async () => {
     const { slug, stepNumber } = req.data;
@@ -103,6 +107,26 @@ export async function handleGetTutorialStep(req) {
       return req.reject(400, 'stepNumber must be a positive integer');
     try { assertEnum({ name: 'format', value: format, allowed: STEP_FORMAT }); }
     catch (e) { return req.reject(400, e.message); }
+
+    // variants: optional JSON-encoded preference map. Fail-open on parse errors.
+    let variants = {};
+    if (req.data.variants) {
+      try {
+        const parsed = typeof req.data.variants === 'string'
+          ? JSON.parse(req.data.variants)
+          : req.data.variants;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          variants = parsed;
+        }
+      } catch {
+        // Malformed JSON → ignore, treat as no preference.
+      }
+    }
+
+    // Analytics: count when a variant preference is actively applied (fail-open).
+    if (Object.keys(variants).length > 0) {
+      try { metrics.counter('mcp.get_tutorial_step.variants_filter'); } catch { /* fail-open */ }
+    }
 
     const lcSlug = slug.toLowerCase();
     if (format === 'html') {
@@ -119,7 +143,7 @@ export async function handleGetTutorialStep(req) {
       };
     }
 
-    const slice = await sliceStepMarkdown(lcSlug, stepNumber);
+    const slice = await sliceStepMarkdown(lcSlug, stepNumber, variants);
     if (!slice) return req.reject(404, 'step not found');
     const result = {
       slug: lcSlug,

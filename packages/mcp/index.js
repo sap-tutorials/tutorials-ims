@@ -11,4 +11,4 @@ export { assertRange, assertEnum, clampLimit } from './mcp-arg-validators.js';
 // mcp-progress-store.js
 export { getMyTutorials, getMyMissions, getMyEvents, getMyCompletedSteps } from './mcp-progress-store.js';
 // tutorial-step-slicer.js
-export { sliceStep, sliceStepMarkdown, sliceAllSteps, invalidateSlug } from './tutorial-step-slicer.js';
+export { sliceStep, sliceStepMarkdown, sliceAllSteps, invalidateSlug, filterVariants } from './tutorial-step-slicer.js';
