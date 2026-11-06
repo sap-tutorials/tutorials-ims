@@ -107,6 +107,17 @@ export interface ComposeResult {
    * container directive. Drives conditional loading of code-walkthrough.ts.
    */
   hasWalkthrough?: boolean
+  /**
+   * Author-declared tool/library versions this tutorial has been tested with.
+   * e.g. `{ "@sap/cds": "9.x", node: "22" }`.
+   * Passed through from `TutorialFrontmatter.testedWith`.
+   */
+  testedWith?: Record<string, string>
+  /**
+   * Prerequisite tutorial slugs that should be completed before this one.
+   * Passed through from `TutorialFrontmatter.requires`.
+   */
+  requires?: string[]
 }
 
 export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult {
@@ -414,5 +425,11 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
       ? { syncGroups: frontmatter.syncGroups }
       : {}),
     ...(hasWalkthrough ? { hasWalkthrough: true } : {}),
+    ...(frontmatter.testedWith && Object.keys(frontmatter.testedWith).length > 0
+      ? { testedWith: frontmatter.testedWith }
+      : {}),
+    ...(frontmatter.requires && frontmatter.requires.length > 0
+      ? { requires: frontmatter.requires }
+      : {}),
   }
 }

@@ -1,0 +1,12 @@
+{{- with .Page.Params.testedWith -}}
+<div class="tut-tested-with">
+  <details>
+    <summary>Tested with</summary>
+    <ul>
+      {{- range $k, $v := . -}}
+      <li><span class="pkg">{{ $k }}</span> <span class="ver">{{ $v }}</span></li>
+      {{- end -}}
+    </ul>
+  </details>
+</div>
+{{- end -}}
