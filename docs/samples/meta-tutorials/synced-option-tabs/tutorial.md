@@ -44,7 +44,7 @@ Follow the prompts to set your project name and package.
 
 Define a simple CDS service, then add the runtime-specific handler.
 
-[OPTION BEGIN [Node.js]]
+[OPTION BEGIN [Node.js] sync=runtime]
 Create `srv/hello-service.cds`:
 
 ```cds
@@ -61,7 +61,7 @@ module.exports = (srv) => {
 }
 ```
 [OPTION END]
-[OPTION BEGIN [Java]]
+[OPTION BEGIN [Java] sync=runtime]
 Create `Application.java` in your main source folder:
 
 ```java
@@ -81,7 +81,7 @@ public class HelloServiceHandler implements EventHandler {
 
 Start the server and try the endpoint.
 
-[OPTION BEGIN [Node.js]]
+[OPTION BEGIN [Node.js] sync=runtime]
 Run the development server:
 
 ```bash
@@ -94,7 +94,7 @@ Open a browser or use `curl` to test:
 curl "http://localhost:4004/hello/greet(name='World')"
 ```
 [OPTION END]
-[OPTION BEGIN [Java]]
+[OPTION BEGIN [Java] sync=runtime]
 Run the Spring Boot server:
 
 ```bash

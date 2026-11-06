@@ -148,6 +148,47 @@ describe('options-sync-regression: exact shortcode shape matches no-sync output'
     ].join('\n')
     expect(out).toContain(expectedGroup2)
   })
+
+  it('complete output matches full expected string byte-identically', () => {
+    const out = convertOptionBlocks(FIXTURE, 'hugo', {})
+    const EXPECTED = [
+      '### Step 1: Initialize the project',
+      '',
+      'Pick your runtime:',
+      '',
+      '{{% option-tabs tabs="Node.js,Java" %}}',
+      '{{% tab index="0" name="Node.js" %}}',
+      '',
+      'Node.js content here.',
+      '',
+      '{{% /tab %}}',
+      '{{% tab index="1" name="Java" %}}',
+      '',
+      'Java content here.',
+      '',
+      '{{% /tab %}}',
+      '{{% /option-tabs %}}',
+      '',
+      'Some text between groups.',
+      '',
+      '### Step 2: Choose your IDE',
+      '',
+      '{{% option-tabs tabs="VS Code,BAS" %}}',
+      '{{% tab index="0" name="VS Code" %}}',
+      '',
+      'VS Code step.',
+      '',
+      '{{% /tab %}}',
+      '{{% tab index="1" name="BAS" %}}',
+      '',
+      'BAS step.',
+      '',
+      '{{% /tab %}}',
+      '{{% /option-tabs %}}',
+      '',
+    ].join('\n')
+    expect(out).toBe(EXPECTED)
+  })
 })
 
 // ---------------------------------------------------------------------------

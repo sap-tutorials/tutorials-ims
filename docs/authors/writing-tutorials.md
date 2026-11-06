@@ -361,7 +361,7 @@ syncTabs: auto
 ---
 ```
 
-> **Tip:** `syncTabs: auto` only classifies groups whose labels ALL match one preset's aliases. A group with mixed or unrecognised labels is left as a plain option group. Run `cds lint` to see which groups were classified.
+> **Tip:** `syncTabs: auto` only classifies groups whose labels ALL match one preset's aliases. A group with mixed or unrecognised labels is left as a plain option group. Run `npm run fetch-tutorials -- --dry-run` or inspect the `syncGroups` frontmatter in the generated Hugo content to see which groups were classified.
 
 **Deep links:**
 
