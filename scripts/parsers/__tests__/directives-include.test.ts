@@ -1,10 +1,14 @@
 // Task 1: Types, frontmatter parse, and ExpandDirectivesContext extension tests
 // Tests for testedWith/requires frontmatter parsing and ExpandDirectivesContext shape.
+// Task 2: ::include directive expand hook tests
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { extractFrontmatter } from '../frontmatter.js'
+import { expandDirectives } from '../directives.js'
 import type { ExpandDirectivesContext } from '../directives.js'
 import type { SnippetDeps } from '../types.js'
+import { resetRegistry, registerDirective } from '../directive-registry.js'
+import { INCLUDE_DEF } from '../directives/include.js'
 
 describe('testedWith frontmatter parsing', () => {
   it('parses testedWith map from frontmatter', () => {
@@ -198,5 +202,119 @@ describe('SnippetDeps type', () => {
   it('accepts empty deps map', () => {
     const deps: SnippetDeps = {}
     expect(Object.keys(deps)).toHaveLength(0)
+  })
+})
+
+// ─── Task 2: ::include expand hook ───────────────────────────────────────────
+
+describe('::include expand hook', () => {
+  beforeEach(() => {
+    resetRegistry()
+    registerDirective(INCLUDE_DEF)
+  })
+
+  it('inlines snippet content (basic)', () => {
+    const snippetMap = new Map([['myrepo/_snippets/step.md', 'hello **world**']])
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test-tutorial',
+      snippetMap,
+    }
+    const result = expandDirectives('Before\n::include[step.md]\nAfter', ctx)
+    expect(result).toContain('hello **world**')
+    expect(result).not.toContain('::include')
+  })
+
+  it('substitutes {{param:region}}', () => {
+    const snippetMap = new Map([['r/_snippets/s.md', 'Region: {{param:region}}']])
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test-tutorial',
+      snippetMap,
+    }
+    const result = expandDirectives('::include[s.md]{region=eu10}', ctx)
+    expect(result).toContain('Region: eu10')
+  })
+
+  it('rejects snippet with step heading (### Step 1)', () => {
+    const snippetMap = new Map([['r/_snippets/s.md', '### Step 1\nfoo']])
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test-tutorial',
+      snippetMap,
+    }
+    expect(() => expandDirectives('::include[s.md]', ctx)).toThrow('directive/include-step-heading')
+  })
+
+  it('rejects missing snippet (snippetMap empty)', () => {
+    const snippetMap = new Map<string, string>()
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test-tutorial',
+      snippetMap,
+    }
+    expect(() => expandDirectives('::include[missing]', ctx)).toThrow('directive/include-not-found')
+  })
+
+  it('rejects direct cycle: snippet includes itself', () => {
+    // Snippet A contains ::include[A] — direct self-reference
+    const snippetKey = 'myrepo/_snippets/self.md'
+    const snippetMap = new Map([
+      [snippetKey, '::include[self.md]'],
+    ])
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test-tutorial',
+      snippetMap,
+    }
+    expect(() => expandDirectives('::include[self.md]', ctx)).toThrow('directive/include-cycle')
+  })
+
+  it('rejects indirect cycle: A includes B includes A', () => {
+    const snippetMap = new Map([
+      ['myrepo/_snippets/A.md', '::include[B.md]'],
+      ['myrepo/_snippets/B.md', '::include[A.md]'],
+    ])
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test-tutorial',
+      snippetMap,
+    }
+    expect(() => expandDirectives('::include[A.md]', ctx)).toThrow('directive/include-cycle')
+  })
+
+  it('respects max depth 3: A→B→C→D fails', () => {
+    // 4-level chain exceeds MAX_INCLUDE_DEPTH=3
+    const snippetMap = new Map([
+      ['r/_snippets/A.md', '::include[B.md]'],
+      ['r/_snippets/B.md', '::include[C.md]'],
+      ['r/_snippets/C.md', '::include[D.md]'],
+      ['r/_snippets/D.md', 'leaf content'],
+    ])
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test-tutorial',
+      snippetMap,
+    }
+    // A→B→C→D requires depth 4 which exceeds MAX_INCLUDE_DEPTH=3
+    expect(() => expandDirectives('::include[A.md]', ctx)).toThrow()
+  })
+
+  it('allows depth 3: A→B→C leaf succeeds', () => {
+    // 3-level chain is exactly MAX_INCLUDE_DEPTH; should succeed
+    const snippetMap = new Map([
+      ['r/_snippets/A.md', '::include[B.md]'],
+      ['r/_snippets/B.md', '::include[C.md]'],
+      ['r/_snippets/C.md', 'leaf content'],
+    ])
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test-tutorial',
+      snippetMap,
+    }
+    const result = expandDirectives('::include[A.md]', ctx)
+    expect(result).toContain('leaf content')
+  })
+
+  it('resolves shared: prefix from shared/ namespace', () => {
+    const snippetMap = new Map([['shared/install-cf-cli', 'Install: cf CLI']])
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test-tutorial',
+      snippetMap,
+    }
+    const result = expandDirectives('::include[shared:install-cf-cli]', ctx)
+    expect(result).toContain('Install: cf CLI')
   })
 })

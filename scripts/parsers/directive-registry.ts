@@ -43,6 +43,11 @@ export interface DirectiveDef {
   };
   /** Attribute schema keyed by attribute name. */
   attrs: Record<string, AttrDef>;
+  /**
+   * When true, attributes not listed in `attrs` are accepted without error.
+   * Used by directives like `::include` that accept free-form param attrs.
+   */
+  allowExtraAttrs?: boolean;
   /** Allowed CSS class names (the values that may appear after '.' in attr block). */
   classes?: string[];
   /** Optional expander: rewrite the node before rendering. */
