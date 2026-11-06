@@ -1,0 +1,38 @@
+[
+  {
+    "tool": "cf",
+    "match": "--hostname\\s+\\S+",
+    "severity": "warn",
+    "since": "cf-cli v8",
+    "message": "The `--hostname` flag was removed in cf CLI v8. Use `routes:` in the application manifest instead.",
+    "replacement": "Add `routes:\\n  - route: <hostname>.<domain>` to manifest.yml",
+    "docs": "https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#routes"
+  },
+  {
+    "tool": "cf",
+    "match": "cf\\s+push\\s+.*--no-hostname",
+    "severity": "warn",
+    "since": "cf-cli v8",
+    "message": "The `--no-hostname` flag was removed in cf CLI v8.",
+    "replacement": "Use `no-route: true` in manifest.yml",
+    "docs": "https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#no-route"
+  },
+  {
+    "tool": "cds",
+    "match": "cds\\s+serve\\s+--in-memory",
+    "severity": "warn",
+    "since": "@sap/cds 7",
+    "message": "`cds serve --in-memory` was removed. Use `cds watch` for local development.",
+    "replacement": "cds watch",
+    "docs": "https://cap.cloud.sap/docs/tools/"
+  },
+  {
+    "tool": "npm",
+    "match": "npm\\s+install\\s+--save\\b",
+    "severity": "warn",
+    "since": "npm 5",
+    "message": "`npm install --save` is the default since npm 5 and the flag is unnecessary.",
+    "replacement": "npm install <package>",
+    "docs": "https://docs.npmjs.com/cli/v10/commands/npm-install"
+  }
+]
