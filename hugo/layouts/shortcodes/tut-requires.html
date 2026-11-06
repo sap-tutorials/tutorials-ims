@@ -1,0 +1,10 @@
+{{- $slug := .Get "slug" -}}
+{{- $title := .Get "title" -}}
+{{- $time := .Get "time" -}}
+<div class="tut-prereq-card" data-slug="{{ $slug }}">
+  <a href="/tutorials/{{ $slug }}">
+    <span class="prereq-title">{{ $title }}</span>
+    <span class="prereq-meta">{{ $time }} min</span>
+  </a>
+  <span class="prereq-status" aria-live="polite"></span>
+</div>

@@ -1,0 +1,7 @@
+{
+  "cap-node": "https://cap.cloud.sap/docs/node.js/api#{{symbol}}",
+  "cap-java": "https://cap.cloud.sap/docs/java/api#{{symbol}}",
+  "ui5": "https://ui5.sap.com/#/api/{{symbol}}",
+  "cloud-sdk-js": "https://sap.github.io/cloud-sdk/docs/js/api/{{symbol}}",
+  "cloud-sdk-java": "https://sap.github.io/cloud-sdk/docs/java/api/{{symbol}}"
+}

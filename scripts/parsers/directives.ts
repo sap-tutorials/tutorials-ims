@@ -371,6 +371,8 @@ function validateAttrs(
   for (const [attrName, attrVal] of Object.entries(raw.attrs)) {
     const attrDef = def.attrs[attrName];
     if (!attrDef) {
+      // If the directive allows extra (free-form) attrs, skip unknown keys
+      if (def.allowExtraAttrs) continue;
       throw new DirectiveParseError(
         `Directive "${name}" has no attribute "${attrName}"`,
         slug,
@@ -698,6 +700,28 @@ export interface ExpandDirectivesContext {
   channel?: string;
   repo?: string;
   branch?: string;
+  /**
+   * Slim catalog index keyed by tutorial slug. Used by `:ref` and similar
+   * directives to resolve titles and metadata without loading the full nav JSON.
+   */
+  catalogBySlug?: Map<string, { title: string; time: number; level?: string }>;
+  /**
+   * Snippet source map: snippetKey → raw markdown source.
+   * Populated by the fetch pipeline before `expandDirectives` is called.
+   * Consumed by the `:include` directive (Task 2).
+   */
+  snippetMap?: Map<string, string>;
+  /**
+   * Ancestor snippet names for cycle detection in nested `:include` directives.
+   * Each frame pushes the current snippet name before recursing and pops on return.
+   * An empty/absent array means we are at the top-level (tutorial body).
+   */
+  includeChain?: string[];
+  /**
+   * Cache for `:help` directive title lookups. Keyed by help topic ID.
+   * Populated lazily by the `:help` directive renderer (Task 3).
+   */
+  helpTitleCache?: Map<string, string>;
 }
 
 /**
@@ -725,6 +749,9 @@ export function expandDirectives(body: string, ctx: ExpandDirectivesContext): st
 
   // Track which node instances have been expanded to detect cycles
   const expandedNodes = new WeakSet<DirectiveNode>();
+  // Store expand results for non-container nodes (leaf/inline) so the render
+  // phase can use the expansion instead of calling render().
+  const expandResults = new WeakMap<DirectiveNode, string>();
   const MAX_EXPAND_DEPTH = 10;
 
   /**
@@ -752,7 +779,7 @@ export function expandDirectives(body: string, ctx: ExpandDirectivesContext): st
 
     expandedNodes.add(node);
 
-    const expanded = def.expand(node, { slug: ctx.slug, variables: ctx.variables });
+    const expanded = def.expand(node, ctx);
     if (!expanded) {
       return undefined;
     }
@@ -808,6 +835,10 @@ export function expandDirectives(body: string, ctx: ExpandDirectivesContext): st
       if (node.kind === 'container') {
         // For containers, update the body
         node.body = expanded;
+      } else {
+        // For leaf/inline nodes with an expand hook, store the result for
+        // use in the render phase (bypasses render() call).
+        expandResults.set(node, expanded);
       }
     }
   }
@@ -864,8 +895,13 @@ export function expandDirectives(body: string, ctx: ExpandDirectivesContext): st
     const def = registry.get(node.name);
     if (!def) continue;
 
+    // For leaf/inline nodes whose expand hook produced content, use that
+    // directly as the replacement (bypasses render() — expand already produced
+    // the final markdown, e.g. for ::include which inlines snippet source).
+    const expandedContent = expandResults.get(node);
+
     const output = def.render(node, { slug: ctx.slug, variables: ctx.variables, channel: ctx.channel, repo: ctx.repo, branch: ctx.branch });
-    const rendered = buildShortcode(node, output);
+    const rendered = expandedContent !== undefined ? expandedContent : buildShortcode(node, output);
     const lineIdx = node.line - 1; // 0-based
 
     if (lineIdx < 0 || lineIdx >= lines.length) continue;

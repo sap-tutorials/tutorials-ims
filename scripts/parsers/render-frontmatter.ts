@@ -102,6 +102,19 @@ export interface RenderHugoFrontmatterArgs {
     aliases?: Record<string, string[]>
     default?: string
   }>
+  /**
+   * Author-declared tool/library versions this tutorial has been tested with.
+   * e.g. `{ "@sap/cds": "9.x", node: "22" }`.
+   * When non-empty, emitted as a YAML map in frontmatter so Hugo templates
+   * can read it via `.Params.testedWith`.
+   */
+  testedWith?: Record<string, string>
+  /**
+   * Prerequisite tutorial slugs that should be completed before this one.
+   * e.g. `['hana-cloud-tutorial-1', 'hana-cloud-tutorial-2']`.
+   * When non-empty, emitted as a YAML list in frontmatter.
+   */
+  requires?: string[]
 }
 
 export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
@@ -138,6 +151,8 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     variables,
     syncKeysUsed,
     syncGroups,
+    testedWith,
+    requires,
   } = args
 
   const cleanTags = tags.map(t => t.replace(/\\/g, ''))
@@ -251,6 +266,8 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
   if (syncGroups && Object.keys(syncGroups).length > 0) {
     fm.syncGroups = syncGroups
   }
+  if (testedWith && Object.keys(testedWith).length > 0) fm.testedWith = testedWith
+  if (requires && requires.length > 0) fm.requires = requires
 
   const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
 

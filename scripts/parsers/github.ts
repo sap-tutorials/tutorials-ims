@@ -1010,3 +1010,161 @@ export async function fetchRulesVr(slug: string, repo: string, branch: string): 
     return existsSync(cacheFile) ? readFileSync(cacheFile, 'utf-8') : null
   }
 }
+
+/**
+ * Fetch _snippets/ directory contents from GitHub repos.
+ * Returns Map<snippetKey, markdownSource>.
+ * Key format: `<repo>/_snippets/<name>` or `shared/<name>` for the shared repo.
+ * @returns Empty map (stub — full implementation in later tasks when SNIPPETS_ENABLED_REPOS is set)
+ */
+export async function fetchSnippets(
+  _repoNames: string[],
+  _token: string,
+): Promise<Map<string, string>> {
+  // Stub: full implementation fetches from GitHub API
+  // Set SNIPPETS_ENABLED_REPOS env var to enable per-repo snippet fetching
+  return new Map()
+}
+
+/**
+ * Scan tutorial sources for ::include[] references and build a dep map.
+ * @param snippetMap - snippet key → source map
+ * @param tutorials - array of { slug, rawMd }
+ * @returns SnippetDeps: snippet key → list of dependent slugs
+ */
+export function buildSnippetDeps(
+  _snippetMap: Map<string, string>,
+  _tutorials: Array<{ slug: string; rawMd: string }>,
+): Record<string, string[]> {
+  // Stub: full implementation in later tasks
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// Help title cache
+// ---------------------------------------------------------------------------
+
+const HELP_TITLE_CACHE_FILE = join(CACHE_DIR, 'help-title-cache.json')
+const HELP_TITLE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+const HELP_FETCH_CONCURRENCY = 5
+const HELP_FETCH_TIMEOUT_MS = 10_000
+const HELP_BASE_URL = 'https://help.sap.com'
+// Strip trailing " | SAP Help Portal" or any " | ..." suffix
+const HELP_TITLE_SUFFIX_RE = /\s*\|.*$/
+
+type HelpTitleEntry = { title: string; ts: number }
+
+function loadHelpTitleCache(): Record<string, HelpTitleEntry> {
+  try {
+    if (existsSync(HELP_TITLE_CACHE_FILE)) {
+      return JSON.parse(readFileSync(HELP_TITLE_CACHE_FILE, 'utf-8'))
+    }
+  } catch {
+    // corrupt cache — start fresh
+  }
+  return {}
+}
+
+function saveHelpTitleCache(cache: Record<string, HelpTitleEntry>): void {
+  try {
+    mkdirSync(CACHE_DIR, { recursive: true })
+    writeFileSync(HELP_TITLE_CACHE_FILE, JSON.stringify(cache, null, 2), 'utf-8')
+  } catch {
+    // non-fatal — title lookups degrade gracefully
+  }
+}
+
+function extractHtmlTitle(html: string): string | null {
+  const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
+  if (!m) return null
+  return m[1].replace(HELP_TITLE_SUFFIX_RE, '').trim() || null
+}
+
+/**
+ * Fetch page titles for a list of help.sap.com relative paths.
+ *
+ * Results are cached on disk for 7 days at `.tutorial-cache/help-title-cache.json`.
+ * On any network error or non-200 response, the path itself is used as the title
+ * so callers always receive a complete map (fail-open).
+ *
+ * Concurrency is capped at 5 parallel requests; each request has a 10 s timeout.
+ *
+ * @param paths  - help.sap.com relative paths, e.g. `/docs/BTP/cloud-foundry/overview`
+ * @param _token - GitHub token (reserved for future auth if SAP ever gates the endpoint)
+ * @returns Map of path → resolved title
+ */
+export async function fetchHelpTitles(
+  paths: string[],
+  _token: string,
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>()
+  if (paths.length === 0) return result
+
+  const cache = loadHelpTitleCache()
+  const now = Date.now()
+
+  // Partition: already cached vs. needs fetch
+  const toFetch: string[] = []
+  for (const p of paths) {
+    const entry = cache[p]
+    if (entry && now - entry.ts < HELP_TITLE_CACHE_TTL_MS) {
+      result.set(p, entry.title)
+    } else {
+      toFetch.push(p)
+    }
+  }
+
+  if (toFetch.length === 0) return result
+
+  // Semaphore-based concurrency limiter
+  let active = 0
+  let idx = 0
+  const pending = new Map<string, Promise<void>>()
+
+  async function fetchOne(path: string): Promise<void> {
+    const url = `${HELP_BASE_URL}${path}`
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), HELP_FETCH_TIMEOUT_MS)
+    let title: string = path // fail-open default
+    try {
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'tutorials-ims-bot/1.0' },
+      })
+      if (res.ok) {
+        const html = await res.text()
+        title = extractHtmlTitle(html) ?? path
+      }
+    } catch {
+      // network error or timeout — use path as title
+    } finally {
+      clearTimeout(timer)
+    }
+    result.set(path, title)
+    cache[path] = { title, ts: Date.now() }
+  }
+
+  // Dispatch up to HELP_FETCH_CONCURRENCY tasks at a time
+  await new Promise<void>((resolve) => {
+    function dispatch(): void {
+      while (active < HELP_FETCH_CONCURRENCY && idx < toFetch.length) {
+        const path = toFetch[idx++]
+        active++
+        const p = fetchOne(path).then(() => {
+          active--
+          pending.delete(path)
+          dispatch()
+          if (active === 0 && idx >= toFetch.length) resolve()
+        })
+        pending.set(path, p)
+      }
+      // Edge case: all paths were already cached when we enter (shouldn't happen here
+      // because toFetch.length > 0, but guard anyway)
+      if (active === 0) resolve()
+    }
+    dispatch()
+  })
+
+  saveHelpTitleCache(cache)
+  return result
+}

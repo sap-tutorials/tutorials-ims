@@ -88,6 +88,39 @@ export function scanCliDeprecations(markdown) {
   return findings;
 }
 
+// ─── testedWith freshness check ───────────────────────────────────────────────
+// Inlined here (not imported from scripts/parsers) to avoid cross-layer
+// module resolution issues at runtime.
+
+/** Known current major versions for packages referenced in testedWith frontmatter. */
+const KNOWN_VERSIONS = {
+  '@sap/cds': 10,
+  'node': 22,
+  'SAP BTP CLI': 2,
+  '@sap/hana-client': 2,
+};
+
+/**
+ * Check a testedWith map for packages whose declared major version is behind
+ * the known current major. Returns an array of findings; empty when everything
+ * is current or unknown. Non-numeric values are silently skipped.
+ *
+ * @param {Record<string, string>} testedWith
+ * @returns {Array<{ pkg: string, declared: number, current: number }>}
+ */
+function checkTestedWithFreshness(testedWith) {
+  const findings = [];
+  for (const [pkg, ver] of Object.entries(testedWith)) {
+    const match = /^(\d+)/.exec(ver);
+    if (!match) continue;
+    const declared = parseInt(match[1], 10);
+    const current = KNOWN_VERSIONS[pkg];
+    if (current === undefined) continue;
+    if (declared < current) findings.push({ pkg, declared, current });
+  }
+  return findings;
+}
+
 // ─── Tool schema ──────────────────────────────────────────────────────────────
 
 export const FRESHNESS_TOOL_SPEC = {
@@ -283,6 +316,42 @@ export async function detectFreshness({ db, tutorialId }) {
     const src = await getTutorialSource(t.slug);
     if (!src || !src.markdown) return { ok: true, model: null, costCents: 0, findings: [] };
 
+    // testedWith outdated-version check (additive, fail-open)
+    // Runs directly on src.markdown (pre-directive-strip) so the YAML frontmatter
+    // block is still intact. Results are accumulated in `extraFindings` and merged
+    // into the final findings array after the LLM pass.
+    const extraFindings = [];
+    try {
+      const mdNorm = src.markdown.replace(/\r\n/g, '\n');
+      const fmMatch = mdNorm.match(/^---\n([\s\S]*?)\n---/);
+      if (fmMatch) {
+        const yaml = await import('js-yaml');
+        const fm = yaml.default.load(fmMatch[1]);
+        if (fm && typeof fm === 'object' && fm.testedWith && typeof fm.testedWith === 'object') {
+          const vFindings = checkTestedWithFreshness(fm.testedWith);
+          for (const f of vFindings) {
+            extraFindings.push({
+              category: 'obsolete-dep',
+              severity: 'Medium',
+              confidence: 'High',
+              stepRef: 0,
+              codeBlockIndex: -1,
+              lang: null,
+              evidence: `${f.pkg} declared major ${f.declared}; current is ${f.current}`,
+              summary: `${f.pkg} is behind current major version (declared: ${f.declared}, current: ${f.current})`,
+              suggestedFix: `Update ${f.pkg} to major version ${f.current} or later`,
+              // Non-empty groundingSource prevents the confidence-Low normalizer from
+              // downgrading this finding. testedWith checks are deterministic (not LLM),
+              // so High confidence is accurate.
+              groundingSource: 'testedWith frontmatter',
+            });
+          }
+        }
+      }
+    } catch (e) {
+      LOG?.warn('testedWith freshness check failed (fail-open)', e);
+    }
+
     // Strip directive syntax (:::details, :kbd[, etc.) so the model sees
     // plain prose rather than raw CommonMark directive fences.
     // Workspace-first / bundle fallback: directives.ts is not compiled to .js;
@@ -332,7 +401,7 @@ export async function detectFreshness({ db, tutorialId }) {
       .map(f => (f.groundingSource ? f : { ...f, confidence: 'Low' }));
 
     const cliFindings = scanCliDeprecations(src.markdown);
-    return { ok: true, model: r.modelName, costCents, findings: [...findings, ...cliFindings] };
+    return { ok: true, model: r.modelName, costCents, findings: [...findings, ...cliFindings, ...extraFindings] };
   } catch (err) {
     LOG.error('detection failed — failing open (non-destructive)', err);
     return { ok: false, model: null, costCents: 0, findings: [] };

@@ -5,7 +5,8 @@ import { performance } from 'node:perf_hooks'
 import { hugoFrontmatterStringify as yamlStringify } from './lib/hugo-yaml.js'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
 import { composeTutorial } from './parsers/compose.js'
-import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial, type DiscoverySource } from './parsers/github.js'
+import './parsers/directives/register-all.js' // side-effect: registers all content-reuse directives
+import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, buildSnippetDeps, fetchHelpTitles, EXCLUDED_REPOS, type DiscoveredTutorial, type DiscoverySource } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache, type BrowseFeaturedEntry } from './parsers/cap.js'
 import {
   computeFeedFingerprint,
@@ -1177,6 +1178,31 @@ async function main() {
   const aiAuthorGate = await resolveAiAuthorGate({ resolveSettings: resolveChatLlmSettings })
   console.log(`[ai-author] ${aiAuthorGate.enabled ? 'ENABLED' : 'DISABLED'} — ${aiAuthorGate.reason}`)
 
+  // ── Gather all :help[...] paths from cached markdown and pre-fetch titles ──
+  // Scan all cached tutorial markdown files for :help[<path>] directives, then
+  // batch-fetch the help.sap.com page titles (7-day disk cache, 5 concurrent,
+  // 10s timeout, fail-open). The resulting map is forwarded into each
+  // composeTutorial call so the :help directive can resolve titles without
+  // making per-tutorial network requests.
+  const HELP_PATH_RE = /:help\[([^\]]+)\]/g
+  const allHelpPathsSet = new Set<string>()
+  for (const t of allTutorials) {
+    const cacheFile = join(CACHE_DIR, `${t.slug}.md`)
+    if (existsSync(cacheFile)) {
+      const raw = readFileSync(cacheFile, 'utf-8')
+      for (const m of raw.matchAll(HELP_PATH_RE)) {
+        allHelpPathsSet.add(m[1])
+      }
+    }
+  }
+  const allHelpPaths = Array.from(allHelpPathsSet)
+  const helpTitleCache: Map<string, string> = allHelpPaths.length > 0
+    ? await fetchHelpTitles(allHelpPaths, token)
+    : new Map()
+  if (allHelpPaths.length > 0) {
+    console.log(`[help-titles] fetched/cached ${helpTitleCache.size} title(s) for ${allHelpPaths.length} path(s)`)
+  }
+
   const tasks = allTutorials.map((t, idx) => async () => {
     const tutStart = performance.now()
     const label = `[${idx + 1}/${allTutorials.length}] ${t.repo}/${t.slug}`
@@ -1256,6 +1282,10 @@ async function main() {
 
       const composed = composeTutorial(rawMd, {
         repo: t.repo, branch: t.branch, slug: t.slug, target, rewriteImages: true,
+        // TODO Task 6: pass real snippetMap from fetchSnippets() and catalogBySlug after navBySlug is built
+        snippetMap: new Map(),
+        catalogBySlug: undefined,
+        helpTitleCache,
       })
       const { title, description, youWillLearn, prerequisites, level, frontmatter } = composed
 
@@ -1924,6 +1954,35 @@ async function main() {
   mkdirSync(navJsonDir, { recursive: true })
   const navPath = join(navJsonDir, '_nav.json')
   writeFileSync(navPath, JSON.stringify(navData, null, 2), 'utf-8')
+
+  // ── Snippet-deps manifest (Task 7) ──────────────────────────────────────
+  // Build and cache a snippet-key → [dependent slugs] map so the rebuild
+  // workflow can expand _snippets/ file changes to only the affected tutorials
+  // (slug-targeted O(N)) rather than triggering a full ~10-min rebuild.
+  //
+  // This runs post-Phase-4 so navEntries is complete. The actual per-tutorial
+  // rawMd is not kept in memory after compose(); for now we pass an empty
+  // snippetMap (stub — buildSnippetDeps returns {} until the full impl lands
+  // in a later task). The cache file is picked up by publish-content.ts and
+  // uploaded to HANA as `_manifest_snippet-deps` for the workflow to fetch
+  // via GET /content/manifest/snippet-deps.
+  // TODO: pass real snippetMap from fetchSnippets() + rawMd per slug once
+  //       snippet pre-fetch is wired (content-reuse Task 8+).
+  try {
+    const snippetDeps = buildSnippetDeps(
+      new Map<string, string>(),
+      navEntries.map(n => ({ slug: n.slug, rawMd: '' })),
+    )
+    mkdirSync(CACHE_DIR, { recursive: true })
+    writeFileSync(
+      join(CACHE_DIR, 'snippet-deps.json'),
+      JSON.stringify(snippetDeps, null, 2),
+      'utf-8',
+    )
+    console.log(`[snippet-deps] wrote snippet-deps.json (${Object.keys(snippetDeps).length} snippet keys)`)
+  } catch (err) {
+    console.warn(`[snippet-deps] failed to build/write snippet-deps.json: ${err instanceof Error ? err.message : err}`)
+  }
 
   // ── Content-cache sidecar (Workstream C) ──
   // Persist the full post-Phase-4 navEntries + author rows + the feed fingerprint

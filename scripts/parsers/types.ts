@@ -88,7 +88,27 @@ export interface TutorialFrontmatter {
    * Absent — placeholder wrapping is skipped entirely (default behavior).
    */
   placeholders?: 'auto' | Array<{ token: string; label?: string }>
+  /**
+   * Author-declared tool/library versions this tutorial has been tested with.
+   * e.g. `{ "@sap/cds": "9.x", node: "22" }`.
+   * Keys and values must be non-empty strings; max 10 entries (extras silently
+   * dropped). Parsed by frontmatter.ts from the `testedWith` YAML map.
+   */
+  testedWith?: Record<string, string>
+  /**
+   * Prerequisite tutorial slugs that should be completed before this one.
+   * e.g. `['hana-cloud-tutorial-1', 'hana-cloud-tutorial-2']`.
+   * Empty/non-string entries are filtered out. Parsed by frontmatter.ts.
+   */
+  requires?: string[]
 }
+
+/**
+ * Maps snippet file paths to the list of tutorial slugs that include them.
+ * Used by the content-reuse pipeline to track which tutorials depend on which
+ * snippet files (for cache invalidation and dependency graph construction).
+ */
+export type SnippetDeps = Record<string, string[]>
 
 /**
  * Canonical question-type discriminators. Source of truth for the

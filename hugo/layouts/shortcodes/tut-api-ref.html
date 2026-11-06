@@ -1,0 +1,12 @@
+{{/*
+  tut-api-ref — link to an API symbol in a curated library.
+
+  Params:
+    symbol — the API symbol name
+    lib    — library key (e.g. "cap-node", "ui5")
+    href   — resolved URL with symbol substituted
+
+  Security note: .Get uses Hugo's default HTML auto-escaping.
+  Never apply safeHTML to directive-supplied values.
+*/}}
+<a href="{{ .Get "href" }}" rel="noopener noreferrer" target="_blank"><code>{{ .Get "symbol" }}</code></a>

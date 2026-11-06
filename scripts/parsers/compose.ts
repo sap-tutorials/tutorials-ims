@@ -26,6 +26,7 @@ import './directives/qa-only.js' // side-effect: registers qa-only directive
 import './directives/callout-directives.js' // side-effect: registers callout container + spoiler directives
 import './directives/index.js' // side-effect: registers rich-media directive barrel
 import './directives/ui.js' // side-effect: registers menu/kbd/icon/ui/ask directives
+import './directives/register-all.js' // side-effect: registers all content-reuse directives
 
 /**
  * Normalize line endings to LF. Catches CRLF (Windows / GitHub-via-Windows-
@@ -60,6 +61,24 @@ export interface ComposeOpts {
    * because it also writes sidecar JSON files. Preview is the only consumer.
    */
   rulesVr?: string
+  /**
+   * Snippet source map: snippetKey → raw markdown source.
+   * Populated by the fetch pipeline before `composeTutorial` is called.
+   * Forwarded to `expandDirectives` for the ::include directive.
+   */
+  snippetMap?: Map<string, string>
+  /**
+   * Slim catalog index keyed by tutorial slug. Used by :ref and similar
+   * directives to resolve titles and metadata without loading the full nav JSON.
+   */
+  catalogBySlug?: Map<string, { title: string; time: number; level?: string }>
+  /**
+   * Pre-fetched help.sap.com page titles keyed by path.
+   * Populated before the compose loop by fetchHelpTitles() and forwarded to
+   * expandDirectives so the :help directive can resolve titles without
+   * per-tutorial network requests.
+   */
+  helpTitleCache?: Map<string, string>
 }
 
 export interface ComposeResult {
@@ -107,6 +126,17 @@ export interface ComposeResult {
    * container directive. Drives conditional loading of code-walkthrough.ts.
    */
   hasWalkthrough?: boolean
+  /**
+   * Author-declared tool/library versions this tutorial has been tested with.
+   * e.g. `{ "@sap/cds": "9.x", node: "22" }`.
+   * Passed through from `TutorialFrontmatter.testedWith`.
+   */
+  testedWith?: Record<string, string>
+  /**
+   * Prerequisite tutorial slugs that should be completed before this one.
+   * Passed through from `TutorialFrontmatter.requires`.
+   */
+  requires?: string[]
 }
 
 export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult {
@@ -229,6 +259,9 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     channel,
     repo: opts.repo,
     branch: opts.branch,
+    snippetMap: opts.snippetMap,
+    catalogBySlug: opts.catalogBySlug,
+    helpTitleCache: opts.helpTitleCache,
   })
 
   const hasCompare = processedBody.includes('{{< tut-compare')
@@ -414,5 +447,11 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
       ? { syncGroups: frontmatter.syncGroups }
       : {}),
     ...(hasWalkthrough ? { hasWalkthrough: true } : {}),
+    ...(frontmatter.testedWith && Object.keys(frontmatter.testedWith).length > 0
+      ? { testedWith: frontmatter.testedWith }
+      : {}),
+    ...(frontmatter.requires && frontmatter.requires.length > 0
+      ? { requires: frontmatter.requires }
+      : {}),
   }
 }
