@@ -1,5 +1,6 @@
 import { initMermaid } from './mermaid-bootstrap'
 import { csrfFetch } from './csrf-fetch'
+import { getChoice, setChoice, onChange } from './sync-groups'
 
 // NOTE: copyCodeBlock (the "Copy code" button handler) now lives in the
 // site-wide code-copy.ts, loaded on every page from baseof.html. The
@@ -22,7 +23,7 @@ document.addEventListener('click', (e) => {
   const skipBtn = target.closest('[data-action="skip-step"]')
   if (skipBtn) { skipStep(skipBtn as HTMLButtonElement); return }
   const tabBtn = target.closest('[role="tab"]')
-  if (tabBtn) { switchTab(tabBtn as HTMLButtonElement); return }
+  if (tabBtn) { activateTab(tabBtn as HTMLButtonElement, true); return }
   const codeToggle = target.closest('[data-action="toggle-code"]')
   if (codeToggle) { toggleCodeBlock(codeToggle as HTMLButtonElement); return }
   const printBtn = target.closest('[data-action="print-tutorial"]')
@@ -145,15 +146,86 @@ function updateActiveTocItem() {
 ;(window as any).collapseAllSteps = collapseAllSteps
 
 // --- Tab switching ---
-function switchTab(btn: HTMLButtonElement) {
+//
+// activateTab(btn, notifySync): selects `btn` within its strip.
+//   - Updates is-selected class, aria-selected, tabindex (roving).
+//   - Shows/hides panels.
+//   - When notifySync=true AND the strip carries data-sync-key, persists the
+//     choice via setChoice() so other strips of the same key follow.
+//
+// Strips with NO data-sync-key behave exactly as before (independent tabs).
+
+function activateTab(btn: HTMLButtonElement, notifySync: boolean) {
   const container = btn.closest('[data-component="tabs"]')
   if (!container) return
   const index = btn.dataset.tabIndex
-  container.querySelectorAll('[role="tab"]').forEach(t => t.classList.remove('is-selected'))
-  btn.classList.add('is-selected')
+
+  // Update all tabs in the strip
+  container.querySelectorAll<HTMLElement>('[role="tab"]').forEach(t => {
+    const active = t === btn
+    t.classList.toggle('is-selected', active)
+    t.setAttribute('aria-selected', active ? 'true' : 'false')
+    t.setAttribute('tabindex', active ? '0' : '-1')
+  })
+
+  // Show/hide panels
   container.querySelectorAll('[data-tab-panel]').forEach(p => {
     const panel = p as HTMLElement
     panel.hidden = panel.dataset.tabPanel !== index
+  })
+
+  // Sync: persist when the strip is wired to a sync key
+  if (notifySync) {
+    const list = container.querySelector('[data-sync-key]') as HTMLElement | null
+    const syncKey = list?.dataset.syncKey
+    if (syncKey) {
+      const syncValue = btn.dataset.syncValue
+      if (syncValue) setChoice(syncKey, syncValue)
+    }
+  }
+}
+
+/** Select the tab whose data-sync-value matches `value`; no-op when not found. */
+function applyChoiceToStrip(strip: Element, value: string) {
+  const btn = strip.querySelector<HTMLButtonElement>(`[role="tab"][data-sync-value="${CSS.escape(value)}"]`)
+  if (btn) activateTab(btn, false)
+}
+
+/** Keydown handler for roving tabindex in tab strips (ArrowLeft/Right/Home/End). */
+document.addEventListener('keydown', (e) => {
+  const target = e.target as HTMLElement
+  if (target.getAttribute('role') !== 'tab') return
+  const container = target.closest('[data-component="tabs"]')
+  if (!container) return
+  const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+  const currentIdx = tabs.indexOf(target as HTMLButtonElement)
+  if (currentIdx === -1) return
+
+  let nextIdx = -1
+  if (e.key === 'ArrowRight') nextIdx = (currentIdx + 1) % tabs.length
+  else if (e.key === 'ArrowLeft') nextIdx = (currentIdx - 1 + tabs.length) % tabs.length
+  else if (e.key === 'Home') nextIdx = 0
+  else if (e.key === 'End') nextIdx = tabs.length - 1
+  else return
+
+  e.preventDefault()
+  activateTab(tabs[nextIdx], true)
+  tabs[nextIdx].focus()
+})
+
+/** Wire all synced strips: apply stored choice on load and subscribe to changes. */
+function initSyncedTabs() {
+  document.querySelectorAll('[data-sync-key]').forEach(list => {
+    const syncKey = (list as HTMLElement).dataset.syncKey!
+    const container = list.closest('[data-component="tabs"]')
+    if (!container) return
+
+    // Apply stored choice (if any) on page load
+    const stored = getChoice(syncKey)
+    if (stored) applyChoiceToStrip(container, stored)
+
+    // Subscribe: when another browser tab/strip writes the same key, follow
+    onChange(syncKey, (value) => applyChoiceToStrip(container, value))
   })
 }
 
@@ -629,6 +701,7 @@ document.addEventListener('DOMContentLoaded', () => {
   ])
   initDoneButtonGate()
   initCodeCheckDoneGate()
+  initSyncedTabs()
   updateActiveTocItem()
   initAuthAwareButtons()
   initStepHashNavigation()
