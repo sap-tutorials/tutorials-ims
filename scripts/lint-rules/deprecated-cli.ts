@@ -3,6 +3,15 @@
  *
  * Scans bash/sh/shell/console/terminal/powershell/cmd fences for commands
  * matching known deprecated patterns from cli-deprecations.json.
+ *
+ * QUARTERLY REVIEW REMINDER (spec task 4.4):
+ *   Each quarter, review cli-deprecations.json for:
+ *   - New CF CLI v8+ removals: https://docs.cloudfoundry.org/cf-cli/cf-help.html
+ *   - New CDS/CAP CLI changes: https://cap.cloud.sap/docs/releases/
+ *   - New BTP CLI changes: https://help.sap.com/docs/btp/sap-business-technology-platform/btp-cli
+ *   - New MBT CLI changes: https://sap.github.io/cloud-mta-build-tool/
+ *   Rules marked `needsOwnerReview: true` should be verified and the flag removed
+ *   once an owner confirms the deprecation against the official changelog.
  */
 import { createRequire } from 'node:module'
 import type { LintFinding } from '../lint-tutorial-markdown.js'
@@ -17,6 +26,10 @@ interface CliDeprecation {
   message: string
   replacement: string
   docs: string
+  /** When true, the rule was added based on best-effort research and needs
+   *  an owner to verify against the official changelog before treating as
+   *  authoritative. The rule still fires — it's advisory at 'warning' level. */
+  needsOwnerReview?: boolean
 }
 
 const DEPRECATIONS: CliDeprecation[] = require('./data/cli-deprecations.json')
