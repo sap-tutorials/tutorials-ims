@@ -92,6 +92,12 @@ On macOS, your group is also {{var:groupNumber}}.
 > **Note:** This is a blockquote.
 > It spans multiple lines.
 
+> [!DETAILS] Why it works
+> body text
+
+> [!HINT]
+> hint body
+
 A list with nested items:
 
 - Item 1

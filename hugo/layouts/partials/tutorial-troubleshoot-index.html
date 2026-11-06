@@ -1,0 +1,20 @@
+{{- /* Render troubleshooting index below tutorial content (#callout-enhancements).
+       Called from single.html. No-ops when no steps have troubleshootEntries. */ -}}
+{{ $entries := slice }}
+{{ range .Params.steps }}
+  {{ if .troubleshootEntries }}
+    {{ range .troubleshootEntries }}
+      {{ $entries = $entries | append . }}
+    {{ end }}
+  {{ end }}
+{{ end }}
+{{ if $entries }}
+<section class="tutorial-troubleshoot-index" aria-label="Troubleshooting">
+  <h2>Troubleshooting</h2>
+  <ul>
+    {{ range $entries }}
+    <li>{{ .title }}</li>
+    {{ end }}
+  </ul>
+</section>
+{{ end }}

@@ -907,6 +907,100 @@ blockquote.alert-caution {
   background-color: var(--sapErrorBackground, #ffeaf4);
 }
 
+/* ── Callout enhancements (#callout-enhancements) ─────────────────────────
+   Icons, titles, collapsible types, spoiler, print rules.                 */
+
+/* Shared aside/details reset so .alert-* rules apply identically          */
+aside.alert, details.alert {
+  border-left: 4px solid var(--sapInformationBorderColor, #0070f2);
+  background-color: var(--sapInformationBackground, #e1f4ff);
+  padding: 0.75rem 1rem;
+  border-radius: 0 0.25rem 0.25rem 0;
+  color: var(--sapTextColor, #32363a);
+  margin: 1rem 0;
+}
+
+/* Icon + type label layout */
+.alert__icon { margin-right: 0.375rem; font-size: 1rem; vertical-align: middle; }
+.alert__title { font-weight: 600; margin-bottom: 0.25rem; }
+.alert__body > :first-child { margin-top: 0; }
+.alert__body > :last-child  { margin-bottom: 0; }
+
+/* Summary row for collapsible alerts */
+details.alert > summary.alert__summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  padding: 0;
+  margin: 0;
+}
+details.alert > summary.alert__summary::-webkit-details-marker { display: none; }
+details.alert > summary.alert__summary::marker { display: none; }
+details.alert > summary.alert__summary::before {
+  content: '▶';
+  font-size: 0.65rem;
+  margin-right: 0.5rem;
+  transition: transform 0.15s;
+  display: inline-block;
+}
+details.alert[open] > summary.alert__summary::before { transform: rotate(90deg); }
+details.alert > .alert__body { margin-top: 0.5rem; }
+
+/* New type colors (aside + details variants) */
+aside.alert-result, details.alert-result {
+  border-left-color: var(--sapSuccessBorderColor, #30914c);
+  background-color: var(--sapSuccessBackground, #f5fae5);
+}
+aside.alert-details, details.alert-details {
+  border-left-color: var(--sapNeutralBorderColor, #8696a9);
+  background-color: var(--sapNeutralBackground, #f2f2f2);
+}
+aside.alert-troubleshoot, details.alert-troubleshoot {
+  border-left-color: var(--sapWarningBorderColor, #dd6100);
+  background-color: var(--sapWarningBackground, #fff8d6);
+}
+aside.alert-hint, details.alert-hint {
+  border-left-color: var(--sapInformationBorderColor, #0070f2);
+  background-color: var(--sapInformationBackground, #e1f4ff);
+}
+aside.alert-solution, details.alert-solution {
+  border-left-color: var(--sapSuccessBorderColor, #30914c);
+  background-color: var(--sapSuccessBackground, #f5fae5);
+}
+
+/* Spoiler inline element */
+.tut-spoiler {
+  background-color: currentColor;
+  color: transparent;
+  border-radius: 0.2em;
+  cursor: pointer;
+  user-select: none;
+  padding: 0 0.15em;
+  transition: color 0.2s, background-color 0.2s;
+}
+.tut-spoiler:focus-visible { outline: 2px solid var(--sapFocusColor, #0070f2); }
+.tut-spoiler[aria-pressed="true"] {
+  background-color: transparent;
+  color: inherit;
+}
+
+/* Progressive reveal: hint N+1 disabled until hint N opened */
+details.alert-hint[data-hint-disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+details.alert-hint[data-hint-disabled] > summary { pointer-events: none; }
+
+/* Print: force all collapsible alerts open */
+@media print {
+  details.alert { display: block; }
+  details.alert > summary.alert__summary { display: block; }
+  details.alert > .alert__body { display: block; }
+  .tut-spoiler { background-color: transparent !important; color: inherit !important; }
+}
+
 /* Tutorial meta bar (tags + time) */
 .tutorial-meta {
   display: flex;
@@ -1373,7 +1467,7 @@ ui5-li .step-badge-row {
  */
 .step-content > .os-options,
 .step-content > .option-tabs,
-.step-content > blockquote.alert,
+.step-content > :is(blockquote, aside, details).alert,
 /* #2820 — the OPTION group also detaches the PROSE/IMAGE/code that trails it
  * within the same substep (e.g. "Set the install directory…", the install
  * screenshot). Those land as column-0 direct children of .step-content after
@@ -1385,12 +1479,12 @@ ui5-li .step-badge-row {
 .step-content > .os-options ~ figure,
 .step-content > .os-options ~ pre,
 .step-content > .os-options ~ .code-block,
-.step-content > .os-options ~ blockquote,
+.step-content > .os-options ~ :is(blockquote, aside, details),
 .step-content > .option-tabs ~ p,
 .step-content > .option-tabs ~ figure,
 .step-content > .option-tabs ~ pre,
 .step-content > .option-tabs ~ .code-block,
-.step-content > .option-tabs ~ blockquote {
+.step-content > .option-tabs ~ :is(blockquote, aside, details) {
   /* #2820 — tutorial code fences render as `<div class="code-block">` (the
    * `<pre>` is nested inside, so the `~ pre` entry above never matches them);
    * a code box that TRAILS an OPTION group within the same substep must get

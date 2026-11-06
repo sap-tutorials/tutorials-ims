@@ -1,6 +1,7 @@
 import { extractFrontmatter } from './frontmatter.js'
 import { normalizeBlockquotedFences } from './blockquote-fence.js'
 import { mergeBlockquoteNoteDividers } from './blockquote-notes.js'
+import { normalizeBlockquoteAlerts } from './blockquote-alerts.js'
 import { extractIntro } from './intro.js'
 import { resolveImageURLs } from './images.js'
 import { resolveAttachmentLinks } from './attachment-links.js'
@@ -15,12 +16,14 @@ import type { BranchGroup } from './branches.js'
 import { parseRulesVrEnriched } from './rules.js'
 import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './codecheck.js'
 import { parseAssertBlocks, attachAssertSpecs } from './assert.js'
+import { collectTroubleshootEntries } from './blockquote-troubleshoot-collect.js'
 import type { TutorialStep, TutorialFrontmatter } from './types.js'
 import { validateVariables, wrapTokens } from './variables.js'
 import type { TutorialVariable } from './variables.js'
 import { expandDirectives } from './directives.js'
 import { stripAuthorNotes } from './author-notes.js'
 import './directives/qa-only.js' // side-effect: registers qa-only directive
+import './directives/callout-directives.js' // side-effect: registers callout container + spoiler directives
 
 /**
  * Normalize line endings to LF. Catches CRLF (Windows / GitHub-via-Windows-
@@ -140,7 +143,11 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   // healer so `>---` lines inside blockquoted code fences are already recognized
   // as code content and left untouched.
   const mergedBody = mergeBlockquoteNoteDividers(listProseHealedBody)
-  let processedBody = resolveImageURLs(mergedBody, {
+  // [callout-enhancements] Pre-pass hook for Hugo alert/callout blockquotes.
+  // Currently a fence-aware passthrough (identity transform). Provides the
+  // normalisation point for any future alert-type aliasing before rendering.
+  const alertsBody = normalizeBlockquoteAlerts(mergedBody)
+  let processedBody = resolveImageURLs(alertsBody, {
     repo: opts.repo, branch: opts.branch, slug: opts.slug,
     rewriteImages: opts.rewriteImages,
   })
@@ -331,6 +338,12 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     }
     const assertMap = parseAssertBlocks(opts.rulesVr)
     if (assertMap.size) attachAssertSpecs(steps, assertMap)
+  }
+
+  // [tutorial-callout-enhancements] Collect troubleshoot alert entries per step.
+  for (const step of steps) {
+    const entries = collectTroubleshootEntries(step.content, step.number)
+    if (entries.length > 0) step.troubleshootEntries = entries
   }
 
   return {

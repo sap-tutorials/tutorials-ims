@@ -391,19 +391,125 @@ GitHub-style alert designator on its own first line:
 > Prefer the frontmatter `video:` field over an inline iframe.
 ```
 
-| You write | Rendered emphasis | Color |
-|---|---|---|
-| `> text` (no designator) | Information (default) | blue |
-| `> [!NOTE]` | Information | blue |
-| `> [!IMPORTANT]` | Information | blue |
-| `> [!TIP]` | Success | green |
-| `> [!WARNING]` | Warning | amber |
-| `> [!CAUTION]` | Error | red |
+#### Alert types reference
+
+| Type | Icon | Default title | Collapsible | Notes |
+|---|---|---|---|---|
+| `> [!NOTE]` | info circle | — | no | General information |
+| `> [!TIP]` | lightbulb | — | no | Helpful aside or shortcut |
+| `> [!IMPORTANT]` | hint | — | no | Key information the reader must not miss |
+| `> [!WARNING]` | alert | — | no | Risk of data loss or unexpected behavior |
+| `> [!CAUTION]` | error | — | no | Severe or irreversible risk |
+| `> [!DETAILS] Title` | detail-view | — | yes (closed) | Collapsible section; **title is required** |
+| `> [!DETAILS+] Title` | detail-view | — | yes (open) | Same as DETAILS but open by default; title required |
+| `> [!TROUBLESHOOT] Title` | wrench | — | yes (closed) | Contributes to the auto-generated troubleshooting index at the bottom of the tutorial; title is optional |
+| `> [!RESULT]` | checkmark | "You should see" | no | Expected outcome after completing a step |
+| `> [!HINT]` | hint | — | yes (closed) | Multiple HINT callouts in the same step get progressive reveal — the second hint unlocks only after the first is opened |
+| `> [!SOLUTION]` | complete | — | yes (closed) | Full solution; place at the end of an exercise |
 
 Pick the designator by *intent*, not loudness: use `[!TIP]` for helpful
 asides, `[!WARNING]`/`[!CAUTION]` only for genuine risk. An ordinary
-"additional note" can stay a plain `>` (blue) or use `[!NOTE]`. The callout is
-color-only — there is no icon or heading label.
+"additional note" can stay a plain `>` (blue) or use `[!NOTE]`.
+
+#### Optional titles
+
+Any alert type accepts an optional title on the same line as the designator:
+
+```markdown
+> [!NOTE] Important setup step
+> This note has a custom heading above its body.
+```
+
+`DETAILS` and `DETAILS+` **require** a title. All other types treat the title as optional.
+
+#### Collapsible callouts — open by default (`+`)
+
+Append `+` to make a collapsible callout start in the open state:
+
+```markdown
+> [!DETAILS+] Show me the full config
+> ```yaml
+> key: value
+> ```
+```
+
+> **Lint warning:** A collapsed callout (`DETAILS`, `HINT`, `SOLUTION`, `TROUBLESHOOT`) that
+> contains the step's only command block will trigger a build warning. Move the command block
+> outside the callout, or mark the callout open with `+`.
+
+#### RESULT callouts
+
+`RESULT` provides a default title of "You should see" and a checkmark icon. Use it immediately
+after the action the reader should verify:
+
+```markdown
+> [!RESULT]
+> The terminal prints `Build succeeded` and exits with code 0.
+```
+
+> **Note:** Automatic verification links (assert-link) are deferred to a follow-up.
+
+#### HINT and SOLUTION callouts
+
+Use `HINT` for progressive nudges inside an exercise. Multiple hints in one step unlock
+one-at-a-time so the reader must open the first before the second appears:
+
+```markdown
+> [!HINT]
+> Look at the `requires` section of `package.json`.
+
+> [!HINT]
+> The value you need is `@sap/cds`.
+
+> [!SOLUTION]
+> Add `"@sap/cds": "^8"` to your `dependencies`.
+```
+
+#### Directive equivalents
+
+Some callout types have an alternative `:::type[Title]` directive syntax — useful when the
+body contains complex markdown that would be awkward inside a `>` blockquote:
+
+| Directive | Equivalent blockquote form |
+|---|---|
+| `:::details[Title]` | `> [!DETAILS] Title` |
+| `:::troubleshoot[Title]` | `> [!TROUBLESHOOT] Title` |
+| `:::result` | `> [!RESULT]` |
+| `:::hint[Optional title]` | `> [!HINT] Optional title` |
+| `:::solution[Optional title]` | `> [!SOLUTION] Optional title` |
+
+Example:
+
+```markdown
+:::details[Full configuration file]
+```yaml
+key: value
+nested:
+  key: value
+```
+:::
+```
+
+#### Inline spoilers
+
+Use `:spoiler[text]` to blur text until the reader clicks it — useful for quiz answers or
+reveal-on-demand content:
+
+```markdown
+The answer is :spoiler[42].
+```
+
+In plain-text contexts (MCP, email) the spoiler is rendered as `||42||`.
+
+#### Plain-text fallback forms
+
+When a tutorial is consumed in a plain-text context (MCP tool, email digest) the platform
+renders simplified equivalents:
+
+| Feature | Plain-text form |
+|---|---|
+| DETAILS / TROUBLESHOOT / HINT / SOLUTION | `**Details: Title**` followed by body |
+| Inline spoiler `:spoiler[text]` | `\|\|text\|\|` |
 
 ### 3.6 Code blocks
 

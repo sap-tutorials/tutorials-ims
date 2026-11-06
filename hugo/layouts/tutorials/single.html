@@ -36,7 +36,7 @@
 
     {{ partial "tutorial-video.html" . }}
     <div class="tutorial-steps">{{ .Content }}</div>
-
+    {{ partial "tutorial-troubleshoot-index.html" . }}
     {{ partial "next-steps.html" . }}
     {{ partial "tutorial-nav-bottom.html" . }}
   </main>
@@ -55,6 +55,8 @@
 {{/* [tutorial-step-pacing] see u1-object-page.html for rationale. */}}
 {{ $taskLists := resources.Get "js/task-lists.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $taskLists.RelPermalink }}" defer></script>
+{{ $hints := resources.Get "js/callout-hints.ts" | js.Build (dict "minify" true) }}
+<script src="{{ $hints.RelPermalink }}" defer></script>
 <script type="module" src="{{ partial "island-src.html" "nav-dropdown" }}"></script>
 {{ if not site.Params.qa }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip-launcher" }}"></script>{{ end }}
 {{ end }}

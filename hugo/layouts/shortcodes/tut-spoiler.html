@@ -1,0 +1,7 @@
+{{/*
+  tut-spoiler — inline spoiler text revealed on click / Enter / Space.
+  Parameter: text (the spoiler content, author-supplied, HTML-escaped by framework).
+  Blurred via CSS; revealed by JS toggle on aria-pressed.
+  Printed revealed (print CSS in sap-fundamental.src.css).
+*/}}
+<span class="tut-spoiler" tabindex="0" role="button" aria-pressed="false">{{ .Get "text" }}</span>
