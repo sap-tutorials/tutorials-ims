@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { authorNotesInProdRule, qaOnlyInProdRule } from '../authoring-aids.js';
+import { authorNotesInProdRule, qaOnlyInProdRule, promotionWarningRule } from '../authoring-aids.js';
 
 describe('authorNotesInProdRule', () => {
   it('finds an inline author note', () => {
@@ -33,5 +33,26 @@ describe('qaOnlyInProdRule', () => {
 
   it('returns empty for clean source', () => {
     expect(qaOnlyInProdRule.scan('test', ['Hello.'], ['Hello.'])).toHaveLength(0);
+  });
+});
+
+describe('promotionWarningRule', () => {
+  it('finds a promotion-warning directive in PROD source', () => {
+    const lines = [':::promotion-warning[resolve before PROD]', 'This step needs a screenshot refresh.', ':::'];
+    const findings = promotionWarningRule.scan('test', lines, lines);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].severity).toBe('notice');
+    expect(findings[0].rule).toBe('promotion-warning-in-prod-source');
+    expect(findings[0].line).toBe(1);
+    expect(findings[0].message).toContain('promotion-warning');
+  });
+
+  it('does NOT flag a promotion-warning pattern mid-line (must be fence-opener)', () => {
+    const lines = ['Some text :::promotion-warning inline'];
+    expect(promotionWarningRule.scan('test', lines, lines)).toHaveLength(0);
+  });
+
+  it('returns empty for clean source', () => {
+    expect(promotionWarningRule.scan('test', ['Hello.'], ['Hello.'])).toHaveLength(0);
   });
 });

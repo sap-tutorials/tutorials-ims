@@ -17,9 +17,21 @@ import * as metrics from '@tutorials/core/metrics.js';
 import { isFlagEnabled } from '@tutorials/core/feature-flags/db-flags.js';
 import { parseMarkdownSteps } from '@tutorials/core/tutorial-markdown-steps.js';
 import { absolutizeImagePaths } from '@tutorials/core/tutorial-markdown.js';
-import { renderDirectivesAsText } from '../../scripts/parsers/directives.js';
 import { filterVariants } from './option-filter.js';
 import { collectTroubleshootEntries } from '../../scripts/parsers/blockquote-troubleshoot-collect.js';
+
+// Lazy import: scripts/parsers/directives.js is a TypeScript source file that is NOT
+// bundled into gen/srv at cds build time. At CF runtime the workspace path is absent;
+// the pre-built _shared/parsers.bundle.mjs (created by scripts/bundle-shared.cjs, same
+// pattern as freshness-detector.js after #3029) is used instead.
+// Memoised so the async resolution only happens once per process lifetime.
+let _directivesMod;
+async function getDirectivesMod() {
+  if (_directivesMod) return _directivesMod;
+  try { _directivesMod = await import('../../scripts/parsers/directives.js'); }
+  catch { _directivesMod = await import('./_shared/parsers.bundle.mjs'); }
+  return _directivesMod;
+}
 
 const NS = 'com.sap.developers.ims';
 const LOG = cds.log('mcp-slicer');
@@ -256,6 +268,7 @@ async function loadAndParseMarkdown(slug) {
   }
 
   const { repo, branch } = await getRepoProvenance(slug);
+  const { renderDirectivesAsText } = await getDirectivesMod();
   const steps = new Map();
   for (const s of parsedSteps) {
     const md = renderDirectivesAsText(absolutizeImagePaths(s.markdown, { slug, repo, branch }));

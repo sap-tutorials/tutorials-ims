@@ -300,9 +300,10 @@ The reader sees only the variant matching their OS. Their choice persists across
 the browser; BAS detected when the tutorial is opened from inside Business Application Studio).
 After they pick an OS, that choice is remembered.
 
-**Missing variants.** When a step doesn't cover the reader's chosen OS, the platform shows the
-closest match and a small banner: "No Linux instructions for this step — showing macOS." Use
-this when one OS path is genuinely identical to another.
+**Missing variants.** When a step doesn't cover the reader's chosen OS, the platform shows a
+placeholder message — "No `<OS>` instructions for this step." — instead of substituting another
+OS's content. No automatic closest-match substitution is made. To avoid gaps, include a panel for
+every OS you expect readers to use, or omit the group entirely if the step is OS-agnostic.
 
 **Existing OS-tabbed tutorials get the picker for free.** No author migration required — the
 heuristic detects OS-flavored OPTION blocks automatically.
