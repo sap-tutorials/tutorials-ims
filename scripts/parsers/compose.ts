@@ -94,6 +94,11 @@ export interface ComposeResult {
    * mappings for custom keys.
    */
   syncGroups?: TutorialFrontmatter['syncGroups']
+  /**
+   * [task5] True when the tutorial body contains at least one :::walkthrough
+   * container directive. Drives conditional loading of code-walkthrough.ts.
+   */
+  hasWalkthrough?: boolean
 }
 
 export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult {
@@ -200,6 +205,10 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
       tutorialVariables = [...(tutorialVariables ?? []), ...synthVars]
     }
   }
+
+  // [task5] Detect :::walkthrough container directives BEFORE expandDirectives
+  // transforms the source. The flag drives conditional JS loading in single.html.
+  const hasWalkthrough = /^:{3}\s*walkthrough\s*$/m.test(processedBody)
 
   // Expand CommonMark-style directives (:name[label]{attrs}) to Hugo shortcodes.
   // Runs AFTER wrapTokens so {{var:X}} tokens in directive labels have already
@@ -387,5 +396,6 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     ...(frontmatter.syncGroups && Object.keys(frontmatter.syncGroups).length > 0
       ? { syncGroups: frontmatter.syncGroups }
       : {}),
+    ...(hasWalkthrough ? { hasWalkthrough: true } : {}),
   }
 }

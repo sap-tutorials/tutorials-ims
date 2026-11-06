@@ -2966,6 +2966,19 @@ html.dark .diff-highlight { background: rgba(200,160,0,.18); }
 .tree-deleted  { color: var(--sapNegativeColor, #aa0808); opacity: .65; text-decoration: line-through; }
 .tree-annotation { opacity: .55; font-size: .85em; margin-left: .75rem; font-style: italic; }
 
+/* Walkthrough directive */
+.tut-walkthrough { display: grid; grid-template-columns: 1fr; gap: 1rem; margin: 1.5rem 0; }
+@media (min-width: 1024px) {
+  .tut-walkthrough { grid-template-columns: 1fr 1fr; align-items: start; }
+  .tut-walkthrough-code { position: sticky; top: 4rem; }
+}
+.tut-walkthrough-notes ol, .tut-walkthrough-notes ul { padding-left: 1.25rem; }
+.tut-walkthrough-notes li { cursor: pointer; padding: .25rem .5rem; border-radius: .25rem; transition: background .15s; }
+.tut-walkthrough-notes li.wt-active,
+.tut-walkthrough-notes li:hover { background: var(--sapHighlightColor, #0064d9); color: #fff; }
+.wt-hl { background: rgba(0,100,220,.15); display: block; }
+html.dark .wt-hl { background: rgba(100,180,255,.2); }
+
 /* Chroma readability overrides (dark mode).
  * Hugo's `gen chromastyles --style=github-dark` emits empty rules for
  * unstyled tokens (.p, .n, .nx, .x, .na, .nb, .bp), expecting them to
