@@ -72,6 +72,13 @@ export interface ComposeOpts {
    * directives to resolve titles and metadata without loading the full nav JSON.
    */
   catalogBySlug?: Map<string, { title: string; time: number; level?: string }>
+  /**
+   * Pre-fetched help.sap.com page titles keyed by path.
+   * Populated before the compose loop by fetchHelpTitles() and forwarded to
+   * expandDirectives so the :help directive can resolve titles without
+   * per-tutorial network requests.
+   */
+  helpTitleCache?: Map<string, string>
 }
 
 export interface ComposeResult {
@@ -254,6 +261,7 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     branch: opts.branch,
     snippetMap: opts.snippetMap,
     catalogBySlug: opts.catalogBySlug,
+    helpTitleCache: opts.helpTitleCache,
   })
 
   const hasCompare = processedBody.includes('{{< tut-compare')
