@@ -81,3 +81,41 @@ export const qaOnlyInProdRule: Rule = {
     return findings
   },
 }
+
+/**
+ * promotionWarningRule — notices when PROD source contains `:::promotion-warning` blocks.
+ *
+ * A `:::promotion-warning` block is an author-placed marker indicating content that should
+ * be reviewed or resolved before the tutorial is promoted to PROD. It is analogous to
+ * `:::qa-only` but is intended to flag specific concerns rather than hide content.
+ *
+ * Assumption: the `:::promotion-warning` directive has not yet been deployed to the
+ * platform as of this rule's addition; this rule pre-declares the lint gate for when
+ * authors begin using the pattern. Owners should confirm the exact directive syntax
+ * once it ships and adjust the regex if needed.
+ *
+ * Severity: 'notice' (advisory — never blocks a build even with --strict).
+ */
+export const promotionWarningRule: Rule = {
+  id: 'promotion-warning-in-prod-source',
+  describe: 'PROD source contains `:::promotion-warning` blocks. These are author-placed "do not promote" markers that should be resolved before PROD publication.',
+
+  scan(slug, _lines, rawLines): LintFinding[] {
+    const findings: LintFinding[] = []
+
+    for (let i = 0; i < rawLines.length; i++) {
+      if (/^:::promotion-warning/.test(rawLines[i])) {
+        findings.push({
+          rule: 'promotion-warning-in-prod-source',
+          slug,
+          file: slug,
+          line: i + 1,
+          message: '`:::promotion-warning` block found in PROD source. Resolve the flagged concern and remove the block before promoting to PROD.',
+          excerpt: rawLines[i].trim(),
+          severity: 'notice',
+        })
+      }
+    }
+    return findings
+  },
+}

@@ -32,7 +32,7 @@ import { iframeNonAllowlistedHostRule } from './lint-rules/iframe-non-allowliste
 import { authorNameWithoutProfileRule } from './lint-rules/author-name-without-profile'
 import { directiveUnknownRule } from './lint-rules/directive-unknown'
 import { deprecatedCliRule } from './lint-rules/deprecated-cli.js'
-import { authorNotesInProdRule, qaOnlyInProdRule } from './lint-rules/authoring-aids.js'
+import { authorNotesInProdRule, qaOnlyInProdRule, promotionWarningRule } from './lint-rules/authoring-aids.js'
 import { directiveSuggestUiRule } from './lint-rules/directive-suggest-ui'
 import { directiveSuggestKbdRule } from './lint-rules/directive-suggest-kbd'
 
@@ -209,7 +209,7 @@ const fenceIndentDiscipline: Rule = {
   },
 }
 
-const RULES: Rule[] = [indentedNumberedListItem, fenceIndentDiscipline, iframeNonAllowlistedHostRule, authorNameWithoutProfileRule, directiveUnknownRule, deprecatedCliRule, authorNotesInProdRule, qaOnlyInProdRule, directiveSuggestUiRule, directiveSuggestKbdRule]
+const RULES: Rule[] = [indentedNumberedListItem, fenceIndentDiscipline, iframeNonAllowlistedHostRule, authorNameWithoutProfileRule, directiveUnknownRule, deprecatedCliRule, authorNotesInProdRule, qaOnlyInProdRule, promotionWarningRule, directiveSuggestUiRule, directiveSuggestKbdRule]
 
 /**
  * Rule: branch-syntax (issue #172 PR 3).
