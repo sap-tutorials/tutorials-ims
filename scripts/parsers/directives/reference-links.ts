@@ -156,7 +156,11 @@ export const NOTE_REF_DEF: DirectiveDef = {
 
   toText(nodeUnknown: unknown, _ctxUnknown: unknown): string {
     const node = nodeUnknown as DirectiveNode;
-    return node.label ?? '';
+    // node.label is the raw digit string when expand has NOT run (renderDirectivesAsText).
+    // node.label is "SAP Note <n>" when expand HAS run (expandDirectives).
+    // Normalise: if it's still the raw digit string, format it; otherwise return as-is.
+    const n = node.label ?? '';
+    return DIGITS_RE.test(n) ? `SAP Note ${n}` : n;
   },
 };
 

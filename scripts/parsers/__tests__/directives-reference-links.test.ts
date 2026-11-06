@@ -144,12 +144,10 @@ describe(':note-ref directive', () => {
   });
 
   it('toText returns "SAP Note <n>"', () => {
-    // renderDirectivesAsText doesn't run expand hooks; toText reads node.label
-    // which is the raw digit string before expand mutates it. So we test via
-    // expandDirectives + the mutated node.label path instead.
-    const ctx: ExpandDirectivesContext = { slug: 'test-tutorial' };
-    const result = expandDirectives(':note-ref[3456789]', ctx);
-    expect(result).toContain('label="SAP Note 3456789"');
+    // renderDirectivesAsText skips expand hooks; toText must format the raw digit
+    // string into "SAP Note <n>" directly, without relying on expand having run.
+    const result = renderDirectivesAsText(':note-ref[3456789]');
+    expect(result).toBe('SAP Note 3456789');
   });
 });
 
