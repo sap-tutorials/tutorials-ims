@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { stripAuthorNotes, AuthorNoteError } from '../author-notes.js';
 
 describe('stripAuthorNotes — PROD channel', () => {
@@ -20,6 +20,22 @@ describe('stripAuthorNotes — PROD channel', () => {
   it('handles a tutorial with no notes', () => {
     const body = 'No notes here.';
     expect(stripAuthorNotes(body, 'prod')).toBe(body);
+  });
+
+  it('warns and strips to end for unterminated inline note', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const body = 'Prefix %% unclosed\nNext line.';
+    const result = stripAuthorNotes(body, 'prod');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[author-notes]'));
+    expect(result).not.toContain('%%');
+    warnSpy.mockRestore();
+  });
+
+  it('includes slug in warn message when provided', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    stripAuthorNotes('Prefix %% unclosed', 'prod', 'my-tutorial');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('in my-tutorial'));
+    warnSpy.mockRestore();
   });
 });
 
@@ -51,5 +67,30 @@ describe('stripAuthorNotes — QA channel', () => {
   it('does NOT process %% inside a fenced code block on QA', () => {
     const body = '```sql\nSELECT %% FROM t;\n```';
     expect(stripAuthorNotes(body, 'qa')).toBe(body);
+  });
+
+  it('does NOT process %% on the fence delimiter line itself', () => {
+    // The opening fence delimiter line is classified as 'code' by classifyLines,
+    // so a %% on it must not be treated as an author note.
+    const body = '```sql %%\nSELECT 1;\n```';
+    expect(stripAuthorNotes(body, 'prod')).toBe(body);
+    expect(stripAuthorNotes(body, 'qa')).toBe(body);
+  });
+
+  it('renders block note as div with attribution on QA', () => {
+    const body = 'Before.\n%%\n@jdoe: Note text here.\n%%\nAfter.';
+    const result = stripAuthorNotes(body, 'qa');
+    expect(result).toContain('class="tut-author-note-block"');
+    expect(result).toContain('data-author="jdoe"');
+    expect(result).toContain('Note text here.');
+  });
+
+  it('preserves all lines of a multi-line block note body on QA', () => {
+    const body = '%%\n@jdoe: Summary line\nMore detail\nEven more\n%%';
+    const result = stripAuthorNotes(body, 'qa');
+    expect(result).toContain('data-author="jdoe"');
+    expect(result).toContain('Summary line');
+    expect(result).toContain('More detail');
+    expect(result).toContain('Even more');
   });
 });

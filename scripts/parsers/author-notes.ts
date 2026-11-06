@@ -38,12 +38,25 @@ export class AuthorNoteError extends Error {
 
 /**
  * Parse attribution prefix out of a note body string.
- * `@jdoe: text` → { author: 'jdoe', body: 'text' }
- * `text`        → { author: '',     body: 'text' }
+ * Only the FIRST line is checked for an `@author:` prefix.
+ * Remaining lines, if any, are preserved as the note body.
+ *
+ * `@jdoe: text`       → { author: 'jdoe', body: 'text' }
+ * `@jdoe:\nline2`     → { author: 'jdoe', body: 'line2' }
+ * `@jdoe: l1\nline2`  → { author: 'jdoe', body: 'l1\nline2' }
+ * `text\nline2`       → { author: '',     body: 'text\nline2' }
  */
 function parseAttribution(raw: string): { author: string; body: string } {
-  const m = raw.match(/^@([\w.-]+):\s*(.*)$/)
-  if (m) return { author: m[1], body: m[2].trim() }
+  const newlineIdx = raw.indexOf('\n')
+  const firstLine = newlineIdx === -1 ? raw : raw.slice(0, newlineIdx)
+  const rest = newlineIdx === -1 ? '' : raw.slice(newlineIdx + 1)
+
+  const m = firstLine.match(/^@([\w.-]+):\s*(.*)$/)
+  if (m) {
+    const firstBody = m[2].trim()
+    const fullBody = rest ? (firstBody ? `${firstBody}\n${rest}` : rest) : firstBody
+    return { author: m[1], body: fullBody }
+  }
   return { author: '', body: raw.trim() }
 }
 
@@ -75,10 +88,11 @@ const INLINE_NOTE_RE = /%%([^%]|%(?!%))*%%/g
  *
  * @param body    Raw markdown body (may contain author notes).
  * @param channel `'prod'` strips all notes; `'qa'` renders them as HTML.
+ * @param slug    Optional tutorial slug for diagnostic messages.
  * @returns       Processed body string.
  * @throws        {AuthorNoteError} on QA when a note is unterminated.
  */
-export function stripAuthorNotes(body: string, channel: 'prod' | 'qa'): string {
+export function stripAuthorNotes(body: string, channel: 'prod' | 'qa', slug?: string): string {
   const lines = body.split('\n')
   const classes = classifyLines(body)
 
@@ -128,7 +142,7 @@ export function stripAuthorNotes(body: string, channel: 'prod' | 'qa'): string {
           throw new AuthorNoteError('Unterminated author note', openLine)
         } else {
           console.warn(
-            `[author-notes] unterminated note at line ${openLine} — stripped to end-of-step`
+            `[author-notes] unterminated note at line ${openLine}${slug ? ` in ${slug}` : ''} — stripped to end-of-step`
           )
           // Strip to end: emit empty line in place of the whole block.
           out.push('')
@@ -182,7 +196,7 @@ export function stripAuthorNotes(body: string, channel: 'prod' | 'qa'): string {
           throw new AuthorNoteError('Unterminated author note', lineNum)
         } else {
           console.warn(
-            `[author-notes] unterminated note at line ${lineNum} — stripped to end-of-step`
+            `[author-notes] unterminated note at line ${lineNum}${slug ? ` in ${slug}` : ''} — stripped to end-of-step`
           )
           // Strip from %% to end-of-line on PROD.
           out.push(line.slice(0, openPos))
