@@ -8,6 +8,8 @@ describe('vendor-asciinema', () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
   it('exits 1 and prints error when fetch returns non-ok', async () => {
+    // Ensure sentinel check passes (returns false = not present) so we reach the fetch path.
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
     vi.stubGlobal('fetch', async () => ({ ok: false, status: 404, statusText: 'Not Found' }));
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
