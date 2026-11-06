@@ -1,0 +1,15 @@
+{{/*
+  tut-diagram — SVG diagram embed with optional dark variant.
+  src = resolved URL to .svg file; alt = required.
+  src-dark = optional dark-mode variant URL.
+  theme = auto|none (default auto).
+*/}}
+{{- $src := .Get "src" -}}
+{{- $alt := .Get "alt" -}}
+{{- $srcDark := .Get "src-dark" -}}
+{{- $theme := .Get "theme" | default "auto" -}}
+<figure class="tut-diagram" data-theme="{{ $theme }}">
+  <img src="{{ $src | safeURL }}" alt="{{ $alt }}" loading="lazy" decoding="async" data-zoomable="true"
+    {{- with $srcDark }} data-src-dark="{{ . | safeURL }}"{{ end }}>
+  {{ with .Get "caption" }}<figcaption>{{ . }}</figcaption>{{ end }}
+</figure>

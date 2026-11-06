@@ -1,0 +1,65 @@
+/* rich-media.css — styles for directive-powered rich media components */
+
+/* Figure numbering */
+body { counter-reset: tut-figure; }
+.tut-figure { counter-increment: tut-figure; }
+.tut-figure__num::before { content: "Figure " counter(tut-figure) ": "; }
+.tut-figure { margin: 1.5rem 0; }
+.tut-figure__images { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; }
+.tut-figure__caption { text-align: center; font-style: italic; margin-top: 0.5rem; color: var(--sapContent_LabelColor, #6a6d70); }
+
+/* Compare slider */
+.tut-compare { position: relative; max-width: 100%; }
+.tut-compare__images { position: relative; overflow: hidden; }
+.tut-compare__before { display: block; width: 100%; }
+.tut-compare__after-wrap { position: absolute; inset: 0; overflow: hidden; clip-path: inset(0 50% 0 0); }
+.tut-compare__after { display: block; width: 100%; }
+.tut-compare__slider { width: 100%; margin-top: 0.5rem; cursor: col-resize; }
+@media print { .tut-compare__slider { display: none; } }
+
+/* Hotspots */
+.tut-hotspot-wrap { position: relative; display: inline-block; }
+.tut-hotspot {
+  position: absolute;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.5rem; height: 1.5rem;
+  border-radius: 50%;
+  background: var(--sapBrandColor, #0070f2);
+  color: #fff;
+  font-size: 0.75rem; font-weight: bold;
+  text-decoration: none;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
+.tut-hotspot--active, .tut-hotspot:focus { outline: 2px solid var(--sapBrandColor, #0070f2); outline-offset: 2px; }
+li.tut-hotspot--active { background: var(--sapHighlightColor, #e8f4fd); border-radius: 4px; }
+
+/* Cast (terminal recording) */
+.tut-cast { background: #1e1e1e; border-radius: 4px; overflow: hidden; min-height: 6rem; }
+.tut-cast__placeholder { color: #aaa; padding: 1rem; margin: 0; font-family: monospace; }
+
+/* Diagram */
+.tut-diagram { margin: 1.5rem 0; text-align: center; }
+.tut-diagram img { max-width: 100%; height: auto; }
+.tut-diagram figcaption { font-style: italic; color: var(--sapContent_LabelColor, #6a6d70); margin-top: 0.5rem; }
+/* Dark mode diagram inversion when theme=auto */
+.tut-diagram[data-theme="auto"] img:not([data-src-dark]) {
+  filter: none;
+}
+@media (prefers-color-scheme: dark) {
+  .tut-diagram[data-theme="auto"] img:not([data-src-dark]) { filter: invert(1) hue-rotate(180deg); }
+}
+
+/* Interactive tables */
+table.sortable th button {
+  background: none; border: none; cursor: pointer; font: inherit; font-weight: bold;
+  padding: 0; display: flex; align-items: center; gap: 0.25rem;
+}
+table.sortable th button[aria-sort="ascending"]::after { content: " ↑"; }
+table.sortable th button[aria-sort="descending"]::after { content: " ↓"; }
+table.filterable + input[type="search"],
+input[type="search"]:has(+ table.filterable) {
+  margin-bottom: 0.5rem; padding: 0.25rem 0.5rem; width: 100%;
+  border: 1px solid var(--sapField_BorderColor, #89919a); border-radius: 4px;
+}
+table.sticky thead th { position: sticky; top: 0; background: var(--sapBackgroundColor, #fff); z-index: 1; }

@@ -569,6 +569,18 @@
 {{ $syncGroups := resources.Get "js/sync-groups.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $syncGroups.RelPermalink }}" defer></script>
 {{ end }}
+{{- $richMediaCss := resources.Get "css/rich-media.css" | minify | fingerprint -}}
+<link rel="stylesheet" href="{{ $richMediaCss.RelPermalink }}">
+{{- $hotspotsJs := resources.Get "js/hotspots.ts" | js.Build (dict "minify" true) -}}
+<script src="{{ $hotspotsJs.RelPermalink }}" defer></script>
+{{ if .Params.hasCompare -}}
+{{- $compareJs := resources.Get "js/compare.ts" | js.Build (dict "minify" true) -}}
+<script src="{{ $compareJs.RelPermalink }}" defer></script>
+{{- end }}
+{{ if .Params.hasCast -}}
+{{- $castJs := resources.Get "js/cast.ts" | js.Build (dict "minify" true) -}}
+<script src="{{ $castJs.RelPermalink }}" defer></script>
+{{- end }}
 <script type="module" src="{{ partial "island-src.html" "nav-dropdown" }}"></script>
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip-launcher" }}"></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-rating" }}" defer></script>{{ end }}

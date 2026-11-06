@@ -24,6 +24,7 @@ import { expandDirectives } from './directives.js'
 import { stripAuthorNotes } from './author-notes.js'
 import './directives/qa-only.js' // side-effect: registers qa-only directive
 import './directives/callout-directives.js' // side-effect: registers callout container + spoiler directives
+import './directives/index.js' // side-effect: registers rich-media directive barrel
 
 /**
  * Normalize line endings to LF. Catches CRLF (Windows / GitHub-via-Windows-
@@ -74,6 +75,12 @@ export interface ComposeResult {
    *  (ordered Windows, macOS, Linux, BAS). Drives the OS picker to show only
    *  supported platforms — #2703. Empty when hasOsOptions is false. */
   osList: string[]
+  /** True when the tutorial body contains at least one tut-compare shortcode. */
+  hasCompare?: boolean
+  /** True when the tutorial body contains at least one tut-cast shortcode. */
+  hasCast?: boolean
+  /** True when the tutorial body contains at least one sortable/filterable/sticky table. */
+  hasSortable?: boolean
   intro: string
   /**
    * [#2811] Validated tutorial variables declared in source frontmatter.
@@ -219,7 +226,13 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     slug: opts.slug,
     variables: tutorialVariables,
     channel,
+    repo: opts.repo,
+    branch: opts.branch,
   })
+
+  const hasCompare = processedBody.includes('{{< tut-compare')
+  const hasCast = processedBody.includes('{{< tut-cast')
+  const hasSortable = /^\{[^}]*(\.sortable|\.filterable|\.sticky)[^}]*\}/m.test(processedBody)
 
   // [#1637] Prerequisites bypassed the body's image-URL rewriter and, because
   // its content is markdownified as-is, markdown images/links inside a raw
@@ -390,6 +403,9 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     // Emit in canonical order so the picker buttons are always Windows, macOS,
     // Linux, BAS — never author-label order.
     osList: OS_VALUES.filter((os) => osListSet.has(os)),
+    ...(hasCompare ? { hasCompare: true } : {}),
+    ...(hasCast ? { hasCast: true } : {}),
+    ...(hasSortable ? { hasSortable: true } : {}),
     intro,
     ...(tutorialVariables ? { variables: tutorialVariables } : {}),
     syncKeysUsed: syncKeysUsedSet,
