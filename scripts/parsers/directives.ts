@@ -33,7 +33,8 @@ export type DirectiveErrorCode =
   | 'duplicate-attr'
   | 'invalid-kind'
   | 'unclosed'
-  | 'invalid-class';
+  | 'invalid-class'
+  | 'invalid-content';
 
 export class DirectiveParseError extends Error {
   slug: string;
@@ -693,6 +694,7 @@ export interface ExpandDirectivesContext {
   slug: string;
   variables?: Array<{ name: string }>;
   registry?: ReadonlyMap<string, DirectiveDef>;
+  channel?: string;
 }
 
 /**
@@ -859,7 +861,7 @@ export function expandDirectives(body: string, ctx: ExpandDirectivesContext): st
     const def = registry.get(node.name);
     if (!def) continue;
 
-    const output = def.render(node, { slug: ctx.slug, variables: ctx.variables });
+    const output = def.render(node, { slug: ctx.slug, variables: ctx.variables, channel: ctx.channel });
     const rendered = buildShortcode(node, output);
     const lineIdx = node.line - 1; // 0-based
 
