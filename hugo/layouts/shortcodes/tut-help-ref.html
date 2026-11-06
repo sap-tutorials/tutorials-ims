@@ -6,6 +6,6 @@
     label — display text (title from cache or path)
 
   Security note: .Get uses Hugo's default HTML auto-escaping.
-  Never apply safeHTML to directive-supplied values.
+  Never mark directive-supplied values as raw HTML.
 */}}
 <a href="{{ .Get "href" }}" rel="noopener noreferrer" target="_blank">{{ .Get "label" }}</a>

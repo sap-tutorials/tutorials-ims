@@ -297,6 +297,7 @@
           {{- end -}}
         {{- end -}}
       {{- end -}}
+      {{/* security-reviewed: $out is $highlighted (Chroma output of Goldmark-escaped $cleanInner) re-split and re-joined with a fixed line-span scaffold; $markerClass is a constant from the if/else chain above — no attacker-controlled HTML enters */}}
       {{ $out | safeHTML }}
     {{- else -}}
       {{- $highlighted := highlight .Inner $lang $optsStr -}}

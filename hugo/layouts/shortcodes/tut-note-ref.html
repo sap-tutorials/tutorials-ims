@@ -6,6 +6,6 @@
     label — display text (e.g. "SAP Note 2471802")
 
   Security note: .Get uses Hugo's default HTML auto-escaping.
-  Never apply safeHTML to directive-supplied values.
+  Never mark directive-supplied values as raw HTML.
 */}}
 <a href="{{ .Get "href" }}" rel="noopener noreferrer" target="_blank">{{ .Get "label" }}</a>

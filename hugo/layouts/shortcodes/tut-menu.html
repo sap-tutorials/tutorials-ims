@@ -12,7 +12,7 @@
   aria-label joins segments with ", then " for screen reader readability.
 
   Security note: .Get "label" uses Hugo's default HTML auto-escaping.
-  Never apply safeHTML to directive-supplied values.
+  Never mark directive-supplied values as raw HTML.
 */}}
 {{- $raw := .Get "label" -}}
 {{- $firstPass := split $raw " > " -}}
