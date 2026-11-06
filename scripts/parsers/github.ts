@@ -1015,15 +1015,111 @@ export async function fetchRulesVr(slug: string, repo: string, branch: string): 
  * Fetch _snippets/ directory contents from GitHub repos.
  * Returns Map<snippetKey, markdownSource>.
  * Key format: `<repo>/_snippets/<name>` or `shared/<name>` for the shared repo.
- * @returns Empty map (stub — full implementation in later tasks when SNIPPETS_ENABLED_REPOS is set)
+ * Gated by SNIPPETS_ENABLED_REPOS env var (comma-separated repo names). Returns
+ * empty map immediately when the env var is unset or empty.
  */
 export async function fetchSnippets(
   _repoNames: string[],
-  _token: string,
+  token: string,
 ): Promise<Map<string, string>> {
-  // Stub: full implementation fetches from GitHub API
-  // Set SNIPPETS_ENABLED_REPOS env var to enable per-repo snippet fetching
-  return new Map()
+  // Parse the SNIPPETS_ENABLED_REPOS gate first — fail fast if empty.
+  const raw = process.env.SNIPPETS_ENABLED_REPOS ?? ''
+  const enabledRepos = raw.split(',').map(s => s.trim()).filter(Boolean)
+  if (enabledRepos.length === 0) return new Map()
+
+  // Build auth headers from the token parameter (not process.env, so tests can
+  // pass a synthetic token without polluting the environment).
+  const authHeaders: Record<string, string> = token ? {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'tutorials-ims-build',
+  } : {}
+
+  // Always include the shared snippets repo when any per-repo snippets are enabled.
+  const SHARED_REPO = 'tutorial-snippets'
+  const reposToFetch = [...new Set([...enabledRepos, SHARED_REPO])]
+
+  const snippetMap = new Map<string, string>()
+
+  for (const repo of reposToFetch) {
+    try {
+      // List .md files under _snippets/ via the Contents API.
+      const listUrl = `${REST_API_BASE}/repos/${ORG}/${repo}/contents/_snippets`
+      const listRes = await fetchWithRetry(listUrl, { headers: authHeaders }, { label: 'snippets-list' })
+      if (listRes.status === 404) {
+        // This repo has no _snippets/ directory — skip gracefully.
+        console.debug(`  [snippets] ${repo}: no _snippets/ directory (404), skipping`)
+        continue
+      }
+      if (!listRes.ok) {
+        const body = await listRes.text().catch(() => '')
+        console.warn(`  [snippets] ${repo}: listing failed (${listRes.status}): ${body.slice(0, 200)}`)
+        continue
+      }
+
+      const entries = await listRes.json() as Array<{ name: string; download_url: string; sha: string; type: string }>
+      if (!Array.isArray(entries)) continue
+
+      const mdFiles = entries.filter(e => e.type === 'file' && e.name.endsWith('.md'))
+
+      // Determine the map key prefix for this repo.
+      const prefix = repo === SHARED_REPO ? 'shared/' : `${repo}/_snippets/`
+
+      // Cache directory for this repo's snippets.
+      const repoCacheDir = join(CACHE_DIR, 'snippets', repo)
+
+      for (const entry of mdFiles) {
+        try {
+          const cacheFile = join(repoCacheDir, entry.name)
+          const shaFile = `${cacheFile}.sha`
+
+          // Check cache: if both the content file and sha sidecar exist and the
+          // sha matches, read from disk to skip the network fetch.
+          let content: string | null = null
+          if (existsSync(cacheFile) && existsSync(shaFile)) {
+            try {
+              const cachedSha = readFileSync(shaFile, 'utf-8').trim()
+              if (cachedSha === entry.sha) {
+                content = readFileSync(cacheFile, 'utf-8')
+              }
+            } catch {
+              // Fall through to re-fetch.
+            }
+          }
+
+          if (content === null) {
+            // Fetch the raw content via download_url.
+            const dlRes = await fetchWithRetry(entry.download_url, { headers: authHeaders }, { label: 'snippets-dl' })
+            if (!dlRes.ok) {
+              console.warn(`  [snippets] ${repo}/${entry.name}: download failed (${dlRes.status}), skipping`)
+              continue
+            }
+            content = await dlRes.text()
+
+            // Persist to cache for subsequent runs.
+            try {
+              mkdirSync(repoCacheDir, { recursive: true })
+              writeFileSync(cacheFile, content, 'utf-8')
+              writeFileSync(shaFile, entry.sha, 'utf-8')
+            } catch {
+              // Cache write failure is non-fatal — content is still usable.
+            }
+          }
+
+          // LF-normalize and insert into the map.
+          snippetMap.set(`${prefix}${entry.name}`, content.replace(/\r\n?/g, '\n'))
+        } catch (fileErr) {
+          console.warn(`  [snippets] ${repo}/${entry.name}: error — ${fileErr instanceof Error ? fileErr.message : String(fileErr)}`)
+        }
+      }
+    } catch (repoErr) {
+      // Fail-open: one failing repo must not abort the entire build.
+      console.warn(`  [snippets] ${repo}: repo-level error — ${repoErr instanceof Error ? repoErr.message : String(repoErr)}`)
+    }
+  }
+
+  return snippetMap
 }
 
 /**
