@@ -77,3 +77,13 @@ difference.
   this skill too (`cds bind --exec -- node scripts/event-report.mjs <eventId>`).
 - Scoping is by **date window**, never `TaskRecords.event_ID` (NULL on normal
   completions). Track = `CompletionPaths.name`, not Mission title.
+- **Sections 3–4 reconcile with the §1 total**: domain and SAP-vs-external
+  counts use the same all-windowed TUTORIAL completion set as the "Total
+  completions" headline, not only track-member tutorials. Anonymized/null-email
+  completers show as `(unknown)` in the domain table and are excluded from the
+  SAP-vs-external split.
+- **Abandonment is an approximation, not an exact count.** Stop-step counts a
+  user's COMPLETED STEP records at their current `attemptNumber` with no
+  per-step date filter, so for returning/multi-attempt users (steps completed
+  before the event, or under a different attempt) the step-drop histogram and
+  median are estimates. Treat them as directional.

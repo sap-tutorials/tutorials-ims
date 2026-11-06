@@ -49,7 +49,7 @@ describe('sections 3-4 — domain + audience breakdown (seeded db)', () => {
 
   it('groups completions by email domain with per-user average', async () => {
     const db = await cds.connect.to('db');
-    const b = await computeDomainBreakdown(event, tutorials, db);
+    const b = await computeDomainBreakdown(event, db);
     const gmail = b.domains.find((d) => d.domain === 'gmail.com');
     expect(gmail.users).toBe(2);
     expect(gmail.completions).toBe(3);
@@ -58,7 +58,7 @@ describe('sections 3-4 — domain + audience breakdown (seeded db)', () => {
 
   it('splits SAP employees from external', async () => {
     const db = await cds.connect.to('db');
-    const b = await computeDomainBreakdown(event, tutorials, db);
+    const b = await computeDomainBreakdown(event, db);
     expect(b.sap.users).toBe(1);
     expect(b.sap.completions).toBe(1);
     expect(b.external.users).toBe(2);
@@ -67,7 +67,7 @@ describe('sections 3-4 — domain + audience breakdown (seeded db)', () => {
 
   it('renders a gmail row in the domain section', async () => {
     const db = await cds.connect.to('db');
-    const b = await computeDomainBreakdown(event, tutorials, db);
+    const b = await computeDomainBreakdown(event, db);
     const md = renderDomainSection(b);
     expect(md).toContain('gmail.com');
   });
@@ -80,5 +80,38 @@ describe('sections 3-4 — domain + audience breakdown (seeded db)', () => {
   it('cf-target guard passes when space is prod', () => {
     const runProd = () => ({ status: 0, stdout: 'API endpoint: https://api.cf.eu10-005.hana.ondemand.com\norg: o\nspace: prod\n' });
     expect(() => assertCfTargetProd(runProd)).not.toThrow();
+  });
+
+  it('counts the full windowed completion set, incl. completions not under any track (matches §1 hero)', async () => {
+    const db = await cds.connect.to('db');
+    const { TaskRecords, Users } = cds.entities('com.sap.developers.ims');
+    // A completion for a tutorial that is NOT in the event's track set, but IS
+    // a windowed TUTORIAL completion — §1 hero counts it, so §3-4 must too.
+    await INSERT.into(Users).entries({ ID: 'c0000000-cccc-0000-0000-00000000000e', email: 'e@zalando.de' });
+    await INSERT.into(TaskRecords).entries({
+      ID: 'd0000000-cccc-0000-0000-00000000000e', user_ID: 'c0000000-cccc-0000-0000-00000000000e',
+      taskLegacyId: 99999, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: IN, attemptNumber: 1,
+    });
+    const b = await computeDomainBreakdown(event, db);
+    // 4 track completions (gmail x3, sap x1) + 1 off-track (zalando) = 5 total.
+    const sum = b.domains.reduce((s, d) => s + d.completions, 0);
+    expect(sum).toBe(5);
+    expect(b.domains.find((d) => d.domain === 'zalando.de')).toBeTruthy();
+  });
+
+  it('excludes unknown/anonymized emails from the SAP-vs-external split', async () => {
+    const db = await cds.connect.to('db');
+    const { TaskRecords, Users } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Users).entries({ ID: 'c0000000-cccc-0000-0000-00000000000f', email: null });
+    await INSERT.into(TaskRecords).entries({
+      ID: 'd0000000-cccc-0000-0000-00000000000f', user_ID: 'c0000000-cccc-0000-0000-00000000000f',
+      taskLegacyId: 99999, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: IN, attemptNumber: 1,
+    });
+    const b = await computeDomainBreakdown(event, db);
+    const totalSplit = b.sap.completions + b.external.completions;
+    const allCompletions = b.domains.reduce((s, d) => s + d.completions, 0);
+    // the null-email completion is in the domain table (as unknown) but NOT in the sap/external split
+    expect(totalSplit).toBeLessThan(allCompletions);
+    expect(b.sap.users + b.external.users).not.toContain(undefined);
   });
 });

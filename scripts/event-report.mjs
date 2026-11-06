@@ -200,24 +200,23 @@ export function renderAbandonmentSection(rows) {
 
 /**
  * Email-domain + SAP-vs-external breakdown of the event's windowed TUTORIAL
- * completers. Counts completions (COMPLETED/SUPERSEDED) in window for the
- * event's tutorials, joined to Users.email.
+ * completers. Counts the SAME all-windowed TUTORIAL completion set as section
+ * 1's hero total (computePathBuckets' totalCompletions) — COMPLETED/SUPERSEDED,
+ * completionDate in window — NOT restricted to track-member tutorials, so the
+ * domain/audience totals reconcile with the "Total completions" headline.
+ * `(unknown)` (anonymized / null-email) completions appear in the domain table
+ * but are excluded from the SAP-vs-external split.
  * @param {object} event resolved Events row (needs startDate/endDate)
- * @param {Array<{legacyId:number}>} tutorials
  * @param {object} db
  * @returns {Promise<{domains:Array<{domain:string,users:number,completions:number,perUser:number}>,sap:{users:number,completions:number},external:{users:number,completions:number}}>}
  */
-export async function computeDomainBreakdown(event, tutorials, db) {
+export async function computeDomainBreakdown(event, db) {
   const { TaskRecords, Users } = cds.entities(NS);
-  const legacyIds = tutorials.map((t) => t.legacyId);
-  if (legacyIds.length === 0) {
-    return { domains: [], sap: { users: 0, completions: 0 }, external: { users: 0, completions: 0 } };
-  }
 
   const records = await db.run(
     SELECT.from(TaskRecords)
       .columns('user_ID')
-      .where({ taskType: 'TUTORIAL', status: { in: ['COMPLETED', 'SUPERSEDED'] }, taskLegacyId: { in: legacyIds } })
+      .where({ taskType: 'TUTORIAL', status: { in: ['COMPLETED', 'SUPERSEDED'] } })
       .and(`completionDate >=`, event.startDate)
       .and(`completionDate <=`, event.endDate),
   );
@@ -243,6 +242,9 @@ export async function computeDomainBreakdown(event, tutorials, db) {
     const d = byDomain.get(domain);
     d.users.add(r.user_ID);
     d.completions += 1;
+    // Unknown/anonymized emails are counted in the domain table but excluded
+    // from the SAP-vs-external split (neither bucket).
+    if (domain === '(unknown)') continue;
     if (domain === 'sap.com') {
       sapUsers.add(r.user_ID);
       sapCompletions += 1;
@@ -368,7 +370,7 @@ export async function buildReport(eventId, db) {
   const abandonment = await computeAbandonment(event, tutorials, db);
   parts.push(renderAbandonmentSection(abandonment));
 
-  const breakdown = await computeDomainBreakdown(event, tutorials, db);
+  const breakdown = await computeDomainBreakdown(event, db);
   parts.push(renderDomainSection(breakdown));
   parts.push(renderAudienceSection(breakdown));
 
