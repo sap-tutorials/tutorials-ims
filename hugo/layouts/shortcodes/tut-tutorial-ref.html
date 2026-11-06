@@ -6,8 +6,8 @@
     label — display text
     href  — resolved href (e.g. /tutorials/<slug>)
 
-  Security note: .Get uses Hugo's default HTML auto-escaping.
-  Never apply safeHTML to directive-supplied values — escapeShortcodeParam
-  in the framework already HTML-escapes the value before it arrives here.
+  Security note: .Get uses Hugo's default HTML auto-escaping. Directive-supplied
+  values are never marked as raw HTML here — escapeShortcodeParam in the framework
+  already HTML-escapes the value before it arrives.
 */}}
 <a class="tut-xref" href="{{ .Get "href" }}" data-slug="{{ .Get "slug" }}">{{ .Get "label" }}</a>

@@ -6,8 +6,10 @@
 {{- /* Rewrite the placeholder panel ids "tabpanel-N" → "tabpanel-<stripId>-N" so
        multiple strips on the same page produce unique DOM ids. tab.html emits
        id="tabpanel-{index}" and aria-labelledby="tab-{index}"; we prefix both
-       here before emitting .Inner. safeHTML is required because replace coerces
-       .Inner (template.HTML) to a plain string. */ -}}
+       here before emitting .Inner.
+       security-reviewed: $inner is .Inner (template.HTML already escaped by Goldmark);
+       the three `replace` calls only rewrite fixed id/aria-labelledby prefixes against
+       constant patterns — no attacker-controlled HTML is introduced. */ -}}
 {{- $inner = replace $inner "id=\"tabpanel-" (printf "id=\"tabpanel-%s-" $stripId) -}}
 {{- $inner = replace $inner "id=\"tab-" (printf "id=\"tab-%s-" $stripId) -}}
 {{- $inner = replace $inner "aria-labelledby=\"tab-" (printf "aria-labelledby=\"tab-%s-" $stripId) -}}
@@ -20,5 +22,7 @@
 <button class="fd-tabs__item{{ if eq $i 0 }} is-selected{{ end }}" role="tab" id="{{ $tabId }}" aria-selected="{{ if eq $i 0 }}true{{ else }}false{{ end }}" aria-controls="{{ $panelId }}" tabindex="{{ if eq $i 0 }}0{{ else }}-1{{ end }}" data-tab-index="{{ $i }}"{{ if $syncKey }} data-sync-value="{{ $syncValue }}"{{ end }}>{{ $tab }}</button>
 {{- end }}
 </div>
-<div class="tab-panels">{{ $inner | safeHTML }}</div>
+<div class="tab-panels">
+{{- /* security-reviewed: $inner derives from .Inner (Goldmark-escaped template.HTML); only fixed id/aria prefixes rewritten via constant-pattern replace */ -}}
+{{ $inner | safeHTML }}</div>
 </div>

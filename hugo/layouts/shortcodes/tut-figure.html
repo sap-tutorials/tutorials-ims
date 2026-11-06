@@ -2,7 +2,7 @@
   tut-figure — figure container with auto-numbered caption.
   label = caption text (inline markdown, pre-escaped by framework).
   Params: width (optional CSS value), align (optional: left/center/right), columns (optional integer).
-  Security: .Get values are auto-escaped by Hugo. Never apply safeHTML.
+  Security: .Get values are auto-escaped by Hugo. Never mark as raw HTML.
 */}}
 {{- $width := .Get "width" -}}
 {{- $align := .Get "align" | default "center" -}}

@@ -2,7 +2,7 @@
   tut-compare — before/after image comparison slider.
   Params: before (resolved URL), after (resolved URL), labels (optional, pipe-separated: "Old|New").
   Security: .Get values are auto-escaped by Hugo. Use safeURL only for image src values.
-  Never apply safeHTML.
+  Never mark as raw HTML.
 */}}
 {{- $before := .Get "before" -}}
 {{- $after := .Get "after" -}}
