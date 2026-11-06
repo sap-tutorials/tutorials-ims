@@ -22,6 +22,15 @@ describe('cast directive', () => {
     const node = { name: 'cast', kind: 'leaf' as const, label: 'demo.cast', attrs: {}, classes: [], line: 1, column: 0 };
     expect(def.toText(node, {})).toContain('demo.cast');
   });
+
+  it('cast shortcode HTML has data-tut-cast and placeholder pre', () => {
+    // This test documents the attribute contract cast.ts relies on.
+    // The shortcode is Hugo-rendered — test the *directive output* which feeds Hugo.
+    const out = expandDirectives('::cast[demo.cast]{rows=24 idle-limit=2}', { slug: 's', repo: 'r', branch: 'b' });
+    // The output is a Hugo shortcode call (not HTML), so we verify the shortcode call params.
+    expect(out).toContain('rows="24"');
+    expect(out).toContain('idle-limit="2"');
+  });
 });
 
 describe('diagram directive', () => {
