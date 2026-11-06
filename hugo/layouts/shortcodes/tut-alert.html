@@ -1,0 +1,20 @@
+{{- /*
+  tut-alert shortcode — delegates to the shared tut-alert partial.
+  Called by directive-rendered container directives or directly in tutorial
+  markdown.
+
+  Parameters:
+    type  (string)           — alert type (note, tip, important, warning,
+                                caution, result, details, troubleshoot,
+                                hint, solution)
+    title (string, optional) — custom title
+    open  (bool, optional)   — when true, collapsible alerts render open
+*/ -}}
+{{ $sign := "" }}
+{{ if .Get "open" }}{{ $sign = "+" }}{{ end }}
+{{ partial "tut-alert.html" (dict
+  "type"  (.Get "type")
+  "title" (default "" (.Get "title"))
+  "sign"  $sign
+  "text"  (.Inner | markdownify)
+) }}
