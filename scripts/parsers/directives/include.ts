@@ -16,6 +16,7 @@ import type { DirectiveDef, DirectiveRenderOutput } from '../directive-registry.
 import { DirectiveParseError } from '../directives.js';
 import type { DirectiveNode, ExpandDirectivesContext } from '../directives.js';
 import { expandDirectives } from '../directives.js';
+import { RAW_BASE_URL } from '../types.js';
 
 /** Maximum nesting depth for ::include chains (A→B→C is depth 3; A→B→C→D is rejected). */
 const MAX_INCLUDE_DEPTH = 3;
@@ -75,6 +76,64 @@ function substituteParams(
     const val = attrs[key];
     if (val === undefined || val === null) return '';
     return String(val);
+  });
+}
+
+/**
+ * Derive repo and branch from a snippet key.
+ *
+ * Key forms:
+ *   - `shared/<name>`             → repo = `tutorial-snippets`, branch = `main`
+ *   - `<repo>/_snippets/<name>`   → repo = `<repo>`, branch = `main`
+ *
+ * Returns null if the key doesn't match a known form.
+ */
+function repoFromSnippetKey(
+  snippetKey: string,
+  snippetRepoMap?: Map<string, { repo: string; branch: string }>,
+): { repo: string; branch: string } | null {
+  // Check explicit map first
+  if (snippetRepoMap?.has(snippetKey)) {
+    return snippetRepoMap.get(snippetKey)!;
+  }
+
+  // shared/<name>
+  if (snippetKey.startsWith('shared/')) {
+    return { repo: 'tutorial-snippets', branch: 'main' };
+  }
+
+  // <repo>/_snippets/<name>
+  const snippetSegIdx = snippetKey.indexOf('/_snippets/');
+  if (snippetSegIdx > 0) {
+    const repo = snippetKey.slice(0, snippetSegIdx);
+    return { repo, branch: 'main' };
+  }
+
+  return null;
+}
+
+/**
+ * Rewrite relative image URLs inside snippet markdown to absolute GitHub raw URLs.
+ *
+ * Only rewrites `![alt](relative-path)` where the path does NOT start with
+ * `http://`, `https://`, or `../`. Absolute and parent-relative URLs are left unchanged.
+ */
+function rewriteSnippetImages(
+  body: string,
+  snippetKey: string,
+  snippetRepoMap?: Map<string, { repo: string; branch: string }>,
+): string {
+  const origin = repoFromSnippetKey(snippetKey, snippetRepoMap);
+  if (!origin) return body;
+
+  const base = `${RAW_BASE_URL}/sap-tutorials/${origin.repo}/${origin.branch}/_snippets/`;
+
+  return body.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => {
+    // Leave absolute URLs and parent-relative paths untouched
+    if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('../')) {
+      return `![${alt}](${src})`;
+    }
+    return `![${alt}](${base}${src})`;
   });
 }
 
@@ -154,6 +213,10 @@ export const INCLUDE_DEF: DirectiveDef = {
     // Param substitution
     const substituted = substituteParams(body, node.attrs);
 
+    // Rewrite relative image URLs in snippet content to absolute GitHub raw URLs,
+    // so images render correctly regardless of which tutorial includes the snippet.
+    const withImages = rewriteSnippetImages(substituted, snippetKey, ctx.snippetRepoMap);
+
     // Recursively expand nested ::include directives within the snippet,
     // passing the updated chain so nested cycles are detected.
     const updatedCtx: ExpandDirectivesContext = {
@@ -161,7 +224,7 @@ export const INCLUDE_DEF: DirectiveDef = {
       includeChain: [...chain, snippetKey],
     };
 
-    return expandDirectives(substituted, updatedCtx);
+    return expandDirectives(withImages, updatedCtx);
   },
 
   render(_nodeUnknown: unknown, _ctxUnknown: unknown): DirectiveRenderOutput {
