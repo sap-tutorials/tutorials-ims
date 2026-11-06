@@ -17,14 +17,14 @@
 // node.label is non-empty. Directives that need a computed display label mutate
 // node.label in their expand hook; render() then omits `label` from output.params.
 
-import { createRequire } from 'module';
 import type { DirectiveDef, DirectiveRenderOutput } from '../directive-registry.js';
 import { DirectiveParseError } from '../directives.js';
 import type { DirectiveNode, ExpandDirectivesContext } from '../directives.js';
+import apiLibsJson from './api-libs.json';
 
-// Load api-libs.json at module init time
-const _require = createRequire(import.meta.url);
-const API_LIBS: Record<string, string> = _require('./api-libs.json');
+// api-libs.json is inlined at bundle time (static JSON import) so no sidecar
+// file is needed next to the built parsers.bundle.mjs.
+const API_LIBS: Record<string, string> = apiLibsJson as Record<string, string>;
 
 // ─── :tutorial-ref[slug]{label?} ─────────────────────────────────────────────
 //
