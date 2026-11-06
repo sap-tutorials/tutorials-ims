@@ -1,6 +1,7 @@
 import { extractFrontmatter } from './frontmatter.js'
 import { normalizeBlockquotedFences } from './blockquote-fence.js'
 import { mergeBlockquoteNoteDividers } from './blockquote-notes.js'
+import { normalizeBlockquoteAlerts } from './blockquote-alerts.js'
 import { extractIntro } from './intro.js'
 import { resolveImageURLs } from './images.js'
 import { resolveAttachmentLinks } from './attachment-links.js'
@@ -140,7 +141,11 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   // healer so `>---` lines inside blockquoted code fences are already recognized
   // as code content and left untouched.
   const mergedBody = mergeBlockquoteNoteDividers(listProseHealedBody)
-  let processedBody = resolveImageURLs(mergedBody, {
+  // [callout-enhancements] Pre-pass hook for Hugo alert/callout blockquotes.
+  // Currently a fence-aware passthrough (identity transform). Provides the
+  // normalisation point for any future alert-type aliasing before rendering.
+  const alertsBody = normalizeBlockquoteAlerts(mergedBody)
+  let processedBody = resolveImageURLs(alertsBody, {
     repo: opts.repo, branch: opts.branch, slug: opts.slug,
     rewriteImages: opts.rewriteImages,
   })
