@@ -1208,7 +1208,8 @@ async function main() {
   // repo. Gated by SNIPPETS_ENABLED_REPOS env var; empty/absent → no fetch,
   // no behavior change for existing tutorials.
   const uniqueRepos = [...new Set(allTutorials.map(t => t.repo).filter(Boolean))]
-  const snippetMap = await fetchSnippets(uniqueRepos, token)
+  const snippetToken = process.env.GITHUB_TOKEN ?? process.env.TUTORIALS_GITHUB_TOKEN ?? ''
+  const snippetMap = await fetchSnippets(uniqueRepos, snippetToken)
   if (snippetMap.size > 0) {
     console.log(`[snippets] fetched ${snippetMap.size} snippet(s) from ${uniqueRepos.length} repo(s)`)
   }
