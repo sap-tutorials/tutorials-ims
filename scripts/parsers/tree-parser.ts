@@ -48,8 +48,9 @@ export function parseTreeLines(lines: string[]): TreeNode[] {
     }
 
     // Detect folder (trailing /)
-    const isFolder = rest.endsWith('/')
-    const label = rest.trimEnd()
+    const trimmedRest = rest.trimEnd()
+    const isFolder = trimmedRest.endsWith('/')
+    const label = trimmedRest
 
     nodes.push({ depth, label, isFolder, state, annotation })
   }

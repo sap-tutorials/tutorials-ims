@@ -225,7 +225,7 @@
         {{- if eq $state "+" -}}{{- $cls = "tree-new" -}}{{- else if eq $state "~" -}}{{- $cls = "tree-modified" -}}{{- else if eq $state "-" -}}{{- $cls = "tree-deleted" -}}{{- end -}}
         {{/* Emit item — depth as inline style, icon from folder/file detection */}}
         <li role="treeitem" style="padding-left: {{ mul $depth 1.25 }}rem"{{ if ne $cls "" }} class="{{ $cls }}"{{ end }}>
-          {{- if $isFolder -}}<span aria-label="folder" aria-hidden="true">📁</span> {{ $rest }}{{- else -}}<span aria-label="file" aria-hidden="true">📄</span> {{ $rest }}{{- end -}}
+          {{- if $isFolder -}}<span aria-hidden="true">📁</span> {{ $rest }}{{- else -}}<span aria-hidden="true">📄</span> {{ $rest }}{{- end -}}
           {{- if ne $annotation "" -}} <span class="tree-annotation">{{ $annotation }}</span>{{- end -}}
         </li>
       {{- end -}}
