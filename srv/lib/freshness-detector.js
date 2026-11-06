@@ -322,14 +322,29 @@ export async function detectFreshness({ db, tutorialId }) {
     // into the final findings array after the LLM pass.
     const extraFindings = [];
     try {
-      const fmMatch = src.markdown.match(/^---\n([\s\S]*?)\n---/);
+      const mdNorm = src.markdown.replace(/\r\n/g, '\n');
+      const fmMatch = mdNorm.match(/^---\n([\s\S]*?)\n---/);
       if (fmMatch) {
         const yaml = await import('js-yaml');
         const fm = yaml.default.load(fmMatch[1]);
         if (fm && typeof fm === 'object' && fm.testedWith && typeof fm.testedWith === 'object') {
           const vFindings = checkTestedWithFreshness(fm.testedWith);
           for (const f of vFindings) {
-            extraFindings.push({ type: 'tested-with-outdated', pkg: f.pkg, declaredMajor: f.declared, currentMajor: f.current });
+            extraFindings.push({
+              category: 'obsolete-dep',
+              severity: 'Medium',
+              confidence: 'High',
+              stepRef: 0,
+              codeBlockIndex: -1,
+              lang: null,
+              evidence: `${f.pkg} declared major ${f.declared}; current is ${f.current}`,
+              summary: `${f.pkg} is behind current major version (declared: ${f.declared}, current: ${f.current})`,
+              suggestedFix: `Update ${f.pkg} to major version ${f.current} or later`,
+              // Non-empty groundingSource prevents the confidence-Low normalizer from
+              // downgrading this finding. testedWith checks are deterministic (not LLM),
+              // so High confidence is accurate.
+              groundingSource: 'testedWith frontmatter',
+            });
           }
         }
       }
