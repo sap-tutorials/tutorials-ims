@@ -120,4 +120,17 @@ describe('diff fence attribute — unified-diff column stripping', () => {
     // blank line span is included as empty string — result should not throw and should join cleanly
     expect(text.split('\n').length).toBeGreaterThanOrEqual(2)
   })
+
+  it('context-only diff fence: copyDiffFinal includes all lines (simulating gutter-stripped output)', () => {
+    // A {diff} fence with only context lines (no +/-) should strip the leading space gutter
+    // and render all lines as plain .line spans. copyDiffFinal must include them all.
+    const html = `<pre><code>
+    <span class="line">const a = 1</span>
+    <span class="line">const b = 2</span>
+  </code></pre>`
+    const block = makeBlock(html)
+    const text = copyDiffFinal(block)
+    expect(text).toContain('const a = 1')
+    expect(text).toContain('const b = 2')
+  })
 })

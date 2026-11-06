@@ -128,10 +128,12 @@
      {diff} attribute: boolean presence check via index $attrs "diff"; no user input
      reaches class names; classes come from fixed if/else chain only. */}}
 {{- $hasDiff := false -}}
+{{- $isDiffFence := false -}}
 {{- $diffMarkers := slice -}}
 {{- $cleanInner := "" -}}
 {{- $copyRaw := eq (index $attrs "copy" | default "") "raw" -}}
 {{- if and (not $isConsole) (index $attrs "diff") -}}
+  {{- $isDiffFence = true -}}
   {{/* {diff} attribute path: unified-diff column stripping.
        Leading + = added, - = removed, space = context; anything else = context (no strip).
        Blank lines (empty string after split) pass through as context with no class.
@@ -261,14 +263,14 @@
     </ul>
   </div>
   {{- else -}}
-  <div class="code-block-body"{{ if $isLong }} data-collapsed="true"{{ end }}{{ if $hasDiff }} data-diff="true"{{ end }}{{ if and $hasDiff $copyRaw }} data-copy-raw="true" data-raw-content="{{ .Inner | htmlEscape }}"{{ end }}>
+  <div class="code-block-body"{{ if $isLong }} data-collapsed="true"{{ end }}{{ if or $hasDiff $isDiffFence }} data-diff="true"{{ end }}{{ if and (or $hasDiff $isDiffFence) $copyRaw }} data-copy-raw="true" data-raw-content="{{ .Inner | htmlEscape }}"{{ end }}>
     {{- if eq $lang "text" -}}
       {{/* security-reviewed: .Inner is Goldmark-escaped markdown code content; printf wraps it in a fixed pre/code scaffold */}}
       {{- $rawHtml := printf "<pre><code>%s</code></pre>" .Inner -}}
       {{- $replaced := replaceRE `TUTVARx([A-Za-z0-9_]+?)x` `<span class="tut-var" data-tut-var="$1"></span>` $rawHtml -}}
       {{/* security-reviewed: variable-token sentinel→span, fixed attribute shape, name is [A-Za-z0-9_] only */}}
       {{ $replaced | safeHTML }}
-    {{- else if $hasDiff -}}
+    {{- else if or $hasDiff $isDiffFence -}}
       {{/* Diff path: highlight the marker-stripped source, then inject diff classes into Chroma output.
            security-reviewed: $cleanInner is derived from Goldmark-escaped markdown; marker stripping is
            a replaceRE with a constant pattern; injected class names come from a fixed if/else chain only. */}}
