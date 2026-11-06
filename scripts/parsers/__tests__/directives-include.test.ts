@@ -1,0 +1,202 @@
+// Task 1: Types, frontmatter parse, and ExpandDirectivesContext extension tests
+// Tests for testedWith/requires frontmatter parsing and ExpandDirectivesContext shape.
+
+import { describe, it, expect, vi } from 'vitest'
+import { extractFrontmatter } from '../frontmatter.js'
+import type { ExpandDirectivesContext } from '../directives.js'
+import type { SnippetDeps } from '../types.js'
+
+describe('testedWith frontmatter parsing', () => {
+  it('parses testedWith map from frontmatter', () => {
+    const { frontmatter } = extractFrontmatter(`---
+testedWith:
+  "@sap/cds": "9.x"
+  node: "22"
+---
+# Test Tutorial
+`)
+    expect(frontmatter.testedWith).toEqual({ '@sap/cds': '9.x', node: '22' })
+  })
+
+  it('caps testedWith at 10 entries and drops extras', () => {
+    // Build a frontmatter YAML with 12 entries
+    const entries = Array.from({ length: 12 }, (_, i) => `  key${i}: "val${i}"`).join('\n')
+    const md = `---\ntestedWith:\n${entries}\n---\n# Test\n`
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { frontmatter } = extractFrontmatter(md)
+    warnSpy.mockRestore()
+    expect(frontmatter.testedWith).toBeDefined()
+    expect(Object.keys(frontmatter.testedWith!).length).toBeLessThanOrEqual(10)
+  })
+
+  it('drops entries with empty string values and warns', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { frontmatter } = extractFrontmatter(`---
+testedWith:
+  good: "1.0"
+  empty: ""
+---
+# Test Tutorial
+`)
+    warnSpy.mockRestore()
+    expect(frontmatter.testedWith).toBeDefined()
+    expect(frontmatter.testedWith!['good']).toBe('1.0')
+    expect(frontmatter.testedWith!['empty']).toBeUndefined()
+  })
+
+  it('returns undefined testedWith when field is absent', () => {
+    const { frontmatter } = extractFrontmatter(`---
+time: 5
+author_name: Test
+author_profile: https://github.com/test
+tags: []
+primary_tag: test
+---
+# Test Tutorial
+`)
+    expect(frontmatter.testedWith).toBeUndefined()
+  })
+
+  it('returns undefined testedWith when field is not an object', () => {
+    const { frontmatter } = extractFrontmatter(`---
+testedWith: "not-an-object"
+---
+# Test Tutorial
+`)
+    expect(frontmatter.testedWith).toBeUndefined()
+  })
+})
+
+describe('requires frontmatter parsing', () => {
+  it('parses requires array', () => {
+    const { frontmatter } = extractFrontmatter(`---
+requires:
+  - hana-cloud-tutorial-1
+---
+# Test Tutorial
+`)
+    expect(frontmatter.requires).toEqual(['hana-cloud-tutorial-1'])
+  })
+
+  it('parses multiple requires slugs', () => {
+    const { frontmatter } = extractFrontmatter(`---
+requires:
+  - hana-cloud-tutorial-1
+  - hana-cloud-tutorial-2
+---
+# Test Tutorial
+`)
+    expect(frontmatter.requires).toEqual(['hana-cloud-tutorial-1', 'hana-cloud-tutorial-2'])
+  })
+
+  it('filters out empty string entries from requires', () => {
+    const { frontmatter } = extractFrontmatter(`---
+requires:
+  - hana-cloud-tutorial-1
+  - ""
+  - hana-cloud-tutorial-2
+---
+# Test Tutorial
+`)
+    expect(frontmatter.requires).toEqual(['hana-cloud-tutorial-1', 'hana-cloud-tutorial-2'])
+  })
+
+  it('returns undefined requires when field is absent', () => {
+    const { frontmatter } = extractFrontmatter(`---
+time: 5
+---
+# Test Tutorial
+`)
+    expect(frontmatter.requires).toBeUndefined()
+  })
+
+  it('returns undefined requires when array is empty after filtering', () => {
+    const { frontmatter } = extractFrontmatter(`---
+requires:
+  - ""
+  - "   "
+---
+# Test Tutorial
+`)
+    expect(frontmatter.requires).toBeUndefined()
+  })
+})
+
+describe('ExpandDirectivesContext extended shape', () => {
+  it('accepts catalogBySlug map', () => {
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test-tutorial',
+      catalogBySlug: new Map([
+        ['other-tutorial', { title: 'Other Tutorial', time: 15, level: 'beginner' }],
+      ]),
+    }
+    expect(ctx.catalogBySlug?.get('other-tutorial')?.title).toBe('Other Tutorial')
+    expect(ctx.catalogBySlug?.get('other-tutorial')?.time).toBe(15)
+    expect(ctx.catalogBySlug?.get('other-tutorial')?.level).toBe('beginner')
+  })
+
+  it('accepts catalogBySlug entry without level (level is optional)', () => {
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test-tutorial',
+      catalogBySlug: new Map([
+        ['other-tutorial', { title: 'Other Tutorial', time: 10 }],
+      ]),
+    }
+    const entry = ctx.catalogBySlug?.get('other-tutorial')
+    expect(entry?.title).toBe('Other Tutorial')
+    expect(entry?.level).toBeUndefined()
+  })
+
+  it('accepts snippetMap for include directive', () => {
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test-tutorial',
+      snippetMap: new Map([
+        ['common/prereqs.md', '## Prerequisites\n- Have an account'],
+      ]),
+    }
+    expect(ctx.snippetMap?.get('common/prereqs.md')).toContain('Prerequisites')
+  })
+
+  it('accepts includeChain for cycle detection', () => {
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test-tutorial',
+      includeChain: ['common/prereqs.md', 'common/shared-setup.md'],
+    }
+    expect(ctx.includeChain).toHaveLength(2)
+    expect(ctx.includeChain![0]).toBe('common/prereqs.md')
+  })
+
+  it('accepts helpTitleCache for help directive', () => {
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test-tutorial',
+      helpTitleCache: new Map([
+        ['hana-cloud', 'SAP HANA Cloud'],
+      ]),
+    }
+    expect(ctx.helpTitleCache?.get('hana-cloud')).toBe('SAP HANA Cloud')
+  })
+
+  it('all new fields are optional (base context still valid)', () => {
+    const ctx: ExpandDirectivesContext = { slug: 'test-tutorial' }
+    expect(ctx.catalogBySlug).toBeUndefined()
+    expect(ctx.snippetMap).toBeUndefined()
+    expect(ctx.includeChain).toBeUndefined()
+    expect(ctx.helpTitleCache).toBeUndefined()
+  })
+})
+
+describe('SnippetDeps type', () => {
+  it('is a Record<string, string[]>', () => {
+    const deps: SnippetDeps = {
+      'common/prereqs.md': ['hana-cloud-tutorial-1', 'hana-cloud-tutorial-2'],
+      'common/setup.md': ['hana-cloud-tutorial-3'],
+    }
+    expect(deps['common/prereqs.md']).toHaveLength(2)
+    expect(deps['common/setup.md']).toContain('hana-cloud-tutorial-3')
+  })
+
+  it('accepts empty deps map', () => {
+    const deps: SnippetDeps = {}
+    expect(Object.keys(deps)).toHaveLength(0)
+  })
+})

@@ -77,6 +77,39 @@ export function extractFrontmatter(md: string): FrontmatterResult {
   const prerequisites = extractSection(maskedContent, 'Prerequisites')
   const level = normalizeLevel(fm.tags ?? [])
 
+  // Parse testedWith: must be a plain object with non-empty string keys and values; max 10 entries
+  const rawTestedWith = (data as Record<string, unknown>).testedWith
+  delete (fm as { testedWith?: unknown }).testedWith
+  if (rawTestedWith !== null && rawTestedWith !== undefined && typeof rawTestedWith === 'object' && !Array.isArray(rawTestedWith)) {
+    const result: Record<string, string> = {}
+    let count = 0
+    for (const [k, v] of Object.entries(rawTestedWith as Record<string, unknown>)) {
+      if (count >= 10) {
+        console.warn(`[frontmatter] testedWith exceeds 10 entries in "${title || 'unknown'}"; extra entries dropped`)
+        break
+      }
+      if (typeof k !== 'string' || k.trim() === '') {
+        console.warn(`[frontmatter] testedWith: skipping entry with non-string or empty key`)
+        continue
+      }
+      if (typeof v !== 'string' || v.trim() === '') {
+        console.warn(`[frontmatter] testedWith: skipping entry "${k}" with non-string or empty value`)
+        continue
+      }
+      result[k] = v
+      count++
+    }
+    if (Object.keys(result).length > 0) fm.testedWith = result
+  }
+
+  // Parse requires: array of non-empty strings
+  const rawRequires = (data as Record<string, unknown>).requires
+  delete (fm as { requires?: unknown }).requires
+  if (Array.isArray(rawRequires)) {
+    const filtered = rawRequires.filter((e): e is string => typeof e === 'string' && e.trim() !== '')
+    if (filtered.length > 0) fm.requires = filtered
+  }
+
   return { frontmatter: fm, title, description, youWillLearn, prerequisites, level, body: content }
 }
 

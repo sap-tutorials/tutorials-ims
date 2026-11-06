@@ -698,6 +698,28 @@ export interface ExpandDirectivesContext {
   channel?: string;
   repo?: string;
   branch?: string;
+  /**
+   * Slim catalog index keyed by tutorial slug. Used by `:ref` and similar
+   * directives to resolve titles and metadata without loading the full nav JSON.
+   */
+  catalogBySlug?: Map<string, { title: string; time: number; level?: string }>;
+  /**
+   * Snippet source map: snippetKey → raw markdown source.
+   * Populated by the fetch pipeline before `expandDirectives` is called.
+   * Consumed by the `:include` directive (Task 2).
+   */
+  snippetMap?: Map<string, string>;
+  /**
+   * Ancestor snippet names for cycle detection in nested `:include` directives.
+   * Each frame pushes the current snippet name before recursing and pops on return.
+   * An empty/absent array means we are at the top-level (tutorial body).
+   */
+  includeChain?: string[];
+  /**
+   * Cache for `:help` directive title lookups. Keyed by help topic ID.
+   * Populated lazily by the `:help` directive renderer (Task 3).
+   */
+  helpTitleCache?: Map<string, string>;
 }
 
 /**
