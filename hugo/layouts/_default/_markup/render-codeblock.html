@@ -118,6 +118,38 @@
      to before — they take the existing highlight path below. */}}
 {{- $isConsole := or (eq $lower "console") (eq $lower "shell-session") (eq $lower "terminal-session") (index $attrs "prompt") -}}
 
+{{/* Diff marker detection: scan .Inner for [!code ++/--/focus/highlight] markers.
+     Only active for non-console fences. Produces $hasDiff, $diffMarkers (slice),
+     and $cleanInner (Inner with markers stripped) for use in the body section.
+     security-reviewed: marker tokens are fixed strings; replaceRE pattern is constant;
+     injected class names come from a fixed if/else chain, not user input. */}}
+{{- $hasDiff := false -}}
+{{- $diffMarkers := slice -}}
+{{- $cleanInner := "" -}}
+{{- $copyRaw := eq (index $attrs "copy" | default "") "raw" -}}
+{{- if not $isConsole -}}
+  {{- range $lineIdx, $codeLine := split .Inner "\n" -}}
+    {{- $markerClass := "" -}}
+    {{- if findRE `\[!code \+\+\]` $codeLine -}}
+      {{- $markerClass = "diff-added" -}}
+      {{- $hasDiff = true -}}
+    {{- else if findRE `\[!code --\]` $codeLine -}}
+      {{- $markerClass = "diff-removed" -}}
+      {{- $hasDiff = true -}}
+    {{- else if findRE `\[!code focus\]` $codeLine -}}
+      {{- $markerClass = "diff-focus" -}}
+      {{- $hasDiff = true -}}
+    {{- else if findRE `\[!code highlight\]` $codeLine -}}
+      {{- $markerClass = "diff-highlight" -}}
+      {{- $hasDiff = true -}}
+    {{- end -}}
+    {{- $diffMarkers = $diffMarkers | append $markerClass -}}
+    {{/* Strip marker comment from the line before highlighting */}}
+    {{- $stripped := $codeLine | replaceRE `\s*(?://|#|<!--|--)\s*\[!code [^\]]+\](?:\s*-->)?` "" -}}
+    {{- $cleanInner = printf "%s%s\n" $cleanInner $stripped -}}
+  {{- end -}}
+{{- end -}}
+
 <div class="code-block{{ if $isLong }} code-block-long{{ end }}"{{ if eq $lower "cds" }} data-lang="cds"{{ end }}>
   <div class="code-block-header">
     {{- if ne $filename "" -}}
@@ -130,6 +162,7 @@
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4V1.5C4 1.22 4.22 1 4.5 1H13.5C13.78 1 14 1.22 14 1.5V10.5C14 10.78 13.78 11 13.5 11H11" stroke="currentColor" stroke-width="1.2"/><rect x="2" y="5" width="9" height="10" rx=".5" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
       <span class="copy-label">Copy</span>
     </button>
+    {{- if $hasDiff -}}<span class="diff-legend" aria-hidden="true">＋ added &nbsp;− removed</span>{{- end -}}
   </div>
   {{- if $isConsole -}}
   {{/* Console branch: split lines into prompt/output/continuation spans.
@@ -147,13 +180,41 @@
 {{- $prevWasContinuation = $lineEndsInCont -}}{{- $prevHlLang = $hlLang -}}{{- else -}}<span class="cl-out">{{ $line }}</span>
 {{- $prevWasContinuation = false -}}{{- end -}}{{- end -}}{{- end -}}</pre></div>
   {{- else -}}
-  <div class="code-block-body"{{ if $isLong }} data-collapsed="true"{{ end }}>
+  <div class="code-block-body"{{ if $isLong }} data-collapsed="true"{{ end }}{{ if $hasDiff }} data-diff="true"{{ end }}{{ if and $hasDiff $copyRaw }} data-copy-raw="true"{{ end }}>
     {{- if eq $lang "text" -}}
       {{/* security-reviewed: .Inner is Goldmark-escaped markdown code content; printf wraps it in a fixed pre/code scaffold */}}
       {{- $rawHtml := printf "<pre><code>%s</code></pre>" .Inner -}}
       {{- $replaced := replaceRE `TUTVARx([A-Za-z0-9_]+?)x` `<span class="tut-var" data-tut-var="$1"></span>` $rawHtml -}}
       {{/* security-reviewed: variable-token sentinel→span, fixed attribute shape, name is [A-Za-z0-9_] only */}}
       {{ $replaced | safeHTML }}
+    {{- else if $hasDiff -}}
+      {{/* Diff path: highlight the marker-stripped source, then inject diff classes into Chroma output.
+           security-reviewed: $cleanInner is derived from Goldmark-escaped markdown; marker stripping is
+           a replaceRE with a constant pattern; injected class names come from a fixed if/else chain only. */}}
+      {{- $highlighted := highlight $cleanInner $lang $optsStr -}}
+      {{- $replaced := replaceRE `TUTVARx([A-Za-z0-9_]+?)x` `<span class="tut-var" data-tut-var="$1"></span>` $highlighted -}}
+      {{/* Post-process: split on <span class="line"> and re-join with diff classes injected.
+           The split produces: [preamble, line0-content, line1-content, ...].
+           Index 0 is the preamble (before the first line span); subsequent parts start
+           immediately after the opening tag we split on. */}}
+      {{- $parts := split $replaced "<span class=\"line\">" -}}
+      {{- $out := index $parts 0 -}}
+      {{- range $partIdx, $part := $parts -}}
+        {{- if eq $partIdx 0 -}}
+        {{- else -}}
+          {{- $lineNum := sub $partIdx 1 -}}
+          {{- $markerClass := "" -}}
+          {{- if lt $lineNum (len $diffMarkers) -}}
+            {{- $markerClass = index $diffMarkers $lineNum -}}
+          {{- end -}}
+          {{- if ne $markerClass "" -}}
+            {{- $out = printf "%s<span class=\"line %s\">%s" $out $markerClass $part -}}
+          {{- else -}}
+            {{- $out = printf "%s<span class=\"line\">%s" $out $part -}}
+          {{- end -}}
+        {{- end -}}
+      {{- end -}}
+      {{ $out | safeHTML }}
     {{- else -}}
       {{- $highlighted := highlight .Inner $lang $optsStr -}}
       {{- $replaced := replaceRE `TUTVARx([A-Za-z0-9_]+?)x` `<span class="tut-var" data-tut-var="$1"></span>` $highlighted -}}

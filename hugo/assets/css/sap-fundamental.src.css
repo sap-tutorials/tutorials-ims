@@ -2947,6 +2947,17 @@ html.dark .code-block-body .chroma .err {
 .cl-cont { padding-left: 1.5em; }
 html.dark .cl-out { opacity: 0.4; }
 
+/* Diff markers */
+.diff-added  { background: rgba(0,200,80,.12); display: block; }
+.diff-removed { background: rgba(220,50,50,.12); display: block; text-decoration: line-through; opacity: .6; }
+.diff-highlight { background: rgba(200,160,0,.12); display: block; }
+.diff-legend { font-size: .75em; opacity: .6; margin-left: auto; padding-right: .25rem; }
+/* Focus: dim all lines until block is hovered */
+.code-block-body:has(.diff-focus):not(:hover) .line:not(.diff-focus) { opacity: .35; }
+html.dark .diff-added  { background: rgba(0,200,80,.18); }
+html.dark .diff-removed { background: rgba(220,50,50,.18); }
+html.dark .diff-highlight { background: rgba(200,160,0,.18); }
+
 /* Chroma readability overrides (dark mode).
  * Hugo's `gen chromastyles --style=github-dark` emits empty rules for
  * unstyled tokens (.p, .n, .nx, .x, .na, .nb, .bp), expecting them to

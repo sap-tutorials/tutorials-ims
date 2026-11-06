@@ -20,3 +20,26 @@ export function copyConsoleCommands(block: HTMLElement): string {
   });
   return lines.join('\n');
 }
+
+// Strip marker comments from a line of text.
+const MARKER_RE = /\s*(?:\/\/|#|<!--|--)\s*\[!code [^\]]+\](?:\s*-->)?/g;
+
+// Copy "final state" from a diff-annotated block: removed lines excluded, markers stripped.
+// If block.dataset.copyRaw === 'true', returns raw textContent instead.
+export function copyDiffFinal(block: HTMLElement): string {
+  if (block.dataset.copyRaw === 'true') {
+    return block.textContent ?? '';
+  }
+  const lines = block.querySelectorAll<HTMLElement>('.line');
+  if (lines.length === 0) {
+    // Fallback: no .line spans; strip markers from full text
+    return (block.textContent ?? '').replace(MARKER_RE, '');
+  }
+  const result: string[] = [];
+  lines.forEach((line) => {
+    if (line.classList.contains('diff-removed')) return;
+    const text = (line.textContent ?? '').replace(MARKER_RE, '');
+    result.push(text);
+  });
+  return result.join('\n');
+}
