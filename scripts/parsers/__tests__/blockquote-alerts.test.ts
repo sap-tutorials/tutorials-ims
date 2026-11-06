@@ -25,3 +25,22 @@ it('is idempotent on known alert syntax', () => {
   const md = '> [!TROUBLESHOOT] My error\n> body'
   expect(normalizeBlockquoteAlerts(md)).toBe(normalizeBlockquoteAlerts(normalizeBlockquoteAlerts(md)))
 })
+it('throws on > [!DETAILS] with no title text', () => {
+  expect(() => normalizeBlockquoteAlerts('> [!DETAILS]\n> body', { slug: 'test-slug', line: 1 }))
+    .toThrow(/\[!DETAILS\].*title.*required/i)
+})
+it('passes > [!DETAILS+] with a title', () => {
+  expect(() => normalizeBlockquoteAlerts('> [!DETAILS+] Title here\n> body')).not.toThrow()
+})
+it('throws on > [!DETAILS+] with no title', () => {
+  expect(() => normalizeBlockquoteAlerts('> [!DETAILS+]\n> body', { slug: 'test-slug', line: 1 }))
+    .toThrow(/\[!DETAILS\].*title.*required/i)
+})
+it('error message includes slug and line number', () => {
+  expect(() => normalizeBlockquoteAlerts('> [!DETAILS]\n> body', { slug: 'my-tutorial', line: 0 }))
+    .toThrow(/my-tutorial/)
+})
+it('does not throw on > [!DETAILS] inside a fenced code block', () => {
+  const md = '```\n> [!DETAILS]\n> inside fence\n```'
+  expect(() => normalizeBlockquoteAlerts(md)).not.toThrow()
+})
