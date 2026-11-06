@@ -121,6 +121,8 @@
 {{/* Diff marker detection: scan .Inner for [!code ++/--/focus/highlight] markers.
      Only active for non-console fences. Produces $hasDiff, $diffMarkers (slice),
      and $cleanInner (Inner with markers stripped) for use in the body section.
+     TODO(follow-up): also support {diff} fence attribute for unified diff format
+     (leading +/-/space column). Track as a separate PR after this change ships.
      security-reviewed: marker tokens are fixed strings; replaceRE pattern is constant;
      injected class names come from a fixed if/else chain, not user input. */}}
 {{- $hasDiff := false -}}
@@ -180,7 +182,7 @@
 {{- $prevWasContinuation = $lineEndsInCont -}}{{- $prevHlLang = $hlLang -}}{{- else -}}<span class="cl-out">{{ $line }}</span>
 {{- $prevWasContinuation = false -}}{{- end -}}{{- end -}}{{- end -}}</pre></div>
   {{- else -}}
-  <div class="code-block-body"{{ if $isLong }} data-collapsed="true"{{ end }}{{ if $hasDiff }} data-diff="true"{{ end }}{{ if and $hasDiff $copyRaw }} data-copy-raw="true"{{ end }}>
+  <div class="code-block-body"{{ if $isLong }} data-collapsed="true"{{ end }}{{ if $hasDiff }} data-diff="true"{{ end }}{{ if and $hasDiff $copyRaw }} data-copy-raw="true" data-raw-content="{{ .Inner | htmlEscape }}"{{ end }}>
     {{- if eq $lang "text" -}}
       {{/* security-reviewed: .Inner is Goldmark-escaped markdown code content; printf wraps it in a fixed pre/code scaffold */}}
       {{- $rawHtml := printf "<pre><code>%s</code></pre>" .Inner -}}

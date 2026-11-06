@@ -25,10 +25,14 @@ export function copyConsoleCommands(block: HTMLElement): string {
 const MARKER_RE = /\s*(?:\/\/|#|<!--|--)\s*\[!code [^\]]+\](?:\s*-->)?/g;
 
 // Copy "final state" from a diff-annotated block: removed lines excluded, markers stripped.
-// If block.dataset.copyRaw === 'true', returns raw textContent instead.
+// If block.dataset.copyRaw === 'true', returns the original source (with markers) stored in
+// data-raw-content (HTML-decoded), because the Chroma highlight path strips markers before
+// rendering so textContent never contains them.
 export function copyDiffFinal(block: HTMLElement): string {
   if (block.dataset.copyRaw === 'true') {
-    return block.textContent ?? '';
+    // Hugo emits the original .Inner via {{ .Inner | htmlEscape }} into data-raw-content.
+    // The dataset access decodes HTML entities automatically.
+    return block.dataset.rawContent ?? block.textContent ?? '';
   }
   const lines = block.querySelectorAll<HTMLElement>('.line');
   if (lines.length === 0) {

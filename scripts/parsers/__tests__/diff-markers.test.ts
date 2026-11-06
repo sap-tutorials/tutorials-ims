@@ -2,11 +2,12 @@
 import { describe, it, expect } from 'vitest'
 import { copyDiffFinal } from '../../../hugo/assets/js/copy-clean.js'
 
-function makeBlock(html: string, copyRaw?: boolean): HTMLElement {
+function makeBlock(html: string, options?: { copyRaw?: boolean; rawContent?: string }): HTMLElement {
   const div = document.createElement('div')
   div.className = 'code-block-body'
   div.innerHTML = html
-  if (copyRaw) div.dataset.copyRaw = 'true'
+  if (options?.copyRaw) div.dataset.copyRaw = 'true'
+  if (options?.rawContent !== undefined) div.dataset.rawContent = options.rawContent
   return div
 }
 
@@ -33,11 +34,15 @@ describe('copyDiffFinal', () => {
     expect(text).toContain('const b = 3')
   })
 
-  it('{copy=raw} yields full source including markers', () => {
+  it('{copy=raw} yields full source including markers via data-raw-content', () => {
+    // Hugo stores .Inner (with markers) in data-raw-content via {{ .Inner | htmlEscape }}.
+    // The rendered DOM has markers stripped (Chroma gets $cleanInner, not .Inner).
+    // copyDiffFinal must read data-raw-content, not textContent, when copyRaw is set.
+    const rawSource = 'const b = 2 // [!code --]\nconst b = 3 // [!code ++]\n'
     const html = `<pre><code>
-      <span class="line diff-removed">const b = 2 // [!code --]</span>
+      <span class="line diff-added">const b = 3</span>
     </code></pre>`
-    const block = makeBlock(html, true)
+    const block = makeBlock(html, { copyRaw: true, rawContent: rawSource })
     const text = copyDiffFinal(block)
     expect(text).toContain('[!code --]')
     expect(text).toContain('const b = 2')
