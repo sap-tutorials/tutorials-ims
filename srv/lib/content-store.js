@@ -54,6 +54,7 @@ export async function snippetDepsHandler(req, res) {
     // ContentFiles.slug is the lookup key; gzip BLOB is in ContentFiles.content
     const { ContentFiles } = cds.entities('com.sap.developers.ims');
     const row = await db.run(
+      // slug-canonical: sentinel
       cds.ql.SELECT.one.from(ContentFiles).where({ slug: '_manifest_snippet-deps' })
     );
     if (!row?.content) {

@@ -71,6 +71,12 @@ const SRV_QA_SERVER = join(REPO_ROOT, 'srv-qa', 'server.js');
  * Format: 'METHOD /path'
  */
 const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
+  'GET /content/manifest/snippet-deps':
+    'Snippet-deps manifest (content-reuse ::include) — a build-pipeline surface read by the ' +
+    'rebuild-content workflow to expand _snippets/ changes to affected tutorial slugs. It serves ' +
+    'the published (non-QA) namespace and is inert until SNIPPETS_ENABLED_REPOS is configured; the ' +
+    'QA author-preview channel never drives content rebuilds, so there is no QA consumer. ' +
+    'Re-evaluate if snippet includes are ever previewed on the QA channel.',
   'GET /content/tutorials/:slug/provenance':
     'Signed provenance envelope (#2245) — an anonymous, public, read-only prod content ' +
     'surface that emits a JWS over PUBLISHED-tutorial freshness/provenance. Feature-flagged ' +
