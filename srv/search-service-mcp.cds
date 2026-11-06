@@ -14,9 +14,14 @@ extend service SearchService {
       @param slug        Lowercase canonical tutorial slug.
       @param stepNumber  1-indexed step number.
       @param format      'markdown' (default, token-efficient source markdown
-                         matching /tutorials/<slug>.md) or 'html' (sliced HTML). */
+                         matching /tutorials/<slug>.md) or 'html' (sliced HTML).
+      @param variants    Optional JSON-encoded variant preference map, e.g.
+                         `{"runtime":"java"}`. When the step contains OPTION
+                         blocks tagged with a matching sync= key, only the
+                         preferred variant's content is returned. Only applies
+                         to format='markdown'. Unrecognised keys are ignored. */
   @(requires: 'any')
-  function get_tutorial_step(slug: String, stepNumber: Integer, format: String) returns {
+  function get_tutorial_step(slug: String, stepNumber: Integer, format: String, variants: String) returns {
     slug          : String;
     stepNumber    : Integer;
     stepTitle     : String;
@@ -24,6 +29,9 @@ extend service SearchService {
     contentFormat : String;
     textLength    : Integer;
     totalSteps    : Integer;
+    // [tutorial-step-pacing] see srv/developer-service-mcp.cds.
+    timeMinutes   : Integer;
+    optional      : Boolean;
   };
 
   /** Search the public SAP community events catalog — CodeJams, Devtoberfest,

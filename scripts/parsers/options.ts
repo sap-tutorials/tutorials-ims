@@ -1,14 +1,30 @@
 import { classifyGroup, forceClassify, type OS, type ClassifyResult } from './os-classifier';
 import { slugify } from '../../srv/lib/slug-utils.js';
 import { classifyLines } from './md-grammar.js';
+import { parseStepHeadingAttrs } from './step-attrs.js';
+import { classifyGroupToPreset, canonicalForLabel, SYNC_PRESETS } from './sync-presets.js';
 
 interface OptionEntry {
   matchIndex: number
   tabName: string
   content: string
+  /** Parsed from the OPTION BEGIN marker, e.g. `sync=runtime` */
+  syncKey?: string
 }
 
 export type OptionsTarget = 'vitepress' | 'hugo'
+
+/**
+ * Thrown when an option group carries conflicting `sync=` keys across its
+ * blocks, or when a `sync=` key (or auto-classified key) is neither a
+ * built-in preset nor declared in `syncGroups`.
+ */
+export class OptionSyncError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'OptionSyncError'
+  }
+}
 
 /**
  * Optional override map: { stepSlug: 'os' | 'regular' }.
@@ -41,6 +57,37 @@ export interface ConvertOptions {
    * never matched any group. Caller MUST initialize to a fresh `Set<string>()`.
    */
   resolvedStepSlugsOut?: Set<string>;
+  /**
+   * [synced-tabs] Opt-in auto-classification: `'auto'` → attempt preset
+   * classification for every group that has no explicit `sync=` key. Only
+   * groups whose labels ALL resolve to the same built-in preset are assigned;
+   * unresolvable groups are left as plain option-tabs (no build error).
+   */
+  syncTabs?: 'auto';
+  /**
+   * [synced-tabs] Per-step overrides keyed by slugified step heading.
+   * `'none'` disables sync for that step's group even if `sync=` is authored
+   * or auto-classified. Any other valid key string forces a specific preset or
+   * custom key (must still pass undeclared-key validation).
+   */
+  syncOverrides?: Record<string, string>;
+  /**
+   * [synced-tabs] Custom sync-group declarations for tutorial-specific keys
+   * that are not built-in presets. Provides the known values so the parser can
+   * compute canonical syncValue for each tab and accept the key without error.
+   */
+  syncGroups?: Record<string, {
+    label: string
+    values: string[]
+    aliases?: Record<string, string[]>
+    default?: string
+  }>;
+  /**
+   * [synced-tabs] Out-param: populated with every sync key actually used
+   * (emitted) in any option-tabs group during this conversion. Caller MUST
+   * initialize to a fresh `Set<string>()`.
+   */
+  syncKeysUsedOut?: Set<string>;
 }
 
 /** Find the slugified ### heading immediately preceding `index` in `content`.
@@ -55,7 +102,12 @@ function priorStepSlug(content: string, index: number): string | undefined {
   let last: string | undefined;
   for (let i = 0; i < lines.length; i++) {
     if (classes[i]?.kind === 'heading' && classes[i].level === 3) {
-      last = lines[i].replace(/^###\s+/, '').replace(/\s*$/, '');
+      const rawTitle = lines[i].replace(/^###\s+/, '').replace(/\s*$/, '');
+      // [tutorial-step-pacing] Strip the same `{time=… optional}` attribute
+      // block v2.ts strips before computing the step slug, so an osOverrides
+      // key keyed on a step heading using the new syntax still resolves
+      // (D1 — slug stability is independent of the attribute block).
+      last = parseStepHeadingAttrs(rawTitle).title;
     }
   }
   return last ? slugify(last) : undefined;
@@ -114,12 +166,134 @@ function indentWrapperLines(block: string, indent: string): string {
     .join('\n');
 }
 
+/** Built-in preset key names. Used for undeclared-key validation. */
+const BUILT_IN_PRESET_KEYS = Object.keys(SYNC_PRESETS)
+
+/** Return the 1-based line number of `index` within `content` by counting newlines. */
+function lineOfIndex(content: string, index: number): number {
+  let n = 1
+  for (let i = 0; i < index; i++) {
+    if (content[i] === '\n') n++
+  }
+  return n
+}
+
+/**
+ * Resolve the sync key that applies to an option group, given:
+ * - explicit `sync=` keys from the group's OPTION BEGIN markers
+ * - per-step `syncOverrides` from frontmatter
+ * - auto-classification via `syncTabs: 'auto'`
+ *
+ * Returns the resolved key string or `undefined` when no sync applies.
+ *
+ * Throws `OptionSyncError` for:
+ * - conflicting explicit keys within the same group
+ * - an undeclared key (not a built-in preset AND not in `syncGroups`)
+ *   NOTE: an explicit `sync=<key>` is ALWAYS validated even if the step's
+ *   `syncOverrides` entry is `'none'` — a typo'd undeclared key must fail
+ *   the build regardless of whether that step's sync is suppressed.
+ */
+function resolveGroupSyncKey(
+  group: OptionEntry[],
+  stepSlug: string | undefined,
+  opts: ConvertOptions,
+  content: string,
+  firstMatchIndex: number,
+): string | undefined {
+  const line = lineOfIndex(content, firstMatchIndex)
+
+  // 1. Collect explicit sync= keys from the group (only first block is required
+  //    to carry it; others may omit it, but MUST NOT carry a different one).
+  const explicitKeys = group.map(e => e.syncKey).filter((k): k is string => !!k)
+  if (explicitKeys.length > 0) {
+    const uniqueKeys = [...new Set(explicitKeys)]
+    if (uniqueKeys.length > 1) {
+      throw new OptionSyncError(
+        `[options] conflicting sync= keys in one option group at line ${line}: ${uniqueKeys.join(', ')}. ` +
+        `Only the first block needs sync=; other blocks must omit it or use the same key.`
+      )
+    }
+  }
+  const explicitKey = explicitKeys[0] // first explicit key if any
+
+  // 1b. Validate explicit key BEFORE applying syncOverrides.
+  //     A typo'd undeclared key (e.g. sync=db) must always fail the build even
+  //     when the step's syncOverrides entry is 'none' (suppresses the group).
+  //     Auto-classified keys don't have this pre-validation — they only arise
+  //     from built-in presets and so are always valid by construction.
+  if (explicitKey) {
+    const isBuiltIn = BUILT_IN_PRESET_KEYS.includes(explicitKey)
+    const isDeclared = !!opts.syncGroups?.[explicitKey]
+    if (!isBuiltIn && !isDeclared) {
+      throw new OptionSyncError(
+        `[options] sync key "${explicitKey}" at line ${line} is not a built-in preset (${BUILT_IN_PRESET_KEYS.join(', ')}) ` +
+        `and is not declared in syncGroups. Declare it in frontmatter syncGroups or use a built-in preset key.`
+      )
+    }
+  }
+
+  // 2. Apply syncOverrides for this step
+  const stepOverride = stepSlug ? opts.syncOverrides?.[stepSlug] : undefined
+  if (stepOverride === 'none') return undefined // disabled for this step
+  // A stepOverride value that isn't 'none' forces a specific key
+  const forcedKey = stepOverride && stepOverride !== 'none' ? stepOverride : undefined
+
+  // 3. Determine the effective key
+  // Priority: explicit > forced > auto
+  let effectiveKey = forcedKey ?? explicitKey
+
+  if (!effectiveKey && opts.syncTabs === 'auto') {
+    // Auto-classify: attempt preset classification
+    const labels = group.map(e => e.tabName)
+    const classified = classifyGroupToPreset(labels)
+    if (classified?.key) effectiveKey = classified.key
+  }
+
+  if (!effectiveKey) return undefined
+
+  // 4. Validate the final effective key (handles forced keys from syncOverrides).
+  //    Explicit keys already validated above; auto-classified keys are always
+  //    built-in presets. This catches a forced key from syncOverrides that names
+  //    an undeclared custom key.
+  const isBuiltIn = BUILT_IN_PRESET_KEYS.includes(effectiveKey)
+  const isDeclared = !!opts.syncGroups?.[effectiveKey]
+  if (!isBuiltIn && !isDeclared) {
+    throw new OptionSyncError(
+      `[options] sync key "${effectiveKey}" at line ${line} is not a built-in preset (${BUILT_IN_PRESET_KEYS.join(', ')}) ` +
+      `and is not declared in syncGroups. Declare it in frontmatter syncGroups or use a built-in preset key.`
+    )
+  }
+
+  return effectiveKey
+}
+
+/**
+ * Compute the canonical syncValue for a tab label given a resolved sync key.
+ * For built-in presets: use canonicalForLabel.
+ * For custom syncGroups: use the label as-is (pass through).
+ */
+function computeSyncValue(
+  tabName: string,
+  syncKey: string,
+  opts: ConvertOptions,
+): string {
+  // Try built-in preset first
+  const preset = canonicalForLabel(syncKey, tabName)
+  if (preset !== null) return preset
+
+  // Custom syncGroups: use tab name as canonical (author defines values; no aliasing in parser)
+  return tabName
+}
+
 export function convertOptionBlocks(
   content: string,
   target: OptionsTarget = 'vitepress',
   opts: ConvertOptions = {}
 ): string {
-  const optionPattern = /\[OPTION BEGIN \[([^\]]+)\]\]\s*\n([\s\S]*?)\[OPTION END\]/g
+  // Extended regex: optional ` sync=<key>` after the label, before the closing `]`
+  // Original:  /\[OPTION BEGIN \[([^\]]+)\]\]\s*\n([\s\S]*?)\[OPTION END\]/g
+  // Extended:  captures optional `sync=<key>` group
+  const optionPattern = /\[OPTION BEGIN \[([^\]]+)\](?:\s+sync=([a-z][a-z0-9-]*))?\]\s*\n([\s\S]*?)\[OPTION END\]/g
 
   const matches = [...content.matchAll(optionPattern)]
   if (matches.length === 0) return content
@@ -131,10 +305,12 @@ export function convertOptionBlocks(
     const entry: OptionEntry = {
       matchIndex: i,
       tabName: matches[i][1],
+      // Extended: capture[2] = sync key (optional), capture[3] = body
+      syncKey: matches[i][2] || undefined,
       // Keep the RAW captured body (no .trim()); dedentBlock needs every line's
       // real indentation to compute the common prefix. Pre-trimming de-indents
       // only line 1 and defeats the dedent (#2703 follow-up).
-      content: matches[i][2].replace(/\s+$/, ''),
+      content: matches[i][3].replace(/\s+$/, ''),
     }
     if (currentGroup.length > 0) {
       const prevMatch = matches[i - 1]
@@ -217,12 +393,26 @@ export function convertOptionBlocks(
         }
         replacement = `{{< os-options >}}\n${panels.join('\n')}\n{{< /os-options >}}`;
       } else {
-        // Existing legacy path — option-tabs shortcode.
+        // Resolve sync key for this group (throws OptionSyncError on conflicts/undeclared keys)
+        const syncKey = resolveGroupSyncKey(group, stepSlug, opts, content, firstMatch.index!)
+
+        // Track used keys
+        if (syncKey && opts.syncKeysUsedOut) {
+          opts.syncKeysUsedOut.add(syncKey)
+        }
+
         const tabNames = group.map(b => b.tabName).join(',')
-        const tabs = group.map((b, i) =>
-          `{{% tab index="${i}" name="${b.tabName}" %}}\n\n${dedentBlock(b.content)}\n\n{{% /tab %}}`
-        ).join('\n')
-        replacement = `{{% option-tabs tabs="${tabNames}" %}}\n${tabs}\n{{% /option-tabs %}}`;
+        const syncTabsAttr = syncKey ? ` sync="${syncKey}"` : ''
+        const syncValuesAttr = syncKey
+          ? ` syncValues="${group.map(b => computeSyncValue(b.tabName, syncKey, opts)).join(',')}"`
+          : ''
+        const tabs = group.map((b, i) => {
+          const syncValueAttr = syncKey
+            ? ` syncValue="${computeSyncValue(b.tabName, syncKey, opts)}"`
+            : ''
+          return `{{% tab index="${i}" name="${b.tabName}"${syncValueAttr} %}}\n\n${dedentBlock(b.content)}\n\n{{% /tab %}}`
+        }).join('\n')
+        replacement = `{{% option-tabs tabs="${tabNames}"${syncTabsAttr}${syncValuesAttr} %}}\n${tabs}\n{{% /option-tabs %}}`;
       }
     } else {
       // VitePress branch unchanged.

@@ -15,7 +15,8 @@ This is the AGENTS.md for the SAP Developers Tutorials platform codebase. AI cod
 ## Quick conventions
 - Hugo content under `hugo/content/tutorials/` is generated — never hand-edit. Modify parsers in `scripts/parsers/` or upstream tutorials in the `sap-tutorials` GitHub org.
 - Tutorial HTML is served from HANA BLOBs, not static files. After Hugo build, run `npm run publish-content`.
-- Run `npm test` (unit, in-memory SQLite) before committing. `npm run test:hybrid` requires `cf login`.
+- Run only **scoped** unit tests locally (`npm test -- <file-or-pattern>` or `npx vitest run <path>`); the full suite pegs the machine and runs in CI (local agent hooks block it). `npm run test:hybrid` requires `cf login`.
+- Wrap noisy commands (build, deploy, tests, `cf logs`) in `scripts/quiet-run.sh` (bash) or `scripts/quiet-run.ps1` (PowerShell) to keep scrollback out of agent context.
 - Use `cds-mcp` to look up CDS definitions and CAP API docs before editing CDS or CAP code.
 
 ## Out of scope for codebase agents

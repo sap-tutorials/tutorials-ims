@@ -1,5 +1,7 @@
 import { initMermaid } from './mermaid-bootstrap'
 import { csrfFetch } from './csrf-fetch'
+import { getChoice, setChoice, onChange, resolveChoice } from './sync-groups'
+import { initTableEnhance } from './table-enhance'
 
 // NOTE: copyCodeBlock (the "Copy code" button handler) now lives in the
 // site-wide code-copy.ts, loaded on every page from baseof.html. The
@@ -19,8 +21,10 @@ document.addEventListener('click', (e) => {
   if (stepHeader) { toggleStep(stepHeader as HTMLElement); return }
   const doneBtn = target.closest('[data-action="mark-done"]')
   if (doneBtn) { markDone(doneBtn as HTMLButtonElement); return }
+  const skipBtn = target.closest('[data-action="skip-step"]')
+  if (skipBtn) { skipStep(skipBtn as HTMLButtonElement); return }
   const tabBtn = target.closest('[role="tab"]')
-  if (tabBtn) { switchTab(tabBtn as HTMLButtonElement); return }
+  if (tabBtn) { activateTab(tabBtn as HTMLButtonElement, true); return }
   const codeToggle = target.closest('[data-action="toggle-code"]')
   if (codeToggle) { toggleCodeBlock(codeToggle as HTMLButtonElement); return }
   const printBtn = target.closest('[data-action="print-tutorial"]')
@@ -143,15 +147,123 @@ function updateActiveTocItem() {
 ;(window as any).collapseAllSteps = collapseAllSteps
 
 // --- Tab switching ---
-function switchTab(btn: HTMLButtonElement) {
+//
+// activateTab(btn, notifySync): selects `btn` within its strip.
+//   - Updates is-selected class, aria-selected, tabindex (roving).
+//   - Shows/hides panels.
+//   - When notifySync=true AND the strip carries data-sync-key, persists the
+//     choice via setChoice() so other strips of the same key follow.
+//
+// Strips with NO data-sync-key behave exactly as before (independent tabs).
+
+function activateTab(btn: HTMLButtonElement, notifySync: boolean) {
   const container = btn.closest('[data-component="tabs"]')
   if (!container) return
   const index = btn.dataset.tabIndex
-  container.querySelectorAll('[role="tab"]').forEach(t => t.classList.remove('is-selected'))
-  btn.classList.add('is-selected')
+
+  // Update all tabs in the strip
+  container.querySelectorAll<HTMLElement>('[role="tab"]').forEach(t => {
+    const active = t === btn
+    t.classList.toggle('is-selected', active)
+    t.setAttribute('aria-selected', active ? 'true' : 'false')
+    t.setAttribute('tabindex', active ? '0' : '-1')
+  })
+
+  // Show/hide panels
   container.querySelectorAll('[data-tab-panel]').forEach(p => {
     const panel = p as HTMLElement
     panel.hidden = panel.dataset.tabPanel !== index
+  })
+
+  // Sync: persist when the strip is wired to a sync key
+  if (notifySync) {
+    const list = container.querySelector('[data-sync-key]') as HTMLElement | null
+    const syncKey = list?.dataset.syncKey
+    if (syncKey) {
+      const syncValue = btn.dataset.syncValue
+      if (syncValue) setChoice(syncKey, syncValue)
+    }
+  }
+}
+
+/** Select the tab whose data-sync-value matches `value`; injects a placeholder when not found. */
+function applyChoiceToStrip(strip: Element, value: string) {
+  const btn = strip.querySelector<HTMLButtonElement>(`[role="tab"][data-sync-value="${CSS.escape(value)}"]`)
+  if (btn) {
+    activateTab(btn, false)
+    // Remove any placeholder left from a prior missing-value state
+    strip.querySelector('[data-sync-missing]')?.remove()
+  } else {
+    // #2820: no silent substitution — inject a placeholder naming the missing value
+    const existing = strip.querySelector('[data-sync-missing]')
+    if (!existing) {
+      const available = Array.from(
+        strip.querySelectorAll<HTMLElement>('[role="tab"][data-sync-value]')
+      ).map(b => b.dataset.syncValue ?? '').filter(Boolean)
+
+      const placeholder = document.createElement('div')
+      placeholder.setAttribute('data-sync-missing', '')
+      placeholder.setAttribute('data-sync-missing-placeholder', '')
+      placeholder.className = 'option-tabs__missing-placeholder'
+      placeholder.textContent =
+        `"${value}" is not available in this section. ` +
+        (available.length > 0 ? `Available options: ${available.join(', ')}.` : 'No options available.')
+      strip.appendChild(placeholder)
+    }
+  }
+}
+
+/** Keydown handler for roving tabindex in tab strips (ArrowLeft/Right/Home/End). */
+document.addEventListener('keydown', (e) => {
+  const target = e.target as HTMLElement
+  if (target.getAttribute('role') !== 'tab') return
+  const container = target.closest('[data-component="tabs"]')
+  if (!container) return
+  const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+  const currentIdx = tabs.indexOf(target as HTMLButtonElement)
+  if (currentIdx === -1) return
+
+  let nextIdx = -1
+  if (e.key === 'ArrowRight') nextIdx = (currentIdx + 1) % tabs.length
+  else if (e.key === 'ArrowLeft') nextIdx = (currentIdx - 1 + tabs.length) % tabs.length
+  else if (e.key === 'Home') nextIdx = 0
+  else if (e.key === 'End') nextIdx = tabs.length - 1
+  else return
+
+  e.preventDefault()
+  activateTab(tabs[nextIdx], true)
+  tabs[nextIdx].focus()
+})
+
+/** Wire all synced strips: apply stored choice on load and subscribe to changes. */
+function initSyncedTabs() {
+  const urlParams = new URLSearchParams(location.search)
+
+  document.querySelectorAll('[data-sync-key]').forEach(list => {
+    const syncKey = (list as HTMLElement).dataset.syncKey!
+    const container = list.closest('[data-component="tabs"]')
+    if (!container) return
+
+    // Collect available values for this strip (needed for resolveChoice firstTab)
+    const availableBtns = list.querySelectorAll<HTMLElement>('[role="tab"][data-sync-value]')
+    const values = Array.from(availableBtns).map(b => b.dataset.syncValue ?? '').filter(Boolean)
+
+    // Resolve with URL param taking priority over stored choice
+    const urlValue = urlParams.get(syncKey) ?? undefined
+    const choice = resolveChoice(syncKey, {
+      urlParam: urlValue,
+      stored: getChoice(syncKey) || undefined,
+      firstTab: values[0],
+    })
+
+    if (choice) {
+      applyChoiceToStrip(container, choice)
+      // Persist the URL-driven choice so sibling strips on the same page pick it up
+      if (urlValue) setChoice(syncKey, choice)
+    }
+
+    // Subscribe: when any strip (same page or another tab) writes the same key, follow
+    onChange(syncKey, (value) => applyChoiceToStrip(container, value))
   })
 }
 
@@ -263,10 +375,12 @@ async function markDone(btn: HTMLButtonElement) {
       detail: { stepIndex: parseInt(stepNum, 10) }
     }))
     updateProgressBar()
+    updateRemainingTime()
 
     // U10: completion feedback. Final-step toast wins over the per-step toast.
-    const total = document.querySelectorAll('.tutorial-step').length
-    const completed = document.querySelectorAll('.tutorial-step.completed').length
+    // [tutorial-step-pacing] "complete" + remaining-count both use the
+    // required (non-optional) denominator — see requiredStepCounts().
+    const { total, completed } = requiredStepCounts()
     if (total > 0 && completed >= total) {
       showStepToast('🎉 Tutorial complete!', 4000)
       showCompletionCta()
@@ -279,6 +393,51 @@ async function markDone(btn: HTMLButtonElement) {
     btn.textContent = 'Done'
     btn.disabled = false
   }
+}
+
+// [tutorial-step-pacing] Optional-step Skip control — client-side UI state
+// only (design D3): no completion record is written, so the server's
+// authoritative completion calc is untouched (it already excludes optional
+// steps from its denominator). Collapses the step and removes it from the
+// remaining-time estimate.
+function skipStep(btn: HTMLButtonElement) {
+  const step = btn.closest('.tutorial-step') as HTMLElement | null
+  if (!step) return
+  step.classList.add('skipped')
+  const body = step.querySelector('.step-body') as HTMLElement | null
+  if (body) body.hidden = true
+  const icon = step.querySelector('.step-toggle-icon')
+  if (icon) icon.textContent = '+'
+  btn.disabled = true
+  btn.textContent = 'Skipped'
+  updateActiveTocItem()
+  updateRemainingTime()
+}
+
+// --- Remaining-time indicator ("≈ N min left") ---
+// Spec: "Step time display" — shown when at least half of the steps declare
+// a time, computed from incomplete, non-optional (and non-skipped) steps
+// that have a time. Reads each step's `data-time-seconds` (tutorial-step.html
+// shortcode) rather than re-parsing #tutorial-data, so it stays in sync with
+// whatever the shortcode actually rendered.
+function updateRemainingTime() {
+  const el = document.getElementById('remaining-time')
+  if (!el) return
+  const steps = Array.from(document.querySelectorAll<HTMLElement>('.tutorial-step'))
+  if (steps.length === 0) { el.hidden = true; return }
+
+  const withTime = steps.filter(s => s.dataset.timeSeconds !== undefined)
+  if (withTime.length * 2 < steps.length) { el.hidden = true; return }
+
+  const remainingSeconds = steps
+    .filter(s => !s.classList.contains('completed') && !s.classList.contains('skipped'))
+    .filter(s => s.dataset.optional !== 'true')
+    .reduce((sum, s) => sum + (parseInt(s.dataset.timeSeconds || '0', 10) || 0), 0)
+
+  if (remainingSeconds <= 0) { el.hidden = true; return }
+  const minutes = Math.max(1, Math.round(remainingSeconds / 60))
+  el.hidden = false
+  el.textContent = `≈ ${minutes} min left`
 }
 
 function initProgressBar() {
@@ -303,6 +462,18 @@ function initProgressBar() {
   container.appendChild(label)
 }
 
+// [tutorial-step-pacing] Tutorial completion requires only non-optional
+// (`data-optional` absent) steps — mirrors the server-side denominator in
+// srv/developer-service.js's _updateTutorialProgress. Recomputed from the
+// DOM rather than threaded through every caller so there is exactly one
+// source of truth for "is this tutorial actually complete" on the client.
+function requiredStepCounts(): { completed: number; total: number } {
+  const requiredSteps = Array.from(document.querySelectorAll<HTMLElement>('.tutorial-step'))
+    .filter(s => s.dataset.optional !== 'true')
+  const completed = requiredSteps.filter(s => s.classList.contains('completed')).length
+  return { completed, total: requiredSteps.length }
+}
+
 function updateProgressBar() {
   const completed = document.querySelectorAll('.tutorial-step.completed').length
   const total = document.querySelectorAll('.tutorial-step').length
@@ -316,7 +487,8 @@ function updateProgressBar() {
   const label = document.querySelector('.progress-label')
   if (label) label.textContent = `${completed} / ${total}`
 
-  if (total > 0 && completed >= total) maybeShowCompletedBanner(completed)
+  const required = requiredStepCounts()
+  if (required.total > 0 && required.completed >= required.total) maybeShowCompletedBanner()
 }
 
 async function loadProgress() {
@@ -339,12 +511,13 @@ async function loadProgress() {
     }
   }
   updateProgressBar()
-  maybeShowCompletedBanner(data.completedSteps.length)
+  updateRemainingTime()
+  maybeShowCompletedBanner()
 }
 
-function maybeShowCompletedBanner(completedCount: number) {
-  const total = document.querySelectorAll('.tutorial-step').length
-  if (!total || completedCount < total) return
+function maybeShowCompletedBanner() {
+  const { completed, total } = requiredStepCounts()
+  if (!total || completed < total) return
   const host = document.querySelector('.tutorial-banners')
   if (!host || host.querySelector('[data-banner="completed"]')) return
   const strip = document.createElement('ui5-message-strip')
@@ -556,6 +729,7 @@ function initPrintDeepLink() {
 // --- Init on DOMContentLoaded ---
 document.addEventListener('DOMContentLoaded', () => {
   initProgressBar()
+  updateRemainingTime()
   // U14: race the real fetch against a 1.5s timeout so a slow or 401 response
   // does not strand users on shimmer. Both branches call markHydrated();
   // markHydrated() is idempotent.
@@ -565,11 +739,13 @@ document.addEventListener('DOMContentLoaded', () => {
   ])
   initDoneButtonGate()
   initCodeCheckDoneGate()
+  initSyncedTabs()
   updateActiveTocItem()
   initAuthAwareButtons()
   initStepHashNavigation()
   initPrintDeepLink()
   initMermaid()
+  initTableEnhance()
   // Activate embeds in any step that is open on load (step 1 is expanded by
   // default) so its video sizes correctly and gets a full-res poster.
   document.querySelectorAll<HTMLElement>('.tutorial-step .step-body:not([hidden])')

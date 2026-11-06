@@ -428,6 +428,8 @@ export function extractAllBranchSpecs(
 export interface StepMeta {
   number: number;
   title: string;
+  /** [tutorial-step-pacing] true when the step heading carried `{optional}`. */
+  optional?: boolean;
 }
 
 export interface TutorialMeta {
@@ -439,6 +441,10 @@ export interface TutorialMeta {
   primaryTag: string | null;
   stepCount: number;
   steps: StepMeta[];
+  /** [tutorial-step-pacing] Step numbers marked `{optional}` — tutorial
+   *  completion requires only the remaining (non-optional) steps. Empty
+   *  when the tutorial doesn't use the syntax. */
+  optionalSteps: number[];
   lastUpdated: string | null;
   primaryContributorEmail: string | null;
   primaryContributorLogin: string | null;
@@ -468,8 +474,11 @@ export function extractMetadata(
     }
 
     const steps: StepMeta[] = Array.isArray(fm.steps)
-      ? fm.steps.map((s: any) => ({ number: s.number ?? 0, title: s.title ?? '' }))
+      ? fm.steps.map((s: any) => ({ number: s.number ?? 0, title: s.title ?? '', ...(s.optional ? { optional: true } : {}) }))
       : [];
+    const optionalSteps: number[] = Array.isArray(fm.optionalSteps)
+      ? fm.optionalSteps
+      : steps.filter(s => s.optional).map(s => s.number);
 
     const contributors = Array.isArray(fm.contributors) ? fm.contributors : [];
     const primary = contributors.length > 0 ? contributors[0] : null;
@@ -488,6 +497,7 @@ export function extractMetadata(
       primaryTag: fm.primaryTag ?? null,
       stepCount: fm.stepCount ?? steps.length,
       steps,
+      optionalSteps,
       lastUpdated: trim(fm.lastUpdated),
       primaryContributorEmail,
       primaryContributorLogin,

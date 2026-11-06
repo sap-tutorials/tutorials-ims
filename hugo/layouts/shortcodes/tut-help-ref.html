@@ -1,0 +1,11 @@
+{{/*
+  tut-help-ref — link to help.sap.com.
+
+  Params:
+    href  — https://help.sap.com/docs/<path>
+    label — display text (title from cache or path)
+
+  Security note: .Get uses Hugo's default HTML auto-escaping.
+  Never mark directive-supplied values as raw HTML.
+*/}}
+<a href="{{ .Get "href" }}" rel="noopener noreferrer" target="_blank">{{ .Get "label" }}</a>

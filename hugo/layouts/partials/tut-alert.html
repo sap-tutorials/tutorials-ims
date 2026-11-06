@@ -1,0 +1,70 @@
+{{- /*
+  tut-alert.html partial — renders a callout/alert block.
+
+  Parameters (passed via dict):
+    type  (string)  — lowercased alert type (note, tip, important, warning,
+                       caution, result, details, troubleshoot, hint, solution)
+    title (string)  — optional custom title; may be empty
+    sign  (string)  — "+" means open-by-default for collapsible types
+    text  (safe HTML) — pre-rendered body HTML
+
+  Collapsible types: details, troubleshoot, hint, solution  → <details>
+  Non-collapsible types: note, tip, important, warning, caution, result
+                         (and unknown) → <aside role="note">
+*/ -}}
+
+{{- $type  := .type -}}
+{{- $title := .title -}}
+{{- $sign  := .sign -}}
+{{- $text  := .text -}}
+
+{{- /* Icon map: type → SAP icon CSS class name */ -}}
+{{- $iconMap := dict
+  "note"        "sap-icon--information"
+  "tip"         "sap-icon--lightbulb"
+  "important"   "sap-icon--hint"
+  "warning"     "sap-icon--alert"
+  "caution"     "sap-icon--error"
+  "details"     "sap-icon--detail-view"
+  "troubleshoot" "sap-icon--wrench"
+  "result"      "sap-icon--accept"
+  "hint"        "sap-icon--hint"
+  "solution"    "sap-icon--complete"
+-}}
+
+{{- $icon := index $iconMap $type -}}
+
+{{- /* Collapsible types */ -}}
+{{- $collapsibleTypes := slice "details" "troubleshoot" "hint" "solution" -}}
+{{- $isCollapsible := in $collapsibleTypes $type -}}
+
+{{- /* open attribute: collapsible with "+" sign */ -}}
+{{- $open := eq $sign "+" -}}
+
+{{- /* Default title for result type */ -}}
+{{- $defaultTitle := "" -}}
+{{- if eq $type "result" -}}{{- $defaultTitle = "You should see" -}}{{- end -}}
+
+{{- /* Resolved display title */ -}}
+{{- $displayTitle := $title -}}
+{{- if eq $displayTitle "" -}}{{- $displayTitle = $defaultTitle -}}{{- end -}}
+
+{{- if $isCollapsible -}}
+<details class="alert alert-{{ $type }}"{{ if $open }} open{{ end }}>
+  <summary class="alert__summary">
+    {{- if $icon -}}<span class="sap-icon {{ $icon }}" aria-hidden="true"></span>{{- end -}}
+    <span class="sr-only">{{ $type | title }}:</span>
+    {{- if $displayTitle }} {{ $displayTitle }}{{ end -}}
+  </summary>
+  <div class="alert__body">{{ $text }}</div>
+</details>
+{{- else -}}
+<aside class="alert alert-{{ $type }}" role="note">
+  <div class="alert__header">
+    {{- if $icon -}}<span class="sap-icon {{ $icon }}" aria-hidden="true"></span>{{- end -}}
+    <span class="sr-only">{{ $type | title }}:</span>
+    {{- if $displayTitle -}}<p class="alert__title">{{ $displayTitle }}</p>{{- end -}}
+  </div>
+  <div class="alert__body">{{ $text }}</div>
+</aside>
+{{- end -}}

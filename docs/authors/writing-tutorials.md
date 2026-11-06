@@ -185,6 +185,50 @@ Rules of thumb:
 - Step content is plain Markdown: lists, code fences, images, links, bold/italic.
 - Inline HTML is escaped for safety. Stick to Markdown.
 
+#### 3.3.1 Step time and optional steps ★ NEW
+
+Add a trailing `{…}` attribute block to a step heading to declare a per-step time estimate
+and/or mark the step optional:
+
+```markdown
+### Deploy the app {time=5m}
+
+### Enable the trial entitlement {time=2m optional}
+```
+
+- `time=<duration>` — `5m`, `90s`, `1h`, or `1h30m` (max 8h). Renders a `⏱ N min` chip on the
+  step and contributes to the tutorial's total time (the page's frontmatter `time:` still wins
+  when both are set; the parser warns in the build log when the two disagree by more than 25%).
+  Readers also see a live "≈ N min left" estimate above the steps once at least half the steps
+  declare a time.
+- `optional` — renders an "Optional" badge and a "Skip" button next to "Done". **Completing a
+  tutorial never requires an optional step** — mark a step optional when it only applies to some
+  readers (e.g. "if you don't already have a trial account"). At least one step must stay
+  required; a tutorial where every step is optional fails the build.
+- The attribute block is stripped before the title is shown or slugged, so adding `{time=5m}`
+  to an existing heading is a safe, non-breaking edit — it does not change the step's anchor,
+  any `osOverrides` key, or existing readers' progress.
+- Unrecognised content in the braces (e.g. `{status: ok}` that isn't step-pacing syntax) is left
+  in the title untouched and reported as a lint warning — it never silently disappears.
+
+#### 3.3.2 Interactive checklists ★ NEW
+
+A standard GFM task list inside a step renders as live, checkable checkboxes instead of plain
+bullets:
+
+```markdown
+- [ ] Create a subaccount
+- [ ] Enable the entitlement
+- [x] Already have a BTP account (pre-checked — shown checked, doesn't count toward the counter)
+```
+
+Each unchecked item becomes a clickable checkbox; a small "x/y" counter above the list tracks
+how many the reader has ticked, and the state persists in the reader's browser across reloads.
+`[x]` items are rendered checked but excluded from that counter — use them for "already done"
+context items, not for things you want the reader to actually tick off. Checking every
+toggleable item in a step visually highlights that step's **Done** button, but never marks the
+step done automatically — the reader still clicks Done.
+
 ### 3.4 Images
 
 Place images alongside the Markdown file in a folder named after the slug:
@@ -256,9 +300,10 @@ The reader sees only the variant matching their OS. Their choice persists across
 the browser; BAS detected when the tutorial is opened from inside Business Application Studio).
 After they pick an OS, that choice is remembered.
 
-**Missing variants.** When a step doesn't cover the reader's chosen OS, the platform shows the
-closest match and a small banner: "No Linux instructions for this step — showing macOS." Use
-this when one OS path is genuinely identical to another.
+**Missing variants.** When a step doesn't cover the reader's chosen OS, the platform shows a
+placeholder message — "No `<OS>` instructions for this step." — instead of substituting another
+OS's content. No automatic closest-match substitution is made. To avoid gaps, include a panel for
+every OS you expect readers to use, or omit the group entirely if the step is OS-agnostic.
 
 **Existing OS-tabbed tutorials get the picker for free.** No author migration required — the
 heuristic detects OS-flavored OPTION blocks automatically.
@@ -281,6 +326,61 @@ for one OS, then ask the extension to "generate OS variants" — it returns tran
 macOS / Linux / BAS blocks you can review and accept inline. See the
 [VS Code extension docs](TODO: link added when plugin ships) for the workflow.
 
+#### 3.5.4 Synced option tabs ★ NEW
+
+When the same choice (language runtime, account tier, IDE) repeats across multiple steps, add `sync=<key>` to each group's first OPTION block. Readers pick once from the page-level picker bar and every group updates automatically — their preference is also remembered across tutorials.
+
+**Built-in preset keys** (automatically alias common label variants):
+
+| Key | Canonical values | Example aliases |
+|---|---|---|
+| `runtime` | `Node.js`, `Java` | `Node`, `CAP Node.js`, `CAP Java`, `Spring` → `Java` |
+| `account` | `Trial`, `Enterprise` | `Pay-As-You-Go`, `PAYG` → `Enterprise` |
+| `ide` | `BAS`, `VS Code` | `Business Application Studio` → `BAS` |
+
+**Usage:**
+
+```markdown
+[OPTION BEGIN [Node.js] sync=runtime]
+Node.js content here.
+[OPTION END]
+[OPTION BEGIN [Java] sync=runtime]
+Java content here.
+[OPTION END]
+```
+
+The same `sync=runtime` key must appear on the **first block of every group** in a step. Conflicting keys within one group are a build error.
+
+**Auto-classification (`syncTabs: auto`):**
+
+Add `syncTabs: auto` to your frontmatter to let the build classify groups automatically — useful when you have many steps with the same runtime choice and don't want to annotate each block individually:
+
+```yaml
+---
+title: My Tutorial
+syncTabs: auto
+---
+```
+
+> **Tip:** `syncTabs: auto` only classifies groups whose labels ALL match one preset's aliases. A group with mixed or unrecognised labels is left as a plain option group. Run `npm run fetch-tutorials -- --dry-run` or inspect the `syncGroups` frontmatter in the generated Hugo content to see which groups were classified.
+
+**Deep links:**
+
+Add `?runtime=Java` (or `?runtime=java` — case-insensitive) to a tutorial URL to pre-select a choice. The selection is persisted for the reader's subsequent visits.
+
+**Custom sync keys:**
+
+Declare a non-preset key in `syncGroups` frontmatter:
+
+```yaml
+syncGroups:
+  db:
+    label: Database
+    values: [HANA, PostgreSQL]
+```
+
+Then use `sync=db` on OPTION groups with labels from that list.
+
 ### Alert callouts
 
 A plain blockquote (`>`) renders as the default blue **Information** callout.
@@ -292,19 +392,125 @@ GitHub-style alert designator on its own first line:
 > Prefer the frontmatter `video:` field over an inline iframe.
 ```
 
-| You write | Rendered emphasis | Color |
-|---|---|---|
-| `> text` (no designator) | Information (default) | blue |
-| `> [!NOTE]` | Information | blue |
-| `> [!IMPORTANT]` | Information | blue |
-| `> [!TIP]` | Success | green |
-| `> [!WARNING]` | Warning | amber |
-| `> [!CAUTION]` | Error | red |
+#### Alert types reference
+
+| Type | Icon | Default title | Collapsible | Notes |
+|---|---|---|---|---|
+| `> [!NOTE]` | info circle | — | no | General information |
+| `> [!TIP]` | lightbulb | — | no | Helpful aside or shortcut |
+| `> [!IMPORTANT]` | hint | — | no | Key information the reader must not miss |
+| `> [!WARNING]` | alert | — | no | Risk of data loss or unexpected behavior |
+| `> [!CAUTION]` | error | — | no | Severe or irreversible risk |
+| `> [!DETAILS] Title` | detail-view | — | yes (closed) | Collapsible section; **title is required** |
+| `> [!DETAILS+] Title` | detail-view | — | yes (open) | Same as DETAILS but open by default; title required |
+| `> [!TROUBLESHOOT] Title` | wrench | — | yes (closed) | Contributes to the auto-generated troubleshooting index at the bottom of the tutorial; title is optional |
+| `> [!RESULT]` | checkmark | "You should see" | no | Expected outcome after completing a step |
+| `> [!HINT]` | hint | — | yes (closed) | Multiple HINT callouts in the same step get progressive reveal — the second hint unlocks only after the first is opened |
+| `> [!SOLUTION]` | complete | — | yes (closed) | Full solution; place at the end of an exercise |
 
 Pick the designator by *intent*, not loudness: use `[!TIP]` for helpful
 asides, `[!WARNING]`/`[!CAUTION]` only for genuine risk. An ordinary
-"additional note" can stay a plain `>` (blue) or use `[!NOTE]`. The callout is
-color-only — there is no icon or heading label.
+"additional note" can stay a plain `>` (blue) or use `[!NOTE]`.
+
+#### Optional titles
+
+Any alert type accepts an optional title on the same line as the designator:
+
+```markdown
+> [!NOTE] Important setup step
+> This note has a custom heading above its body.
+```
+
+`DETAILS` and `DETAILS+` **require** a title. All other types treat the title as optional.
+
+#### Collapsible callouts — open by default (`+`)
+
+Append `+` to make a collapsible callout start in the open state:
+
+```markdown
+> [!DETAILS+] Show me the full config
+> ```yaml
+> key: value
+> ```
+```
+
+> **Lint warning:** A collapsed callout (`DETAILS`, `HINT`, `SOLUTION`, `TROUBLESHOOT`) that
+> contains the step's only command block will trigger a build warning. Move the command block
+> outside the callout, or mark the callout open with `+`.
+
+#### RESULT callouts
+
+`RESULT` provides a default title of "You should see" and a checkmark icon. Use it immediately
+after the action the reader should verify:
+
+```markdown
+> [!RESULT]
+> The terminal prints `Build succeeded` and exits with code 0.
+```
+
+> **Note:** Automatic verification links (assert-link) are deferred to a follow-up.
+
+#### HINT and SOLUTION callouts
+
+Use `HINT` for progressive nudges inside an exercise. Multiple hints in one step unlock
+one-at-a-time so the reader must open the first before the second appears:
+
+```markdown
+> [!HINT]
+> Look at the `requires` section of `package.json`.
+
+> [!HINT]
+> The value you need is `@sap/cds`.
+
+> [!SOLUTION]
+> Add `"@sap/cds": "^8"` to your `dependencies`.
+```
+
+#### Directive equivalents
+
+Some callout types have an alternative `:::type[Title]` directive syntax — useful when the
+body contains complex markdown that would be awkward inside a `>` blockquote:
+
+| Directive | Equivalent blockquote form |
+|---|---|
+| `:::details[Title]` | `> [!DETAILS] Title` |
+| `:::troubleshoot[Title]` | `> [!TROUBLESHOOT] Title` |
+| `:::result` | `> [!RESULT]` |
+| `:::hint[Optional title]` | `> [!HINT] Optional title` |
+| `:::solution[Optional title]` | `> [!SOLUTION] Optional title` |
+
+Example:
+
+```markdown
+:::details[Full configuration file]
+```yaml
+key: value
+nested:
+  key: value
+```
+:::
+```
+
+#### Inline spoilers
+
+Use `:spoiler[text]` to blur text until the reader clicks it — useful for quiz answers or
+reveal-on-demand content:
+
+```markdown
+The answer is :spoiler[42].
+```
+
+In plain-text contexts (MCP, email) the spoiler is rendered as `||42||`.
+
+#### Plain-text fallback forms
+
+When a tutorial is consumed in a plain-text context (MCP tool, email digest) the platform
+renders simplified equivalents:
+
+| Feature | Plain-text form |
+|---|---|
+| DETAILS / TROUBLESHOOT / HINT / SOLUTION | `**Details: Title**` followed by body |
+| Inline spoiler `:spoiler[text]` | `\|\|text\|\|` |
 
 ### 3.6 Code blocks
 
@@ -318,6 +524,133 @@ entity Books : managed {
 }
 \`\`\`
 ```
+
+The platform extends standard fenced code blocks with five additional features described below.
+
+#### 3.6.1 Console blocks
+
+Tag a fence `console`, `shell-session`, or `terminal-session` — or add `{prompt}` to any language fence — to enable **prompt/output separation**. Lines starting with a recognised prompt (`$`, `>`, `PS>`, `#`) are commands; all other lines are visually dimmed output. The copy button copies **only the command lines**, with prompts stripped.
+
+Continuation: a command line ending with `\` folds with the next continuation line into one copyable command.
+
+```markdown
+\`\`\`console
+$ cf login -a https://api.cf.eu10.hana.ondemand.com
+API endpoint: https://api.cf.eu10.hana.ondemand.com
+$ cf target -s dev
+org: myorg  space: dev
+\`\`\`
+```
+
+Copied text: `cf login -a https://api.cf.eu10.hana.ondemand.com\ncf target -s dev`
+
+Existing `bash` fences **without** `{prompt}` are unchanged.
+
+#### 3.6.2 Diff and focus markers
+
+Add trailing comment markers to individual lines to annotate diffs without changing the code itself. The markers are stripped from the rendered display.
+
+| Marker | Effect |
+|--------|--------|
+| `// [!code ++]` | Line is **added** (green highlight) |
+| `// [!code --]` | Line is **removed** (red, struck-through, excluded from copy) |
+| `// [!code focus]` | Line is **focused** (non-focused lines dimmed until hover) |
+| `// [!code highlight]` | Line is **highlighted** (yellow accent) |
+
+Comment syntax adapts to the language: `//` for JS/TS/Go/Java, `#` for Python/YAML/Bash, `<!--` for HTML/XML.
+
+```markdown
+\`\`\`js
+function greet(name) { // [!code --]
+function greet(name = 'World') { // [!code ++]
+  return \`Hello, \${name}!\`
+}
+\`\`\`
+```
+
+Copy default: the **final code** (removed lines excluded, markers stripped). Use `{copy=raw}` to copy source with markers intact, useful for teaching diffs.
+
+#### 3.6.3 Fill-in placeholders
+
+When a tutorial uses values that are **different for every reader but not a personalised variable** (e.g. `<YOUR_SUBACCOUNT_ID>`), opt in to placeholder detection. The platform converts each token into a fillable chip backed by the variables system — filling it once updates every occurrence and the value persists across page refreshes.
+
+**Auto-detect** (recommended):
+
+```yaml
+placeholders: auto
+```
+
+The parser scans for tokens matching `<YOUR_…>`, `<MY_…>`, or `<THREE_OR_MORE_UPPERCASE_CHARS>`. It skips TypeScript/Java generics such as `Array<T>` or `List<String>`.
+
+**Explicit list** (when auto-detection finds false positives):
+
+```yaml
+placeholders:
+  - token: <YOUR_SUBACCOUNT_ID>
+    label: Your BTP subaccount ID
+  - token: <MY_CF_SPACE>
+    label: Your Cloud Foundry space name
+```
+
+Unfilled placeholders display and copy as the original token text (e.g. `<YOUR_SUBACCOUNT_ID>`).
+
+#### 3.6.4 File tree fences
+
+Tag a fence `tree` to render a directory structure as an accessible, collapsible tree:
+
+```markdown
+\`\`\`tree
+my-project/
+  package.json
+  src/
+    index.ts
++ srv/
++   cat-service.ts  # new: CAP service handler
+~ db/schema.cds     # modified: added new entity
+- old-handler.js    # deleted
+\`\`\`
+```
+
+**Syntax:**
+- Indentation (2-space) or standard box-drawing characters (`├──`, `└──`, `│`) indicate hierarchy.
+- Trailing `/` marks a folder.
+- Leading `+` / `~` / `-` prefixes mark new / modified / deleted items (rendered in green / blue / red).
+- `  # text` (two or more spaces then `#`) adds an inline annotation.
+
+The copy button returns the **plain ASCII tree source**.
+
+#### 3.6.5 Walkthroughs (`:::walkthrough`)
+
+A **walkthrough** pairs a code fence with an ordered list of notes. Each note starts with a line range in braces. Clicking or keyboard-navigating a note highlights the corresponding lines in the code.
+
+```markdown
+:::walkthrough
+\`\`\`js
+import cds from '@sap/cds'
+
+const app = cds.connect.to('catalog')
+const { Books } = app.entities
+
+app.on('READ', Books, req => {
+  return app.read(Books).where({ ID: req.data.ID })
+})
+\`\`\`
+
+1. {1} Import the CAP SDK
+2. {3} Connect to the catalog service
+3. {4} Destructure the `Books` entity
+4. {6-8} Register a READ handler and return the result
+:::
+```
+
+**Rules:**
+- The body must contain **exactly one** fenced code block followed by a numbered list.
+- Each list item must start with `{N}` or `{N-M}` where N and M are 1-based line numbers within the fence.
+- Line references out of bounds fail the **build** with `directive/invalid-attr`.
+
+For plain-text consumers (MCP, AI tools), the walkthrough renders as the raw code fence followed by notes prefixed `(lines N–M) `.
+
+---
 
 ### 3.7 Personalize with variables
 
@@ -380,6 +713,93 @@ Key behaviors:
 - `placeholder` only sets the greyed-out hint and the pre-substitution text; it is **not** a scan-and-replace target. Only `{{var:<name>}}` tokens are substituted — a bare `XXX` in your text stays `XXX`.
 
 Full worked walkthrough (self-demonstrating): **[Use Variables to Personalize Your Tutorials](https://developers.sap.com/tutorials/use-variables-in-tutorials)** (source: `sap-tutorials/meta-tutorials`).
+
+### 3.8 Directives ★ NEW
+
+Directives are a generic structured-content syntax for tutorials. They allow you to mark up passages that will be handled by specialized components, added to the platform in follow-up features. The directive system ships with **no concrete directives yet** — it is the foundation only. Examples here use hypothetical directive names to show the syntax; they will not render as live components until those features land.
+
+Directives have three forms:
+
+**Inline directives** (mid-sentence):
+
+```markdown
+This feature is available in `:menu[Production]{edition="prod"}` only.
+```
+
+A directive spans from the opening `:` through the closing `}`. It has a **name** (kebab-case), an optional **label** in brackets, and optional **attributes** in braces.
+
+**Leaf directives** (standalone, block-level):
+
+```markdown
+Some text above.
+
+::code-sample[Download the SDK]{url="https://example.com/sdk.zip" filename="sdk.zip"}
+
+More text below.
+```
+
+Leaf directives are alone on a line, prefixed with `::`, and render as a self-contained block.
+
+**Container directives** (wrapping other content):
+
+```markdown
+:::details[Click to expand]
+This content is hidden until the reader clicks the heading.
+More paragraphs and **markdown** all work here.
+:::
+```
+
+Container directives open with `:::` and close with `:::`. Content between them is Markdown, rendered normally. Nesting uses extra colons — an outer container uses more colons than its inner content:
+
+```markdown
+::::compare
+Outer container (four colons).
+
+:::figure[Screenshot A]{align="left"}
+Inner figure (three colons).
+:::
+
+:::figure[Screenshot B]{align="right"}
+Another inner figure.
+:::
+::::
+```
+
+**Attribute syntax:**
+
+- **Quoted values:** `key="value"` or `key='value'` — use double or single quotes around values with spaces.
+- **Unquoted values:** `key=value` (no spaces in the value itself).
+- **Bare flags:** `open` → treated as `open=true`.
+- **CSS classes:** `.classname` — shorthand for `class="classname"`. The directive's implementation controls which classes are allowed (you will get a build warning if you use a class not in its allowlist).
+- **Element IDs:** `#id` — shorthand for `id="id"`.
+- **Duplicate keys:** an error; each key must appear once.
+
+Examples:
+
+```markdown
+:::panel[Expandable section]{open .highlight #my-panel}
+
+This is a container with `open=true`, class `highlight`, and id `my-panel`.
+
+:::
+
+:code[JavaScript]{lang="js" theme='dark'}
+
+:::details[Learn more]{class="advanced"}
+For advanced users only.
+:::
+```
+
+**Escaping and safety:**
+
+- Attribute values are **always HTML-escaped** by the framework — you never need to escape manually, and HTML injection through attributes is not possible.
+- Directives inside code fences, inline code, indented code blocks, HTML blocks, or YAML frontmatter are **never interpreted** — they render literally as text. This keeps your Markdown safe when it happens to contain colons and braces that look like a directive but aren't.
+
+**Unknown directive names:**
+
+If you use a directive name that doesn't exist (e.g. `:menu[...]` before the `menu` feature ships), the text is left as-is (rendered literally) and you'll see a **lint warning** `directive-unknown` during the build. This warning never stops a build — it's informational only. The intent is to make it safe to write Markdown that *coincidentally* looks like `:something[...]` without risking a hard failure.
+
+When a concrete directive is added to the platform, the warning will stop and the directive will render as a styled component.
 
 ---
 

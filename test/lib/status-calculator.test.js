@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateTutorialProgress, calculateMissionProgress } from '../../srv/lib/status-calculator.js';
+import { calculateTutorialProgress, calculateMissionProgress, parseOptionalSteps } from '../../srv/lib/status-calculator.js';
 
 describe('status-calculator', () => {
   describe('calculateTutorialProgress', () => {
@@ -38,6 +38,25 @@ describe('status-calculator', () => {
     it('calculates percentage', () => {
       const result = calculateMissionProgress(1, 4);
       expect(result).toEqual({ progress: 25, status: 'IN_PROGRESS' });
+    });
+  });
+
+  describe('parseOptionalSteps', () => {
+    it('returns an empty Set for null/undefined/empty', () => {
+      expect(parseOptionalSteps(null).size).toBe(0);
+      expect(parseOptionalSteps(undefined).size).toBe(0);
+      expect(parseOptionalSteps('').size).toBe(0);
+      expect(parseOptionalSteps('   ').size).toBe(0);
+    });
+
+    it('parses a comma-joined list of step numbers', () => {
+      const set = parseOptionalSteps('2,5');
+      expect([...set].sort()).toEqual([2, 5]);
+    });
+
+    it('tolerates whitespace and ignores malformed entries', () => {
+      const set = parseOptionalSteps(' 2 , x, 5 ,0,-1');
+      expect([...set].sort()).toEqual([2, 5]);
     });
   });
 });

@@ -7,3 +7,4 @@ export const sliceStepMarkdown = mod.sliceStepMarkdown;
 export const sliceAllSteps = mod.sliceAllSteps;
 export const invalidateSlug = mod.invalidateSlug;
 export const _resetConnection = mod._resetConnection;
+export const filterVariants = mod.filterVariants;

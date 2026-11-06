@@ -1,0 +1,41 @@
+/* QA authoring aids — only loaded when site.Params.qa is true */
+
+/* qa-only frame */
+.tut-qa-only-frame {
+  border: 2px dashed #B58A00;
+  background: #FFFBE6;
+  padding: .75rem 1rem;
+  margin: 1rem 0;
+  border-radius: 4px;
+}
+.tut-qa-only-label {
+  display: block;
+  font-weight: 700;
+  color: #5C3D00;
+  margin-bottom: .5rem;
+  text-transform: uppercase;
+  font-size: .8rem;
+  letter-spacing: .05em;
+}
+[data-theme="dark"] .tut-qa-only-frame { background: #2a2200; border-color: #b58a00; }
+[data-theme="dark"] .tut-qa-only-label { color: #f0c040; }
+
+/* author notes */
+.tut-author-note {
+  background: #FFF3CD;
+  border: 1px solid #FFC107;
+  border-radius: 3px;
+  padding: 0 .3em;
+  font-style: italic;
+  color: #856404;
+}
+.tut-author-note-block {
+  background: #FFF3CD;
+  border-left: 4px solid #FFC107;
+  padding: .5rem .75rem;
+  margin: .75rem 0;
+  color: #856404;
+  font-style: italic;
+}
+[data-theme="dark"] .tut-author-note,
+[data-theme="dark"] .tut-author-note-block { background: #2a1f00; border-color: #ffc107; color: #ffc107; }

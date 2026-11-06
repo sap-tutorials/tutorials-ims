@@ -113,6 +113,12 @@ export default defineConfig({
           { text: 'Analytics admin',   link: '/authors/analytics-admin' },
           { text: 'Joule commands',    link: '/authors/joule-commands' }
         ]},
+        { text: 'Authoring reference', items: [
+          { text: 'Authoring aids',              link: '/authors/authoring-aids' },
+          { text: 'Content reuse and references', link: '/authors/content-reuse-and-references' },
+          { text: 'Rich media and tables',       link: '/authors/rich-media-and-tables' },
+          { text: 'UI instruction directives',   link: '/authors/ui-instruction-directives' }
+        ]},
         { text: 'Branching paths', items: [
           { text: 'Branched missions',  link: '/authors/branched-missions' },
           { text: 'Branched tutorials', link: '/authors/branched-tutorials' },
@@ -179,6 +185,7 @@ export default defineConfig({
           { text: 'Deploy checklist',          link: '/developers/operations/deploy-checklist' },
           { text: 'Deployment',                link: '/developers/operations/deployment' },
           { text: 'Devtoberfest selfie art',   link: '/developers/operations/devtoberfest-selfie-assets' },
+          { text: 'Draft integrity re-enable', link: '/developers/operations/draft-integrity-reenable' },
           { text: 'Gameboard PROD data troubleshooting', link: '/developers/operations/gameboard-prod-data-troubleshooting' },
           { text: 'GitHub App setup',          link: '/developers/operations/github-app-setup' },
           { text: 'GitHub dispatch PAT rotation', link: '/developers/operations/github-dispatch-pat-rotation' },

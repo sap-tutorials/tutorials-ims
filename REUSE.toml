@@ -9,3 +9,18 @@ path = "**"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 SAP SE or an SAP affiliate company and tutorials-ims contributors"
 SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "hugo/static/js/vendor/asciinema-player.min.js"
+SPDX-FileCopyrightText = "asciinema contributors"
+SPDX-License-Identifier = "Apache-2.0"
+# NOTE: This file must be placed before deploying tutorials that use ::cast directives.
+# Download from https://github.com/asciinema/asciinema-player/releases
+
+[[annotations]]
+path = "hugo/static/js/vendor/asciinema-player.css"
+SPDX-FileCopyrightText = "asciinema contributors"
+SPDX-License-Identifier = "Apache-2.0"
+# NOTE: This file must be placed before deploying tutorials that use ::cast directives.
+# Download from https://github.com/asciinema/asciinema-player/releases
+

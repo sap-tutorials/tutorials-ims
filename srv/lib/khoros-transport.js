@@ -16,6 +16,8 @@
 // vi.stubGlobal('fetch')), THIS transport uses native fetch — so khoros-mode
 // tests CAN stub global.fetch. Contrast memory curl-transport-bypasses-fetch-stub.
 
+import { resolveSecret } from './secret-resolver.js';
+
 const KHOROS_API_BASE = 'https://community.sap.com/api/2.0/search';
 const SELECT_CLAUSE = 'SELECT subject,post_time,view_href,teaser,author.login FROM messages';
 const FIXED_TAIL = 'AND depth=0 ORDER BY post_time DESC LIMIT 20';
@@ -105,11 +107,23 @@ export function itemsToRssXml(items) {
  * fetch-shaped transport backed by the Khoros JSON API. `url` is the fully
  * built /api/2.0/search URL (see buildKhorosUrl). Returns a Response-shaped
  * object whose text() yields synthesized RSS XML.
+ *
+ * AUTH (#3011): Cloudflare bot-management now 403-challenges the unauthenticated
+ * /api/2.0/search path. Khoros issued a production API token (credstore entry
+ * KHOROS_API_TOKEN) that bypasses the challenge when sent as the
+ * `x-khoros-api-access` header. We resolve it per request (resolveSecret caches
+ * for 5 min; rotation hot-flushes via invalidateSecret). When no token resolves
+ * (local dev / token absent) we send no header and fail open — the request is
+ * then challenged and returns 403, handled by the non-2xx path below.
  */
 export function khorosFetch(url, init = {}) {
   return (async () => {
+    const token = await resolveSecret('KHOROS_API_TOKEN', { logTag: '[khoros]' });
+    const headers = { ...(init.headers || {}) };
+    if (token) headers['x-khoros-api-access'] = token;
     const res = await fetch(url, {
       ...init,
+      headers,
       redirect: 'manual', // safeFetch re-validates each hop
     });
     if (res.status < 200 || res.status >= 300) {

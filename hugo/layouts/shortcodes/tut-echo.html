@@ -1,0 +1,15 @@
+{{/*
+  tut-echo — test-only fixture shortcode for directive end-to-end rendering.
+
+  Renders the "label" parameter inside a span. Used by directive unit tests
+  to verify that expandDirectives produces a valid Hugo shortcode that
+  Goldmark can process.
+
+  Usage (inline/leaf):
+    {{< tut-echo label="some text" >}}
+
+  Security note: .Get "label" uses Hugo's default HTML auto-escaping.
+  Never mark directive-supplied values as raw HTML — the escapeShortcodeParam
+  call in the framework already HTML-escapes the value before it arrives here.
+*/}}
+<span class="tut-echo">{{ .Get "label" }}</span>

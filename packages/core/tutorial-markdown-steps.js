@@ -19,6 +19,7 @@
  *   - scripts/parsers/v2.ts             (H3 split, [VALIDATE_n]/[DONE] stripping)
  *   - scripts/parsers/fence-tracker.ts  (CommonMark fence rules)
  *   - scripts/parsers/html-comment-lines.ts (multi-line <!-- --> masking)
+ *   - scripts/parsers/step-attrs.ts     (tutorial-step-pacing heading attrs)
  *
  * Pure: no I/O, safe to unit-test directly.
  */
@@ -28,6 +29,43 @@ import { stripImageDirectiveComments } from './tutorial-markdown.js';
 const VALIDATE_LINE = /^\s*\[VALIDATE_\d+\]\s*$/;
 const DONE_LINE = /^\s*\[DONE\]\s*$/;
 const H3 = /^### (.+)$/;
+
+// [tutorial-step-pacing] Minimal runtime port of scripts/parsers/step-attrs.ts
+// — title + timeSeconds + optional only (no lint-warning collection; this
+// runs at MCP request time against already-published content, so a malformed
+// attribute block fails OPEN: the brace is just left attached to the title,
+// same as the build-time "unknown token" behaviour, rather than erroring the
+// tool call).
+const HEADING_ATTRS_RE = /^(.*?)\s*\{([^}]*)\}\s*$/;
+const DURATION_RE = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/;
+const MAX_SECONDS = 8 * 3600;
+
+function parseStepHeadingAttrs(rawTitle) {
+  const match = rawTitle.match(HEADING_ATTRS_RE);
+  if (!match) return { title: rawTitle.trim() };
+  const [, base, inner] = match;
+  const tokens = inner.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return { title: base.trim() };
+
+  let timeSeconds;
+  let optional = false;
+  let unknown = false;
+  for (const token of tokens) {
+    if (token === 'optional') { optional = true; continue; }
+    const timeMatch = token.match(/^time=(.+)$/);
+    if (timeMatch) {
+      const m = timeMatch[1].match(DURATION_RE);
+      if (!m || (!m[1] && !m[2] && !m[3])) { unknown = true; continue; }
+      const total = parseInt(m[1] || '0', 10) * 3600 + parseInt(m[2] || '0', 10) * 60 + parseInt(m[3] || '0', 10);
+      if (total <= 0 || total > MAX_SECONDS) { unknown = true; continue; }
+      timeSeconds = total;
+      continue;
+    }
+    unknown = true;
+  }
+  if (unknown) return { title: rawTitle.trim() };
+  return { title: base.trim(), timeSeconds, optional: optional || undefined };
+}
 
 const FENCE_OPEN = /^(\s{0,3})(`{3,}|~{3,})(.*)$/;
 const FENCE_CLOSE = /^(\s{0,3})(`{3,}|~{3,})\s*$/;
@@ -131,12 +169,19 @@ function parseMarkdownSteps(body) {
 
   const raw = [];
   let currentTitle = '';
+  let currentTimeSeconds;
+  let currentOptional;
   let currentLines = [];
   let inStep = false;
 
   const flush = () => {
     if (!inStep) return;
-    raw.push({ title: currentTitle, content: stripMarkers(currentLines).join('\n').trim() });
+    raw.push({
+      title: currentTitle,
+      content: stripMarkers(currentLines).join('\n').trim(),
+      timeSeconds: currentTimeSeconds,
+      optional: currentOptional,
+    });
   };
 
   for (let i = 0; i < lines.length; i++) {
@@ -150,7 +195,10 @@ function parseMarkdownSteps(body) {
     const h3 = line.match(H3);
     if (h3) {
       flush();
-      currentTitle = h3[1].trim();
+      const attrs = parseStepHeadingAttrs(h3[1].trim());
+      currentTitle = attrs.title;
+      currentTimeSeconds = attrs.timeSeconds;
+      currentOptional = attrs.optional;
       currentLines = [];
       inStep = true;
       continue;
@@ -163,12 +211,15 @@ function parseMarkdownSteps(body) {
     const heading = `### ${s.title}`;
     const stripped = stripImageDirectiveComments(s.content).trim();
     const markdown = stripped ? `${heading}\n\n${stripped}` : heading;
-    return {
+    const out = {
       number: idx + 1,
       title: s.title,
       markdown,
       text: stripMarkdownToText(markdown),
     };
+    if (s.timeSeconds !== undefined) out.timeMinutes = Math.max(1, Math.round(s.timeSeconds / 60));
+    if (s.optional) out.optional = true;
+    return out;
   });
 }
 

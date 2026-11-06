@@ -1,0 +1,27 @@
+{
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/gen/**": true,
+    "**/mta_archives/**": true,
+    "**/hugo/public/**": true,
+    "**/hugo/resources/**": true,
+    "**/hugo/content/tutorials/**": true,
+    "**/approuter/static/*/**": true,
+    "**/.tutorial-cache/**": true,
+    "**/.tutorial-cache-qa/**": true,
+    "**/.quiet-logs/**": true,
+    "**/.worktrees/**": true,
+    "**/.hana-snapshots/**": true,
+    "**/.migration-data/**": true,
+    "**/.playwright-mcp/**": true
+  },
+  "search.exclude": {
+    "hugo/content/tutorials/**": true,
+    "approuter/static/*/**": true
+  },
+  "files.associations": {
+    "*.cds": "cds",
+    "hugo.qa.toml": "toml"
+  },
+  "chat.useAgentsMdFile": true
+}

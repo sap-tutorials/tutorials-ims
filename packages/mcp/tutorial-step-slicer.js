@@ -17,6 +17,16 @@ import * as metrics from '@tutorials/core/metrics.js';
 import { isFlagEnabled } from '@tutorials/core/feature-flags/db-flags.js';
 import { parseMarkdownSteps } from '@tutorials/core/tutorial-markdown-steps.js';
 import { absolutizeImagePaths } from '@tutorials/core/tutorial-markdown.js';
+import { filterVariants } from './option-filter.js';
+import { collectTroubleshootEntries } from '../../scripts/parsers/blockquote-troubleshoot-collect.js';
+// `renderDirectivesAsText` lives in scripts/parsers/directives.ts. Imported
+// statically (same as collectTroubleshootEntries above): esbuild inlines it into
+// srv/lib/_shared/mcp.bundle.mjs at bundle time, so CF runtime never needs the
+// scripts/parsers/ source on disk. A dynamic import('./_shared/parsers.bundle.mjs')
+// was tried (#3029 pattern) but that path is relative to packages/mcp/ — where no
+// _shared/ dir is ever emitted — so esbuild could not resolve it and the bundle build
+// failed. Static import avoids the runtime-path problem entirely.
+import { renderDirectivesAsText } from '../../scripts/parsers/directives.js';
 
 const NS = 'com.sap.developers.ims';
 const LOG = cds.log('mcp-slicer');
@@ -255,8 +265,16 @@ async function loadAndParseMarkdown(slug) {
   const { repo, branch } = await getRepoProvenance(slug);
   const steps = new Map();
   for (const s of parsedSteps) {
-    const md = absolutizeImagePaths(s.markdown, { slug, repo, branch });
-    steps.set(s.number, { markdown: md, text: s.text, title: s.title });
+    const md = renderDirectivesAsText(absolutizeImagePaths(s.markdown, { slug, repo, branch }));
+    const entry = { markdown: md, text: s.text, title: s.title };
+    // [tutorial-step-pacing] carried through to handleGetTutorialStep's
+    // response (spec "Pacing data in machine consumers").
+    if (s.timeMinutes !== undefined) entry.timeMinutes = s.timeMinutes;
+    if (s.optional) entry.optional = true;
+    // [tutorial-callout-enhancements] Collect troubleshoot entries from source markdown.
+    const troubleshootEntries = collectTroubleshootEntries(s.markdown, s.number);
+    if (troubleshootEntries.length > 0) entry.troubleshootEntries = troubleshootEntries;
+    steps.set(s.number, entry);
   }
 
   const result = { steps, totalSteps: steps.size };
@@ -275,13 +293,28 @@ async function loadAndParseMarkdown(slug) {
 
 /** Per-step source markdown. Shape mirrors sliceStep but carries `markdown`
  *  instead of `html`. Returns null on unknown slug / out-of-range step /
- *  missing source. */
-export async function sliceStepMarkdown(slug, stepNumber) {
+ *  missing source.
+ *
+ *  @param {string} slug
+ *  @param {number} stepNumber
+ *  @param {Record<string,string>} [variants]  Optional variant preference map,
+ *    e.g. `{ runtime: 'java' }`. When provided, OPTION blocks in the markdown
+ *    are filtered so that only the matching variant's content is returned
+ *    (unmatched groups fall back to all variants with labelled headers). */
+export async function sliceStepMarkdown(slug, stepNumber, variants) {
   const parsed = await loadAndParseMarkdown(slug);
   if (!parsed) return null;
   const step = parsed.steps.get(stepNumber);
   if (!step) return null;
-  return { markdown: step.markdown, text: step.text, stepTitle: step.title, totalSteps: parsed.totalSteps };
+  let md = step.markdown;
+  if (variants && typeof variants === 'object' && Object.keys(variants).length > 0) {
+    md = filterVariants(md, variants);
+  }
+  const result = { markdown: md, text: step.text, stepTitle: step.title, totalSteps: parsed.totalSteps };
+  if (step.timeMinutes !== undefined) result.timeMinutes = step.timeMinutes;
+  if (step.optional) result.optional = true;
+  if (step.troubleshootEntries?.length) result.troubleshootEntries = step.troubleshootEntries;
+  return result;
 }
 
 export async function sliceAllSteps(slug) {
@@ -315,3 +348,7 @@ cds.on('served', () => {
     if (slug) invalidateSlug(slug).catch(() => {});
   });
 });
+
+// Re-export filterVariants so consumers can import it from this module or
+// from the srv/lib re-export shim without needing to know about option-filter.js.
+export { filterVariants };

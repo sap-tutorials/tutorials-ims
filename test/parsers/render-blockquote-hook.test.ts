@@ -15,8 +15,15 @@ describe('render-blockquote hook', () => {
     expect(t).toMatch(/<blockquote>\s*\{\{[-\s]*\.Text/)
   })
 
-  it('emits a semantic alert class for alert blockquotes', () => {
+  it('delegates alert blockquotes to the tut-alert partial, which emits a semantic alert class', () => {
+    // #2595/#71a8d70bc: the alert branch no longer emits the class inline; it
+    // delegates to partials/tut-alert.html, passing .AlertType as `type`. The
+    // semantic `alert alert-<type>` class is emitted by the partial.
     const t = readFileSync(p, 'utf8')
-    expect(t).toContain('class="alert alert-{{ .AlertType }}"')
+    expect(t).toMatch(/partial\s+"tut-alert\.html"/)
+    expect(t).toContain('"type" .AlertType')
+
+    const partial = readFileSync('hugo/layouts/partials/tut-alert.html', 'utf8')
+    expect(partial).toContain('class="alert alert-{{ $type }}"')
   })
 })

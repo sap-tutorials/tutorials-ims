@@ -49,6 +49,10 @@ const CHANNELS_CJS = [
 
 const targets = [
   {
+    entry: path.resolve(__dirname, 'parsers', 'directives.ts'),
+    out: path.join(outDir, 'parsers.bundle.mjs'),
+  },
+  {
     entry: require.resolve('@tutorials/core'),
     out: path.join(outDir, 'core.bundle.mjs'),
   },

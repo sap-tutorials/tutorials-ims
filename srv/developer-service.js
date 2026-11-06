@@ -1,5 +1,5 @@
 import cds from '@sap/cds';
-import { calculateTutorialProgress } from './lib/status-calculator.js';
+import { calculateTutorialProgress, parseOptionalSteps } from './lib/status-calculator.js';
 import { getNextLegacyId } from './lib/legacy-id.js';
 import { hashIp } from './lib/feedback-salt.js';
 import { getMyCompletedTutorials, getMyInProgressTutorials } from './lib/user-progress.js';
@@ -16,6 +16,7 @@ import { rollUpParentsForCompletion } from './lib/completion-rollup.js';
 import { renderMarkdown } from './lib/markdown.js';
 import { buildTaskMap, effectiveLegacyId, expandGroupTutorials, buildPathItems, buildPathSegments, fetchGroupTitles, groupChildLegacyIds, buildRecordMap } from './lib/path-item-task-resolver.js';
 import { annotateUnlocked } from './lib/app-space-segments.js';
+import { isFlagEnabled } from './lib/feature-flags/db-flags.js';
 import { handleRequestAccountMerge, handleConfirmAccountMerge } from './lib/account-merge-request.js';
 
 // Per-user rate limit for resetTutorialProgress — same window as the
@@ -720,13 +721,21 @@ export default class DeveloperService extends cds.ApplicationService {
       // surface a SUPERSEDED row and render a done task as incomplete.
       const recordMap = buildRecordMap(userRecords);
 
+      let appSpaceGameEnabled = false;
+      try {
+        appSpaceGameEnabled = isFlagEnabled('APP_SPACE_GAME_ENABLED');
+      } catch {
+        // flag check failed - leave as false (default OFF)
+      }
+
       return {
         eventId: event.legacyId,
         eventName: event.name || '',
-        eventDescription: renderMarkdown(event.description),   // #2296: admin-authored Markdown → safe HTML for the app-space hero
+        eventDescription: renderMarkdown(event.description),   // #2296: admin-authored Markdown -> safe HTML for the app-space hero
         eventType: event.eventType ?? 'OTHER',
         hasLogo: Boolean(event.hasLogo),
-        authenticated: Boolean(dbUser),   // #2314/#2730: false only for anonymous callers → client skips the logged-in-only realtime/confetti path. Truthy when user resolves via any tier (sapId, identity link, or pin).
+        authenticated: Boolean(dbUser),   // #2314/#2730: false only for anonymous callers -> client skips the logged-in-only realtime/confetti path. Truthy when user resolves via any tier (sapId, identity link, or pin).
+        appSpaceGameEnabled,
         type: 'COMPLEX',
         paths: paths.map(p => {
           const pathItems = allItems.filter(i => i.path_ID === p.ID);
@@ -1206,7 +1215,16 @@ export default class DeveloperService extends cds.ApplicationService {
       cds.entities('com.sap.developers.ims');
 
     const steps = await SELECT.from(dbSteps).where({ tutorial_ID: tutorial.ID });
-    const stepLegacyIds = steps.map(s => s.legacyId);
+    // [tutorial-step-pacing] Tutorial completion requires only NON-optional
+    // steps (spec "Optional steps"). Exclude optional stepOrders' legacyIds
+    // from the denominator set so (a) the required-step total shrinks by the
+    // same amount as stepCount below, and (b) a reader who skips an optional
+    // step is never short a completion record for it.
+    const optionalStepNumbers = parseOptionalSteps(tutorial.optionalSteps);
+    const requiredSteps = optionalStepNumbers.size > 0
+      ? steps.filter(s => !optionalStepNumbers.has(s.stepOrder))
+      : steps;
+    const stepLegacyIds = requiredSteps.map(s => s.legacyId);
 
     // Look up the user's CURRENT (non-SUPERSEDED) TUTORIAL task record first
     // so we can scope step counts + new row inserts to its attemptNumber.
@@ -1236,8 +1254,8 @@ export default class DeveloperService extends cds.ApplicationService {
     // Fallback to DB count only when stepCount is null (e.g. tests, or
     // tutorials published before this column existed). See issue #89.
     const totalSteps = (typeof tutorial.stepCount === 'number' && tutorial.stepCount > 0)
-      ? tutorial.stepCount
-      : steps.length;
+      ? tutorial.stepCount - optionalStepNumbers.size
+      : requiredSteps.length;
 
     const { progress, status } = calculateTutorialProgress(
       completedStepRecords, totalSteps

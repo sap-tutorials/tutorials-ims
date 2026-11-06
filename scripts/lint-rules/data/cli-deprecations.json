@@ -1,0 +1,88 @@
+[
+  {
+    "tool": "cf",
+    "match": "--hostname\\s+\\S+",
+    "severity": "warn",
+    "since": "cf-cli v8",
+    "message": "The `--hostname` flag was removed in cf CLI v8. Use `routes:` in the application manifest instead.",
+    "replacement": "Add `routes:\\n  - route: <hostname>.<domain>` to manifest.yml",
+    "docs": "https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#routes"
+  },
+  {
+    "tool": "cf",
+    "match": "cf\\s+push\\s+.*--no-hostname",
+    "severity": "warn",
+    "since": "cf-cli v8",
+    "message": "The `--no-hostname` flag was removed in cf CLI v8.",
+    "replacement": "Use `no-route: true` in manifest.yml",
+    "docs": "https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#no-route"
+  },
+  {
+    "tool": "cf",
+    "match": "cf\\s+map-route\\s+.*--hostname",
+    "severity": "warn",
+    "since": "cf-cli v8",
+    "message": "The `--hostname` flag was removed from `cf map-route` in cf CLI v8. Pass the full route as a positional argument instead.",
+    "replacement": "cf map-route <app> <domain> --hostname <h>  →  cf map-route <app> <hostname>.<domain>",
+    "docs": "https://docs.cloudfoundry.org/devguide/deploy-apps/routes-domains.html",
+    "needsOwnerReview": true
+  },
+  {
+    "tool": "cf",
+    "match": "cf\\s+create-route\\s+.*--hostname",
+    "severity": "warn",
+    "since": "cf-cli v8",
+    "message": "The `--hostname` flag was removed from `cf create-route` in cf CLI v8. Specify the full hostname directly.",
+    "replacement": "cf create-route <space> <domain> --hostname <h>  →  cf create-route <space> <hostname>.<domain>",
+    "docs": "https://docs.cloudfoundry.org/devguide/deploy-apps/routes-domains.html",
+    "needsOwnerReview": true
+  },
+  {
+    "tool": "cf",
+    "match": "cf\\s+push\\s+.*--no-route\\b",
+    "severity": "warn",
+    "since": "cf-cli v8",
+    "message": "The `--no-route` flag was removed from `cf push` in cf CLI v8. Set `no-route: true` in manifest.yml instead.",
+    "replacement": "Add `no-route: true` to manifest.yml",
+    "docs": "https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#no-route",
+    "needsOwnerReview": true
+  },
+  {
+    "tool": "cds",
+    "match": "cds\\s+serve\\s+--in-memory",
+    "severity": "warn",
+    "since": "@sap/cds 7",
+    "message": "`cds serve --in-memory` was removed. Use `cds watch` for local development.",
+    "replacement": "cds watch",
+    "docs": "https://cap.cloud.sap/docs/tools/"
+  },
+  {
+    "tool": "cds",
+    "match": "cds\\s+run\\b",
+    "severity": "warn",
+    "since": "@sap/cds 6",
+    "message": "`cds run` was deprecated in favour of `cds watch` for local development. `cds watch` also monitors for file changes and restarts automatically.",
+    "replacement": "cds watch",
+    "docs": "https://cap.cloud.sap/docs/tools/",
+    "needsOwnerReview": true
+  },
+  {
+    "tool": "npm",
+    "match": "npm\\s+install\\s+--save\\b",
+    "severity": "warn",
+    "since": "npm 5",
+    "message": "`npm install --save` is the default since npm 5 and the flag is unnecessary.",
+    "replacement": "npm install <package>",
+    "docs": "https://docs.npmjs.com/cli/v10/commands/npm-install"
+  },
+  {
+    "tool": "npm",
+    "match": "npm\\s+install\\s+-g\\s+@sap/cds\\b",
+    "severity": "warn",
+    "since": "@sap/cds-dk 7",
+    "message": "Install the CAP CLI via `@sap/cds-dk`, not `@sap/cds`. `@sap/cds` is the runtime library; `@sap/cds-dk` is the development kit that provides the `cds` command.",
+    "replacement": "npm install -g @sap/cds-dk",
+    "docs": "https://cap.cloud.sap/docs/get-started/",
+    "needsOwnerReview": true
+  }
+]

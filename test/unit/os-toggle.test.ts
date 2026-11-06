@@ -250,3 +250,38 @@ describe('activate — missing-OS placeholder (#2820)', () => {
     expect(__test__.activate('Linux')).toBe('Linux');
   });
 });
+
+describe('detectDefaultOs — legacy os-preference migration (sync-groups adapter)', () => {
+  // After the os-toggle refactor, getPreference() reads through sync-groups'
+  // getChoice('os') which falls back to the legacy localStorage['os-preference']
+  // key. A returning reader who has only the legacy key set must still have
+  // their preference honoured — the migration must not silently drop it.
+  beforeEach(() => {
+    resetBody();
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    Object.defineProperty(navigator, 'userAgent', { value: '', configurable: true });
+  });
+
+  it('honours a legacy os-preference=Linux when the unified object has no os key', async () => {
+    // Set ONLY the old key — not the new unified sync-groups object.
+    localStorage.setItem('os-preference', 'Linux');
+    const { __test__ } = await import('../../hugo/assets/js/os-toggle');
+    expect(__test__.detectDefaultOs()).toBe('Linux');
+  });
+
+  it('honours a legacy os-preference=macOS when unified object is absent', async () => {
+    localStorage.setItem('os-preference', 'macOS');
+    const { __test__ } = await import('../../hugo/assets/js/os-toggle');
+    expect(__test__.detectDefaultOs()).toBe('macOS');
+  });
+
+  it('the unified sync-groups os value takes precedence over the legacy key', async () => {
+    localStorage.setItem('os-preference', 'Linux');
+    localStorage.setItem('sync-groups', JSON.stringify({ os: 'Windows' }));
+    const { __test__ } = await import('../../hugo/assets/js/os-toggle');
+    expect(__test__.detectDefaultOs()).toBe('Windows');
+  });
+});

@@ -36,6 +36,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..');
 const SHORTCODES = join(REPO_ROOT, 'hugo', 'layouts', 'shortcodes');
 const MARKUP = join(REPO_ROOT, 'hugo', 'layouts', '_default', '_markup');
+const PARTIALS = join(REPO_ROOT, 'hugo', 'layouts', 'partials');
 
 function hugoBinary(): string {
   return process.env.HUGO || 'hugo';
@@ -51,6 +52,7 @@ function renderThroughPipeline(stepBody: string): string {
   const dir = mkdtempSync(join(tmpdir(), 'opt-tail-leak-'));
   mkdirSync(join(dir, 'layouts', 'shortcodes'), { recursive: true });
   mkdirSync(join(dir, 'layouts', '_default', '_markup'), { recursive: true });
+  mkdirSync(join(dir, 'layouts', 'partials'), { recursive: true });
   mkdirSync(join(dir, 'content'), { recursive: true });
 
   for (const sc of ['os-options.html', 'os-panel.html', 'option-tabs.html', 'tab.html']) {
@@ -67,6 +69,10 @@ function renderThroughPipeline(stepBody: string): string {
     const p = join(MARKUP, h);
     if (existsSync(p)) copyFileSync(p, join(dir, 'layouts', '_default', '_markup', h));
   }
+  // render-blockquote.html delegates GitHub-style alerts (`> [!TIP]`) to the
+  // tut-alert partial (#2595/#71a8d70bc), so it must be present or the Hugo
+  // build fails resolving `partial "tut-alert.html"`.
+  copyFileSync(join(PARTIALS, 'tut-alert.html'), join(dir, 'layouts', 'partials', 'tut-alert.html'));
 
   writeFileSync(join(dir, 'hugo.toml'),
     'baseURL = "http://example.org/"\n' +
@@ -155,9 +161,12 @@ describe('OPTION group followed by shared prose/image/tips (#2820 regression)', 
     expect(text).not.toContain('[!TIP]');
   });
 
-  it('renders both TIPs as alert-tip blockquotes', () => {
+  it('renders both TIPs as alert-tip callouts', () => {
+    // #2595/#71a8d70bc: `> [!TIP]` alerts now render via the tut-alert partial
+    // as non-collapsible <aside class="alert alert-tip" role="note">, not as
+    // <blockquote class="alert-tip">.
     const $ = load(rendered);
-    expect($('blockquote.alert-tip').length).toBe(2);
+    expect($('aside.alert.alert-tip').length).toBe(2);
   });
 
   it('renders the trailing image as a tutorial-figure', () => {

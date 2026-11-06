@@ -35,6 +35,11 @@ export async function computeConceptInputDigest(db, namespace) {
   await probe('ApiDocConceptLinks', ext.ApiDocConceptLinks, 'modifiedAt');
   await probe('SampleConceptLinks', ext.SampleConceptLinks, 'modifiedAt');
   await probe('HelpDocConceptLinks', ext.HelpDocConceptLinks, 'modifiedAt');
+  // #2998: the archcenter <a href> is read live from HelpDocs.url at publish time
+  // (concept-detail.ejs:36). A bare HelpDocs.url/title change touches no *ConceptLinks
+  // row, so without this probe the concept re-render phase-skips and the corrected URL
+  // never re-bakes. Over-triggers slightly (any HelpDocs change), which is acceptable.
+  await probe('HelpDocs', ext.HelpDocs, 'modifiedAt');
   await probe('CommunityEventConceptLinks', ext.CommunityEventConceptLinks, 'extractedAt'); // no managed
   await probe('CommunityEvents', ext.CommunityEvents, 'modifiedAt');
   return digestFromProbes(probes);

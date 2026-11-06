@@ -19,6 +19,7 @@
 // (tutorial not found, no code blocks, null legacy markdown) — returns ok:true.
 
 import cds from '@sap/cds';
+import { createRequire } from 'node:module';
 import { OrchestrationClient } from '@sap-ai-sdk/orchestration';
 import { extractCodeBlocks, extractTutorialContext } from './freshness-extract.js';
 import { groundCodeBlock } from './freshness-grounding.js';
@@ -29,6 +30,96 @@ const LOG = cds.log('freshness-detector');
 const TOOL_NAME = 'submit_freshness_findings';
 const MAX_TOKENS = 2000;
 const TEMPERATURE = 0;
+
+// ─── CLI Deprecation scan (deterministic pre-pass) ────────────────────────────
+
+const _require = createRequire(import.meta.url);
+/** @type {Array<{tool:string,match:string,severity:string,since:string,message:string,replacement:string,docs:string}>} */
+const CLI_DEPRECATIONS = _require('../../scripts/lint-rules/data/cli-deprecations.json');
+
+const SHELL_LANGS = /^(bash|sh|shell|console|terminal|powershell|cmd)$/i;
+const PROMPT_RE = /^(\$ |PS> |> |# )/;
+
+/**
+ * Deterministic pre-pass: scan markdown for deprecated CLI commands in shell fences.
+ * Returns findings in the same shape as LLM freshness findings.
+ * @param {string} markdown
+ * @returns {Array<{category:string,severity:string,confidence:string,stepRef:number,codeBlockIndex:number,evidence:string,summary:string,suggestedFix:string,groundingSource:string}>}
+ */
+export function scanCliDeprecations(markdown) {
+  const findings = [];
+  const lines = markdown.split('\n');
+  let inFence = false;
+  let fenceLang = '';
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const fenceMatch = line.match(/^[ \t]{0,3}(```|~~~)(\S*)/);
+    if (fenceMatch) {
+      if (!inFence) {
+        inFence = true;
+        fenceLang = fenceMatch[2] ?? '';
+      } else {
+        inFence = false;
+        fenceLang = '';
+      }
+      continue;
+    }
+    if (!inFence || !SHELL_LANGS.test(fenceLang)) continue;
+
+    const stripped = line.replace(PROMPT_RE, '');
+    for (const dep of CLI_DEPRECATIONS) {
+      const re = new RegExp(dep.match);
+      if (re.test(stripped)) {
+        findings.push({
+          category: 'deprecated-api',
+          severity: 'Medium',
+          confidence: 'High',
+          stepRef: 0,
+          codeBlockIndex: -1,
+          evidence: line.trim(),
+          summary: dep.message,
+          suggestedFix: dep.replacement,
+          groundingSource: dep.docs,
+        });
+      }
+    }
+  }
+  return findings;
+}
+
+// ─── testedWith freshness check ───────────────────────────────────────────────
+// Inlined here (not imported from scripts/parsers) to avoid cross-layer
+// module resolution issues at runtime.
+
+/** Known current major versions for packages referenced in testedWith frontmatter. */
+const KNOWN_VERSIONS = {
+  '@sap/cds': 10,
+  'node': 22,
+  'SAP BTP CLI': 2,
+  '@sap/hana-client': 2,
+};
+
+/**
+ * Check a testedWith map for packages whose declared major version is behind
+ * the known current major. Returns an array of findings; empty when everything
+ * is current or unknown. Non-numeric values are silently skipped.
+ *
+ * @param {Record<string, string>} testedWith
+ * @returns {Array<{ pkg: string, declared: number, current: number }>}
+ */
+function checkTestedWithFreshness(testedWith) {
+  const findings = [];
+  for (const [pkg, ver] of Object.entries(testedWith)) {
+    const match = /^(\d+)/.exec(ver);
+    if (!match) continue;
+    const declared = parseInt(match[1], 10);
+    const current = KNOWN_VERSIONS[pkg];
+    if (current === undefined) continue;
+    if (declared < current) findings.push({ pkg, declared, current });
+  }
+  return findings;
+}
 
 // ─── Tool schema ──────────────────────────────────────────────────────────────
 
@@ -225,15 +316,62 @@ export async function detectFreshness({ db, tutorialId }) {
     const src = await getTutorialSource(t.slug);
     if (!src || !src.markdown) return { ok: true, model: null, costCents: 0, findings: [] };
 
+    // testedWith outdated-version check (additive, fail-open)
+    // Runs directly on src.markdown (pre-directive-strip) so the YAML frontmatter
+    // block is still intact. Results are accumulated in `extraFindings` and merged
+    // into the final findings array after the LLM pass.
+    const extraFindings = [];
+    try {
+      const mdNorm = src.markdown.replace(/\r\n/g, '\n');
+      const fmMatch = mdNorm.match(/^---\n([\s\S]*?)\n---/);
+      if (fmMatch) {
+        const yaml = await import('js-yaml');
+        const fm = yaml.default.load(fmMatch[1]);
+        if (fm && typeof fm === 'object' && fm.testedWith && typeof fm.testedWith === 'object') {
+          const vFindings = checkTestedWithFreshness(fm.testedWith);
+          for (const f of vFindings) {
+            extraFindings.push({
+              category: 'obsolete-dep',
+              severity: 'Medium',
+              confidence: 'High',
+              stepRef: 0,
+              codeBlockIndex: -1,
+              lang: null,
+              evidence: `${f.pkg} declared major ${f.declared}; current is ${f.current}`,
+              summary: `${f.pkg} is behind current major version (declared: ${f.declared}, current: ${f.current})`,
+              suggestedFix: `Update ${f.pkg} to major version ${f.current} or later`,
+              // Non-empty groundingSource prevents the confidence-Low normalizer from
+              // downgrading this finding. testedWith checks are deterministic (not LLM),
+              // so High confidence is accurate.
+              groundingSource: 'testedWith frontmatter',
+            });
+          }
+        }
+      }
+    } catch (e) {
+      LOG?.warn('testedWith freshness check failed (fail-open)', e);
+    }
+
+    // Strip directive syntax (:::details, :kbd[, etc.) so the model sees
+    // plain prose rather than raw CommonMark directive fences.
+    // Workspace-first / bundle fallback: directives.ts is not compiled to .js;
+    // the CF deploy copies only srv/ (not scripts/parsers/), so we fall back to
+    // the pre-built bundle at _shared/parsers.bundle.mjs.
+    let _directivesMod;
+    try { _directivesMod = await import('../../scripts/parsers/directives.js'); }
+    catch { _directivesMod = await import('./_shared/parsers.bundle.mjs'); }
+    const renderDirectivesAsText = _directivesMod.renderDirectivesAsText;
+    const markdown = renderDirectivesAsText(src.markdown);
+
     // Feed whole-tutorial markdown as ONE pseudo-step so extractCodeBlocks
     // yields a global codeBlockIndex (0..N). Per-step attribution deferred.
     // No code blocks — genuine clean run, NOT a fault → ok:true.
-    const blocks = extractCodeBlocks([{ number: 1, content: src.markdown }]);
+    const blocks = extractCodeBlocks([{ number: 1, content: markdown }]);
     if (!blocks.length) return { ok: true, model: null, costCents: 0, findings: [] };
 
     // Document-wide orientation (frontmatter + prerequisites) fed once at the top
     // so the model judges blocks in the tutorial's real context, not in isolation.
-    const tutContext = extractTutorialContext(src.markdown);
+    const tutContext = extractTutorialContext(markdown);
 
     const groundingByBlock = await Promise.all(
       blocks.map(b => groundCodeBlock({ db, code: b.code }).catch(() => []))
@@ -262,7 +400,8 @@ export async function detectFreshness({ db, tutorialId }) {
       // Enforce: a finding with empty groundingSource must be confidence:Low.
       .map(f => (f.groundingSource ? f : { ...f, confidence: 'Low' }));
 
-    return { ok: true, model: r.modelName, costCents, findings };
+    const cliFindings = scanCliDeprecations(src.markdown);
+    return { ok: true, model: r.modelName, costCents, findings: [...findings, ...cliFindings, ...extraFindings] };
   } catch (err) {
     LOG.error('detection failed — failing open (non-destructive)', err);
     return { ok: false, model: null, costCents: 0, findings: [] };

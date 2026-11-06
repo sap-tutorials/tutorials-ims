@@ -5,7 +5,8 @@ import { performance } from 'node:perf_hooks'
 import { hugoFrontmatterStringify as yamlStringify } from './lib/hugo-yaml.js'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
 import { composeTutorial } from './parsers/compose.js'
-import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial, type DiscoverySource } from './parsers/github.js'
+import './parsers/directives/register-all.js' // side-effect: registers all content-reuse directives
+import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, buildSnippetDeps, fetchSnippets, fetchHelpTitles, EXCLUDED_REPOS, type DiscoveredTutorial, type DiscoverySource } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache, type BrowseFeaturedEntry } from './parsers/cap.js'
 import {
   computeFeedFingerprint,
@@ -645,6 +646,8 @@ export function writeHugoPage(
   semaphoreMap: Record<string, string> = {},
   osList: string[] = [],
   variables?: import('./parsers/variables.js').TutorialVariable[],
+  syncKeysUsed?: Set<string>,
+  syncGroups?: import('./parsers/types.js').TutorialFrontmatter['syncGroups'],
 ): void {
   const content = renderHugoFrontmatter({
     slug,
@@ -671,6 +674,8 @@ export function writeHugoPage(
     video,
     semaphoreMap,
     variables,
+    syncKeysUsed,
+    syncGroups,
   })
 
   mkdirSync(outputDir, { recursive: true })
@@ -1173,6 +1178,42 @@ async function main() {
   const aiAuthorGate = await resolveAiAuthorGate({ resolveSettings: resolveChatLlmSettings })
   console.log(`[ai-author] ${aiAuthorGate.enabled ? 'ENABLED' : 'DISABLED'} — ${aiAuthorGate.reason}`)
 
+  // ── Gather all :help[...] paths from cached markdown and pre-fetch titles ──
+  // Scan all cached tutorial markdown files for :help[<path>] directives, then
+  // batch-fetch the help.sap.com page titles (7-day disk cache, 5 concurrent,
+  // 10s timeout, fail-open). The resulting map is forwarded into each
+  // composeTutorial call so the :help directive can resolve titles without
+  // making per-tutorial network requests.
+  const HELP_PATH_RE = /:help\[([^\]]+)\]/g
+  const allHelpPathsSet = new Set<string>()
+  for (const t of allTutorials) {
+    const cacheFile = join(CACHE_DIR, `${t.slug}.md`)
+    if (existsSync(cacheFile)) {
+      const raw = readFileSync(cacheFile, 'utf-8')
+      for (const m of raw.matchAll(HELP_PATH_RE)) {
+        allHelpPathsSet.add(m[1])
+      }
+    }
+  }
+  const allHelpPaths = Array.from(allHelpPathsSet)
+  const helpTitleCache: Map<string, string> = allHelpPaths.length > 0
+    ? await fetchHelpTitles(allHelpPaths, token)
+    : new Map()
+  if (allHelpPaths.length > 0) {
+    console.log(`[help-titles] fetched/cached ${helpTitleCache.size} title(s) for ${allHelpPaths.length} path(s)`)
+  }
+
+  // ── Snippet pre-fetch (content-reuse Task 6) ─────────────────────────────
+  // Fetch _snippets/*.md from opted-in repos and the shared tutorial-snippets
+  // repo. Gated by SNIPPETS_ENABLED_REPOS env var; empty/absent → no fetch,
+  // no behavior change for existing tutorials.
+  const uniqueRepos = [...new Set(allTutorials.map(t => t.repo).filter(Boolean))]
+  const snippetToken = process.env.GITHUB_TOKEN ?? process.env.TUTORIALS_GITHUB_TOKEN ?? ''
+  const snippetMap = await fetchSnippets(uniqueRepos, snippetToken)
+  if (snippetMap.size > 0) {
+    console.log(`[snippets] fetched ${snippetMap.size} snippet(s) from ${uniqueRepos.length} repo(s)`)
+  }
+
   const tasks = allTutorials.map((t, idx) => async () => {
     const tutStart = performance.now()
     const label = `[${idx + 1}/${allTutorials.length}] ${t.repo}/${t.slug}`
@@ -1252,6 +1293,9 @@ async function main() {
 
       const composed = composeTutorial(rawMd, {
         repo: t.repo, branch: t.branch, slug: t.slug, target, rewriteImages: true,
+        snippetMap,
+        catalogBySlug: undefined,
+        helpTitleCache,
       })
       const { title, description, youWillLearn, prerequisites, level, frontmatter } = composed
 
@@ -1578,6 +1622,8 @@ async function main() {
           semaphoreMap,
           composed.osList,
           composed.variables,
+          composed.syncKeysUsed.size > 0 ? composed.syncKeysUsed : undefined,
+          composed.syncGroups,
         )
         authorRows.push({
           authorProfile: frontmatter.author_profile ?? '',
@@ -1918,6 +1964,33 @@ async function main() {
   mkdirSync(navJsonDir, { recursive: true })
   const navPath = join(navJsonDir, '_nav.json')
   writeFileSync(navPath, JSON.stringify(navData, null, 2), 'utf-8')
+
+  // ── Snippet-deps manifest (Task 7 / content-reuse Task 8) ──────────────────
+  // Build and cache a snippet-key → [dependent slugs] map so the rebuild
+  // workflow can expand _snippets/ file changes to only the affected tutorials
+  // (slug-targeted O(N)) rather than triggering a full ~10-min rebuild.
+  //
+  // This runs post-Phase-4 so navEntries is complete. rawMd for each slug is
+  // read from the disk cache (fail-open: empty string if missing). The cache
+  // file is picked up by publish-content.ts and uploaded to HANA as
+  // `_manifest_snippet-deps` for the workflow to fetch via
+  // GET /content/manifest/snippet-deps.
+  try {
+    const rawMdBySlug = navEntries.map(n => ({
+      slug: n.slug,
+      rawMd: (() => { try { return readFileSync(join(CACHE_DIR, `${n.slug.toLowerCase()}.md`), 'utf-8') } catch { return '' } })(),
+    }))
+    const snippetDeps = buildSnippetDeps(snippetMap, rawMdBySlug)
+    mkdirSync(CACHE_DIR, { recursive: true })
+    writeFileSync(
+      join(CACHE_DIR, 'snippet-deps.json'),
+      JSON.stringify(snippetDeps, null, 2),
+      'utf-8',
+    )
+    console.log(`[snippet-deps] wrote snippet-deps.json (${Object.keys(snippetDeps).length} snippet keys)`)
+  } catch (err) {
+    console.warn(`[snippet-deps] failed to build/write snippet-deps.json: ${err instanceof Error ? err.message : err}`)
+  }
 
   // ── Content-cache sidecar (Workstream C) ──
   // Persist the full post-Phase-4 navEntries + author rows + the feed fingerprint

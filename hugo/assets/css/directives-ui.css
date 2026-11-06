@@ -1,0 +1,170 @@
+/* hugo/assets/css/directives-ui.css
+ *
+ * Styles for the five UI instruction directives:
+ *   tut-menu  — navigation menu path (breadcrumb-style)
+ *   tut-kbd   — keyboard shortcut
+ *   tut-icon  — UI5 inline icon
+ *   tut-ui    — UI element name (button/field/tab/link)
+ *   tut-ask   — "Ask Joule" contextual AI button
+ *
+ * Uses SAP Horizon design tokens throughout. Tokens auto-resolve in both
+ * light and dark mode when the UI5 theme is loaded; no manual dark-mode
+ * overrides are needed for token-based values.
+ *
+ * Related: hugo/layouts/shortcodes/tut-*.html
+ */
+
+/* ---------------------------------------------------------------------------
+ * tut-menu — inline menu navigation path
+ * e.g. Tools › Connections › New Connection
+ * ------------------------------------------------------------------------- */
+
+.tut-menu {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  flex-wrap: wrap;
+  vertical-align: middle;
+}
+
+.tut-menu__item {
+  display: inline-block;
+  border: 1px solid var(--sapField_BorderColor, #89919a);
+  border-radius: 3px;
+  padding: 0.05em 0.35em;
+  font-size: 0.9em;
+  white-space: nowrap;
+  color: var(--sapContent_LabelColor, #556b82);
+  background: var(--sapButton_Background, #fff);
+}
+
+.tut-menu__sep {
+  color: var(--sapContent_LabelColor, #556b82);
+  font-size: 0.75em;
+  user-select: none;
+  line-height: 1;
+  padding: 0 0.1em;
+}
+
+/* ---------------------------------------------------------------------------
+ * tut-kbd — keyboard shortcut
+ * e.g. Ctrl+S, ⌘S
+ * ------------------------------------------------------------------------- */
+
+.tut-kbd {
+  font-family: monospace;
+  font-size: 0.875em;
+  border: 1px solid var(--sapField_BorderColor, #89919a);
+  border-radius: 3px;
+  padding: 0.1em 0.4em;
+  background: var(--sapButton_Background, #fff);
+  color: var(--sapContent_LabelColor, #556b82);
+  white-space: nowrap;
+  /* Subtle box-shadow gives physical key appearance */
+  box-shadow: 0 1px 0 var(--sapField_BorderColor, #89919a);
+  vertical-align: middle;
+}
+
+/* ---------------------------------------------------------------------------
+ * tut-icon — inline UI5 icon
+ * Sized to match surrounding text; color follows content icon token.
+ * ------------------------------------------------------------------------- */
+
+.tut-icon {
+  width: 1em;
+  height: 1em;
+  vertical-align: middle;
+  color: var(--sapContent_IconColor, #0070f2);
+  /* Align baseline with surrounding text */
+  position: relative;
+  top: -0.05em;
+}
+
+/* ---------------------------------------------------------------------------
+ * tut-ui — UI element name (button, field, tab, link)
+ * Renders the visible label of a UI element in bold with a subtle border.
+ * ------------------------------------------------------------------------- */
+
+.tut-ui {
+  font-weight: 600;
+  border: 1px solid var(--sapField_BorderColor, #89919a);
+  border-radius: 3px;
+  padding: 0 0.25em;
+  white-space: nowrap;
+  color: var(--sapContent_LabelColor, #556b82);
+  background: var(--sapButton_Background, #fff);
+}
+
+/* Type modifiers: subtle visual distinction without heavy styling */
+.tut-ui--button {
+  background: var(--sapButton_Background, #fff);
+  border-color: var(--sapUiHighlight, #0070f2);
+  color: var(--sapUiHighlight, #0070f2);
+}
+
+.tut-ui--tab {
+  border-bottom: 2px solid var(--sapUiHighlight, #0070f2);
+  border-radius: 3px 3px 0 0;
+}
+
+.tut-ui--field {
+  font-weight: 400;
+  font-style: italic;
+}
+
+.tut-ui--link {
+  color: var(--sapUiHighlight, #0070f2);
+  text-decoration: underline;
+  border: none;
+  padding: 0;
+  background: transparent;
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------
+ * tut-ask — "Ask Joule" contextual AI button
+ * Hidden by default ([hidden] attr); JS reveals it when Joule is available.
+ * ------------------------------------------------------------------------- */
+
+.tut-ask {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  cursor: pointer;
+  font-size: 0.85em;
+  border: 1px solid var(--sapUiHighlight, #0070f2);
+  border-radius: 3px;
+  padding: 0.15em 0.5em;
+  background: var(--sapButton_Background, #fff);
+  color: var(--sapUiHighlight, #0070f2);
+  font-family: inherit;
+  vertical-align: middle;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.tut-ask:hover {
+  background: var(--sapUiHighlight, #0070f2);
+  color: var(--sapButton_Background, #fff);
+}
+
+.tut-ask:focus-visible {
+  outline: 2px solid var(--sapContent_FocusColor, #0854a0);
+  outline-offset: 2px;
+}
+
+/* [hidden] must override display:inline-flex */
+.tut-ask[hidden] {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * Print: hide interactive / icon-only elements
+ * tut-menu and tut-kbd print as-is (their text content is meaningful in print)
+ * ------------------------------------------------------------------------- */
+
+@media print {
+  .tut-ask,
+  .tut-icon {
+    display: none;
+  }
+}

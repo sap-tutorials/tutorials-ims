@@ -22,7 +22,6 @@
   "code" "text"
   "output" "text"
   "log" "text"
-  "console" "bash"
   "csv" "text"
   "env" "bash"
   "dotenv" "bash"
@@ -75,6 +74,10 @@
   "http" "HTTP"
   "ini" "INI"
   "i18n" "Properties"
+  "console" "Terminal"
+  "shell-session" "Terminal"
+  "terminal-session" "Terminal"
+  "tree" "Tree"
 -}}
 
 {{- $lower := $raw | lower -}}
@@ -110,6 +113,76 @@
 {{- $lineCount := len (split (trim .Inner "\n") "\n") -}}
 {{- $isLong := gt $lineCount 25 -}}
 
+{{/* Console block detection: triggered by lang tag or {prompt} attribute.
+     Guard: ONLY activates for console/shell-session/terminal-session langs or the
+     explicit {prompt} attribute. All other langs (including bash) are byte-identical
+     to before — they take the existing highlight path below. */}}
+{{- $isConsole := or (eq $lower "console") (eq $lower "shell-session") (eq $lower "terminal-session") (index $attrs "prompt") -}}
+
+{{/* Diff marker detection: scan .Inner for [!code ++/--/focus/highlight] markers,
+     OR process {diff} fence attribute for unified-diff (+/-/space column) format.
+     Only active for non-console fences. Produces $hasDiff, $diffMarkers (slice),
+     and $cleanInner (Inner with markers stripped) for use in the body section.
+     security-reviewed: marker tokens are fixed strings; replaceRE pattern is constant;
+     injected class names come from a fixed if/else chain, not user input.
+     {diff} attribute: boolean presence check via index $attrs "diff"; no user input
+     reaches class names; classes come from fixed if/else chain only. */}}
+{{- $hasDiff := false -}}
+{{- $isDiffFence := false -}}
+{{- $diffMarkers := slice -}}
+{{- $cleanInner := "" -}}
+{{- $copyRaw := eq (index $attrs "copy" | default "") "raw" -}}
+{{- if and (not $isConsole) (index $attrs "diff") -}}
+  {{- $isDiffFence = true -}}
+  {{/* {diff} attribute path: unified-diff column stripping.
+       Leading + = added, - = removed, space = context; anything else = context (no strip).
+       Blank lines (empty string after split) pass through as context with no class.
+       security-reviewed: leading char is matched via a fixed if/else chain; no user input
+       reaches $markerClass; stripping is first-char-only via substr. */}}
+  {{- range $lineIdx, $codeLine := split .Inner "\n" -}}
+    {{- $markerClass := "" -}}
+    {{- $stripped := $codeLine -}}
+    {{- if gt (len $codeLine) 0 -}}
+      {{- $firstChar := substr $codeLine 0 1 -}}
+      {{- if eq $firstChar "+" -}}
+        {{- $markerClass = "diff-added" -}}
+        {{- $hasDiff = true -}}
+        {{- $stripped = substr $codeLine 1 (len $codeLine) -}}
+      {{- else if eq $firstChar "-" -}}
+        {{- $markerClass = "diff-removed" -}}
+        {{- $hasDiff = true -}}
+        {{- $stripped = substr $codeLine 1 (len $codeLine) -}}
+      {{- else if eq $firstChar " " -}}
+        {{/* Context line: strip the leading space, no marker class */}}
+        {{- $stripped = substr $codeLine 1 (len $codeLine) -}}
+      {{- end -}}
+    {{- end -}}
+    {{- $diffMarkers = $diffMarkers | append $markerClass -}}
+    {{- $cleanInner = printf "%s%s\n" $cleanInner $stripped -}}
+  {{- end -}}
+{{- else if not $isConsole -}}
+  {{- range $lineIdx, $codeLine := split .Inner "\n" -}}
+    {{- $markerClass := "" -}}
+    {{- if findRE `\[!code \+\+\]` $codeLine -}}
+      {{- $markerClass = "diff-added" -}}
+      {{- $hasDiff = true -}}
+    {{- else if findRE `\[!code --\]` $codeLine -}}
+      {{- $markerClass = "diff-removed" -}}
+      {{- $hasDiff = true -}}
+    {{- else if findRE `\[!code focus\]` $codeLine -}}
+      {{- $markerClass = "diff-focus" -}}
+      {{- $hasDiff = true -}}
+    {{- else if findRE `\[!code highlight\]` $codeLine -}}
+      {{- $markerClass = "diff-highlight" -}}
+      {{- $hasDiff = true -}}
+    {{- end -}}
+    {{- $diffMarkers = $diffMarkers | append $markerClass -}}
+    {{/* Strip marker comment from the line before highlighting */}}
+    {{- $stripped := $codeLine | replaceRE `\s*(?://|#|<!--|--)\s*\[!code [^\]]+\](?:\s*-->)?` "" -}}
+    {{- $cleanInner = printf "%s%s\n" $cleanInner $stripped -}}
+  {{- end -}}
+{{- end -}}
+
 <div class="code-block{{ if $isLong }} code-block-long{{ end }}"{{ if eq $lower "cds" }} data-lang="cds"{{ end }}>
   <div class="code-block-header">
     {{- if ne $filename "" -}}
@@ -118,18 +191,114 @@
     {{- else -}}
       <span class="code-block-lang">{{ $displayName }}</span>
     {{- end -}}
-    <button type="button" class="code-block-copy" onclick="copyCodeBlock(this)" aria-label="Copy code">
+    <button type="button" class="code-block-copy" onclick="copyCodeBlock(this)" aria-label="Copy code"{{ if $isConsole }} title="Copies commands only"{{ end }}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4V1.5C4 1.22 4.22 1 4.5 1H13.5C13.78 1 14 1.22 14 1.5V10.5C14 10.78 13.78 11 13.5 11H11" stroke="currentColor" stroke-width="1.2"/><rect x="2" y="5" width="9" height="10" rx=".5" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
       <span class="copy-label">Copy</span>
     </button>
+    {{- if $hasDiff -}}<span class="diff-legend" aria-hidden="true">＋ added &nbsp;− removed</span>{{- end -}}
   </div>
-  <div class="code-block-body"{{ if $isLong }} data-collapsed="true"{{ end }}>
+  {{- if $isConsole -}}
+  {{/* Console branch: split lines into prompt/output/continuation spans.
+       Prompt patterns: $, >, #, ❯, or PS...> (PowerShell).
+       Each command line gets class="cl-cmd" data-prompt="<token>" data-cmd-text="<text after prompt>".
+       Command text is syntax-highlighted as bash (or powershell for PS prompts) using Hugo's
+       highlight function; the outer <pre><code> wrapper is stripped so the tokens sit inside the span.
+       Continuation lines (after a line ending in \ ` ^) get class="cl-cont" data-continuation="true"
+       and are also highlighted.
+       Output lines get class="cl-out" and are rendered as plain text.
+       security-reviewed: .Inner is Goldmark-escaped markdown code content; line text is
+       HTML-attribute-escaped via Hugo template auto-escaping; only fixed class/attribute names emitted. */}}
+  <div class="code-block-body"{{ if $isLong }} data-collapsed="true"{{ end }} data-console="true"><pre>{{- $lines := split .Inner "\n" -}}{{- $prevWasContinuation := false -}}{{- $prevHlLang := "bash" -}}{{- range $i, $line := $lines -}}{{- $trimmed := trim $line " \t" -}}{{/* Skip empty trailing line that split() produces */}}{{- if and (eq $i (sub (len $lines) 1)) (eq $trimmed "") -}}{{- else -}}{{/* Detect prompt: $, >, #, ❯, or PS...> */}}{{- $isPrompt := false -}}{{- $promptToken := "" -}}{{- $cmdText := "" -}}{{- $hlLang := "bash" -}}{{- if and (hasPrefix $trimmed "PS") (or (hasPrefix $trimmed "PS>") (hasPrefix $trimmed "PS ")) -}}{{- $isPrompt = true -}}{{- $gtIdx := index (split $trimmed ">") 0 -}}{{- $promptToken = printf "%s>" $gtIdx -}}{{- $afterPrompt := strings.TrimPrefix (printf "%s>" $gtIdx) $trimmed -}}{{- $cmdText = trim $afterPrompt " \t" -}}{{- $hlLang = "powershell" -}}{{- else if hasPrefix $trimmed "$ " -}}{{- $isPrompt = true -}}{{- $promptToken = "$" -}}{{- $cmdText = strings.TrimPrefix "$ " $trimmed -}}{{- else if hasPrefix $trimmed "> " -}}{{- $isPrompt = true -}}{{- $promptToken = ">" -}}{{- $cmdText = strings.TrimPrefix "> " $trimmed -}}{{- else if hasPrefix $trimmed "# " -}}{{- $isPrompt = true -}}{{- $promptToken = "#" -}}{{- $cmdText = strings.TrimPrefix "# " $trimmed -}}{{- else if hasPrefix $trimmed "❯ " -}}{{- $isPrompt = true -}}{{- $promptToken = "❯" -}}{{- $cmdText = strings.TrimPrefix "❯ " $trimmed -}}{{- end -}}{{/* Determine if this line ends in a continuation character */}}{{- $trimmedLen := len $trimmed -}}{{- $lineEndsInCont := false -}}{{- if gt $trimmedLen 0 -}}{{- $lastChar := substr $trimmed (sub $trimmedLen 1) 1 -}}{{- $lineEndsInCont = or (eq $lastChar "\\") (eq $lastChar "`") (eq $lastChar "^") -}}{{- end -}}{{/* Classify line and emit highlighted HTML */}}{{- if $prevWasContinuation -}}{{- $hlRaw := highlight $trimmed $prevHlLang "" -}}{{- $hlInner := $hlRaw | replaceRE `(?s)^<[^>]+><[^>]+>` "" | replaceRE `(?s)</[^>]+></[^>]+>\s*$` "" -}}<span class="cl-cont" data-continuation="true" data-cmd-text="{{ $trimmed }}">{{ $hlInner | safeHTML }}</span>
+{{- $prevWasContinuation = $lineEndsInCont -}}{{- else if $isPrompt -}}{{- $hlRaw := highlight $cmdText $hlLang "" -}}{{- $hlInner := $hlRaw | replaceRE `(?s)^<[^>]+><[^>]+>` "" | replaceRE `(?s)</[^>]+></[^>]+>\s*$` "" -}}<span class="cl-cmd" data-prompt="{{ $promptToken }}" data-cmd-text="{{ $cmdText }}">{{ $hlInner | safeHTML }}</span>
+{{- $prevWasContinuation = $lineEndsInCont -}}{{- $prevHlLang = $hlLang -}}{{- else -}}<span class="cl-out">{{ $line }}</span>
+{{- $prevWasContinuation = false -}}{{- end -}}{{- end -}}{{- end -}}</pre></div>
+  {{- else if eq $lower "tree" -}}
+  {{/* Tree fence: render as accessible flat list with inline style depth indentation.
+       Parses 2-space indentation, box-drawing chars (├──, └──, │), state prefixes (+/-/~),
+       trailing / = folder, # annotation. Copy button returns the plain ASCII source.
+       Algorithm mirrors tree-parser.ts (canonical spec). Depth = floor(leading / 2) after
+       normalizing box-drawing: │+0-3sp → 2sp (one indent unit), ├└─ connectors → stripped.
+       security-reviewed: .Inner is Goldmark-escaped code content; all class names from a fixed
+       if/else chain; no user input reaches href/src/style beyond the numeric depth multiplier. */}}
+  <div class="code-block-body"{{ if $isLong }} data-collapsed="true"{{ end }} data-tree="true">
+    <ul role="tree">
+    {{- range split (trim .Inner "\n") "\n" -}}
+      {{- $line := . -}}
+      {{- if trim $line " \t" -}}
+        {{/* Normalize box-drawing: │ + 0-3 spaces → 2 spaces (one depth unit);
+             ├── or └── connectors → stripped (depth comes from │ count);
+             lone ─ → stripped */}}
+        {{- $normalized := $line | replaceRE `│\s{0,3}` "  " | replaceRE `[├└]─*\s*` "" | replaceRE `─` "" -}}
+        {{/* Count leading spaces for depth using strings.TrimLeft */}}
+        {{- $stripped := strings.TrimLeft $normalized " " -}}
+        {{- $leading := sub (len $normalized) (len $stripped) -}}
+        {{/* depth = floor(leading / 2) — use integer division (truncating = floor for positive) */}}
+        {{- $depth := div $leading 2 -}}
+        {{- $rest := trim $stripped " \t" -}}
+        {{/* Extract state prefix (+ ~ -) */}}
+        {{- $state := "" -}}
+        {{- if or (hasPrefix $rest "+ ") (hasPrefix $rest "~ ") (hasPrefix $rest "- ") -}}
+          {{- $state = substr $rest 0 1 -}}
+          {{- $rest = substr $rest 2 (len $rest) -}}
+        {{- end -}}
+        {{/* Extract annotation: two or more spaces + # */}}
+        {{- $annotation := "" -}}
+        {{- if findRE `\s{2,}# ` $rest -}}
+          {{- $parts := split $rest "  # " -}}
+          {{- $rest = trim (index $parts 0) " \t" -}}
+          {{- $annotation = trim (index $parts 1) " \t" -}}
+        {{- end -}}
+        {{/* Detect folder (trailing /) */}}
+        {{- $isFolder := hasSuffix $rest "/" -}}
+        {{/* Build state class */}}
+        {{- $cls := "" -}}
+        {{- if eq $state "+" -}}{{- $cls = "tree-new" -}}{{- else if eq $state "~" -}}{{- $cls = "tree-modified" -}}{{- else if eq $state "-" -}}{{- $cls = "tree-deleted" -}}{{- end -}}
+        {{/* Emit item — depth as inline style, icon from folder/file detection */}}
+        <li role="treeitem" style="padding-left: {{ mul $depth 1.25 }}rem"{{ if ne $cls "" }} class="{{ $cls }}"{{ end }}>
+          {{- if $isFolder -}}<span aria-hidden="true">📁</span> {{ $rest }}{{- else -}}<span aria-hidden="true">📄</span> {{ $rest }}{{- end -}}
+          {{- if ne $annotation "" -}} <span class="tree-annotation">{{ $annotation }}</span>{{- end -}}
+        </li>
+      {{- end -}}
+    {{- end -}}
+    </ul>
+  </div>
+  {{- else -}}
+  <div class="code-block-body"{{ if $isLong }} data-collapsed="true"{{ end }}{{ if or $hasDiff $isDiffFence }} data-diff="true"{{ end }}{{ if and (or $hasDiff $isDiffFence) $copyRaw }} data-copy-raw="true" data-raw-content="{{ .Inner | htmlEscape }}"{{ end }}>
     {{- if eq $lang "text" -}}
       {{/* security-reviewed: .Inner is Goldmark-escaped markdown code content; printf wraps it in a fixed pre/code scaffold */}}
       {{- $rawHtml := printf "<pre><code>%s</code></pre>" .Inner -}}
       {{- $replaced := replaceRE `TUTVARx([A-Za-z0-9_]+?)x` `<span class="tut-var" data-tut-var="$1"></span>` $rawHtml -}}
       {{/* security-reviewed: variable-token sentinel→span, fixed attribute shape, name is [A-Za-z0-9_] only */}}
       {{ $replaced | safeHTML }}
+    {{- else if or $hasDiff $isDiffFence -}}
+      {{/* Diff path: highlight the marker-stripped source, then inject diff classes into Chroma output.
+           security-reviewed: $cleanInner is derived from Goldmark-escaped markdown; marker stripping is
+           a replaceRE with a constant pattern; injected class names come from a fixed if/else chain only. */}}
+      {{- $highlighted := highlight $cleanInner $lang $optsStr -}}
+      {{- $replaced := replaceRE `TUTVARx([A-Za-z0-9_]+?)x` `<span class="tut-var" data-tut-var="$1"></span>` $highlighted -}}
+      {{/* Post-process: split on <span class="line"> and re-join with diff classes injected.
+           The split produces: [preamble, line0-content, line1-content, ...].
+           Index 0 is the preamble (before the first line span); subsequent parts start
+           immediately after the opening tag we split on. */}}
+      {{- $parts := split $replaced "<span class=\"line\">" -}}
+      {{- $out := index $parts 0 -}}
+      {{- range $partIdx, $part := $parts -}}
+        {{- if eq $partIdx 0 -}}
+        {{- else -}}
+          {{- $lineNum := sub $partIdx 1 -}}
+          {{- $markerClass := "" -}}
+          {{- if lt $lineNum (len $diffMarkers) -}}
+            {{- $markerClass = index $diffMarkers $lineNum -}}
+          {{- end -}}
+          {{- if ne $markerClass "" -}}
+            {{- $out = printf "%s<span class=\"line %s\">%s" $out $markerClass $part -}}
+          {{- else -}}
+            {{- $out = printf "%s<span class=\"line\">%s" $out $part -}}
+          {{- end -}}
+        {{- end -}}
+      {{- end -}}
+      {{/* security-reviewed: $out is $highlighted (Chroma output of Goldmark-escaped $cleanInner) re-split and re-joined with a fixed line-span scaffold; $markerClass is a constant from the if/else chain above — no attacker-controlled HTML enters */}}
+      {{ $out | safeHTML }}
     {{- else -}}
       {{- $highlighted := highlight .Inner $lang $optsStr -}}
       {{- $replaced := replaceRE `TUTVARx([A-Za-z0-9_]+?)x` `<span class="tut-var" data-tut-var="$1"></span>` $highlighted -}}
@@ -137,6 +306,7 @@
       {{ $replaced | safeHTML }}
     {{- end -}}
   </div>
+  {{- end -}}
   {{- if $isLong -}}
     <button type="button" class="code-block-toggle" data-action="toggle-code" aria-expanded="false">
       <span class="toggle-show">Show all {{ $lineCount }} lines</span>

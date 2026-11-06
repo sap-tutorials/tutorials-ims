@@ -1,6 +1,7 @@
 import { extractFrontmatter } from './frontmatter.js'
 import { normalizeBlockquotedFences } from './blockquote-fence.js'
 import { mergeBlockquoteNoteDividers } from './blockquote-notes.js'
+import { normalizeBlockquoteAlerts } from './blockquote-alerts.js'
 import { extractIntro } from './intro.js'
 import { resolveImageURLs } from './images.js'
 import { resolveAttachmentLinks } from './attachment-links.js'
@@ -15,9 +16,17 @@ import type { BranchGroup } from './branches.js'
 import { parseRulesVrEnriched } from './rules.js'
 import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './codecheck.js'
 import { parseAssertBlocks, attachAssertSpecs } from './assert.js'
+import { collectTroubleshootEntries } from './blockquote-troubleshoot-collect.js'
 import type { TutorialStep, TutorialFrontmatter } from './types.js'
-import { validateVariables, wrapTokens } from './variables.js'
-import type { TutorialVariable } from './variables.js'
+import { validateVariables, wrapTokens, validatePlaceholders, wrapPlaceholders } from './variables.js'
+import type { TutorialVariable, PlaceholderDef } from './variables.js'
+import { expandDirectives } from './directives.js'
+import { stripAuthorNotes } from './author-notes.js'
+import './directives/qa-only.js' // side-effect: registers qa-only directive
+import './directives/callout-directives.js' // side-effect: registers callout container + spoiler directives
+import './directives/index.js' // side-effect: registers rich-media directive barrel
+import './directives/ui.js' // side-effect: registers menu/kbd/icon/ui/ask directives
+import './directives/register-all.js' // side-effect: registers all content-reuse directives
 
 /**
  * Normalize line endings to LF. Catches CRLF (Windows / GitHub-via-Windows-
@@ -44,6 +53,7 @@ export interface ComposeOpts {
   slug: string
   target: 'hugo' | 'vitepress'
   rewriteImages: boolean
+  channel?: 'prod' | 'qa'
   /**
    * [#655] Optional rules.vr companion content. When provided, this function
    * parses it and merges validation + codecheck + AI flags into `steps`.
@@ -51,6 +61,24 @@ export interface ComposeOpts {
    * because it also writes sidecar JSON files. Preview is the only consumer.
    */
   rulesVr?: string
+  /**
+   * Snippet source map: snippetKey → raw markdown source.
+   * Populated by the fetch pipeline before `composeTutorial` is called.
+   * Forwarded to `expandDirectives` for the ::include directive.
+   */
+  snippetMap?: Map<string, string>
+  /**
+   * Slim catalog index keyed by tutorial slug. Used by :ref and similar
+   * directives to resolve titles and metadata without loading the full nav JSON.
+   */
+  catalogBySlug?: Map<string, { title: string; time: number; level?: string }>
+  /**
+   * Pre-fetched help.sap.com page titles keyed by path.
+   * Populated before the compose loop by fetchHelpTitles() and forwarded to
+   * expandDirectives so the :help directive can resolve titles without
+   * per-tutorial network requests.
+   */
+  helpTitleCache?: Map<string, string>
 }
 
 export interface ComposeResult {
@@ -67,6 +95,12 @@ export interface ComposeResult {
    *  (ordered Windows, macOS, Linux, BAS). Drives the OS picker to show only
    *  supported platforms — #2703. Empty when hasOsOptions is false. */
   osList: string[]
+  /** True when the tutorial body contains at least one tut-compare shortcode. */
+  hasCompare?: boolean
+  /** True when the tutorial body contains at least one tut-cast shortcode. */
+  hasCast?: boolean
+  /** True when the tutorial body contains at least one sortable/filterable/sticky table. */
+  hasSortable?: boolean
   intro: string
   /**
    * [#2811] Validated tutorial variables declared in source frontmatter.
@@ -74,6 +108,35 @@ export interface ComposeResult {
    * Undefined when no variables are declared (tutorial behaves as before).
    */
   variables?: TutorialVariable[]
+  /**
+   * [synced-tabs] Sync keys actually used (emitted) in this tutorial's option
+   * groups. Empty set when no sync groups are present. Caller emits this as
+   * `syncKeysUsed` in Hugo frontmatter so the template can skip sync-group
+   * bootstrapping for tutorials that don't use it.
+   */
+  syncKeysUsed: Set<string>
+  /**
+   * [synced-tabs] Custom syncGroups declared in frontmatter, forwarded to Hugo
+   * frontmatter when non-empty so the client runtime knows value→canonical
+   * mappings for custom keys.
+   */
+  syncGroups?: TutorialFrontmatter['syncGroups']
+  /**
+   * [task5] True when the tutorial body contains at least one :::walkthrough
+   * container directive. Drives conditional loading of code-walkthrough.ts.
+   */
+  hasWalkthrough?: boolean
+  /**
+   * Author-declared tool/library versions this tutorial has been tested with.
+   * e.g. `{ "@sap/cds": "9.x", node: "22" }`.
+   * Passed through from `TutorialFrontmatter.testedWith`.
+   */
+  testedWith?: Record<string, string>
+  /**
+   * Prerequisite tutorial slugs that should be completed before this one.
+   * Passed through from `TutorialFrontmatter.requires`.
+   */
+  requires?: string[]
 }
 
 export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult {
@@ -81,8 +144,10 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   // consistent line terminators. parseV2Steps's /^### (.+)$/ would otherwise
   // return 0 steps for CRLF tutorials.
   const normalized = normalizeLineEndings(rawMd)
+  const channel = opts.channel ?? 'prod'
+  const strippedNotes = stripAuthorNotes(normalized, channel, opts.slug)
   const { title, description, youWillLearn, prerequisites, level, frontmatter, body } =
-    extractFrontmatter(normalized)
+    extractFrontmatter(strippedNotes)
 
   const isV2 = frontmatter.parser === 'v2'
 
@@ -121,7 +186,11 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   // healer so `>---` lines inside blockquoted code fences are already recognized
   // as code content and left untouched.
   const mergedBody = mergeBlockquoteNoteDividers(listProseHealedBody)
-  let processedBody = resolveImageURLs(mergedBody, {
+  // [callout-enhancements] Pre-pass hook for Hugo alert/callout blockquotes.
+  // Currently a fence-aware passthrough (identity transform). Provides the
+  // normalisation point for any future alert-type aliasing before rendering.
+  const alertsBody = normalizeBlockquoteAlerts(mergedBody)
+  let processedBody = resolveImageURLs(alertsBody, {
     repo: opts.repo, branch: opts.branch, slug: opts.slug,
     rewriteImages: opts.rewriteImages,
   })
@@ -153,6 +222,52 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     processedBody = wrapTokens(processedBody, tutorialVariables)
   }
 
+  // [task3] Wrap placeholder tokens (`<YOUR_X>`, `<MY_X>`, `<UPPER_CASE>`) when
+  // the author has opted in via `placeholders:` frontmatter. Runs AFTER wrapTokens
+  // so author-declared `{{var:X}}` tokens are already sentinel-wrapped and won't
+  // be touched again. Detected/declared tokens are converted to synthetic
+  // TutorialVariable entries and merged into tutorialVariables so the Hugo island
+  // knows about them (same "Your values" panel mechanism).
+  if (frontmatter.placeholders) {
+    const placeholderDefs = validatePlaceholders(frontmatter.placeholders, processedBody)
+    if (placeholderDefs.length > 0) {
+      processedBody = wrapPlaceholders(processedBody, placeholderDefs)
+      // Merge synthetic vars so the Hugo island knows about them
+      const synthVars: TutorialVariable[] = placeholderDefs.map((p: PlaceholderDef) => ({
+        name: p.token.replace(/^<|>$/g, '').replace(/-/g, '_'),
+        label: p.label,
+        type: 'string' as const,
+        placeholder: p.token,
+        display: true,
+      }))
+      tutorialVariables = [...(tutorialVariables ?? []), ...synthVars]
+    }
+  }
+
+  // [task5] Detect :::walkthrough container directives BEFORE expandDirectives
+  // transforms the source. The flag drives conditional JS loading in single.html.
+  const hasWalkthrough = /^:{3}\s*walkthrough\s*$/m.test(processedBody)
+
+  // Expand CommonMark-style directives (:name[label]{attrs}) to Hugo shortcodes.
+  // Runs AFTER wrapTokens so {{var:X}} tokens in directive labels have already
+  // been wrapped into tut-var spans/sentinels, and BEFORE convertOptionBlocks
+  // so directives inside [OPTION BEGIN …] panels are expanded before content
+  // is relocated into tab shortcodes. Empty registry → identity transform.
+  processedBody = expandDirectives(processedBody, {
+    slug: opts.slug,
+    variables: tutorialVariables,
+    channel,
+    repo: opts.repo,
+    branch: opts.branch,
+    snippetMap: opts.snippetMap,
+    catalogBySlug: opts.catalogBySlug,
+    helpTitleCache: opts.helpTitleCache,
+  })
+
+  const hasCompare = processedBody.includes('{{< tut-compare')
+  const hasCast = processedBody.includes('{{< tut-cast')
+  const hasSortable = /^\{[^}]*(\.sortable|\.filterable|\.sticky)[^}]*\}/m.test(processedBody)
+
   // [#1637] Prerequisites bypassed the body's image-URL rewriter and, because
   // its content is markdownified as-is, markdown images/links inside a raw
   // <table> (a common QR-code pattern) rendered as literal text. Run the same
@@ -181,11 +296,16 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   const hasOsOptionsFlag = { value: false }
   const osListSet = new Set<OS>()
   const resolvedStepSlugs = new Set<string>()
+  const syncKeysUsedSet = new Set<string>()
   processedBody = convertOptionBlocks(processedBody, opts.target, {
     osOverrides: frontmatter.osOverrides,
     hasOsOptionsOut: hasOsOptionsFlag,
     osListOut: osListSet,
     resolvedStepSlugsOut: resolvedStepSlugs,
+    syncTabs: frontmatter.syncTabs,
+    syncOverrides: frontmatter.syncOverrides,
+    syncGroups: frontmatter.syncGroups,
+    syncKeysUsedOut: syncKeysUsedSet,
   })
 
   // Warn on osOverrides keys that never matched any step heading on the page.
@@ -220,7 +340,38 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
       throw err
     }
   }
-  const steps = isV2 ? parseV2Steps(v2Body) : parseV1Steps(processedBody)
+  const stepAttrWarnings: string[] = []
+  const steps = isV2 ? parseV2Steps(v2Body, stepAttrWarnings) : parseV1Steps(processedBody)
+  for (const w of stepAttrWarnings) console.warn(`[compose] ${opts.slug}: ${w}`)
+
+  // [tutorial-step-pacing] Derive the tutorial's total time when frontmatter
+  // `time:` is absent, from the sum of step `timeSeconds` (rounded to whole
+  // minutes, minimum 1 when any step time exists). Lint-warn (not a hard
+  // failure) when a declared frontmatter `time:` differs from the step-time
+  // sum by more than 25% (spec "Step time display").
+  const stepTimeSecondsSum = steps.reduce((sum, s) => sum + (s.timeSeconds ?? 0), 0)
+  if (stepTimeSecondsSum > 0) {
+    const derivedMinutes = Math.max(1, Math.round(stepTimeSecondsSum / 60))
+    if (typeof frontmatter.time === 'number' && frontmatter.time > 0) {
+      const diffRatio = Math.abs(frontmatter.time - derivedMinutes) / frontmatter.time
+      if (diffRatio > 0.25) {
+        console.warn(
+          `[compose] ${opts.slug}: step-attr/time-mismatch — frontmatter time (${frontmatter.time}m) ` +
+          `differs from the sum of step times (${derivedMinutes}m) by more than 25%`
+        )
+      }
+    } else {
+      frontmatter.time = derivedMinutes
+    }
+  }
+  // "Optional steps" requirement: a tutorial in which EVERY step is optional
+  // fails lint (treated as a hard build error — there is nothing left to
+  // require for completion, which is almost certainly an authoring mistake).
+  if (steps.length > 0 && steps.every(s => s.optional)) {
+    throw new Error(
+      `[compose] ${opts.slug}: every step is marked {optional} — at least one step must be required`
+    )
+  }
 
   const intro = extractIntro(isV2 ? v2Body : processedBody, isV2)
 
@@ -267,6 +418,12 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     if (assertMap.size) attachAssertSpecs(steps, assertMap)
   }
 
+  // [tutorial-callout-enhancements] Collect troubleshoot alert entries per step.
+  for (const step of steps) {
+    const entries = collectTroubleshootEntries(step.content, step.number)
+    if (entries.length > 0) step.troubleshootEntries = entries
+  }
+
   return {
     title,
     description,
@@ -280,7 +437,21 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     // Emit in canonical order so the picker buttons are always Windows, macOS,
     // Linux, BAS — never author-label order.
     osList: OS_VALUES.filter((os) => osListSet.has(os)),
+    ...(hasCompare ? { hasCompare: true } : {}),
+    ...(hasCast ? { hasCast: true } : {}),
+    ...(hasSortable ? { hasSortable: true } : {}),
     intro,
     ...(tutorialVariables ? { variables: tutorialVariables } : {}),
+    syncKeysUsed: syncKeysUsedSet,
+    ...(frontmatter.syncGroups && Object.keys(frontmatter.syncGroups).length > 0
+      ? { syncGroups: frontmatter.syncGroups }
+      : {}),
+    ...(hasWalkthrough ? { hasWalkthrough: true } : {}),
+    ...(frontmatter.testedWith && Object.keys(frontmatter.testedWith).length > 0
+      ? { testedWith: frontmatter.testedWith }
+      : {}),
+    ...(frontmatter.requires && frontmatter.requires.length > 0
+      ? { requires: frontmatter.requires }
+      : {}),
   }
 }

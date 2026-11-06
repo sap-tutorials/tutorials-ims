@@ -70,9 +70,14 @@ extend service DeveloperService {
       @param slug        Lowercase canonical tutorial slug.
       @param stepNumber  1-indexed step number.
       @param format      'markdown' (default, token-efficient source markdown
-                         matching /tutorials/<slug>.md) or 'html' (sliced HTML). */
+                         matching /tutorials/<slug>.md) or 'html' (sliced HTML).
+      @param variants    Optional JSON-encoded variant preference map, e.g.
+                         `{"runtime":"java"}`. When the step contains OPTION
+                         blocks tagged with a matching sync= key, only the
+                         preferred variant's content is returned. Only applies
+                         to format='markdown'. Unrecognised keys are ignored. */
   @(requires: 'authenticated-user')
-  function get_tutorial_step(slug: String, stepNumber: Integer, format: String) returns {
+  function get_tutorial_step(slug: String, stepNumber: Integer, format: String, variants: String) returns {
     slug          : String;
     stepNumber    : Integer;
     stepTitle     : String;
@@ -80,6 +85,12 @@ extend service DeveloperService {
     contentFormat : String;
     textLength    : Integer;
     totalSteps    : Integer;
+    // [tutorial-step-pacing] Present only when the step's heading declared
+    // `{time=… optional}` and format='markdown'. Absent (not 0/false) on
+    // plain steps and on format='html' (not yet threaded through the HTML
+    // slicer — see packages/mcp/tutorial-step-slicer.js).
+    timeMinutes   : Integer;
+    optional      : Boolean;
   };
 
   /** Mark a step of a tutorial as completed for the signed-in user.

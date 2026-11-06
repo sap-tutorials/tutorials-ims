@@ -54,6 +54,10 @@ hugo/static-qa/
 !hugo/static/images/devtoberfest/avatars/*.png
 !hugo/static/images/devtoberfest/arcade/**/*.png
 !hugo/static/images/devtoberfest/selfie/thumbnails/*.png
+!hugo/static/images/app-space-game/**/*.png
+# Raw Kasimir sprite sheets are build inputs for scripts/build-kasimir-atlas.mjs — hugo/static is
+# served publicly, so keep the multi-MB source art out of the repo and the deployed site.
+hugo/static/images/app-space-game/sprite-src/
 !hugo/static/images/devtoberfest/selfie/stickers/*.png
 !hugo/static/images/devtoberfest/selfie/backgrounds/*.png
 !app/display-app-drawings/public/*.png

@@ -1,0 +1,121 @@
+/**
+ * Authoring-aids lint rules.
+ *
+ * authorNotesInProdRule — warns when PROD source contains `%% … %%` author notes.
+ * qaOnlyInProdRule      — warns when PROD source contains `:::qa-only` blocks.
+ *
+ * Both rules scan `rawLines` (not the fence-redacted `lines`) because author
+ * notes could appear inside fence context — but PROD source must NOT contain
+ * them regardless of location.
+ */
+import type { LintFinding } from '../lint-tutorial-markdown.js'
+
+type Rule = {
+  id: string
+  describe: string
+  scan(slug: string, lines: string[], rawLines: string[]): LintFinding[]
+}
+
+/** Returns the set of 0-based line indices that are inside a fenced code block. */
+function fencedLineIndices(rawLines: string[]): Set<number> {
+  const fenced = new Set<number>()
+  let inFence = false
+  for (let i = 0; i < rawLines.length; i++) {
+    const fenceMatch = rawLines[i].match(/^[ \t]{0,3}(```|~~~)/)
+    if (fenceMatch) {
+      inFence = !inFence
+      fenced.add(i) // delimiter line itself is also "fenced" (not note content)
+      continue
+    }
+    if (inFence) fenced.add(i)
+  }
+  return fenced
+}
+
+export const authorNotesInProdRule: Rule = {
+  id: 'author-notes-in-prod-source',
+  describe: 'PROD source contains author notes (`%% … %%`). These are stripped at publish time but indicate the source was not cleaned before promotion.',
+
+  scan(slug, _lines, rawLines): LintFinding[] {
+    const findings: LintFinding[] = []
+    const fenced = fencedLineIndices(rawLines)
+
+    for (let i = 0; i < rawLines.length; i++) {
+      if (fenced.has(i)) continue
+      if (rawLines[i].includes('%%')) {
+        findings.push({
+          rule: 'author-notes-in-prod-source',
+          slug,
+          file: slug,
+          line: i + 1,
+          message: 'Author note (`%% … %%`) found in PROD source. Remove before promoting to PROD.',
+          excerpt: rawLines[i].trim(),
+          severity: 'warning',
+        })
+      }
+    }
+    return findings
+  },
+}
+
+export const qaOnlyInProdRule: Rule = {
+  id: 'qa-only-in-prod-source',
+  describe: 'PROD source contains `:::qa-only` blocks. These are stripped at publish time but indicate the source was not cleaned before promotion.',
+
+  scan(slug, _lines, rawLines): LintFinding[] {
+    const findings: LintFinding[] = []
+
+    for (let i = 0; i < rawLines.length; i++) {
+      if (/^:::qa-only/.test(rawLines[i])) {
+        findings.push({
+          rule: 'qa-only-in-prod-source',
+          slug,
+          file: slug,
+          line: i + 1,
+          message: '`:::qa-only` block found in PROD source. Resolve or remove before promoting to PROD.',
+          excerpt: rawLines[i].trim(),
+          severity: 'warning',
+        })
+      }
+    }
+    return findings
+  },
+}
+
+/**
+ * promotionWarningRule — notices when PROD source contains `:::promotion-warning` blocks.
+ *
+ * A `:::promotion-warning` block is an author-placed marker indicating content that should
+ * be reviewed or resolved before the tutorial is promoted to PROD. It is analogous to
+ * `:::qa-only` but is intended to flag specific concerns rather than hide content.
+ *
+ * Assumption: the `:::promotion-warning` directive has not yet been deployed to the
+ * platform as of this rule's addition; this rule pre-declares the lint gate for when
+ * authors begin using the pattern. Owners should confirm the exact directive syntax
+ * once it ships and adjust the regex if needed.
+ *
+ * Severity: 'notice' (advisory — never blocks a build even with --strict).
+ */
+export const promotionWarningRule: Rule = {
+  id: 'promotion-warning-in-prod-source',
+  describe: 'PROD source contains `:::promotion-warning` blocks. These are author-placed "do not promote" markers that should be resolved before PROD publication.',
+
+  scan(slug, _lines, rawLines): LintFinding[] {
+    const findings: LintFinding[] = []
+
+    for (let i = 0; i < rawLines.length; i++) {
+      if (/^:::promotion-warning/.test(rawLines[i])) {
+        findings.push({
+          rule: 'promotion-warning-in-prod-source',
+          slug,
+          file: slug,
+          line: i + 1,
+          message: '`:::promotion-warning` block found in PROD source. Resolve the flagged concern and remove the block before promoting to PROD.',
+          excerpt: rawLines[i].trim(),
+          severity: 'notice',
+        })
+      }
+    }
+    return findings
+  },
+}

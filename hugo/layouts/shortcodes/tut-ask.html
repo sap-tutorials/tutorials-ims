@@ -1,0 +1,24 @@
+{{/*
+  tut-ask — renders the "Ask Joule" contextual AI button.
+
+  Consumes:
+    prompt — pre-formatted question text to send to Joule
+
+  Produces: a hidden <button> that JS reveals when Joule is available.
+  Emits zero HTML in QA or preview mode (matches codecheck-mount.html pattern).
+
+  The `hidden` attribute ensures the button is invisible until kbd-os.ts /
+  joule-integration JS removes it. This prevents flash of unstyled content
+  when Joule is not available.
+
+  Usage (inline/leaf):
+    {{< tut-ask prompt="How do I configure a destination?" >}}
+
+  QA guard: matches {{- if and (not site.Params.qa) (not site.Params.previewMode) -}}
+  pattern from hugo/layouts/partials/codecheck-mount.html.
+
+  Security note: .Get uses Hugo's default HTML auto-escaping.
+*/}}
+{{- if and (not site.Params.qa) (not site.Params.previewMode) -}}
+<button class="tut-ask" data-prompt="{{ .Get "prompt" }}" type="button" hidden aria-label="Ask Joule">Ask Joule</button>
+{{- end -}}

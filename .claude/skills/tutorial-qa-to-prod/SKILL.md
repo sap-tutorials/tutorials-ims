@@ -53,6 +53,17 @@ CONTRIB_DEF=$(gh api "repos/$CONTRIB" --jq '.default_branch')   # expect: main
 MAIN_DEF=$(gh api "repos/$MAIN"    --jq '.default_branch')      # expect: master
 ```
 
+### Step 0.5 — Check for authoring aids (author notes + QA-only blocks)
+
+After fetching the QA source (below), scan the file for leftover authoring aids:
+
+```bash
+NOTE_COUNT=$(grep -c '%%' "$FILE" 2>/dev/null || echo 0)
+QA_ONLY_COUNT=$(grep -c '^:::qa-only' "$FILE" 2>/dev/null || echo 0)
+```
+
+If `NOTE_COUNT > 0` or `QA_ONLY_COUNT > 0`: **report the counts and locations** to the author and ask them to remove author notes (`%% … %%`) and resolve QA-only blocks (`:::qa-only`) before the PROD PR is opened. Authoring aids in PROD source will trigger lint warnings on the PROD build. Do not block on this (the author may have a valid reason to proceed), but make the counts visible.
+
 ### Step 1 — Fetch the QA source (source of truth for the copy)
 
 The QA file is what the author previewed and approved — it is authoritative.

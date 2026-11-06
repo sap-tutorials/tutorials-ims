@@ -1,0 +1,10 @@
+{{/*
+  tut-since — version tag indicating when a feature was introduced.
+
+  Params:
+    label — the version label (e.g. "CAP 9", "UI5 1.120")
+
+  Security note: .Get uses Hugo's default HTML auto-escaping.
+  Never mark directive-supplied values as raw HTML.
+*/}}
+<span class="tut-since-tag">{{ .Get "label" }}</span>

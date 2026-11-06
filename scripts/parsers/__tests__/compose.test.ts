@@ -285,3 +285,63 @@ describe('composeTutorial osList (#2703)', () => {
     expect(result.osList).toEqual([])
   })
 })
+
+describe('composeTutorial testedWith/requires passthrough (task 4 review fix)', () => {
+  // Verifies that the `testedWith` and `requires` frontmatter fields declared
+  // in tutorials are surfaced in ComposeResult so freshness-detector.js can
+  // read them for the testedWith outdated-version check.
+  //
+  // Note on CRLF: the CRLF fix for the testedWith frontmatter parser lives in
+  // srv/lib/freshness-detector.js (src.markdown.replace(/\r\n/g, '\n') before
+  // the /^---\n...\n---/ regex). The compose parser itself normalises line
+  // endings earlier via normaliseLineEndings() — see parser-crlf-regression.test.ts.
+
+  it('passes testedWith through to ComposeResult', () => {
+    const rawMd = [
+      '---',
+      'title: Test',
+      'description: A test tutorial',
+      'auto_validation: true',
+      'time: 5',
+      'tags: [ tutorial>beginner ]',
+      'testedWith:',
+      '  "@sap/cds": "9.x"',
+      '  node: "22"',
+      '---',
+      '',
+      '## Overview',
+      '',
+    ].join('\n')
+    const result = composeTutorial(rawMd, {
+      slug: 'test-slug',
+      repo: 'test-repo',
+      branch: 'main',
+      rewriteImages: false,
+    })
+    expect(result.testedWith).toEqual({ '@sap/cds': '9.x', node: '22' })
+  })
+
+  it('passes requires through to ComposeResult', () => {
+    const rawMd = [
+      '---',
+      'title: Test',
+      'description: A test tutorial',
+      'auto_validation: true',
+      'time: 5',
+      'tags: [ tutorial>beginner ]',
+      'requires:',
+      '  - hana-cloud-tutorial-1',
+      '---',
+      '',
+      '## Overview',
+      '',
+    ].join('\n')
+    const result = composeTutorial(rawMd, {
+      slug: 'test-slug',
+      repo: 'test-repo',
+      branch: 'main',
+      rewriteImages: false,
+    })
+    expect(result.requires).toEqual(['hana-cloud-tutorial-1'])
+  })
+})

@@ -1,0 +1,35 @@
+{{/*
+  tut-menu — renders a UI menu navigation path.
+
+  Consumes: label (string, segments separated by " > " or "→")
+  Produces: inline <span> with breadcrumb-style menu path and aria-label.
+
+  Usage (inline/leaf):
+    {{< tut-menu label="File > Save" >}}
+    {{< tut-menu label="Connectivity → Destinations → New Destination" >}}
+
+  Two-pass split: first on " > ", then on "→" for any remaining unsplit segments.
+  aria-label joins segments with ", then " for screen reader readability.
+
+  Security note: .Get "label" uses Hugo's default HTML auto-escaping.
+  Never mark directive-supplied values as raw HTML.
+*/}}
+{{- $raw := .Get "label" -}}
+{{- $firstPass := split $raw " > " -}}
+{{- $segments := slice -}}
+{{- range $firstPass -}}
+  {{- if strings.Contains . "→" -}}
+    {{- range split . "→" -}}
+      {{- $segments = $segments | append (trim . " ") -}}
+    {{- end -}}
+  {{- else -}}
+    {{- $segments = $segments | append . -}}
+  {{- end -}}
+{{- end -}}
+{{- $ariaLabel := delimit $segments ", then " -}}
+<span class="tut-menu" role="text" aria-label="{{ $ariaLabel }}">
+{{- range $i, $seg := $segments -}}
+  {{- if gt $i 0 -}}<span class="tut-menu__sep" aria-hidden="true">›</span>{{- end -}}
+  <span class="tut-menu__item">{{ $seg }}</span>
+{{- end -}}
+</span>

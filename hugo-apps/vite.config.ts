@@ -297,6 +297,7 @@ export default defineConfig({
       input: {
         navigator: resolve(__dirname, 'src/navigator/main.ts'),
         'app-space': resolve(__dirname, 'src/app-space/main.ts'),
+        'app-space-game': resolve(__dirname, 'src/app-space-game/main.ts'),
         devtoberfest: resolve(__dirname, 'src/devtoberfest/main.ts'),
         gameboard: resolve(__dirname, 'src/gameboard/main.ts'),
         arcade: resolve(__dirname, 'src/arcade/main.ts'),

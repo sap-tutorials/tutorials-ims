@@ -94,8 +94,9 @@ describe('option-tabs shortcode renders real buttons (issue #1591)', () => {
   });
 
   it('emits clickable <button> tab elements, not escaped source', () => {
-    expect(rendered).toContain('<button class="fd-tabs__item is-selected" role="tab" data-tab-index="0">Free Tier</button>');
-    expect(rendered).toContain('<button class="fd-tabs__item" role="tab" data-tab-index="1">Production</button>');
+    // Check the key attributes are present (exact string changed with ARIA attrs in Task 4)
+    expect(rendered).toMatch(/<button[^>]*class="fd-tabs__item is-selected"[^>]*>Free Tier<\/button>/);
+    expect(rendered).toMatch(/<button[^>]*class="fd-tabs__item"[^>]*>Production<\/button>/);
   });
 
   it('does not escape the buttons into a <pre><code> block', () => {

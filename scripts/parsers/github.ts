@@ -1010,3 +1010,308 @@ export async function fetchRulesVr(slug: string, repo: string, branch: string): 
     return existsSync(cacheFile) ? readFileSync(cacheFile, 'utf-8') : null
   }
 }
+
+/**
+ * Fetch _snippets/ directory contents from GitHub repos.
+ * Returns Map<snippetKey, markdownSource>.
+ * Key format: `<repo>/_snippets/<name>` or `shared/<name>` for the shared repo.
+ * Gated by SNIPPETS_ENABLED_REPOS env var (comma-separated repo names). Returns
+ * empty map immediately when the env var is unset or empty.
+ */
+export async function fetchSnippets(
+  _repoNames: string[],
+  token: string,
+): Promise<Map<string, string>> {
+  // Parse the SNIPPETS_ENABLED_REPOS gate first — fail fast if empty.
+  const raw = process.env.SNIPPETS_ENABLED_REPOS ?? ''
+  const enabledRepos = raw.split(',').map(s => s.trim()).filter(Boolean)
+  if (enabledRepos.length === 0) return new Map()
+
+  // Build auth headers from the token parameter (not process.env, so tests can
+  // pass a synthetic token without polluting the environment).
+  const authHeaders: Record<string, string> = token ? {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'tutorials-ims-build',
+  } : {}
+
+  // Always include the shared snippets repo when any per-repo snippets are enabled.
+  const SHARED_REPO = 'tutorial-snippets'
+  const reposToFetch = [...new Set([...enabledRepos, SHARED_REPO])]
+
+  const snippetMap = new Map<string, string>()
+
+  for (const repo of reposToFetch) {
+    try {
+      // List .md files under _snippets/ via the Contents API.
+      const listUrl = `${REST_API_BASE}/repos/${ORG}/${repo}/contents/_snippets`
+      const listRes = await fetchWithRetry(listUrl, { headers: authHeaders }, { label: 'snippets-list' })
+      if (listRes.status === 404) {
+        // This repo has no _snippets/ directory — skip gracefully.
+        console.debug(`  [snippets] ${repo}: no _snippets/ directory (404), skipping`)
+        continue
+      }
+      if (!listRes.ok) {
+        const body = await listRes.text().catch(() => '')
+        console.warn(`  [snippets] ${repo}: listing failed (${listRes.status}): ${body.slice(0, 200)}`)
+        continue
+      }
+
+      const entries = await listRes.json() as Array<{ name: string; download_url: string; sha: string; type: string }>
+      if (!Array.isArray(entries)) continue
+
+      const mdFiles = entries.filter(e => e.type === 'file' && e.name.endsWith('.md'))
+
+      // Determine the map key prefix for this repo.
+      // Shared repo: strip the .md extension from the key so that
+      // ::include[shared:cf-cli] (label without extension) resolves to 'shared/cf-cli'.
+      // Per-repo: keep the .md extension so that ::include[step.md] (label with extension)
+      // suffix-matches 'myrepo/_snippets/step.md'.
+      const isShared = repo === SHARED_REPO
+      const prefix = isShared ? 'shared/' : `${repo}/_snippets/`
+
+      // Cache directory for this repo's snippets.
+      const repoCacheDir = join(CACHE_DIR, 'snippets', repo)
+
+      for (const entry of mdFiles) {
+        try {
+          const cacheFile = join(repoCacheDir, entry.name)
+          const shaFile = `${cacheFile}.sha`
+
+          // Check cache: if both the content file and sha sidecar exist and the
+          // sha matches, read from disk to skip the network fetch.
+          let content: string | null = null
+          if (existsSync(cacheFile) && existsSync(shaFile)) {
+            try {
+              const cachedSha = readFileSync(shaFile, 'utf-8').trim()
+              if (cachedSha === entry.sha) {
+                content = readFileSync(cacheFile, 'utf-8')
+              }
+            } catch {
+              // Fall through to re-fetch.
+            }
+          }
+
+          if (content === null) {
+            // Fetch the raw content via download_url.
+            const dlRes = await fetchWithRetry(entry.download_url, { headers: authHeaders }, { label: 'snippets-dl' })
+            if (!dlRes.ok) {
+              console.warn(`  [snippets] ${repo}/${entry.name}: download failed (${dlRes.status}), skipping`)
+              continue
+            }
+            content = await dlRes.text()
+
+            // Persist to cache for subsequent runs.
+            try {
+              mkdirSync(repoCacheDir, { recursive: true })
+              writeFileSync(cacheFile, content, 'utf-8')
+              writeFileSync(shaFile, entry.sha, 'utf-8')
+            } catch {
+              // Cache write failure is non-fatal — content is still usable.
+            }
+          }
+
+          // LF-normalize and insert into the map.
+          // For shared snippets: strip the .md extension from the key so authors can
+          // write ::include[shared:cf-cli] without the extension (matching the label
+          // convention). For per-repo snippets: keep .md so ::include[step.md] matches.
+          const keyName = isShared && entry.name.endsWith('.md')
+            ? entry.name.slice(0, -3)
+            : entry.name
+          snippetMap.set(`${prefix}${keyName}`, content.replace(/\r\n?/g, '\n'))
+        } catch (fileErr) {
+          console.warn(`  [snippets] ${repo}/${entry.name}: error — ${fileErr instanceof Error ? fileErr.message : String(fileErr)}`)
+        }
+      }
+    } catch (repoErr) {
+      // Fail-open: one failing repo must not abort the entire build.
+      console.warn(`  [snippets] ${repo}: repo-level error — ${repoErr instanceof Error ? repoErr.message : String(repoErr)}`)
+    }
+  }
+
+  return snippetMap
+}
+
+/**
+ * Scan tutorial sources for ::include[] references and build a dep map.
+ * @param snippetMap - snippet key → source map
+ * @param tutorials - array of { slug, rawMd }
+ * @returns SnippetDeps: snippet key → list of dependent slugs
+ */
+export function buildSnippetDeps(
+  snippetMap: Map<string, string>,
+  tutorials: Array<{ slug: string; rawMd: string }>,
+): Record<string, string[]> {
+  const INCLUDE_RE = /::include\[([^\]]+)\]/g
+  const depsMap = new Map<string, Set<string>>()
+
+  for (const { slug, rawMd } of tutorials) {
+    if (!rawMd) continue
+
+    INCLUDE_RE.lastIndex = 0
+    let match: RegExpExecArray | null
+    while ((match = INCLUDE_RE.exec(rawMd)) !== null) {
+      const label = match[1]
+
+      // Resolve label to a snippet key using the same logic as resolveSnippetKey in include.ts
+      let key: string
+      if (label.startsWith('shared:')) {
+        // shared: prefix → shared/<name>
+        key = 'shared/' + label.slice(7)
+      } else if (snippetMap.has(label)) {
+        // Exact key match
+        key = label
+      } else {
+        // Suffix match: find a key ending with /_snippets/<label>
+        const suffix = `/_snippets/${label}`
+        const found = [...snippetMap.keys()].find(k => k.endsWith(suffix))
+        key = found ?? label
+      }
+
+      // Add slug to the dep set for this key (deduplicates automatically)
+      let slugSet = depsMap.get(key)
+      if (!slugSet) {
+        slugSet = new Set<string>()
+        depsMap.set(key, slugSet)
+      }
+      slugSet.add(slug)
+    }
+  }
+
+  // Convert Map<string, Set<string>> → Record<string, string[]>
+  const result: Record<string, string[]> = {}
+  for (const [key, slugSet] of depsMap) {
+    result[key] = [...slugSet]
+  }
+  return result
+}
+
+// ---------------------------------------------------------------------------
+// Help title cache
+// ---------------------------------------------------------------------------
+
+const HELP_TITLE_CACHE_FILE = join(CACHE_DIR, 'help-title-cache.json')
+const HELP_TITLE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+const HELP_FETCH_CONCURRENCY = 5
+const HELP_FETCH_TIMEOUT_MS = 10_000
+const HELP_BASE_URL = 'https://help.sap.com'
+// Strip trailing " | SAP Help Portal" or any " | ..." suffix
+const HELP_TITLE_SUFFIX_RE = /\s*\|.*$/
+
+type HelpTitleEntry = { title: string; ts: number }
+
+function loadHelpTitleCache(): Record<string, HelpTitleEntry> {
+  try {
+    if (existsSync(HELP_TITLE_CACHE_FILE)) {
+      return JSON.parse(readFileSync(HELP_TITLE_CACHE_FILE, 'utf-8'))
+    }
+  } catch {
+    // corrupt cache — start fresh
+  }
+  return {}
+}
+
+function saveHelpTitleCache(cache: Record<string, HelpTitleEntry>): void {
+  try {
+    mkdirSync(CACHE_DIR, { recursive: true })
+    writeFileSync(HELP_TITLE_CACHE_FILE, JSON.stringify(cache, null, 2), 'utf-8')
+  } catch {
+    // non-fatal — title lookups degrade gracefully
+  }
+}
+
+function extractHtmlTitle(html: string): string | null {
+  const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
+  if (!m) return null
+  return m[1].replace(HELP_TITLE_SUFFIX_RE, '').trim() || null
+}
+
+/**
+ * Fetch page titles for a list of help.sap.com relative paths.
+ *
+ * Results are cached on disk for 7 days at `.tutorial-cache/help-title-cache.json`.
+ * On any network error or non-200 response, the path itself is used as the title
+ * so callers always receive a complete map (fail-open).
+ *
+ * Concurrency is capped at 5 parallel requests; each request has a 10 s timeout.
+ *
+ * @param paths  - help.sap.com relative paths, e.g. `/docs/BTP/cloud-foundry/overview`
+ * @param _token - GitHub token (reserved for future auth if SAP ever gates the endpoint)
+ * @returns Map of path → resolved title
+ */
+export async function fetchHelpTitles(
+  paths: string[],
+  _token: string,
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>()
+  if (paths.length === 0) return result
+
+  const cache = loadHelpTitleCache()
+  const now = Date.now()
+
+  // Partition: already cached vs. needs fetch
+  const toFetch: string[] = []
+  for (const p of paths) {
+    const entry = cache[p]
+    if (entry && now - entry.ts < HELP_TITLE_CACHE_TTL_MS) {
+      result.set(p, entry.title)
+    } else {
+      toFetch.push(p)
+    }
+  }
+
+  if (toFetch.length === 0) return result
+
+  // Semaphore-based concurrency limiter
+  let active = 0
+  let idx = 0
+  const pending = new Map<string, Promise<void>>()
+
+  async function fetchOne(path: string): Promise<void> {
+    const url = `${HELP_BASE_URL}${path}`
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), HELP_FETCH_TIMEOUT_MS)
+    let title: string = path // fail-open default
+    try {
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'tutorials-ims-bot/1.0' },
+      })
+      if (res.ok) {
+        const html = await res.text()
+        title = extractHtmlTitle(html) ?? path
+      }
+    } catch {
+      // network error or timeout — use path as title
+    } finally {
+      clearTimeout(timer)
+    }
+    result.set(path, title)
+    cache[path] = { title, ts: Date.now() }
+  }
+
+  // Dispatch up to HELP_FETCH_CONCURRENCY tasks at a time
+  await new Promise<void>((resolve) => {
+    function dispatch(): void {
+      while (active < HELP_FETCH_CONCURRENCY && idx < toFetch.length) {
+        const path = toFetch[idx++]
+        active++
+        const p = fetchOne(path).then(() => {
+          active--
+          pending.delete(path)
+          dispatch()
+          if (active === 0 && idx >= toFetch.length) resolve()
+        })
+        pending.set(path, p)
+      }
+      // Edge case: all paths were already cached when we enter (shouldn't happen here
+      // because toFetch.length > 0, but guard anyway)
+      if (active === 0) resolve()
+    }
+    dispatch()
+  })
+
+  saveHelpTitleCache(cache)
+  return result
+}

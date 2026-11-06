@@ -1,0 +1,11 @@
+{{/*
+  tut-note-ref — link to an SAP Note.
+
+  Params:
+    href  — https://me.sap.com/notes/<n>
+    label — display text (e.g. "SAP Note 2471802")
+
+  Security note: .Get uses Hugo's default HTML auto-escaping.
+  Never mark directive-supplied values as raw HTML.
+*/}}
+<a href="{{ .Get "href" }}" rel="noopener noreferrer" target="_blank">{{ .Get "label" }}</a>

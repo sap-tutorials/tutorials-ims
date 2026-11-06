@@ -1,5 +1,6 @@
-{{ $index := .Get "index" }}
-{{ $name := .Get "name" }}
-<div class="tab-panel" data-tab-panel="{{ $index }}" data-tab-name="{{ $name }}"{{ if ne $index "0" }} hidden{{ end }}>
+{{- $index := .Get "index" -}}
+{{- $name := .Get "name" -}}
+{{- $syncValue := .Get "syncValue" -}}
+<div class="tab-panel" id="tabpanel-{{ $index }}" role="tabpanel" aria-labelledby="tab-{{ $index }}" data-tab-panel="{{ $index }}" data-tab-name="{{ $name }}"{{ if $syncValue }} data-sync-value="{{ $syncValue }}"{{ end }}{{ if ne $index "0" }} hidden{{ end }}>
   {{ .Inner }}
 </div>

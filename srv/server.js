@@ -32,7 +32,7 @@ import { decideHandler } from './lib/branch/decide.js';
 import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
-import { contentAuthMiddleware, publishHandler, serveHandler, markdownServeHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, excludedSlugsHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler, quarantineIngestHandler } from './lib/content-store.js';
+import { contentAuthMiddleware, publishHandler, serveHandler, markdownServeHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, excludedSlugsHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler, quarantineIngestHandler, snippetDepsHandler } from './lib/content-store.js';
 import { imageSourceHandler } from './lib/image-source-handler.js';
 import { imageIngestHandler } from './lib/image-ingest-handler.js';
 import { attachmentSourceHandler } from './lib/attachment-source-handler.js';
@@ -819,6 +819,10 @@ cds.on('bootstrap', (app) => {
   // contributors/validation-rules whose stored content is already current.
   app.get('/content/contributor-hashes', contributorHashesHandler);
   app.get('/content/validation-rule-hashes', validationRuleHashesHandler);
+  // Snippet-deps manifest: snippet-key → [dependent slugs] map published by
+  // fetch-tutorials. The rebuild workflow reads this to expand _snippets/ file
+  // changes to the affected tutorial slugs (fail-open: returns {} when absent).
+  app.get('/content/manifest/snippet-deps', snippetDepsHandler);
   // Public, anonymous Markdown alternate of a tutorial (#agent-readiness): the
   // "machine-readable layer" agents look for. Approuter maps ^/tutorials/<slug>.md$
   // here. Registered BEFORE the wildcard serveHandler so the `.md` suffix wins;

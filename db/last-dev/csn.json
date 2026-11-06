@@ -809,6 +809,11 @@
           "type": "cds.Integer",
           "@cds.persistence.name": "STEPCOUNT"
         },
+        "optionalSteps": {
+          "type": "cds.String",
+          "length": 1000,
+          "@cds.persistence.name": "OPTIONALSTEPS"
+        },
         "redirectTo_ID": {
           "type": "cds.String",
           "length": 36,

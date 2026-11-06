@@ -37,6 +37,12 @@ export interface RenderHugoFrontmatterArgs {
    *  in Windows/macOS/Linux/BAS order. Drives the picker to show only
    *  supported platforms. Omitted/empty when hasOsOptions is false. */
   osList?: string[]
+  /** When true, page body contains at least one tut-compare shortcode. */
+  hasCompare?: boolean
+  /** When true, page body contains at least one tut-cast shortcode. */
+  hasCast?: boolean
+  /** When true, page body contains at least one sortable/filterable/sticky table. */
+  hasSortable?: boolean
   /**
    * [#655] Verbatim rules.vr source. When set + non-empty, emitted as a top-level
    * frontmatter field so Hugo's baseof.html can render
@@ -78,6 +84,37 @@ export interface RenderHugoFrontmatterArgs {
    * variables panel island. Omitted (key absent) when no variables are declared.
    */
   variables?: TutorialVariable[]
+  /**
+   * [synced-tabs] Sync keys used in this tutorial's option groups.
+   * Emitted as `syncKeysUsed: string[]` in Hugo frontmatter so the template
+   * can skip sync-group bootstrapping for tutorials without sync groups.
+   * Omitted/empty → key not emitted.
+   */
+  syncKeysUsed?: Set<string>
+  /**
+   * [synced-tabs] Custom sync group declarations forwarded from frontmatter.
+   * Emitted as `syncGroups:` so the client runtime has value→canonical
+   * mappings for non-preset keys. Omitted when empty or undefined.
+   */
+  syncGroups?: Record<string, {
+    label: string
+    values: string[]
+    aliases?: Record<string, string[]>
+    default?: string
+  }>
+  /**
+   * Author-declared tool/library versions this tutorial has been tested with.
+   * e.g. `{ "@sap/cds": "9.x", node: "22" }`.
+   * When non-empty, emitted as a YAML map in frontmatter so Hugo templates
+   * can read it via `.Params.testedWith`.
+   */
+  testedWith?: Record<string, string>
+  /**
+   * Prerequisite tutorial slugs that should be completed before this one.
+   * e.g. `['hana-cloud-tutorial-1', 'hana-cloud-tutorial-2']`.
+   * When non-empty, emitted as a YAML list in frontmatter.
+   */
+  requires?: string[]
 }
 
 export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
@@ -101,6 +138,9 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     registry,
     hasOsOptions,
     osList,
+    hasCompare,
+    hasCast,
+    hasSortable,
     rulesVrSource,
     hasAi,
     githubLogin,
@@ -109,6 +149,10 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     video,
     semaphoreMap,
     variables,
+    syncKeysUsed,
+    syncGroups,
+    testedWith,
+    requires,
   } = args
 
   const cleanTags = tags.map(t => t.replace(/\\/g, ''))
@@ -152,10 +196,17 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
       if (s.skipIf)              entry.skipIf        = s.skipIf
       if (s.skipLabel)           entry.skipLabel     = s.skipLabel
       if (s.skipReason)          entry.skipReason    = s.skipReason
+      // [tutorial-step-pacing] Per-step time/optional metadata parsed from a
+      // `{time=5m optional}` heading attribute block. Consumed by the
+      // tutorial-step.html shortcode (chip/badge/skip) and by client JS
+      // (remaining-time indicator).
+      if (s.timeSeconds !== undefined) entry.timeSeconds = s.timeSeconds
+      if (s.optional)            entry.optional      = true
       // [#2362] json-render challenge widget — the answer-stripped public spec
       // attached by fetch-tutorials' challenge pass. Must be serialized here or
       // .Params.steps[].challenge is dropped and the widget never renders.
       if (s.challenge?.nodes?.length) entry.challenge = s.challenge
+      if (s.troubleshootEntries?.length) entry.troubleshootEntries = s.troubleshootEntries
       return entry
     }),
   }
@@ -182,6 +233,16 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
 
   if (hasOsOptions) fm.hasOsOptions = true
   if (osList && osList.length) fm.osList = osList
+  if (hasCompare) fm.hasCompare = true
+  if (hasCast) fm.hasCast = true
+  if (hasSortable) fm.hasSortable = true
+
+  // [tutorial-step-pacing] Optional-step numbers, mirrored at the top level
+  // (in addition to each step's own `optional: true`) so the publish pipeline
+  // can thread `optionalSteps` straight into Tutorials without re-walking
+  // `steps` — see packages/content/content-publish-session.js.
+  const optionalSteps = steps.filter(s => s.optional).map(s => s.number)
+  if (optionalSteps.length > 0) fm.optionalSteps = optionalSteps
 
   // [#655] Preview path: pass through verbatim rules.vr source + precomputed
   // AI-involved flag so Hugo's baseof.html can emit a <script id="rules-vr-source">
@@ -196,6 +257,17 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
   if (video) fm.video = { embedUrl: video.embedUrl, title: video.title, provider: video.provider }
 
   if (variables && variables.length > 0) fm.variables = variables
+
+  // [synced-tabs] Emit sync metadata so the client runtime can bootstrap
+  // sync group state. Only emitted when the tutorial actually uses syncing.
+  if (syncKeysUsed && syncKeysUsed.size > 0) {
+    fm.syncKeysUsed = [...syncKeysUsed]
+  }
+  if (syncGroups && Object.keys(syncGroups).length > 0) {
+    fm.syncGroups = syncGroups
+  }
+  if (testedWith && Object.keys(testedWith).length > 0) fm.testedWith = testedWith
+  if (requires && requires.length > 0) fm.requires = requires
 
   const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
 

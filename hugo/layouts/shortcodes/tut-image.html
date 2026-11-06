@@ -1,0 +1,10 @@
+{{/*
+  tut-image — inline sized image via directive.
+  Params: src (resolved URL), label (alt text, auto-escaped), width, height.
+  Security: .Get values are auto-escaped. Never mark user-supplied values as raw HTML or raw URLs without explicit review.
+*/}}
+{{- $src := .Get "src" -}}
+{{- $alt := .Get "label" | default "" -}}
+{{- $width := .Get "width" -}}
+{{- $height := .Get "height" -}}
+<img src="{{ $src | safeURL }}" alt="{{ $alt }}"{{ with $width }} width="{{ . }}"{{ end }}{{ with $height }} height="{{ . }}"{{ end }} loading="lazy" decoding="async" class="tut-inline-img">

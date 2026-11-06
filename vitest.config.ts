@@ -41,12 +41,12 @@ export default defineConfig({
           name: 'unit',
           globals: true,
           environment: 'node',
-          include: ['test/**/*.test.{js,ts}', 'scripts/__tests__/**/*.test.{js,ts}', 'scripts/**/__tests__/**/*.test.{js,ts}', 'srv/**/__tests__/**/*.test.{js,ts}', 'app/analytics-explorer/src/**/__tests__/**/*.test.ts', 'app/explore/src/**/__tests__/**/*.test.ts', 'app/channel-atlas/src/**/__tests__/**/*.test.ts', 'hugo-apps/src/**/*.{test,spec}.{js,ts}', '.claude/skills/**/__tests__/**/*.test.{js,ts}'],
+          include: ['test/**/*.test.{js,mjs,ts}', 'scripts/__tests__/**/*.test.{js,mjs,ts}', 'scripts/**/__tests__/**/*.test.{js,mjs,ts}', 'srv/**/__tests__/**/*.test.{js,mjs,ts}', 'app/analytics-explorer/src/**/__tests__/**/*.test.ts', 'app/explore/src/**/__tests__/**/*.test.ts', 'app/channel-atlas/src/**/__tests__/**/*.test.ts', 'hugo-apps/src/**/*.{test,spec}.{js,ts}', '.claude/skills/**/__tests__/**/*.test.{js,mjs,ts}', 'hugo/assets/js/__tests__/**/*.test.{js,mjs,ts}'],
           // test/e2e/** is the Playwright-driven `e2e` project (below). Its
           // specs launch a real browser against a DEPLOYED approuter and would
           // hang the unit tier (which has no BASE_URL); the broad
           // `test/**/*.test.{js,ts}` include above would otherwise swallow them.
-          exclude: ['node_modules', 'gen', 'hugo', 'test/hybrid/**', 'test/hybrid-qa/**', 'test/smoke/**', 'test/e2e/**', 'test/build/**'],
+          exclude: ['node_modules', 'gen', 'hugo/content/**', 'hugo/public/**', 'hugo/static/**', 'hugo/layouts/**', 'hugo/data/**', 'hugo/themes/**', 'test/hybrid/**', 'test/hybrid-qa/**', 'test/smoke/**', 'test/e2e/**', 'test/build/**'],
           // testTimeout raised to 30s because the `test/unit/check-*.test.ts`
           // cluster spawns `npx tsx <script>` per-`it` — cold TSX + child process
           // startup on Windows can breach the vitest default (5s). Project

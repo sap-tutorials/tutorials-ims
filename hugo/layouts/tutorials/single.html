@@ -25,6 +25,8 @@
     {{ partial "tutorial-prerequisites.html" . }}
 
     {{ if not site.Params.qa }}<div id="progress-bar" data-step-count="{{ .Params.stepCount }}" data-slug="{{ .Params.slug }}"></div>{{ end }}
+    {{/* [tutorial-step-pacing] see u1-object-page.html for rationale. */}}
+    {{ if not site.Params.qa }}<span id="remaining-time" class="tutorial-remaining-time" hidden></span>{{ end }}
     {{ if not site.Params.qa }}<div id="tutorial-pip-launcher" data-slug="{{ .Params.slug }}" data-active-step="1" data-pip-src="{{ partial "island-src.html" "tutorial-pip" }}"></div>{{ end }}
 
     <div class="step-controls">
@@ -34,7 +36,7 @@
 
     {{ partial "tutorial-video.html" . }}
     <div class="tutorial-steps">{{ .Content }}</div>
-
+    {{ partial "tutorial-troubleshoot-index.html" . }}
     {{ partial "next-steps.html" . }}
     {{ partial "tutorial-nav-bottom.html" . }}
   </main>
@@ -50,6 +52,22 @@
 
 {{ $js := resources.Get "js/tutorial.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $js.RelPermalink }}" defer></script>
+{{/* [tutorial-step-pacing] see u1-object-page.html for rationale. */}}
+{{ $taskLists := resources.Get "js/task-lists.ts" | js.Build (dict "minify" true) }}
+<script src="{{ $taskLists.RelPermalink }}" defer></script>
+{{ $hints := resources.Get "js/callout-hints.ts" | js.Build (dict "minify" true) }}
+<script src="{{ $hints.RelPermalink }}" defer></script>
+{{- if .Params.hasWalkthrough -}}
+{{ $wt := resources.Get "js/code-walkthrough.ts" | js.Build (dict "minify" true) }}
+<script src="{{ $wt.RelPermalink }}" defer></script>
+{{- end -}}
+{{/* kbd-os.ts: swap <kbd data-kbd> labels to match the active OS preference.
+     Loaded unconditionally on all tutorial pages (every tutorial may contain
+     :kbd directives) unless we are in preview mode. */}}
+{{ if not site.Params.previewMode }}
+{{ $kbdOs := resources.Get "js/kbd-os.ts" | js.Build (dict "minify" true) }}
+<script src="{{ $kbdOs.RelPermalink }}" defer></script>
+{{ end }}
 <script type="module" src="{{ partial "island-src.html" "nav-dropdown" }}"></script>
 {{ if not site.Params.qa }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip-launcher" }}"></script>{{ end }}
 {{ end }}

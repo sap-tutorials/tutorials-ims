@@ -903,6 +903,7 @@
       if (trigger) trigger.remove();
       if (stepFab) stepFab.remove();
       if (embedJouleBtn) embedJouleBtn.remove();
+      document.querySelectorAll('.tut-ask').forEach(btn => btn.remove());
       return;
     }
     if (trigger) trigger.hidden = false;
@@ -922,6 +923,22 @@
       // accounted for the always-present fixed bar, so the overlap recurred
       // whenever the user was not scrolled to the very bottom of the page.
     }
+    // Wire .tut-ask[data-prompt] buttons: reveal + attach delegated click listener
+    // so pressing "Ask Joule" on a :ask directive opens Joule pre-loaded with the
+    // step context and the directive's prompt string. Uses event delegation so
+    // buttons that are dynamically inserted (e.g. via Hugo island hydration) are
+    // also covered without a MutationObserver.
+    document.querySelectorAll('.tut-ask[data-prompt]').forEach(btn => {
+      btn.hidden = false;
+    });
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('.tut-ask[data-prompt]');
+      if (!btn) return;
+      const ctx = (typeof window.opGetCurrentStep === 'function')
+        ? window.opGetCurrentStep()
+        : { slug: '', n: 1, heading: '' };
+      window.joule.openWithStepContext({ ...ctx, prompt: btn.dataset.prompt });
+    });
     if (cfg.bannerText) { banner.textContent = cfg.bannerText; banner.hidden = false; }
 
     // Auto-open after login redirect: _openImpl() appends ?joule=open to returnTo,

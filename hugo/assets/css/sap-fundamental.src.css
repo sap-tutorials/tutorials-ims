@@ -907,6 +907,100 @@ blockquote.alert-caution {
   background-color: var(--sapErrorBackground, #ffeaf4);
 }
 
+/* ── Callout enhancements (#callout-enhancements) ─────────────────────────
+   Icons, titles, collapsible types, spoiler, print rules.                 */
+
+/* Shared aside/details reset so .alert-* rules apply identically          */
+aside.alert, details.alert {
+  border-left: 4px solid var(--sapInformationBorderColor, #0070f2);
+  background-color: var(--sapInformationBackground, #e1f4ff);
+  padding: 0.75rem 1rem;
+  border-radius: 0 0.25rem 0.25rem 0;
+  color: var(--sapTextColor, #32363a);
+  margin: 1rem 0;
+}
+
+/* Icon + type label layout */
+.alert__icon { margin-right: 0.375rem; font-size: 1rem; vertical-align: middle; }
+.alert__title { font-weight: 600; margin-bottom: 0.25rem; }
+.alert__body > :first-child { margin-top: 0; }
+.alert__body > :last-child  { margin-bottom: 0; }
+
+/* Summary row for collapsible alerts */
+details.alert > summary.alert__summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  padding: 0;
+  margin: 0;
+}
+details.alert > summary.alert__summary::-webkit-details-marker { display: none; }
+details.alert > summary.alert__summary::marker { display: none; }
+details.alert > summary.alert__summary::before {
+  content: '▶';
+  font-size: 0.65rem;
+  margin-right: 0.5rem;
+  transition: transform 0.15s;
+  display: inline-block;
+}
+details.alert[open] > summary.alert__summary::before { transform: rotate(90deg); }
+details.alert > .alert__body { margin-top: 0.5rem; }
+
+/* New type colors (aside + details variants) */
+aside.alert-result, details.alert-result {
+  border-left-color: var(--sapSuccessBorderColor, #30914c);
+  background-color: var(--sapSuccessBackground, #f5fae5);
+}
+aside.alert-details, details.alert-details {
+  border-left-color: var(--sapNeutralBorderColor, #8696a9);
+  background-color: var(--sapNeutralBackground, #f2f2f2);
+}
+aside.alert-troubleshoot, details.alert-troubleshoot {
+  border-left-color: var(--sapWarningBorderColor, #dd6100);
+  background-color: var(--sapWarningBackground, #fff8d6);
+}
+aside.alert-hint, details.alert-hint {
+  border-left-color: var(--sapInformationBorderColor, #0070f2);
+  background-color: var(--sapInformationBackground, #e1f4ff);
+}
+aside.alert-solution, details.alert-solution {
+  border-left-color: var(--sapSuccessBorderColor, #30914c);
+  background-color: var(--sapSuccessBackground, #f5fae5);
+}
+
+/* Spoiler inline element */
+.tut-spoiler {
+  background-color: currentColor;
+  color: transparent;
+  border-radius: 0.2em;
+  cursor: pointer;
+  user-select: none;
+  padding: 0 0.15em;
+  transition: color 0.2s, background-color 0.2s;
+}
+.tut-spoiler:focus-visible { outline: 2px solid var(--sapFocusColor, #0070f2); }
+.tut-spoiler[aria-pressed="true"] {
+  background-color: transparent;
+  color: inherit;
+}
+
+/* Progressive reveal: hint N+1 disabled until hint N opened */
+details.alert-hint[data-hint-disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+details.alert-hint[data-hint-disabled] > summary { pointer-events: none; }
+
+/* Print: force all collapsible alerts open */
+@media print {
+  details.alert { display: block; }
+  details.alert > summary.alert__summary { display: block; }
+  details.alert > .alert__body { display: block; }
+  .tut-spoiler { background-color: transparent !important; color: inherit !important; }
+}
+
 /* Tutorial meta bar (tags + time) */
 .tutorial-meta {
   display: flex;
@@ -1259,6 +1353,33 @@ ui5-li .step-badge-row {
   line-height: 1.3;
 }
 
+/* [tutorial-step-pacing] Per-step time chip + Optional badge, rendered by
+   hugo/layouts/shortcodes/tutorial-step.html next to the step title. */
+.step-time-chip,
+.step-optional-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.0625rem 0.5rem;
+  border-radius: 999px;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+.step-time-chip {
+  background: var(--sapInfobar_Background, var(--sapList_Background, #f5f6f7));
+  color: var(--sapContent_LabelColor, #556b82);
+  border: 1px solid var(--sapList_BorderColor, #e5e5e5);
+}
+
+.step-optional-badge {
+  background: var(--sapWarningBackground, #fef7f1);
+  color: var(--sapWarningColor, #e76500);
+  border: 1px solid var(--sapWarningBorderColor, #e9730c);
+}
+
 .step-toggle-icon {
   font-size: 1.25rem;
   font-weight: 400;
@@ -1346,7 +1467,7 @@ ui5-li .step-badge-row {
  */
 .step-content > .os-options,
 .step-content > .option-tabs,
-.step-content > blockquote.alert,
+.step-content > :is(blockquote, aside, details).alert,
 /* #2820 — the OPTION group also detaches the PROSE/IMAGE/code that trails it
  * within the same substep (e.g. "Set the install directory…", the install
  * screenshot). Those land as column-0 direct children of .step-content after
@@ -1358,12 +1479,12 @@ ui5-li .step-badge-row {
 .step-content > .os-options ~ figure,
 .step-content > .os-options ~ pre,
 .step-content > .os-options ~ .code-block,
-.step-content > .os-options ~ blockquote,
+.step-content > .os-options ~ :is(blockquote, aside, details),
 .step-content > .option-tabs ~ p,
 .step-content > .option-tabs ~ figure,
 .step-content > .option-tabs ~ pre,
 .step-content > .option-tabs ~ .code-block,
-.step-content > .option-tabs ~ blockquote {
+.step-content > .option-tabs ~ :is(blockquote, aside, details) {
   /* #2820 — tutorial code fences render as `<div class="code-block">` (the
    * `<pre>` is nested inside, so the `~ pre` entry above never matches them);
    * a code box that TRAILS an OPTION group within the same substep must get
@@ -1466,6 +1587,46 @@ ui5-li .step-badge-row {
   color: #fff;
   cursor: default;
   opacity: 1;
+}
+
+/* [tutorial-step-pacing] Checklist "all checked" emphasis — visual nudge
+   only, never auto-marks the step done (design D4 "All checked" scenario). */
+.step-actions button.is-checklist-complete:not(.is-completed) {
+  box-shadow: 0 0 0 2px var(--sapPositiveColor, #30914c);
+}
+
+.tutorial-step.skipped .step-header {
+  opacity: 0.6;
+}
+
+/* Interactive checklists (task-lists.ts) */
+.task-list-counter {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--sapContent_LabelColor, #556b82);
+  margin: 0.5rem 0 0.25rem;
+}
+
+.step-content li.task-list-item {
+  list-style: none;
+  margin-left: -1.5rem;
+}
+
+.step-content li.task-list-item .task-list-checkbox {
+  margin-right: 0.5rem;
+}
+
+.step-content li.task-list-item .task-list-item-label {
+  cursor: pointer;
+}
+
+/* [tutorial-step-pacing] Remaining-time indicator — populated + shown by
+   tutorial.ts's updateRemainingTime(); hidden by default in markup. */
+.op-chip--remaining-time,
+.tutorial-remaining-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .step-validation-mount:empty {
@@ -2779,6 +2940,44 @@ html.dark .code-block-body .chroma .err {
   color: inherit;
   background-color: transparent;
 }
+
+/* Console blocks — prompt/output/continuation line styling */
+.cl-out { opacity: 0.5; user-select: none; }
+.cl-cmd { /* default: inherit */ }
+.cl-cont { padding-left: 1.5em; }
+html.dark .cl-out { opacity: 0.4; }
+
+/* Diff markers */
+.diff-added  { background: rgba(0,200,80,.12); display: block; }
+.diff-removed { background: rgba(220,50,50,.12); display: block; text-decoration: line-through; opacity: .6; }
+.diff-highlight { background: rgba(200,160,0,.12); display: block; }
+.diff-legend { font-size: .75em; opacity: .6; margin-left: auto; padding-right: .25rem; }
+/* Focus: dim all lines until block is hovered */
+.code-block-body:has(.diff-focus):not(:hover) .line:not(.diff-focus) { opacity: .35; }
+html.dark .diff-added  { background: rgba(0,200,80,.18); }
+html.dark .diff-removed { background: rgba(220,50,50,.18); }
+html.dark .diff-highlight { background: rgba(200,160,0,.18); }
+
+/* Tree fences */
+[data-tree] [role="tree"] { list-style: none; padding-left: 0; margin: 0; font-family: var(--sapFontCodeFamily, monospace); font-size: .9em; }
+[data-tree] [role="treeitem"] { display: block; padding: .1rem 0; white-space: pre; }
+.tree-new      { color: var(--sapPositiveColor, #256f3a); }
+.tree-modified { color: var(--sapInformativeColor, #0064d9); }
+.tree-deleted  { color: var(--sapNegativeColor, #aa0808); opacity: .65; text-decoration: line-through; }
+.tree-annotation { opacity: .55; font-size: .85em; margin-left: .75rem; font-style: italic; }
+
+/* Walkthrough directive */
+.tut-walkthrough { display: grid; grid-template-columns: 1fr; gap: 1rem; margin: 1.5rem 0; }
+@media (min-width: 1024px) {
+  .tut-walkthrough { grid-template-columns: 1fr 1fr; align-items: start; }
+  .tut-walkthrough-code { position: sticky; top: 4rem; }
+}
+.tut-walkthrough-notes ol, .tut-walkthrough-notes ul { padding-left: 1.25rem; }
+.tut-walkthrough-notes li { cursor: pointer; padding: .25rem .5rem; border-radius: .25rem; transition: background .15s; }
+.tut-walkthrough-notes li.wt-active,
+.tut-walkthrough-notes li:hover { background: var(--sapHighlightColor, #0064d9); color: #fff; }
+.wt-hl { background: rgba(0,100,220,.15); display: block; }
+html.dark .wt-hl { background: rgba(100,180,255,.2); }
 
 /* Chroma readability overrides (dark mode).
  * Hugo's `gen chromastyles --style=github-dark` emits empty rules for

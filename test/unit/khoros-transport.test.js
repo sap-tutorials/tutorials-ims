@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildKhorosUrl, validateApiQuery, itemsToRssXml, khorosFetch } from '../../srv/lib/khoros-transport.js';
 import { parseRss } from '../../srv/lib/rss-parse.js';
+import { _primeForTests, _resetForTests } from '../../srv/lib/secret-resolver.js';
 import { vi, afterEach } from 'vitest';
 
 describe('buildKhorosUrl', () => {
@@ -133,7 +134,7 @@ describe('itemsToRssXml → parseRss round-trip', () => {
 });
 
 describe('khorosFetch', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); _resetForTests(); });
   it('fetches JSON and returns a Response-shaped object whose text() is RSS XML', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true, status: 200,
@@ -165,5 +166,52 @@ describe('khorosFetch', () => {
     const res = await khorosFetch('https://community.sap.com/api/2.0/search?q=x');
     expect(res.status).toBe(200);
     expect(parseRss(await res.text())).toEqual([]);
+  });
+
+  it('sends the x-khoros-api-access header when KHOROS_API_TOKEN resolves (#3011)', async () => {
+    _primeForTests('KHOROS_API_TOKEN', 'secret-tok-123');
+    const spy = vi.fn(async () => ({
+      ok: true, status: 200,
+      json: async () => KHOROS_FIXTURE,
+      text: async () => JSON.stringify(KHOROS_FIXTURE),
+    }));
+    vi.stubGlobal('fetch', spy);
+    await khorosFetch('https://community.sap.com/api/2.0/search?q=x');
+    expect(spy).toHaveBeenCalledTimes(1);
+    const init = spy.mock.calls[0][1];
+    expect(init.headers['x-khoros-api-access']).toBe('secret-tok-123');
+  });
+
+  it('preserves caller-supplied headers while adding the token header (#3011)', async () => {
+    _primeForTests('KHOROS_API_TOKEN', 'secret-tok-123');
+    const spy = vi.fn(async () => ({
+      ok: true, status: 200,
+      json: async () => KHOROS_FIXTURE,
+      text: async () => JSON.stringify(KHOROS_FIXTURE),
+    }));
+    vi.stubGlobal('fetch', spy);
+    await khorosFetch('https://community.sap.com/api/2.0/search?q=x', {
+      headers: { 'User-Agent': 'ua', Accept: 'application/xml' },
+    });
+    const init = spy.mock.calls[0][1];
+    expect(init.headers['x-khoros-api-access']).toBe('secret-tok-123');
+    expect(init.headers['User-Agent']).toBe('ua');
+    expect(init.headers.Accept).toBe('application/xml');
+  });
+
+  it('omits the x-khoros-api-access header when no token resolves (fail-open, #3011)', async () => {
+    _resetForTests(); // clear cache
+    delete process.env.KHOROS_API_TOKEN; // and the env fallback so no token resolves
+    const spy = vi.fn(async () => ({
+      ok: false, status: 403,
+      json: async () => ({}), text: async () => 'blocked',
+    }));
+    vi.stubGlobal('fetch', spy);
+    await khorosFetch('https://community.sap.com/api/2.0/search?q=x', {
+      headers: { 'User-Agent': 'ua' },
+    });
+    const init = spy.mock.calls[0][1];
+    expect(init.headers['x-khoros-api-access']).toBeUndefined();
+    expect(init.headers['User-Agent']).toBe('ua'); // caller headers still pass through
   });
 });

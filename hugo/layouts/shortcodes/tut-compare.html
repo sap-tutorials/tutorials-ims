@@ -1,0 +1,22 @@
+{{/*
+  tut-compare — before/after image comparison slider.
+  Params: before (resolved URL), after (resolved URL), labels (optional, pipe-separated: "Old|New").
+  Security: .Get values are auto-escaped by Hugo. Use safeURL only for image src values.
+  Never mark as raw HTML.
+*/}}
+{{- $before := .Get "before" -}}
+{{- $after := .Get "after" -}}
+{{- $labels := .Get "labels" | default "" -}}
+{{- $labelParts := split $labels "|" -}}
+{{- $labelBefore := "Before" -}}{{- $labelAfter := "After" -}}
+{{- if and $labels (ge (len $labelParts) 1) -}}{{- $labelBefore = index $labelParts 0 -}}{{- end -}}
+{{- if and $labels (ge (len $labelParts) 2) -}}{{- $labelAfter = index $labelParts 1 -}}{{- end -}}
+<div class="tut-compare" data-compare data-labels="{{ $labels }}">
+  <div class="tut-compare__images">
+    <img class="tut-compare__before" src="{{ $before | safeURL }}" alt="{{ $labelBefore }}" loading="lazy">
+    <div class="tut-compare__after-wrap">
+      <img class="tut-compare__after" src="{{ $after | safeURL }}" alt="{{ $labelAfter }}" loading="lazy">
+    </div>
+  </div>
+  <input type="range" min="0" max="100" value="50" class="tut-compare__slider" aria-label="Compare before and after">
+</div>
