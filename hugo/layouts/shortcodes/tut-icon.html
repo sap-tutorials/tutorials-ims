@@ -1,0 +1,20 @@
+{{/*
+  tut-icon — renders a UI5 icon with accessible name.
+
+  Consumes:
+    name  — UI5 icon name (e.g. "settings", "add", "search")
+    label — accessible name for screen readers
+
+  Produces: <ui5-icon> web component styled as inline icon.
+
+  Usage (inline/leaf):
+    {{< tut-icon name="settings" label="Settings" >}}
+
+  Note: ui5-icon requires the @ui5/webcomponents-icons package, which is
+  already loaded in this project's UI5 bundle.
+
+  Print media: hidden via @media print in directives-ui.css.
+
+  Security note: .Get uses Hugo's default HTML auto-escaping.
+*/}}
+<ui5-icon name="{{ .Get "name" }}" accessible-name="{{ .Get "label" }}" class="tut-icon"></ui5-icon>

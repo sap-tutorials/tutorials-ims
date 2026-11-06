@@ -1,0 +1,19 @@
+{{/*
+  tut-kbd — renders a keyboard shortcut with OS-specific variants.
+
+  Consumes:
+    label  — raw label like "Mod+S" (informational, not rendered directly)
+    win    — pre-formatted Windows form, e.g. "Ctrl+S" (rendered as default)
+    mac    — pre-formatted Mac form, e.g. "⌘S"
+    linux  — pre-formatted Linux form, e.g. "Ctrl+S"
+
+  Produces: <kbd> element with data-kbd hook for kbd-os.ts (Task 3).
+  The Windows form is the no-JS default; kbd-os.ts swaps content at runtime
+  based on the detected OS using data-win/data-mac/data-linux attributes.
+
+  Usage (inline/leaf):
+    {{< tut-kbd label="Mod+S" win="Ctrl+S" mac="⌘S" linux="Ctrl+S" >}}
+
+  Security note: .Get uses Hugo's default HTML auto-escaping.
+*/}}
+<kbd class="tut-kbd" data-kbd data-win="{{ .Get "win" }}" data-mac="{{ .Get "mac" }}" data-linux="{{ .Get "linux" }}" aria-label="{{ .Get "win" }}">{{ .Get "win" }}</kbd>

@@ -581,6 +581,14 @@
 {{- $castJs := resources.Get "js/cast.ts" | js.Build (dict "minify" true) -}}
 <script src="{{ $castJs.RelPermalink }}" defer></script>
 {{- end }}
+{{/* kbd-os.ts: swap <kbd data-kbd> labels to match the active OS preference.
+     Loaded unconditionally on all tutorial pages (every tutorial may contain
+     :kbd directives) unless we are in QA/preview mode where the authoring
+     chrome doesn't run client-side OS detection. */}}
+{{ if not site.Params.previewMode }}
+{{ $kbdOs := resources.Get "js/kbd-os.ts" | js.Build (dict "minify" true) }}
+<script src="{{ $kbdOs.RelPermalink }}" defer></script>
+{{ end }}
 <script type="module" src="{{ partial "island-src.html" "nav-dropdown" }}"></script>
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip-launcher" }}"></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="{{ partial "island-src.html" "tutorial-rating" }}" defer></script>{{ end }}

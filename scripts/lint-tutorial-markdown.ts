@@ -33,6 +33,8 @@ import { authorNameWithoutProfileRule } from './lint-rules/author-name-without-p
 import { directiveUnknownRule } from './lint-rules/directive-unknown'
 import { deprecatedCliRule } from './lint-rules/deprecated-cli.js'
 import { authorNotesInProdRule, qaOnlyInProdRule } from './lint-rules/authoring-aids.js'
+import { directiveSuggestUiRule } from './lint-rules/directive-suggest-ui'
+import { directiveSuggestKbdRule } from './lint-rules/directive-suggest-kbd'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..')
@@ -207,7 +209,7 @@ const fenceIndentDiscipline: Rule = {
   },
 }
 
-const RULES: Rule[] = [indentedNumberedListItem, fenceIndentDiscipline, iframeNonAllowlistedHostRule, authorNameWithoutProfileRule, directiveUnknownRule, deprecatedCliRule, authorNotesInProdRule, qaOnlyInProdRule]
+const RULES: Rule[] = [indentedNumberedListItem, fenceIndentDiscipline, iframeNonAllowlistedHostRule, authorNameWithoutProfileRule, directiveUnknownRule, deprecatedCliRule, authorNotesInProdRule, qaOnlyInProdRule, directiveSuggestUiRule, directiveSuggestKbdRule]
 
 /**
  * Rule: branch-syntax (issue #172 PR 3).

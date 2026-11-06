@@ -66,6 +66,7 @@
 {{ $lightbox := resources.Get "css/lightbox.css" | minify | fingerprint }}
 {{ $skeletons := resources.Get "css/skeletons.css" | minify | fingerprint }}
 {{ $missionSideNav := resources.Get "css/mission-side-nav.css" | minify | fingerprint }}
+{{ $directivesUi := resources.Get "css/directives-ui.css" | minify | fingerprint }}
 <link rel="stylesheet" href="{{ $themeVars.RelPermalink }}">
 <link rel="stylesheet" href="{{ $darkVars.RelPermalink }}">
 <link rel="stylesheet" href="{{ $chromaLight.RelPermalink }}">
@@ -86,6 +87,7 @@
 <link rel="stylesheet" href="{{ $skeletons.RelPermalink }}">
 <link rel="stylesheet" href="{{ $missionSideNav.RelPermalink }}">
 {{ if site.Params.qa }}{{ $qaAuthoring := resources.Get "css/qa-authoring.css" | minify | fingerprint }}<link rel="stylesheet" href="{{ $qaAuthoring.RelPermalink }}">{{ end }}
+<link rel="stylesheet" href="{{ $directivesUi.RelPermalink }}">
 <script>
   const t = localStorage.getItem('theme') ||
     (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
