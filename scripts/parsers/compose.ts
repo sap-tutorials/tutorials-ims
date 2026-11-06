@@ -220,6 +220,8 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     slug: opts.slug,
     variables: tutorialVariables,
     channel,
+    repo: opts.repo,
+    branch: opts.branch,
   })
 
   // [#1637] Prerequisites bypassed the body's image-URL rewriter and, because

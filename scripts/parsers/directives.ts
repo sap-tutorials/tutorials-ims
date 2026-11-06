@@ -696,6 +696,8 @@ export interface ExpandDirectivesContext {
   variables?: Array<{ name: string }>;
   registry?: ReadonlyMap<string, DirectiveDef>;
   channel?: string;
+  repo?: string;
+  branch?: string;
 }
 
 /**
@@ -862,7 +864,7 @@ export function expandDirectives(body: string, ctx: ExpandDirectivesContext): st
     const def = registry.get(node.name);
     if (!def) continue;
 
-    const output = def.render(node, { slug: ctx.slug, variables: ctx.variables, channel: ctx.channel });
+    const output = def.render(node, { slug: ctx.slug, variables: ctx.variables, channel: ctx.channel, repo: ctx.repo, branch: ctx.branch });
     const rendered = buildShortcode(node, output);
     const lineIdx = node.line - 1; // 0-based
 

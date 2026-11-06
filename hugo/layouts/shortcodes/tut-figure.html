@@ -1,0 +1,12 @@
+{{/*
+  tut-figure — figure container with auto-numbered caption.
+  label = caption text (inline markdown, pre-escaped by framework).
+  Params: width (optional CSS value), align (optional: left/center/right), columns (optional integer).
+  Security: .Get values are auto-escaped by Hugo. Never apply safeHTML.
+*/}}
+{{- $width := .Get "width" -}}
+{{- $align := .Get "align" | default "center" -}}
+<figure class="tut-figure"{{ with $width }} style="max-width:{{ . }}"{{ end }} data-figure-align="{{ $align }}">
+  <div class="tut-figure__images">{{ .Inner }}</div>
+  {{ with .Get "label" }}<figcaption class="tut-figure__caption"><span class="tut-figure__num" aria-hidden="true"></span>{{ . }}</figcaption>{{ end }}
+</figure>
