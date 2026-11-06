@@ -24,6 +24,7 @@ import { expandDirectives } from './directives.js'
 import { stripAuthorNotes } from './author-notes.js'
 import './directives/qa-only.js' // side-effect: registers qa-only directive
 import './directives/callout-directives.js' // side-effect: registers callout container + spoiler directives
+import './directives/index.js' // side-effect: registers rich-media directive barrel
 
 /**
  * Normalize line endings to LF. Catches CRLF (Windows / GitHub-via-Windows-
