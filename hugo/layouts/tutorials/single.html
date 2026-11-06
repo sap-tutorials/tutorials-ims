@@ -61,6 +61,13 @@
 {{ $wt := resources.Get "js/code-walkthrough.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $wt.RelPermalink }}" defer></script>
 {{- end -}}
+{{/* kbd-os.ts: swap <kbd data-kbd> labels to match the active OS preference.
+     Loaded unconditionally on all tutorial pages (every tutorial may contain
+     :kbd directives) unless we are in preview mode. */}}
+{{ if not site.Params.previewMode }}
+{{ $kbdOs := resources.Get "js/kbd-os.ts" | js.Build (dict "minify" true) }}
+<script src="{{ $kbdOs.RelPermalink }}" defer></script>
+{{ end }}
 <script type="module" src="{{ partial "island-src.html" "nav-dropdown" }}"></script>
 {{ if not site.Params.qa }}<script type="module" src="{{ partial "island-src.html" "tutorial-pip-launcher" }}"></script>{{ end }}
 {{ end }}
