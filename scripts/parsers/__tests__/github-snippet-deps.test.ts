@@ -18,7 +18,9 @@ describe('buildSnippetDeps', () => {
     expect(deps['myrepo/_snippets/step.md']).toHaveLength(2)
   })
 
-  it('resolves shared: prefix', () => {
+  it('resolves shared: prefix (key without .md, matching fetchSnippets output)', () => {
+    // fetchSnippets strips .md from shared/ keys: 'shared/cf-cli.md' → 'shared/cf-cli'
+    // ::include[shared:cf-cli] → resolveSnippetKey → 'shared/cf-cli' → found
     const snippetMap = new Map([['shared/cf-cli', 'content']])
     const tutorials = [{ slug: 'tut-a', rawMd: '::include[shared:cf-cli]' }]
     const deps = buildSnippetDeps(snippetMap, tutorials)
@@ -47,4 +49,13 @@ describe('buildSnippetDeps', () => {
     const deps = buildSnippetDeps(snippetMap, tutorials)
     expect(Object.keys(deps)).toHaveLength(0)
   })
+
+  it('does NOT match single-colon :include (only double-colon ::include)', () => {
+    // :include[x] in e.g. a code example or text must not be treated as a directive
+    const snippetMap = new Map([['r/_snippets/s.md', 'content']])
+    const tutorials = [{ slug: 'tut-a', rawMd: 'some text :include[s.md] end' }]
+    const deps = buildSnippetDeps(snippetMap, tutorials)
+    expect(Object.keys(deps)).toHaveLength(0)
+  })
 })
+

@@ -1064,7 +1064,12 @@ export async function fetchSnippets(
       const mdFiles = entries.filter(e => e.type === 'file' && e.name.endsWith('.md'))
 
       // Determine the map key prefix for this repo.
-      const prefix = repo === SHARED_REPO ? 'shared/' : `${repo}/_snippets/`
+      // Shared repo: strip the .md extension from the key so that
+      // ::include[shared:cf-cli] (label without extension) resolves to 'shared/cf-cli'.
+      // Per-repo: keep the .md extension so that ::include[step.md] (label with extension)
+      // suffix-matches 'myrepo/_snippets/step.md'.
+      const isShared = repo === SHARED_REPO
+      const prefix = isShared ? 'shared/' : `${repo}/_snippets/`
 
       // Cache directory for this repo's snippets.
       const repoCacheDir = join(CACHE_DIR, 'snippets', repo)
@@ -1108,7 +1113,13 @@ export async function fetchSnippets(
           }
 
           // LF-normalize and insert into the map.
-          snippetMap.set(`${prefix}${entry.name}`, content.replace(/\r\n?/g, '\n'))
+          // For shared snippets: strip the .md extension from the key so authors can
+          // write ::include[shared:cf-cli] without the extension (matching the label
+          // convention). For per-repo snippets: keep .md so ::include[step.md] matches.
+          const keyName = isShared && entry.name.endsWith('.md')
+            ? entry.name.slice(0, -3)
+            : entry.name
+          snippetMap.set(`${prefix}${keyName}`, content.replace(/\r\n?/g, '\n'))
         } catch (fileErr) {
           console.warn(`  [snippets] ${repo}/${entry.name}: error — ${fileErr instanceof Error ? fileErr.message : String(fileErr)}`)
         }
@@ -1132,7 +1143,7 @@ export function buildSnippetDeps(
   snippetMap: Map<string, string>,
   tutorials: Array<{ slug: string; rawMd: string }>,
 ): Record<string, string[]> {
-  const INCLUDE_RE = /:?:include\[([^\]]+)\]/g
+  const INCLUDE_RE = /::include\[([^\]]+)\]/g
   const depsMap = new Map<string, Set<string>>()
 
   for (const { slug, rawMd } of tutorials) {

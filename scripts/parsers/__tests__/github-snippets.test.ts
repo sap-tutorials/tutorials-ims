@@ -62,7 +62,7 @@ describe('fetchSnippets', () => {
     }) as any
     const { fetchSnippets } = await import('../github.js')
     const result = await fetchSnippets(['hana-cloud-tutorial'], 'token')
-    expect(result.has('shared/cf-cli.md')).toBe(true)
+    expect(result.has('shared/cf-cli')).toBe(true)
     delete process.env.SNIPPETS_ENABLED_REPOS
   })
 })

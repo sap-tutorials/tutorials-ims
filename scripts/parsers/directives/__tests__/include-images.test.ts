@@ -27,9 +27,10 @@ describe('::include image URL rewriting', () => {
   })
 
   it('rewrites shared snippet image to tutorial-snippets repo base URL', () => {
-    const snippetMap = new Map([['shared/setup.md', '![logo](logo.png)']])
+    // Shared snippet keys have .md stripped (matching the ::include[shared:name] label convention)
+    const snippetMap = new Map([['shared/setup', '![logo](logo.png)']])
     const ctx: ExpandDirectivesContext = { slug: 'test', snippetMap }
-    const result = expandDirectives('::include[shared:setup.md]', ctx)
+    const result = expandDirectives('::include[shared:setup]', ctx)
     expect(result).toContain('tutorial-snippets')
     expect(result).toContain('logo.png')
   })
