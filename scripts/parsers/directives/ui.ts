@@ -10,10 +10,10 @@
 // Side-effect: call registerUiDirectives() once at startup.
 // In tests: resetRegistry(); registerUiDirectives()
 
-import { registerDirective } from '../directive-registry.js';
+import { registerDirective, getRegistry } from '../directive-registry.js';
 import { DirectiveParseError } from '../directives.js';
 import type { DirectiveNode } from '../directives.js';
-import iconAllowlist from './icon-allowlist.json' assert { type: 'json' };
+import iconAllowlist from './icon-allowlist.json' with { type: 'json' };
 
 // ─── Key token constants ──────────────────────────────────────────────────────
 
@@ -158,11 +158,17 @@ function titleCase(name: string): string {
 
 // ─── Registration ─────────────────────────────────────────────────────────────
 
-/** Register all five UI directives into the global registry. */
+/** Register all five UI directives into the global registry.
+ * Idempotent: skips any directive that is already registered (guards against
+ * double-import without an intervening resetRegistry()).
+ */
 export function registerUiDirectives(): void {
+  function safeRegister(def: Parameters<typeof registerDirective>[0]): void {
+    if (getRegistry().has(def.name)) return;
+    registerDirective(def);
+  }
 
-  // ── :menu ──────────────────────────────────────────────────────────────────
-  registerDirective({
+  safeRegister({
     name: 'menu',
     kinds: ['inline'],
     summary: 'Navigation menu path (e.g. File > New > Project)',
@@ -183,7 +189,7 @@ export function registerUiDirectives(): void {
   });
 
   // ── :kbd ───────────────────────────────────────────────────────────────────
-  registerDirective({
+  safeRegister({
     name: 'kbd',
     kinds: ['inline'],
     summary: 'Keyboard shortcut with per-OS formatting',
@@ -225,7 +231,7 @@ export function registerUiDirectives(): void {
   });
 
   // ── :icon ──────────────────────────────────────────────────────────────────
-  registerDirective({
+  safeRegister({
     name: 'icon',
     kinds: ['inline'],
     summary: 'UI5 icon reference by name',
@@ -270,7 +276,7 @@ export function registerUiDirectives(): void {
   });
 
   // ── :ui ────────────────────────────────────────────────────────────────────
-  registerDirective({
+  safeRegister({
     name: 'ui',
     kinds: ['inline'],
     summary: 'Generic UI element label (button, field, tab, link)',
@@ -299,7 +305,7 @@ export function registerUiDirectives(): void {
   });
 
   // ── :ask ───────────────────────────────────────────────────────────────────
-  registerDirective({
+  safeRegister({
     name: 'ask',
     kinds: ['inline'],
     summary: 'Ask Joule AI assistant a question',

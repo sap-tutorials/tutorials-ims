@@ -10,6 +10,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 // Non-icon files to exclude (these are bundle/index/utility files, NOT icon names)
 const EXCLUDE_NAMES = new Set([
@@ -53,6 +54,27 @@ export function generateIconAllowlist(distPath: string): string[] {
   return icons.sort();
 }
 
+/**
+ * Locate `@ui5/webcomponents-icons/dist/` using Node's module resolution from
+ * a given starting directory, falling back to an env-var override. Returns the
+ * resolved path or throws if the package cannot be found.
+ *
+ * @param fromDir Directory to start module resolution from (use import.meta.url context).
+ */
+export function resolveIconDistPath(fromDir: string): string {
+  if (process.env.UI5_ICONS_DIST) return process.env.UI5_ICONS_DIST;
+  const req = createRequire(path.join(fromDir, '_stub_.js'));
+  try {
+    // resolve the package.json to find the package root, then go to dist/
+    const pkgJson = req.resolve('@ui5/webcomponents-icons/package.json');
+    return path.join(path.dirname(pkgJson), 'dist');
+  } catch {
+    throw new Error(
+      `Cannot find @ui5/webcomponents-icons. Run npm install from ${fromDir} or set UI5_ICONS_DIST.`,
+    );
+  }
+}
+
 // ─── Main (when run as a script) ─────────────────────────────────────────────
 
 const isMain = process.argv[1] === fileURLToPath(import.meta.url) ||
@@ -60,20 +82,17 @@ const isMain = process.argv[1] === fileURLToPath(import.meta.url) ||
   process.argv[1]?.endsWith('generate-icon-allowlist.js');
 
 if (isMain) {
-  // Prefer CLI arg, then env var, then main project node_modules (for worktree usage),
-  // then script-relative node_modules (for normal usage).
   const scriptDir = fileURLToPath(new URL('.', import.meta.url));
-  const candidates = [
-    process.argv[2], // explicit CLI arg
-    process.env.UI5_ICONS_DIST, // env override
-    path.resolve(scriptDir, '../../node_modules/@ui5/webcomponents-icons/dist'), // parent (worktree)
-    path.resolve(scriptDir, '../node_modules/@ui5/webcomponents-icons/dist'), // normal
-  ].filter(Boolean) as string[];
+  // Prefer explicit CLI arg over automatic resolution
+  let distPath: string;
+  if (process.argv[2]) {
+    distPath = process.argv[2];
+  } else {
+    distPath = resolveIconDistPath(scriptDir);
+  }
 
-  const distPath = candidates.find(p => fs.existsSync(p));
-
-  if (!distPath) {
-    console.error(`ERROR: @ui5/webcomponents-icons/dist not found. Tried:\n${candidates.join('\n')}`);
+  if (!fs.existsSync(distPath)) {
+    console.error(`ERROR: @ui5/webcomponents-icons/dist not found at ${distPath}`);
     process.exit(1);
   }
 

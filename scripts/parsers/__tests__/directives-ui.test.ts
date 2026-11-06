@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { fileURLToPath } from 'node:url';
 import { parseDirectives, DirectiveParseError } from '../directives.js';
 import { resetRegistry, getRegistry } from '../directive-registry.js';
 import { registerUiDirectives } from '../directives/ui.js';
-import { generateIconAllowlist } from '../../generate-icon-allowlist.js';
+import { generateIconAllowlist, resolveIconDistPath } from '../../generate-icon-allowlist.js';
 
 describe('UI directives — registration and parsing', () => {
   beforeEach(() => {
@@ -200,11 +201,10 @@ describe('UI directives — registration and parsing', () => {
 // ─── Icon allowlist generator ─────────────────────────────────────────────────
 
 describe('generateIconAllowlist', () => {
-  // Use an environment variable if set; fall back to the main project's node_modules
-  // (works in both the worktree and the main checkout, using the Windows-native path).
-  const DIST_PATH =
-    process.env.UI5_ICONS_DIST ??
-    'D:\\projects\\tutorials-poc\\node_modules\\@ui5\\webcomponents-icons\\dist';
+  // Resolve the dist path via Node module resolution (portable, no hardcoded paths).
+  // resolveIconDistPath walks up from this test file's location to find the installed package.
+  const __dir = fileURLToPath(new URL('.', import.meta.url));
+  const DIST_PATH = resolveIconDistPath(__dir);
 
   it('returns a non-empty array of strings', () => {
     const result = generateIconAllowlist(DIST_PATH);
