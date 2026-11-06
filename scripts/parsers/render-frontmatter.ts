@@ -41,6 +41,8 @@ export interface RenderHugoFrontmatterArgs {
   hasCompare?: boolean
   /** When true, page body contains at least one tut-cast shortcode. */
   hasCast?: boolean
+  /** When true, page body contains at least one sortable/filterable/sticky table. */
+  hasSortable?: boolean
   /**
    * [#655] Verbatim rules.vr source. When set + non-empty, emitted as a top-level
    * frontmatter field so Hugo's baseof.html can render
@@ -125,6 +127,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     osList,
     hasCompare,
     hasCast,
+    hasSortable,
     rulesVrSource,
     hasAi,
     githubLogin,
@@ -217,6 +220,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
   if (osList && osList.length) fm.osList = osList
   if (hasCompare) fm.hasCompare = true
   if (hasCast) fm.hasCast = true
+  if (hasSortable) fm.hasSortable = true
 
   // [tutorial-step-pacing] Optional-step numbers, mirrored at the top level
   // (in addition to each step's own `optional: true`) so the publish pipeline

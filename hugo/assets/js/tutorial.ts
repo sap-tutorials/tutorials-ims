@@ -1,6 +1,7 @@
 import { initMermaid } from './mermaid-bootstrap'
 import { csrfFetch } from './csrf-fetch'
 import { getChoice, setChoice, onChange, resolveChoice } from './sync-groups'
+import { initTableEnhance } from './table-enhance'
 
 // NOTE: copyCodeBlock (the "Copy code" button handler) now lives in the
 // site-wide code-copy.ts, loaded on every page from baseof.html. The
@@ -744,6 +745,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initStepHashNavigation()
   initPrintDeepLink()
   initMermaid()
+  initTableEnhance()
   // Activate embeds in any step that is open on load (step 1 is expanded by
   // default) so its video sizes correctly and gets a full-res poster.
   document.querySelectorAll<HTMLElement>('.tutorial-step .step-body:not([hidden])')
