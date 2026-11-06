@@ -645,6 +645,8 @@ export function writeHugoPage(
   semaphoreMap: Record<string, string> = {},
   osList: string[] = [],
   variables?: import('./parsers/variables.js').TutorialVariable[],
+  syncKeysUsed?: Set<string>,
+  syncGroups?: import('./parsers/types.js').TutorialFrontmatter['syncGroups'],
 ): void {
   const content = renderHugoFrontmatter({
     slug,
@@ -671,6 +673,8 @@ export function writeHugoPage(
     video,
     semaphoreMap,
     variables,
+    syncKeysUsed,
+    syncGroups,
   })
 
   mkdirSync(outputDir, { recursive: true })
@@ -1578,6 +1582,8 @@ async function main() {
           semaphoreMap,
           composed.osList,
           composed.variables,
+          composed.syncKeysUsed.size > 0 ? composed.syncKeysUsed : undefined,
+          composed.syncGroups,
         )
         authorRows.push({
           authorProfile: frontmatter.author_profile ?? '',

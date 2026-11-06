@@ -1,27 +1,22 @@
 // U8: cross-block selection sync for codetabs.
 // Pick "Java" once and every <ui5-tabcontainer data-codetabs> on the page
 // (and on every page you visit afterwards) remembers — provided the block
-// has a tab with that name. Persisted in localStorage["codetabs-preference"].
+// has a tab with that name. Backed by sync-groups.ts under key "codetabs".
+// Legacy localStorage["codetabs-preference"] is honoured via sync-groups'
+// migration read-fallback for one release.
 
-const STORAGE_KEY = "codetabs-preference";
+import { getChoice, setChoice, onChange } from './sync-groups';
+
 const CHANGE_EVENT = "codetabs:change";
 
 let applying = false;
 
 function getPreference(): string | null {
-  try {
-    return localStorage.getItem(STORAGE_KEY);
-  } catch {
-    return null;
-  }
+  return getChoice('codetabs');
 }
 
 function setPreference(name: string) {
-  try {
-    localStorage.setItem(STORAGE_KEY, name);
-  } catch {
-    /* private mode / quota — preference simply won't persist this session */
-  }
+  setChoice('codetabs', name);
 }
 
 type Ui5Tab = HTMLElement & { getDomRefInStrip?: () => HTMLElement | null };
@@ -83,6 +78,11 @@ async function init() {
       if (c === detail.source) return;
       selectTabByName(c, detail.name);
     });
+  });
+
+  // Cross-tab sync via sync-groups onChange.
+  onChange('codetabs', (next) => {
+    document.querySelectorAll("ui5-tabcontainer[data-codetabs]").forEach((c) => selectTabByName(c, next));
   });
 }
 

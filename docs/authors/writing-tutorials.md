@@ -325,6 +325,61 @@ for one OS, then ask the extension to "generate OS variants" — it returns tran
 macOS / Linux / BAS blocks you can review and accept inline. See the
 [VS Code extension docs](TODO: link added when plugin ships) for the workflow.
 
+#### 3.5.4 Synced option tabs ★ NEW
+
+When the same choice (language runtime, account tier, IDE) repeats across multiple steps, add `sync=<key>` to each group's first OPTION block. Readers pick once from the page-level picker bar and every group updates automatically — their preference is also remembered across tutorials.
+
+**Built-in preset keys** (automatically alias common label variants):
+
+| Key | Canonical values | Example aliases |
+|---|---|---|
+| `runtime` | `Node.js`, `Java` | `Node`, `CAP Node.js`, `CAP Java`, `Spring` → `Java` |
+| `account` | `Trial`, `Enterprise` | `Pay-As-You-Go`, `PAYG` → `Enterprise` |
+| `ide` | `BAS`, `VS Code` | `Business Application Studio` → `BAS` |
+
+**Usage:**
+
+```markdown
+[OPTION BEGIN [Node.js] sync=runtime]
+Node.js content here.
+[OPTION END]
+[OPTION BEGIN [Java] sync=runtime]
+Java content here.
+[OPTION END]
+```
+
+The same `sync=runtime` key must appear on the **first block of every group** in a step. Conflicting keys within one group are a build error.
+
+**Auto-classification (`syncTabs: auto`):**
+
+Add `syncTabs: auto` to your frontmatter to let the build classify groups automatically — useful when you have many steps with the same runtime choice and don't want to annotate each block individually:
+
+```yaml
+---
+title: My Tutorial
+syncTabs: auto
+---
+```
+
+> **Tip:** `syncTabs: auto` only classifies groups whose labels ALL match one preset's aliases. A group with mixed or unrecognised labels is left as a plain option group. Run `npm run fetch-tutorials -- --dry-run` or inspect the `syncGroups` frontmatter in the generated Hugo content to see which groups were classified.
+
+**Deep links:**
+
+Add `?runtime=Java` (or `?runtime=java` — case-insensitive) to a tutorial URL to pre-select a choice. The selection is persisted for the reader's subsequent visits.
+
+**Custom sync keys:**
+
+Declare a non-preset key in `syncGroups` frontmatter:
+
+```yaml
+syncGroups:
+  db:
+    label: Database
+    values: [HANA, PostgreSQL]
+```
+
+Then use `sync=db` on OPTION groups with labels from that list.
+
 ### Alert callouts
 
 A plain blockquote (`>`) renders as the default blue **Information** callout.

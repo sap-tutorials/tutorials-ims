@@ -55,6 +55,32 @@ export interface TutorialFrontmatter {
    * heuristically look OS-shaped.
    */
   osOverrides?: Record<string, 'os' | 'regular'>
+  /**
+   * [synced-tabs] Opt-in auto-classification of option groups to sync presets.
+   * `'auto'`: each group whose labels ALL resolve to a built-in sync preset
+   * (runtime/account/ide) is automatically assigned that preset key and emits
+   * `sync=` + per-tab `syncValue=` attributes. Absent = no auto-classification.
+   */
+  syncTabs?: 'auto'
+  /**
+   * [synced-tabs] Per-step sync overrides keyed by slugified step heading.
+   * `'none'`: disable sync for this step's option group even if `sync=` is
+   * authored or auto-classified. Any other string value (matching `[a-z][a-z0-9-]*`)
+   * forces a specific sync key for this step's group.
+   */
+  syncOverrides?: Record<string, string>
+  /**
+   * [synced-tabs] Custom sync-group declarations for tutorial-specific keys
+   * that are not built-in presets (runtime/account/ide). Keyed by sync key.
+   * Each entry declares a label for UI and the ordered canonical values
+   * (tab names); aliases maps legacy tab names to canonical values.
+   */
+  syncGroups?: Record<string, {
+    label: string
+    values: string[]
+    aliases?: Record<string, string[]>
+    default?: string
+  }>
 }
 
 /**

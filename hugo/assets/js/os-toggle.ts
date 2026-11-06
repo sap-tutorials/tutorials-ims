@@ -4,8 +4,12 @@
 // activates panels via data-os-active, listens for picker changes,
 // cross-tab sync via storage events.
 // NOTE: importing this module fires init() immediately as a side-effect.
+//
+// Storage is delegated to sync-groups.ts (unified JSON object).
+// Legacy 'os-preference' is still honoured via sync-groups' migration fallback.
 
-const STORAGE_KEY = 'os-preference';
+import { getChoice, setChoice, onChange } from './sync-groups';
+
 const CHANGE_EVENT = 'osprefchange';
 
 export const OS_VALUES = ['Windows', 'macOS', 'Linux', 'BAS'] as const;
@@ -16,20 +20,12 @@ function isValidOs(v: string | null | undefined): v is OS {
 }
 
 function getPreference(): OS | null {
-  try {
-    const v = localStorage.getItem(STORAGE_KEY);
-    return isValidOs(v) ? v : null;
-  } catch {
-    return null;
-  }
+  const v = getChoice('os');
+  return isValidOs(v) ? v : null;
 }
 
 function setPreference(os: OS) {
-  try {
-    localStorage.setItem(STORAGE_KEY, os);
-  } catch {
-    /* private mode / quota */
-  }
+  setChoice('os', os);
 }
 
 function detectFromBas(): OS | null {
@@ -196,11 +192,9 @@ async function init(): Promise<void> {
     wirePicker(picker, current);
   }
 
-  // Cross-tab sync.
-  window.addEventListener('storage', (e) => {
-    if (e.key !== STORAGE_KEY) return;
-    const next = e.newValue;
-    if (next && isValidOs(next)) {
+  // Cross-tab sync via sync-groups onChange.
+  onChange('os', (next) => {
+    if (isValidOs(next)) {
       activate(next);
       if (picker) selectPickerItem(picker, next);
     }
