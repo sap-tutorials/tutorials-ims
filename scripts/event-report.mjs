@@ -6,6 +6,17 @@ const NS = 'com.sap.developers.ims';
 const nf = new Intl.NumberFormat('en-US');
 
 /**
+ * Resolve the IMS entity set. Under `cds.test`/`cds serve` the global
+ * `cds.entities` is a function; in a standalone `node` process (cds bind --exec)
+ * it is not, so fall back to the linked model. Both return the same entities.
+ * @returns {object} map of entity defs ({ Events, Tutorials, … })
+ */
+function modelEntities() {
+  if (typeof cds.entities === 'function') return cds.entities(NS);
+  return cds.linked(cds.model).entities(NS);
+}
+
+/**
  * Accept a bare eventId/legacyId or an app-space URL (…?eventId=NNN…).
  * @param {string} input
  * @returns {string} the eventId
@@ -52,7 +63,7 @@ export function renderTrackSection(bucketsResult, event) {
  * @param {object} db cds db service
  */
 export async function resolveEvent(eventLegacyId, db) {
-  const { Events } = cds.entities(NS);
+  const { Events } = modelEntities();
   const event = await db.run(SELECT.one.from(Events).where({ legacyId: eventLegacyId }));
   return event ?? null;
 }
@@ -90,7 +101,7 @@ export async function resolveEventTutorials(event, db) {
     .map((k) => Number(k.slice('TUTORIAL:'.length)));
   if (legacyIds.length === 0) return [];
 
-  const { Tutorials, Steps } = cds.entities(NS);
+  const { Tutorials, Steps } = modelEntities();
   const tuts = await db.run(
     SELECT.from(Tutorials).columns('ID', 'legacyId', 'title', 'stepCount').where({ legacyId: { in: legacyIds } }),
   );
@@ -116,7 +127,7 @@ export async function resolveEventTutorials(event, db) {
  * @returns {Promise<Array<{tutorialLegacyId:number,title:string,totalSteps:number,abandonedCount:number,medianStopStep:number,perStep:Array<{step:number,count:number,pct:number}>}>>}
  */
 export async function computeAbandonment(event, tutorials, db) {
-  const { TaskRecords, Steps } = cds.entities(NS);
+  const { TaskRecords, Steps } = modelEntities();
   const rows = [];
   for (const t of tutorials) {
     const inProgress = await db.run(
@@ -211,7 +222,7 @@ export function renderAbandonmentSection(rows) {
  * @returns {Promise<{domains:Array<{domain:string,users:number,completions:number,perUser:number}>,sap:{users:number,completions:number},external:{users:number,completions:number}}>}
  */
 export async function computeDomainBreakdown(event, db) {
-  const { TaskRecords, Users } = cds.entities(NS);
+  const { TaskRecords, Users } = modelEntities();
 
   const records = await db.run(
     SELECT.from(TaskRecords)
