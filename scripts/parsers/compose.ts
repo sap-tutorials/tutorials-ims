@@ -22,6 +22,7 @@ import type { TutorialVariable } from './variables.js'
 import { expandDirectives } from './directives.js'
 import { stripAuthorNotes } from './author-notes.js'
 import './directives/qa-only.js' // side-effect: registers qa-only directive
+import './directives/callout-directives.js' // side-effect: registers callout container + spoiler directives
 
 /**
  * Normalize line endings to LF. Catches CRLF (Windows / GitHub-via-Windows-
