@@ -200,7 +200,8 @@ describe('khorosFetch', () => {
   });
 
   it('omits the x-khoros-api-access header when no token resolves (fail-open, #3011)', async () => {
-    _resetForTests(); // no token primed, no env var
+    _resetForTests(); // clear cache
+    delete process.env.KHOROS_API_TOKEN; // and the env fallback so no token resolves
     const spy = vi.fn(async () => ({
       ok: false, status: 403,
       json: async () => ({}), text: async () => 'blocked',
