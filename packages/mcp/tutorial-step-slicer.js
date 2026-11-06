@@ -19,6 +19,7 @@ import { parseMarkdownSteps } from '@tutorials/core/tutorial-markdown-steps.js';
 import { absolutizeImagePaths } from '@tutorials/core/tutorial-markdown.js';
 import { renderDirectivesAsText } from '../../scripts/parsers/directives.js';
 import { filterVariants } from './option-filter.js';
+import { collectTroubleshootEntries } from '../../scripts/parsers/blockquote-troubleshoot-collect.js';
 
 const NS = 'com.sap.developers.ims';
 const LOG = cds.log('mcp-slicer');
@@ -263,6 +264,9 @@ async function loadAndParseMarkdown(slug) {
     // response (spec "Pacing data in machine consumers").
     if (s.timeMinutes !== undefined) entry.timeMinutes = s.timeMinutes;
     if (s.optional) entry.optional = true;
+    // [tutorial-callout-enhancements] Collect troubleshoot entries from source markdown.
+    const troubleshootEntries = collectTroubleshootEntries(s.markdown, s.number);
+    if (troubleshootEntries.length > 0) entry.troubleshootEntries = troubleshootEntries;
     steps.set(s.number, entry);
   }
 
@@ -302,6 +306,7 @@ export async function sliceStepMarkdown(slug, stepNumber, variants) {
   const result = { markdown: md, text: step.text, stepTitle: step.title, totalSteps: parsed.totalSteps };
   if (step.timeMinutes !== undefined) result.timeMinutes = step.timeMinutes;
   if (step.optional) result.optional = true;
+  if (step.troubleshootEntries?.length) result.troubleshootEntries = step.troubleshootEntries;
   return result;
 }
 

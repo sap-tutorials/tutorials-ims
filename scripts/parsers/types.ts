@@ -208,6 +208,14 @@ export interface TutorialStep {
   aiInvolved?: boolean
 
   asserts?: AssertBlock[]
+
+  // [tutorial-callout-enhancements] Troubleshoot entry collection.
+  troubleshootEntries?: TroubleshootEntry[]
+}
+
+export interface TroubleshootEntry {
+  title: string
+  anchor: string
 }
 
 export interface ParsedTutorial {

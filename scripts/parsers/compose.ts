@@ -16,6 +16,7 @@ import type { BranchGroup } from './branches.js'
 import { parseRulesVrEnriched } from './rules.js'
 import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './codecheck.js'
 import { parseAssertBlocks, attachAssertSpecs } from './assert.js'
+import { collectTroubleshootEntries } from './blockquote-troubleshoot-collect.js'
 import type { TutorialStep, TutorialFrontmatter } from './types.js'
 import { validateVariables, wrapTokens } from './variables.js'
 import type { TutorialVariable } from './variables.js'
@@ -337,6 +338,12 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     }
     const assertMap = parseAssertBlocks(opts.rulesVr)
     if (assertMap.size) attachAssertSpecs(steps, assertMap)
+  }
+
+  // [tutorial-callout-enhancements] Collect troubleshoot alert entries per step.
+  for (const step of steps) {
+    const entries = collectTroubleshootEntries(step.content, step.number)
+    if (entries.length > 0) step.troubleshootEntries = entries
   }
 
   return {

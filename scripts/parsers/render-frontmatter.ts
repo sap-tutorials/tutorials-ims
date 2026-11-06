@@ -182,6 +182,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
       // attached by fetch-tutorials' challenge pass. Must be serialized here or
       // .Params.steps[].challenge is dropped and the widget never renders.
       if (s.challenge?.nodes?.length) entry.challenge = s.challenge
+      if (s.troubleshootEntries?.length) entry.troubleshootEntries = s.troubleshootEntries
       return entry
     }),
   }
