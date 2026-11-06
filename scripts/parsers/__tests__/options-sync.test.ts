@@ -81,8 +81,8 @@ describe('options-sync: sync= attribute parsing and emission', () => {
       { tab: 'Java' },
     ])
     const out = convertOptionBlocks(content, 'hugo', {})
-    // Check the opening tag shape
-    expect(out).toMatch(/\{{% option-tabs tabs="Node\.js,Java" sync="runtime" %\}\}/)
+    // Check the opening tag shape — now includes syncValues= for canonical button values
+    expect(out).toMatch(/\{{% option-tabs tabs="Node\.js,Java" sync="runtime" syncValues="Node\.js,Java" %\}\}/)
   })
 })
 
@@ -289,7 +289,52 @@ describe('options-sync: custom syncGroups key accepted', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 7. Backward compat: no sync= / no syncTabs → byte-identical emission
+// 7. Canonicalising preset: button data-sync-value agrees with panel syncValue
+// ---------------------------------------------------------------------------
+
+describe('options-sync: canonicalising preset — button and panel data-sync-value agree', () => {
+  it('emits syncValues= on option-tabs with canonical "Node.js" for label "Node"', () => {
+    // The parser should emit syncValues= so option-tabs.html can use canonical
+    // values on button data-sync-value attributes (matching the panel's syncValue).
+    const content = makeContent([
+      { tab: 'Node', syncKey: 'runtime' },
+      { tab: 'Java' },
+    ])
+    const out = convertOptionBlocks(content, 'hugo', {})
+    // The strip must carry the canonical values list so the template can use it
+    expect(out).toContain('syncValues="Node.js,Java"')
+  })
+
+  it('tab panel syncValue for label "Node" is canonical "Node.js"', () => {
+    const content = makeContent([
+      { tab: 'Node', syncKey: 'runtime' },
+      { tab: 'Java' },
+    ])
+    const out = convertOptionBlocks(content, 'hugo', {})
+    // Each tab panel must emit the canonical value
+    expect(out).toContain('syncValue="Node.js"')
+    expect(out).toContain('syncValue="Java"')
+  })
+
+  it('syncValues= and tab syncValue= use the same canonical value for each label', () => {
+    // This is the core regression test: both must agree so the button's
+    // data-sync-value (sourced from syncValues[i]) matches the panel's
+    // data-sync-value (sourced from syncValue=).
+    const content = makeContent([
+      { tab: 'Node', syncKey: 'runtime' },
+      { tab: 'Java' },
+    ])
+    const out = convertOptionBlocks(content, 'hugo', {})
+    // Strip carries canonical list
+    expect(out).toMatch(/syncValues="Node\.js,Java"/)
+    // Each panel carries the same canonical value
+    expect(out).toMatch(/name="Node"[^"]*syncValue="Node\.js"/)
+    expect(out).toMatch(/name="Java"[^"]*syncValue="Java"/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 8 (was 7). Backward compat: no sync= / no syncTabs → byte-identical emission
 // ---------------------------------------------------------------------------
 
 describe('options-sync: backward compatibility — no sync attrs emitted when unused', () => {

@@ -403,13 +403,16 @@ export function convertOptionBlocks(
 
         const tabNames = group.map(b => b.tabName).join(',')
         const syncTabsAttr = syncKey ? ` sync="${syncKey}"` : ''
+        const syncValuesAttr = syncKey
+          ? ` syncValues="${group.map(b => computeSyncValue(b.tabName, syncKey, opts)).join(',')}"`
+          : ''
         const tabs = group.map((b, i) => {
           const syncValueAttr = syncKey
             ? ` syncValue="${computeSyncValue(b.tabName, syncKey, opts)}"`
             : ''
           return `{{% tab index="${i}" name="${b.tabName}"${syncValueAttr} %}}\n\n${dedentBlock(b.content)}\n\n{{% /tab %}}`
         }).join('\n')
-        replacement = `{{% option-tabs tabs="${tabNames}"${syncTabsAttr} %}}\n${tabs}\n{{% /option-tabs %}}`;
+        replacement = `{{% option-tabs tabs="${tabNames}"${syncTabsAttr}${syncValuesAttr} %}}\n${tabs}\n{{% /option-tabs %}}`;
       }
     } else {
       // VitePress branch unchanged.

@@ -1,5 +1,6 @@
 {{- $tabs := split (.Get "tabs") "," -}}
 {{- $syncKey := .Get "sync" -}}
+{{- $syncValues := split (.Get "syncValues") "," -}}
 {{- $stripId := printf "%d" $.Ordinal -}}
 {{- $inner := .Inner -}}
 {{- /* Rewrite the placeholder panel ids "tabpanel-N" → "tabpanel-<stripId>-N" so
@@ -15,7 +16,8 @@
 {{- range $i, $tab := $tabs }}
 {{- $tabId := printf "tab-%s-%d" $stripId $i }}
 {{- $panelId := printf "tabpanel-%s-%d" $stripId $i }}
-<button class="fd-tabs__item{{ if eq $i 0 }} is-selected{{ end }}" role="tab" id="{{ $tabId }}" aria-selected="{{ if eq $i 0 }}true{{ else }}false{{ end }}" aria-controls="{{ $panelId }}" tabindex="{{ if eq $i 0 }}0{{ else }}-1{{ end }}" data-tab-index="{{ $i }}"{{ if $syncKey }} data-sync-value="{{ $tab }}"{{ end }}>{{ $tab }}</button>
+{{- $syncValue := cond (and $syncKey (lt $i (len $syncValues))) (index $syncValues $i) $tab -}}
+<button class="fd-tabs__item{{ if eq $i 0 }} is-selected{{ end }}" role="tab" id="{{ $tabId }}" aria-selected="{{ if eq $i 0 }}true{{ else }}false{{ end }}" aria-controls="{{ $panelId }}" tabindex="{{ if eq $i 0 }}0{{ else }}-1{{ end }}" data-tab-index="{{ $i }}"{{ if $syncKey }} data-sync-value="{{ $syncValue }}"{{ end }}>{{ $tab }}</button>
 {{- end }}
 </div>
 <div class="tab-panels">{{ $inner | safeHTML }}</div>
