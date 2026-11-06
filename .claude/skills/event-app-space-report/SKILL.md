@@ -62,12 +62,15 @@ difference.
 1. **Tutorial completions by track** — total + per-Track count and share
    (`CompletionPaths.name`; FK-first tutorial resolution; windowed COMPLETED/
    SUPERSEDED completions).
-2. **Abandoned tutorials** — IN_PROGRESS tutorials whose record was last touched
-   (`modifiedAt`) inside the window, with per-tutorial median stop-step and a
-   per-step drop histogram (stop-step = COMPLETED STEP records at the user's
-   current attempt vs `Tutorials.stepCount`).
-3. **Completer email domains** — distinct completers per domain, completions,
-   and completions/user; most-engaged domains.
+2. **Abandoned tutorials** — a "Top abandonees by count" list, a computed
+   stop-pattern summary (minimum steps done before stopping; % of abandoners
+   who'd done 3+ steps), then per-tutorial median stop-step with "% through"
+   framing and a per-step drop histogram (stop-step = COMPLETED STEP records at
+   the user's current attempt vs `Tutorials.stepCount`).
+3. **Completer email domains** — distinct completers per domain (with known
+   multi-domain orgs like NTT Data / EY rolled up via `ORG_DOMAIN_MAP`),
+   completions, completions/user; a most-engaged table + a prose callout naming
+   the standout high-engagement companies.
 4. **SAP employees vs external** — `@sap.com` vs everyone else.
 
 ## Notes

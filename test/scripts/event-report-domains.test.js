@@ -114,4 +114,33 @@ describe('sections 3-4 — domain + audience breakdown (seeded db)', () => {
     expect(totalSplit).toBeLessThan(allCompletions);
     expect(b.sap.users + b.external.users).not.toContain(undefined);
   });
+
+  it('rolls multiple sub-domains of one org into a single labeled row', async () => {
+    const db = await cds.connect.to('db');
+    const { TaskRecords, Users } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Users).entries([
+      { ID: 'c0000000-cccc-0000-0000-0000000000e1', email: 'x@gds.ey.com' },
+      { ID: 'c0000000-cccc-0000-0000-0000000000e2', email: 'y@it.ey.com' },
+    ]);
+    await INSERT.into(TaskRecords).entries([
+      { ID: 'd0000000-cccc-0000-0000-0000000000e1', user_ID: 'c0000000-cccc-0000-0000-0000000000e1', taskLegacyId: 99999, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: IN, attemptNumber: 1 },
+      { ID: 'd0000000-cccc-0000-0000-0000000000e2', user_ID: 'c0000000-cccc-0000-0000-0000000000e2', taskLegacyId: 99999, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: IN, attemptNumber: 1 },
+    ]);
+    const orgMap = { EY: ['gds.ey.com', 'it.ey.com'] };
+    const b = await computeDomainBreakdown(event, db, { orgMap });
+    const ey = b.domains.find((d) => d.domain === 'EY');
+    expect(ey).toBeTruthy();
+    expect(ey.users).toBe(2);
+    expect(ey.completions).toBe(2);
+    // the raw sub-domains must NOT also appear as separate rows
+    expect(b.domains.find((d) => d.domain === 'gds.ey.com')).toBeFalsy();
+    expect(b.domains.find((d) => d.domain === 'it.ey.com')).toBeFalsy();
+  });
+
+  it('renders a per-user engagement callout for the most engaged domains', async () => {
+    const db = await cds.connect.to('db');
+    const b = await computeDomainBreakdown(event, db);
+    const md = renderDomainSection(b);
+    expect(md).toMatch(/engag/i); // "Notable: highly engaged" callout prose
+  });
 });

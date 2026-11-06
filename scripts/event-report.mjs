@@ -6,6 +6,16 @@ const NS = 'com.sap.developers.ims';
 const nf = new Intl.NumberFormat('en-US');
 
 /**
+ * Known multi-domain orgs → their email domains. Sub-domains roll up into the
+ * single org label in the domain breakdown (matches the Berlin report's
+ * "NTT Data (combined)", "EY (combined)" tiers). Extend as needed.
+ */
+const ORG_DOMAIN_MAP = {
+  'NTT Data': ['nttdata.com', 'global.ntt', 'nttdata-solutions.com', 'emeal.nttdata.com'],
+  EY: ['ey.com', 'gds.ey.com', 'it.ey.com'],
+};
+
+/**
  * Resolve the IMS entity set. Under `cds.test`/`cds serve` the global
  * `cds.entities` is a function; in a standalone `node` process (cds bind --exec)
  * it is not, so fall back to the linked model. Both return the same entities.
@@ -175,6 +185,8 @@ export async function computeAbandonment(event, tutorials, db) {
       totalSteps: t.totalSteps,
       abandonedCount: total,
       medianStopStep: median(stopSteps),
+      medianStopPct: t.totalSteps > 0 ? Math.round((median(stopSteps) / t.totalSteps) * 100) : 0,
+      minStepsDone: Math.min(...stopSteps),
       perStep,
       stepTitles: Object.fromEntries(stepRows.map((s) => [s.stepOrder, s.title])),
     });
@@ -194,10 +206,39 @@ export function renderAbandonmentSection(rows) {
     lines.push('_No in-progress tutorials in the event window._');
     return lines.join('\n');
   }
+
+  // Top abandonees by count (rows already sorted desc by abandonedCount).
+  lines.push('### Top abandonees by count', '');
+  for (const r of rows.slice(0, 10)) {
+    lines.push(`- ${r.title} (${r.abandonedCount} abandoned)`);
+  }
+
+  // Computed stop-pattern summary: where did people stop relative to the start?
+  const minAcross = Math.min(...rows.map((r) => (Number.isFinite(r.minStepsDone) ? r.minStepsDone : 0)));
+  const engagedShare = (() => {
+    // share of abandoners who had done >= 3 steps before stopping
+    let deep = 0;
+    let all = 0;
+    for (const r of rows) {
+      for (const p of r.perStep) {
+        all += p.count;
+        if (p.step >= 3) deep += p.count;
+      }
+    }
+    return all > 0 ? Math.round((deep / all) * 100) : 0;
+  })();
+  lines.push(
+    '',
+    `**Stop pattern:** minimum steps completed before stopping across all abandoned records = ${minAcross}` +
+      (minAcross >= 1 ? ' — people engaged meaningfully before stopping; no "opened and immediately quit".' : ' — some records stopped at step 0.'),
+    `${engagedShare}% of abandoners had completed 3+ steps before stopping.`,
+    '',
+  );
+
   for (const r of rows) {
     lines.push(
       `### ${r.title} — ${r.abandonedCount} abandoned, ${r.totalSteps} steps`,
-      `Median stop: step ${r.medianStopStep} of ${r.totalSteps}`,
+      `Median stop: step ${r.medianStopStep} of ${r.totalSteps} (${r.medianStopPct}% through)`,
       '',
     );
     for (const p of r.perStep) {
@@ -219,10 +260,18 @@ export function renderAbandonmentSection(rows) {
  * but are excluded from the SAP-vs-external split.
  * @param {object} event resolved Events row (needs startDate/endDate)
  * @param {object} db
+ * @param {{orgMap?: Record<string,string[]>}} [opts] org→domains rollup map (defaults to ORG_DOMAIN_MAP)
  * @returns {Promise<{domains:Array<{domain:string,users:number,completions:number,perUser:number}>,sap:{users:number,completions:number},external:{users:number,completions:number}}>}
  */
-export async function computeDomainBreakdown(event, db) {
+export async function computeDomainBreakdown(event, db, opts = {}) {
   const { TaskRecords, Users } = modelEntities();
+  const orgMap = opts.orgMap ?? ORG_DOMAIN_MAP;
+  // reverse lookup: raw domain → org label
+  const orgByDomain = new Map();
+  for (const [org, doms] of Object.entries(orgMap)) {
+    for (const d of doms) orgByDomain.set(d.toLowerCase(), org);
+  }
+  const label = (domain) => orgByDomain.get(domain) ?? domain;
 
   const records = await db.run(
     SELECT.from(TaskRecords)
@@ -248,15 +297,17 @@ export async function computeDomainBreakdown(event, db) {
 
   for (const r of records) {
     const email = emailById.get(r.user_ID) || '';
-    const domain = email.includes('@') ? email.slice(email.indexOf('@') + 1) : '(unknown)';
+    const rawDomain = email.includes('@') ? email.slice(email.indexOf('@') + 1) : '(unknown)';
+    const domain = rawDomain === '(unknown)' ? '(unknown)' : label(rawDomain);
     if (!byDomain.has(domain)) byDomain.set(domain, { users: new Set(), completions: 0 });
     const d = byDomain.get(domain);
     d.users.add(r.user_ID);
     d.completions += 1;
     // Unknown/anonymized emails are counted in the domain table but excluded
-    // from the SAP-vs-external split (neither bucket).
-    if (domain === '(unknown)') continue;
-    if (domain === 'sap.com') {
+    // from the SAP-vs-external split (neither bucket). SAP check uses the raw
+    // domain (org rollup never maps to sap.com).
+    if (rawDomain === '(unknown)') continue;
+    if (rawDomain === 'sap.com') {
       sapUsers.add(r.user_ID);
       sapCompletions += 1;
     } else {
@@ -299,6 +350,12 @@ export function renderDomainSection(breakdown) {
   lines.push('', '### Most engaged by completions/user', '', '| Domain | Completions/user |', '| --- | --- |');
   const engaged = [...domains].filter((d) => d.users >= 3).sort((a, b) => b.perUser - a.perUser).slice(0, 10);
   for (const d of engaged) lines.push(`| ${d.domain} | ${d.perUser} |`);
+  // Prose callout naming the standout high-engagement companies.
+  const standout = engaged.filter((d) => d.perUser >= 4).slice(0, 6);
+  if (standout.length > 0) {
+    const names = standout.map((d) => `${d.domain} (${d.users} users, ${d.completions} completions = ${d.perUser}/user)`);
+    lines.push('', `**Notable — highly engaged companies:** ${names.join('; ')}.`);
+  }
   lines.push('', `_Total completions across domains: ${nf.format(totalCompletions)}._`);
   return lines.join('\n');
 }

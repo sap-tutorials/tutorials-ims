@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import cds from '@sap/cds';
-import { resolveEventTutorials, computeAbandonment } from '../../scripts/event-report.mjs';
+import { resolveEventTutorials, computeAbandonment, renderAbandonmentSection } from '../../scripts/event-report.mjs';
 
 cds.test('serve', '--project', '.', '--in-memory');
 
@@ -95,5 +95,28 @@ describe('section 2 — abandonment + step-drop (seeded db)', () => {
     const rows = await computeAbandonment(event, tuts, db);
     const nos = rows.find((r) => r.tutorialLegacyId === 80002) ?? { medianStopStep: 0, abandonedCount: 0 };
     expect(Number.isNaN(nos.medianStopStep)).toBe(false);
+  });
+
+  it('carries median % through on each row', async () => {
+    const db = await cds.connect.to('db');
+    const tuts = await resolveEventTutorials(event, db);
+    const rows = await computeAbandonment(event, tuts, db);
+    const tutRow = rows.find((r) => r.tutorialLegacyId === 80001);
+    // median 1 of 9 steps → 11%
+    expect(tutRow.medianStopPct).toBe(11);
+  });
+
+  it('renders a Top abandonees by count list and a computed stop-pattern summary', async () => {
+    const db = await cds.connect.to('db');
+    const tuts = await resolveEventTutorials(event, db);
+    const rows = await computeAbandonment(event, tuts, db);
+    const md = renderAbandonmentSection(rows);
+    expect(md).toMatch(/Top abandonees by count/i);
+    // The 9-step tutorial has 3 abandonees — the top list names it with its count.
+    expect(md).toMatch(/Abandoned Tutorial.*3/);
+    // Stop-pattern summary line reports the minimum steps-done across records
+    // (here 1,1,5 → min 1), i.e. people engaged before stopping.
+    expect(md).toMatch(/stop pattern/i);
+    expect(md).toMatch(/% through/i);
   });
 });
