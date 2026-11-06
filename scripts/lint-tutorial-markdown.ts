@@ -32,6 +32,7 @@ import { iframeNonAllowlistedHostRule } from './lint-rules/iframe-non-allowliste
 import { authorNameWithoutProfileRule } from './lint-rules/author-name-without-profile'
 import { directiveUnknownRule } from './lint-rules/directive-unknown'
 import { deprecatedCliRule } from './lint-rules/deprecated-cli.js'
+import { authorNotesInProdRule, qaOnlyInProdRule } from './lint-rules/authoring-aids.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..')
@@ -206,7 +207,7 @@ const fenceIndentDiscipline: Rule = {
   },
 }
 
-const RULES: Rule[] = [indentedNumberedListItem, fenceIndentDiscipline, iframeNonAllowlistedHostRule, authorNameWithoutProfileRule, directiveUnknownRule, deprecatedCliRule]
+const RULES: Rule[] = [indentedNumberedListItem, fenceIndentDiscipline, iframeNonAllowlistedHostRule, authorNameWithoutProfileRule, directiveUnknownRule, deprecatedCliRule, authorNotesInProdRule, qaOnlyInProdRule]
 
 /**
  * Rule: branch-syntax (issue #172 PR 3).
