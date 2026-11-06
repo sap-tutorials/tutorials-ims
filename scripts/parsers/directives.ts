@@ -722,6 +722,12 @@ export interface ExpandDirectivesContext {
    * Populated lazily by the `:help` directive renderer (Task 3).
    */
   helpTitleCache?: Map<string, string>;
+  /**
+   * Maps snippetKey → { repo, branch } for resolving image URLs inside snippet
+   * content to the snippet's own raw GitHub base URL (not the including tutorial's).
+   * When absent, repo/branch are parsed from the snippetKey itself.
+   */
+  snippetRepoMap?: Map<string, { repo: string; branch: string }>;
 }
 
 /**
