@@ -68,3 +68,69 @@ describe('corpus regression — standard fences unchanged', () => {
     expect(copyDiffFinal(block)).toContain('const a = 1')
   })
 })
+
+describe('diff fence attribute — unified-diff column stripping', () => {
+  it('copyDiffFinal: diff-added and context lines included, diff-removed excluded', () => {
+    // Simulates the DOM output produced by the {diff} Hugo template path.
+    // The Hugo template strips the leading +/-/space column and assigns:
+    //   + lines → <span class="line diff-added">
+    //   - lines → <span class="line diff-removed">
+    //   space lines → <span class="line">
+    // copyDiffFinal should exclude removed lines and include added + context.
+    const html = `<pre><code>
+      <span class="line diff-added">added line</span>
+      <span class="line diff-removed">removed line</span>
+      <span class="line">context line</span>
+    </code></pre>`
+    const block = makeBlock(html)
+    const text = copyDiffFinal(block)
+    expect(text).toContain('added line')
+    expect(text).not.toContain('removed line')
+    expect(text).toContain('context line')
+  })
+
+  it('backward compat: a plain .line span whose text starts with + is treated as context (no exclusion)', () => {
+    // A fence WITHOUT {diff} attribute may have code lines beginning with + (e.g.,
+    // TypeScript union types, git diff output shown as plain text, etc.).
+    // Without the {diff} gate, the Hugo template does NOT classify such lines as diff-added.
+    // They get class="line" only, not "line diff-added". copyDiffFinal must not exclude them.
+    const html = `<pre><code>
+      <span class="line">+foo</span>
+      <span class="line">bar</span>
+    </code></pre>`
+    const block = makeBlock(html)
+    const text = copyDiffFinal(block)
+    expect(text).toContain('+foo')
+    expect(text).toContain('bar')
+  })
+
+  it('blank lines in a unified-diff block pass through as context (no crash, included in output)', () => {
+    // A blank line in a unified-diff hunk (empty string after leading-column strip)
+    // should produce a plain <span class="line"> with empty text content.
+    // copyDiffFinal must handle these without crashing and include them.
+    const html = `<pre><code>
+      <span class="line diff-added">first line</span>
+      <span class="line"></span>
+      <span class="line diff-added">third line</span>
+    </code></pre>`
+    const block = makeBlock(html)
+    const text = copyDiffFinal(block)
+    expect(text).toContain('first line')
+    expect(text).toContain('third line')
+    // blank line span is included as empty string — result should not throw and should join cleanly
+    expect(text.split('\n').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('context-only diff fence: copyDiffFinal includes all lines (simulating gutter-stripped output)', () => {
+    // A {diff} fence with only context lines (no +/-) should strip the leading space gutter
+    // and render all lines as plain .line spans. copyDiffFinal must include them all.
+    const html = `<pre><code>
+    <span class="line">const a = 1</span>
+    <span class="line">const b = 2</span>
+  </code></pre>`
+    const block = makeBlock(html)
+    const text = copyDiffFinal(block)
+    expect(text).toContain('const a = 1')
+    expect(text).toContain('const b = 2')
+  })
+})

@@ -119,18 +119,48 @@
      to before — they take the existing highlight path below. */}}
 {{- $isConsole := or (eq $lower "console") (eq $lower "shell-session") (eq $lower "terminal-session") (index $attrs "prompt") -}}
 
-{{/* Diff marker detection: scan .Inner for [!code ++/--/focus/highlight] markers.
+{{/* Diff marker detection: scan .Inner for [!code ++/--/focus/highlight] markers,
+     OR process {diff} fence attribute for unified-diff (+/-/space column) format.
      Only active for non-console fences. Produces $hasDiff, $diffMarkers (slice),
      and $cleanInner (Inner with markers stripped) for use in the body section.
-     TODO(follow-up): also support {diff} fence attribute for unified diff format
-     (leading +/-/space column). Track as a separate PR after this change ships.
      security-reviewed: marker tokens are fixed strings; replaceRE pattern is constant;
-     injected class names come from a fixed if/else chain, not user input. */}}
+     injected class names come from a fixed if/else chain, not user input.
+     {diff} attribute: boolean presence check via index $attrs "diff"; no user input
+     reaches class names; classes come from fixed if/else chain only. */}}
 {{- $hasDiff := false -}}
+{{- $isDiffFence := false -}}
 {{- $diffMarkers := slice -}}
 {{- $cleanInner := "" -}}
 {{- $copyRaw := eq (index $attrs "copy" | default "") "raw" -}}
-{{- if not $isConsole -}}
+{{- if and (not $isConsole) (index $attrs "diff") -}}
+  {{- $isDiffFence = true -}}
+  {{/* {diff} attribute path: unified-diff column stripping.
+       Leading + = added, - = removed, space = context; anything else = context (no strip).
+       Blank lines (empty string after split) pass through as context with no class.
+       security-reviewed: leading char is matched via a fixed if/else chain; no user input
+       reaches $markerClass; stripping is first-char-only via substr. */}}
+  {{- range $lineIdx, $codeLine := split .Inner "\n" -}}
+    {{- $markerClass := "" -}}
+    {{- $stripped := $codeLine -}}
+    {{- if gt (len $codeLine) 0 -}}
+      {{- $firstChar := substr $codeLine 0 1 -}}
+      {{- if eq $firstChar "+" -}}
+        {{- $markerClass = "diff-added" -}}
+        {{- $hasDiff = true -}}
+        {{- $stripped = substr $codeLine 1 (len $codeLine) -}}
+      {{- else if eq $firstChar "-" -}}
+        {{- $markerClass = "diff-removed" -}}
+        {{- $hasDiff = true -}}
+        {{- $stripped = substr $codeLine 1 (len $codeLine) -}}
+      {{- else if eq $firstChar " " -}}
+        {{/* Context line: strip the leading space, no marker class */}}
+        {{- $stripped = substr $codeLine 1 (len $codeLine) -}}
+      {{- end -}}
+    {{- end -}}
+    {{- $diffMarkers = $diffMarkers | append $markerClass -}}
+    {{- $cleanInner = printf "%s%s\n" $cleanInner $stripped -}}
+  {{- end -}}
+{{- else if not $isConsole -}}
   {{- range $lineIdx, $codeLine := split .Inner "\n" -}}
     {{- $markerClass := "" -}}
     {{- if findRE `\[!code \+\+\]` $codeLine -}}
@@ -233,14 +263,14 @@
     </ul>
   </div>
   {{- else -}}
-  <div class="code-block-body"{{ if $isLong }} data-collapsed="true"{{ end }}{{ if $hasDiff }} data-diff="true"{{ end }}{{ if and $hasDiff $copyRaw }} data-copy-raw="true" data-raw-content="{{ .Inner | htmlEscape }}"{{ end }}>
+  <div class="code-block-body"{{ if $isLong }} data-collapsed="true"{{ end }}{{ if or $hasDiff $isDiffFence }} data-diff="true"{{ end }}{{ if and (or $hasDiff $isDiffFence) $copyRaw }} data-copy-raw="true" data-raw-content="{{ .Inner | htmlEscape }}"{{ end }}>
     {{- if eq $lang "text" -}}
       {{/* security-reviewed: .Inner is Goldmark-escaped markdown code content; printf wraps it in a fixed pre/code scaffold */}}
       {{- $rawHtml := printf "<pre><code>%s</code></pre>" .Inner -}}
       {{- $replaced := replaceRE `TUTVARx([A-Za-z0-9_]+?)x` `<span class="tut-var" data-tut-var="$1"></span>` $rawHtml -}}
       {{/* security-reviewed: variable-token sentinel→span, fixed attribute shape, name is [A-Za-z0-9_] only */}}
       {{ $replaced | safeHTML }}
-    {{- else if $hasDiff -}}
+    {{- else if or $hasDiff $isDiffFence -}}
       {{/* Diff path: highlight the marker-stripped source, then inject diff classes into Chroma output.
            security-reviewed: $cleanInner is derived from Goldmark-escaped markdown; marker stripping is
            a replaceRE with a constant pattern; injected class names come from a fixed if/else chain only. */}}
