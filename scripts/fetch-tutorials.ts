@@ -6,7 +6,7 @@ import { hugoFrontmatterStringify as yamlStringify } from './lib/hugo-yaml.js'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
 import { composeTutorial } from './parsers/compose.js'
 import './parsers/directives/register-all.js' // side-effect: registers all content-reuse directives
-import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, buildSnippetDeps, fetchHelpTitles, EXCLUDED_REPOS, type DiscoveredTutorial, type DiscoverySource } from './parsers/github.js'
+import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, buildSnippetDeps, fetchSnippets, fetchHelpTitles, EXCLUDED_REPOS, type DiscoveredTutorial, type DiscoverySource } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache, type BrowseFeaturedEntry } from './parsers/cap.js'
 import {
   computeFeedFingerprint,
@@ -1203,6 +1203,16 @@ async function main() {
     console.log(`[help-titles] fetched/cached ${helpTitleCache.size} title(s) for ${allHelpPaths.length} path(s)`)
   }
 
+  // ── Snippet pre-fetch (content-reuse Task 6) ─────────────────────────────
+  // Fetch _snippets/*.md from opted-in repos and the shared tutorial-snippets
+  // repo. Gated by SNIPPETS_ENABLED_REPOS env var; empty/absent → no fetch,
+  // no behavior change for existing tutorials.
+  const uniqueRepos = [...new Set(allTutorials.map(t => t.repo).filter(Boolean))]
+  const snippetMap = await fetchSnippets(uniqueRepos, token)
+  if (snippetMap.size > 0) {
+    console.log(`[snippets] fetched ${snippetMap.size} snippet(s) from ${uniqueRepos.length} repo(s)`)
+  }
+
   const tasks = allTutorials.map((t, idx) => async () => {
     const tutStart = performance.now()
     const label = `[${idx + 1}/${allTutorials.length}] ${t.repo}/${t.slug}`
@@ -1282,8 +1292,7 @@ async function main() {
 
       const composed = composeTutorial(rawMd, {
         repo: t.repo, branch: t.branch, slug: t.slug, target, rewriteImages: true,
-        // TODO Task 6: pass real snippetMap from fetchSnippets() and catalogBySlug after navBySlug is built
-        snippetMap: new Map(),
+        snippetMap,
         catalogBySlug: undefined,
         helpTitleCache,
       })
@@ -1955,24 +1964,22 @@ async function main() {
   const navPath = join(navJsonDir, '_nav.json')
   writeFileSync(navPath, JSON.stringify(navData, null, 2), 'utf-8')
 
-  // ── Snippet-deps manifest (Task 7) ──────────────────────────────────────
+  // ── Snippet-deps manifest (Task 7 / content-reuse Task 8) ──────────────────
   // Build and cache a snippet-key → [dependent slugs] map so the rebuild
   // workflow can expand _snippets/ file changes to only the affected tutorials
   // (slug-targeted O(N)) rather than triggering a full ~10-min rebuild.
   //
-  // This runs post-Phase-4 so navEntries is complete. The actual per-tutorial
-  // rawMd is not kept in memory after compose(); for now we pass an empty
-  // snippetMap (stub — buildSnippetDeps returns {} until the full impl lands
-  // in a later task). The cache file is picked up by publish-content.ts and
-  // uploaded to HANA as `_manifest_snippet-deps` for the workflow to fetch
-  // via GET /content/manifest/snippet-deps.
-  // TODO: pass real snippetMap from fetchSnippets() + rawMd per slug once
-  //       snippet pre-fetch is wired (content-reuse Task 8+).
+  // This runs post-Phase-4 so navEntries is complete. rawMd for each slug is
+  // read from the disk cache (fail-open: empty string if missing). The cache
+  // file is picked up by publish-content.ts and uploaded to HANA as
+  // `_manifest_snippet-deps` for the workflow to fetch via
+  // GET /content/manifest/snippet-deps.
   try {
-    const snippetDeps = buildSnippetDeps(
-      new Map<string, string>(),
-      navEntries.map(n => ({ slug: n.slug, rawMd: '' })),
-    )
+    const rawMdBySlug = navEntries.map(n => ({
+      slug: n.slug,
+      rawMd: (() => { try { return readFileSync(join(CACHE_DIR, `${n.slug.toLowerCase()}.md`), 'utf-8') } catch { return '' } })(),
+    }))
+    const snippetDeps = buildSnippetDeps(snippetMap, rawMdBySlug)
     mkdirSync(CACHE_DIR, { recursive: true })
     writeFileSync(
       join(CACHE_DIR, 'snippet-deps.json'),
