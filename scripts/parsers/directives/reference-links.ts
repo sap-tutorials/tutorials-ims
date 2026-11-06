@@ -17,14 +17,14 @@
 // node.label is non-empty. Directives that need a computed display label mutate
 // node.label in their expand hook; render() then omits `label` from output.params.
 
-import { createRequire } from 'module';
 import type { DirectiveDef, DirectiveRenderOutput } from '../directive-registry.js';
 import { DirectiveParseError } from '../directives.js';
 import type { DirectiveNode, ExpandDirectivesContext } from '../directives.js';
 
-// Load api-libs.json at module init time
-const _require = createRequire(import.meta.url);
-const API_LIBS: Record<string, string> = _require('./api-libs.json');
+// Static default import so esbuild inlines the JSON into the parsers bundle.
+// A runtime require left it external of parsers.bundle.mjs (same class of bug
+// that crashed tutorials-srv-qa for icon-allowlist.json). resolveJsonModule is on.
+import API_LIBS from './api-libs.json';
 
 // ─── :tutorial-ref[slug]{label?} ─────────────────────────────────────────────
 //

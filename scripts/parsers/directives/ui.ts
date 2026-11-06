@@ -10,14 +10,13 @@
 // Side-effect: call registerUiDirectives() once at startup.
 // In tests: resetRegistry(); registerUiDirectives()
 
-import { createRequire } from 'node:module';
 import { registerDirective, getRegistry } from '../directive-registry.js';
 import { DirectiveParseError } from '../directives.js';
 import type { DirectiveNode } from '../directives.js';
-
-const _require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const iconAllowlist: string[] = _require('./icon-allowlist.json') as string[];
+// Static default import so esbuild inlines the JSON into the parsers bundle
+// (parsers.bundle.mjs). A runtime require left it external and crashed
+// tutorials-srv-qa at boot with MODULE_NOT_FOUND. resolveJsonModule is on.
+import iconAllowlist from './icon-allowlist.json';
 
 // ─── Key token constants ──────────────────────────────────────────────────────
 
