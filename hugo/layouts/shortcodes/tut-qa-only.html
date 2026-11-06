@@ -1,0 +1,5 @@
+{{- $reason := .Get "reason" -}}
+<div class="tut-qa-only-frame" aria-label="QA only: {{ $reason }}">
+  <span class="tut-qa-only-label">QA only: {{ $reason }}</span>
+  <div class="tut-qa-only-body">{{ .Inner }}</div>
+</div>

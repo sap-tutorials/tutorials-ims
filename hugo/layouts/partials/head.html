@@ -85,6 +85,7 @@
 <link rel="stylesheet" href="{{ $lightbox.RelPermalink }}">
 <link rel="stylesheet" href="{{ $skeletons.RelPermalink }}">
 <link rel="stylesheet" href="{{ $missionSideNav.RelPermalink }}">
+{{ if site.Params.qa }}{{ $qaAuthoring := resources.Get "css/qa-authoring.css" | minify | fingerprint }}<link rel="stylesheet" href="{{ $qaAuthoring.RelPermalink }}">{{ end }}
 <script>
   const t = localStorage.getItem('theme') ||
     (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
