@@ -19,6 +19,8 @@ import type { TutorialStep, TutorialFrontmatter } from './types.js'
 import { validateVariables, wrapTokens } from './variables.js'
 import type { TutorialVariable } from './variables.js'
 import { expandDirectives } from './directives.js'
+import { stripAuthorNotes } from './author-notes.js'
+import './directives/qa-only.js' // side-effect: registers qa-only directive
 
 /**
  * Normalize line endings to LF. Catches CRLF (Windows / GitHub-via-Windows-
@@ -45,6 +47,7 @@ export interface ComposeOpts {
   slug: string
   target: 'hugo' | 'vitepress'
   rewriteImages: boolean
+  channel?: 'prod' | 'qa'
   /**
    * [#655] Optional rules.vr companion content. When provided, this function
    * parses it and merges validation + codecheck + AI flags into `steps`.
@@ -82,8 +85,10 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   // consistent line terminators. parseV2Steps's /^### (.+)$/ would otherwise
   // return 0 steps for CRLF tutorials.
   const normalized = normalizeLineEndings(rawMd)
+  const channel = opts.channel ?? 'prod'
+  const strippedNotes = stripAuthorNotes(normalized, channel, opts.slug)
   const { title, description, youWillLearn, prerequisites, level, frontmatter, body } =
-    extractFrontmatter(normalized)
+    extractFrontmatter(strippedNotes)
 
   const isV2 = frontmatter.parser === 'v2'
 
@@ -162,6 +167,7 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   processedBody = expandDirectives(processedBody, {
     slug: opts.slug,
     variables: tutorialVariables,
+    channel,
   })
 
   // [#1637] Prerequisites bypassed the body's image-URL rewriter and, because
