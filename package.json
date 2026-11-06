@@ -43,7 +43,7 @@
     "backfill-attachments": "tsx scripts/backfill-attachments.ts",
     "preflight:ai-quiz-smoke": "tsx scripts/preflight-ai-quiz-smoke.ts",
     "prebuild:shared-bundle": "node scripts/bundle-shared.cjs",
-    "prebuild:parsers-bundle": "esbuild scripts/parsers/index.ts --bundle --platform=node --format=esm --outfile=srv-qa/lib/parsers.bundle.mjs --external:node:* --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
+    "prebuild:parsers-bundle": "esbuild scripts/parsers/index.ts --bundle --platform=node --format=esm --outfile=srv-qa/lib/parsers.bundle.mjs --external:node:* --banner:js=\"import { createRequire as __cjsBundleRequire } from 'module'; const require = __cjsBundleRequire(import.meta.url);\"",
     "check:security-annotations": "node scripts/check-hugo-safe-html.cjs",
     "check:api-docs-drift": "node scripts/check-api-docs-drift.cjs",
     "check:security-txt-drift": "node scripts/check-security-txt-drift.cjs",
