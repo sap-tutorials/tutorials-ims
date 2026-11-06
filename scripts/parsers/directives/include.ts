@@ -224,7 +224,19 @@ export const INCLUDE_DEF: DirectiveDef = {
       includeChain: [...chain, snippetKey],
     };
 
-    return expandDirectives(withImages, updatedCtx);
+    // Augment any parse error thrown inside the snippet body with context
+    // so authors see: "<original message> (included from <slug>:<line> via <key>)"
+    // instead of a bare line number relative to the snippet file.
+    // Avoid double-wrapping: if the message already contains "included from",
+    // re-throw as-is (the inner frame already annotated it).
+    try {
+      return expandDirectives(withImages, updatedCtx);
+    } catch (err: unknown) {
+      if (err instanceof Error && !err.message.includes('included from')) {
+        err.message = `${err.message} (included from ${ctx.slug}:${node.line} via ${snippetKey})`;
+      }
+      throw err;
+    }
   },
 
   render(_nodeUnknown: unknown, _ctxUnknown: unknown): DirectiveRenderOutput {
