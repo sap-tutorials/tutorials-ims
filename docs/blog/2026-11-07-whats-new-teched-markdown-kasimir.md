@@ -2,11 +2,11 @@
 
 *Posted 2026-11-07 · the stretch since our last update on October 19th*
 
-It's been a loud three weeks. TechEd pulled a wave of event-floor features over the line, authors got a genuinely large box of new Markdown toys, and — because we apparently can't help ourselves — Kasimir the cat learned to run, jump, and fall into pits inside a Three.js arcade game that lives on the event kiosks. This post walks all of it, from the user-facing to the load-bearing internals.
+It's been a loud three weeks. TechEd pulled a wave of event-floor features over the line, authors got a genuinely large box of new Markdown toys, and — because we apparently can't help ourselves — Kasimir the cat learned to run, jump, and fall into pits inside a Three.js arcade game that lives on the event kiosks. This post walks through all of it, from the user-facing to the load-bearing internals.
 
 If you just want the headlines:
 
-- **App Space** (our in-person event hub) learned to branch — fork lanes and free-order tutorial clusters — and now gates completions to the actual event window, shows a scannable prize barcode, and can quietly pull a broken track offline.
+- **App Space** (our in-person event hub) learned to branch, fork lanes and free-order tutorial clusters, and now gates completions to the actual event window, shows a scannable prize barcode, and can quietly pull a broken track offline without republishing.
 - The **Badge Scanner** got a v2: a camera that actually opens, an atomic two-prize cap, and a live event-stats panel.
 - **Daily Drawings** is a new projector screen for on-stage prize draws, presented by a tuxedo-wearing Kasimir.
 - Authors can now write **callouts, synced tabs, reusable snippets, smart reference links, console/diff/tree code blocks, walkthroughs, figures, image sliders, hotspots, asciinema casts, diagrams, and sortable tables** — all through a new directive grammar.
@@ -93,6 +93,8 @@ It ships as a new sibling Vue 3 app, `app/display-app-drawings/`, served at `/dr
 
 This is the part tutorial authors will feel every day. We shipped a new **directive grammar** — a generic, CommonMark-style syntax — and then landed a whole catalog of concrete directives on top of it. (Note for anyone reading the docs: the `writing-tutorials.md` §3.8 "foundation" page still says "ships with no concrete directives yet." That line is now stale — the foundation shipped first, the directives followed in their own PRs, documented across four new author pages.)
 
+Each feature below links its **author guide** (the reference doc) and a **live example tutorial** you can read on the author QA channel — every one is a real, published tutorial in the `sap-tutorials/meta-tutorials` repo that self-demonstrates the syntax it documents.
+
 ### The grammar
 
 Three forms, one consistent shape:
@@ -107,6 +109,8 @@ Container:  :::details[Click to expand]
 
 Single `:` is inline (always needs a `[label]`), `::` is a leaf, `:::` wraps a container — and you nest by adding *more* colons on the outer fence. Attributes are `key="value"`, bare flags (`open` → `open=true`), `.class`, and `#id`, and values are always HTML-escaped so there's no injection path. Anything inside a code fence, inline code, HTML block, or frontmatter is left completely alone. An unregistered directive is rendered literally and raises a warning-only `directive-unknown` lint — prose that happens to look like `:foo[...]` stays safe.
 
+> 📖 **Docs:** [`writing-tutorials.md` §3.8 — Directives](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/authors/writing-tutorials.md)
+
 ### UI instruction directives
 
 Five inline directives for writing UI steps that render crisply and adapt to the reader:
@@ -120,6 +124,8 @@ Five inline directives for writing UI steps that render crisply and adapt to the
 | `:ask` | `:ask[What is a CDS projection?]` | an "Ask Joule" button |
 
 The clever one is `:kbd`. Write `:kbd[Mod+S]` once and it renders `Ctrl`+`S` on Windows/Linux and `⌘S` on macOS, with `Alt`→`⌥`, `Shift`→`⇧`, `Enter`→`↩`, and friends. You can override per-platform with `:kbd[Mod+T]{mac="Ctrl+Option+T"}`. `:icon` names are validated against a real `@ui5/webcomponents-icons` allowlist — a typo is a **hard build error** that suggests the closest match. `:ask` is hidden on the QA channel and removed entirely from the DOM if Joule isn't enabled for the session.
+
+> 📖 **Docs:** [`ui-instruction-directives.md`](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/authors/ui-instruction-directives.md) · ▶️ **Live example:** [UI Instruction Directives](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials-qa/directive-ui-instructions) (a "Configure an SAP BTP Destination" walkthrough)
 
 ### Content reuse and smart references
 
@@ -150,6 +156,8 @@ testedWith:
   node: "22"
 ```
 
+> 📖 **Docs:** [`content-reuse-and-references.md`](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/authors/content-reuse-and-references.md) · ▶️ **Live example:** [Content Reuse and References](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials-qa/directive-content-reuse)
+
 ### Code blocks that behave like real docs
 
 A lot landed here (`writing-tutorials.md` §3.6):
@@ -165,6 +173,8 @@ A lot landed here (`writing-tutorials.md` §3.6):
 - **Tree fences** (` ```tree `) render file hierarchies with `/` for folders and `+`/`~`/`-` prefixes for new/modified/deleted, collapsible and accessible, copying back to a plain ASCII tree.
 - **Walkthroughs** — a `:::walkthrough` container pairs one code fence with a numbered list where each item carries a `{N}` or `{N-M}` line range; clicking a note highlights those lines.
 
+> 📖 **Docs:** [`writing-tutorials.md` §3.6](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/authors/writing-tutorials.md) · ▶️ **Live example:** [Code Block Enhancements](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials-qa/directive-code-blocks)
+
 ### Callouts
 
 GitHub-style blockquote alerts, finally:
@@ -175,6 +185,8 @@ GitHub-style blockquote alerts, finally:
 ```
 
 `[!NOTE]` `[!TIP]` `[!IMPORTANT]` `[!WARNING]` `[!CAUTION]` are the standard set, plus ours: `[!DETAILS] Title` and `[!DETAILS+] Title` (collapsible closed/open), `[!TROUBLESHOOT]` (feeds an auto-generated troubleshooting index at the bottom of the tutorial), `[!RESULT]` ("You should see…"), and `[!HINT]`/`[!SOLUTION]`. Multiple `[!HINT]`s in one step reveal **progressively** — the second only opens after you've opened the first. There's an inline `:spoiler[text]` that blurs until clicked (and renders as `||text||` in plain-text/MCP contexts), and collapsibles auto-expand for print.
+
+> 📖 **Docs:** [`writing-tutorials.md` — Alert callouts](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/authors/writing-tutorials.md) · ▶️ **Live example:** [Callouts & Alerts](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials-qa/directive-callouts)
 
 ### Synced tabs
 
@@ -188,6 +200,8 @@ Built on our existing OPTION blocks — tag the first block of each group with `
 
 The reader picks once from a page-level picker bar, every group on the page updates, and the choice is remembered across tutorials. There are built-in preset keys (`runtime`, `account`, `ide`) that alias common labels, an auto-classifier (`syncTabs: auto`), deep links (`?runtime=Java`), and a proper WAI-ARIA option-tabs implementation.
 
+> 📖 **Docs:** [`writing-tutorials.md` §3.5.4](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/authors/writing-tutorials.md) · ▶️ **Live example:** [Synced Option Tabs](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials-qa/directive-synced-option-tabs)
+
 ### Rich media and tables
 
 - **Figures**: `:::figure[Caption]{width=80% align=center}` wrapping one or more images, auto-numbered "Figure N," with a lightbox gallery.
@@ -198,9 +212,15 @@ The reader picks once from a page-level picker bar, every group on the page upda
 - **Diagrams**: `::diagram[cap-architecture.svg]{alt="…"}` with lightbox zoom/pan and automatic dark-mode inversion for white-background SVGs (`alt` is required — missing it fails the build).
 - **Interactive tables**: append `{.sortable .filterable .sticky}` after any Markdown table.
 
+> 📖 **Docs:** [`rich-media-and-tables.md`](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/authors/rich-media-and-tables.md) · ▶️ **Live example:** [Rich Media & Tables](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials-qa/directive-rich-media)
+
 ### Authoring aids
 
 For the people writing all this: inline/block **author notes** `%% @reviewer: fix this %%` (visible on QA, stripped entirely on PROD), `:::qa-only[Reason]` blocks, and a **CLI-freshness linter** that scans shell fences against a deprecations list and warns on things like `cf push --hostname` (removed in cf v8) or `cds serve --in-memory` (→ `cds watch`).
+
+> 📖 **Docs:** [`authoring-aids.md`](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/authors/authoring-aids.md) · ▶️ **Live example:** [Authoring Aids](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials-qa/directive-authoring-aids)
+
+Variables got new `value`/`display` fields too — see the self-demonstrating [Use Variables to Personalize Your Tutorials](https://tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials-qa/use-variables-in-tutorials). All seven directive samples live in the `sap-tutorials/meta-tutorials` repo and are collected in the **[Tutorial Platform Features for Authors](https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials/mission-tutorial-platform-features-for-authors)** mission.
 
 ---
 
