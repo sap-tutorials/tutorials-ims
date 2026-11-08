@@ -900,13 +900,18 @@ export function expandDirectives(body: string, ctx: ExpandDirectivesContext): st
 
     const paramStr = params.length > 0 ? ' ' + params.join(' ') : '';
 
+    // Shortcode name defaults to tut-<directive>, but a directive may override
+    // it (output.shortcode) when several directives share one template — e.g.
+    // the callout directives all render via `tut-alert`.
+    const shortcodeName = output.shortcode ?? `tut-${node.name}`;
+
     if (node.kind === 'container') {
       // For containers, build opening + body + closing
       const body = output.body || '';
-      return `{{% tut-${node.name}${paramStr} %}}\n${body}\n{{% /tut-${node.name} %}}`;
+      return `{{% ${shortcodeName}${paramStr} %}}\n${body}\n{{% /${shortcodeName} %}}`;
     } else {
       // For inline/leaf
-      return `{{< tut-${node.name}${paramStr} >}}`;
+      return `{{< ${shortcodeName}${paramStr} >}}`;
     }
   }
 

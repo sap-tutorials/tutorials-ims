@@ -68,3 +68,31 @@ describe('callout-directives registration', () => {
     expect(def.kinds).toContain('container')
   })
 })
+
+describe('callout-directives end-to-end shortcode serialization', () => {
+  beforeEach(() => {
+    resetRegistry()
+    registerCalloutDirectives()
+  })
+
+  // Regression: callout directives have no per-name template (no tut-details.html
+  // etc.) — they all render via the shared tut-alert shortcode. buildShortcode
+  // previously emitted {{% tut-<name> %}}, causing Hugo "template for shortcode
+  // tut-details not found" and failing the build on directive-callouts.md.
+  it('details expands to a tut-alert shortcode, not tut-details', async () => {
+    const { expandDirectives } = await import('../directives.js')
+    const out = expandDirectives(':::details[Show me]\nHidden.\n:::', { slug: 't' } as any)
+    expect(out).toContain('{{% tut-alert')
+    expect(out).toContain('type="details"')
+    expect(out).not.toMatch(/tut-details\b/)
+    expect(out).toContain('{{% /tut-alert %}}')
+  })
+
+  it('result (no label) expands to tut-alert type="result"', async () => {
+    const { expandDirectives } = await import('../directives.js')
+    const out = expandDirectives(':::result\nIt worked.\n:::', { slug: 't' } as any)
+    expect(out).toContain('{{% tut-alert')
+    expect(out).toContain('type="result"')
+    expect(out).not.toMatch(/tut-result\b/)
+  })
+})
