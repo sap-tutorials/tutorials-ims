@@ -17,6 +17,22 @@ describe('stripAuthorNotes — PROD channel', () => {
     expect(stripAuthorNotes(body, 'prod')).toBe(body);
   });
 
+  it('does NOT strip %% inside an inline code span', () => {
+    // Regression: prose documenting the %% syntax uses backtick spans.
+    const body = 'Notes are delimited by `%%`: a bare `%%` opens and `%%` closes.';
+    expect(stripAuthorNotes(body, 'prod')).toBe(body);
+  });
+
+  it('strips a real inline note but keeps %% inside backticks on the same line', () => {
+    const body = 'Write `%%` here %% @jdoe: drop this %% and done.';
+    expect(stripAuthorNotes(body, 'prod')).toBe('Write `%%` here  and done.');
+  });
+
+  it('does NOT strip %% inside an HTML comment block', () => {
+    const body = '<!-- example author note: %% @jdoe: hi %% -->';
+    expect(stripAuthorNotes(body, 'prod')).toBe(body);
+  });
+
   it('handles a tutorial with no notes', () => {
     const body = 'No notes here.';
     expect(stripAuthorNotes(body, 'prod')).toBe(body);

@@ -45,10 +45,19 @@ function resolveSnippetKey(
   // 2. Exact label match
   if (snippetMap.has(label)) return label;
 
-  // 3. Suffix match: any key ending with /_snippets/<label>
-  const suffix = '/_snippets/' + label;
-  for (const key of snippetMap.keys()) {
-    if (key.endsWith(suffix)) return key;
+  // 3. Suffix match: any key ending with /_snippets/<label>. Per-repo snippet
+  //    keys retain the `.md` extension (github.ts keeps it so `::include[step.md]`
+  //    matches exactly), but authors write the label WITHOUT the extension
+  //    (docs/authors/content-reuse-and-references.md). So try the bare suffix
+  //    first, then the `.md` form, so `::include[btp-trial-setup]` resolves the
+  //    stored `…/_snippets/btp-trial-setup.md` key.
+  const suffixes = label.endsWith('.md')
+    ? ['/_snippets/' + label]
+    : ['/_snippets/' + label, '/_snippets/' + label + '.md'];
+  for (const suffix of suffixes) {
+    for (const key of snippetMap.keys()) {
+      if (key.endsWith(suffix)) return key;
+    }
   }
 
   // Fallback: return the label so the caller can produce a clear error message
