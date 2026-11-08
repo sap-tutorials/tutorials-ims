@@ -688,7 +688,14 @@ export function escapeShortcodeParam(v: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
-    .replace(/\\/g, '&#92;');
+    .replace(/\\/g, '&#92;')
+    // Hugo's shortcode arg lexer cannot handle a raw newline inside a quoted
+    // param value — it reports "unterminated quoted string". Encode CR/LF as
+    // numeric entities so any multi-line value (e.g. the walkthrough directive's
+    // fenced `code` param) survives as a single quoted arg. The consuming
+    // shortcode template must decode &#10;/&#13; back before markdownify.
+    .replace(/\r/g, '&#13;')
+    .replace(/\n/g, '&#10;');
 }
 
 // ─── expandDirectives ────────────────────────────────────────────────────────

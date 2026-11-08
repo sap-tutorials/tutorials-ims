@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { resetRegistry, type DirectiveDef } from '../directive-registry.js'
-import { DirectiveParseError } from '../directives.js'
+import { resetRegistry, registerDirective, type DirectiveDef } from '../directive-registry.js'
+import { DirectiveParseError, expandDirectives } from '../directives.js'
 
 // Import the walkthrough def directly from the module
 import { walkthroughDef } from '../directives/tut-walkthrough.js'
@@ -72,5 +72,36 @@ describe('walkthrough directive', () => {
     }
     const text = walkthroughDef.toText(node, CTX)
     expect(text).toContain('(lines 1–2)')  // en-dash
+  })
+})
+
+describe('walkthrough directive — end-to-end shortcode serialization', () => {
+  beforeEach(() => {
+    resetRegistry()
+    registerDirective(walkthroughDef)
+  })
+
+  // Regression for the Hugo build failure "unterminated quoted string in
+  // shortcode parameter-argument" (directive-code-blocks.md). The walkthrough
+  // directive routes a multi-line code fence into the `code=` shortcode param;
+  // escapeShortcodeParam must encode newlines so Hugo's arg lexer accepts it.
+  it('emits no raw newline inside a quoted shortcode param', () => {
+    const md = [
+      ':::walkthrough',
+      '```js',
+      'const x = 1',
+      'const y = 2',
+      '```',
+      '',
+      '1. {1} Declares x',
+      '2. {2} Declares y',
+      ':::',
+    ].join('\n')
+    const out = expandDirectives(md, { slug: 'test-tutorial' } as any)
+    // No code=/notes= quoted value may contain a literal newline.
+    expect(out).not.toMatch(/\b(?:code|notes)="[^"]*\n/)
+    // Newlines must survive as encoded entities the template decodes.
+    expect(out).toContain('&#10;')
+    expect(out).toContain('{{% tut-walkthrough')
   })
 })

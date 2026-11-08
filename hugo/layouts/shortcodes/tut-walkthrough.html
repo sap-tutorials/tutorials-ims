@@ -3,9 +3,14 @@
   Receives: code (fenced code block markdown), notes (numbered list markdown).
   Emitted by expandDirectives when a :::walkthrough container directive is expanded.
   Security note: .Get values are HTML-escaped by escapeShortcodeParam before arriving here.
+  Newlines are encoded as &#10;/&#13; by escapeShortcodeParam (Hugo's shortcode arg
+  lexer rejects raw newlines inside a quoted param); decode them back here before
+  markdownify so fenced code blocks and numbered lists render correctly.
   The | markdownify call is safe — Hugo's Goldmark renders markdown to HTML.
 */}}
+{{- $code := .Get "code" | replaceRE "&#13;" "" | replaceRE "&#10;" "\n" -}}
+{{- $notes := .Get "notes" | replaceRE "&#13;" "" | replaceRE "&#10;" "\n" -}}
 <div class="tut-walkthrough" data-walkthrough>
-  <div class="tut-walkthrough-code">{{ .Get "code" | markdownify }}</div>
-  <div class="tut-walkthrough-notes">{{ .Get "notes" | markdownify }}</div>
+  <div class="tut-walkthrough-code">{{ $code | markdownify }}</div>
+  <div class="tut-walkthrough-notes">{{ $notes | markdownify }}</div>
 </div>
