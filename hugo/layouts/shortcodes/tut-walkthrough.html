@@ -7,10 +7,18 @@
   lexer rejects raw newlines inside a quoted param); decode them back here before
   markdownify so fenced code blocks and numbered lists render correctly.
   The | markdownify call is safe — Hugo's Goldmark renders markdown to HTML.
+
+  walkthrough is a CONTAINER directive, so buildShortcode always emits a closing
+  {{% /tut-walkthrough %}} tag. Hugo rejects a closing tag on a shortcode whose
+  template never evaluates .Inner ("does not evaluate .Inner or .InnerDeindent,
+  yet a closing tag was provided"). The directive routes all content into the
+  code/notes params and has no meaningful inner body, so we reference .Inner
+  defensively — this both satisfies Hugo and renders any stray inner content.
 */}}
 {{- $code := .Get "code" | replaceRE "&#13;" "" | replaceRE "&#10;" "\n" -}}
 {{- $notes := .Get "notes" | replaceRE "&#13;" "" | replaceRE "&#10;" "\n" -}}
 <div class="tut-walkthrough" data-walkthrough>
   <div class="tut-walkthrough-code">{{ $code | markdownify }}</div>
   <div class="tut-walkthrough-notes">{{ $notes | markdownify }}</div>
+  {{- with .Inner }}{{ . }}{{ end -}}
 </div>
