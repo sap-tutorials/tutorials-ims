@@ -31,6 +31,17 @@ describe('findUnexpandedDirectives', () => {
     expect(findUnexpandedDirectives(body, NAMES)).toEqual([]);
   });
 
+  it('does NOT flag a token inside an HTML comment (doc example)', () => {
+    // directive-authoring-aids: `<!-- The :::qa-only block above … -->`
+    const body = 'Prose.\n<!-- The :::details block demonstrates X.\n   multi-line note -->\nmore.';
+    expect(findUnexpandedDirectives(body, ['details', 'ui'])).toEqual([]);
+  });
+
+  it('flags a real token on a line that also has an unrelated comment', () => {
+    const body = 'Click :ui[Go] <!-- not :menu[X] here -->';
+    expect(findUnexpandedDirectives(body, NAMES)).toEqual([':ui[']);
+  });
+
   it('does NOT flag unrelated prose colons', () => {
     const body = 'Meet at 9:00 and see http://x.test and note: this.';
     expect(findUnexpandedDirectives(body, NAMES)).toEqual([]);
