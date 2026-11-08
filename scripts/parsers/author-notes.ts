@@ -7,12 +7,14 @@
  *               containing only `%%` closes. Content between the delimiters is
  *               the note body.
  *
- * Fence-awareness: any line classified as `'code'` by classifyLines() (i.e.
- * inside a fenced or indented code block) is treated as literal — `%%` on such
- * a line is never a delimiter.
+ * Fence-awareness: any line classified as `'code'` or `'html'` by classifyLines()
+ * (inside a fenced/indented code block or an HTML block) is treated as literal —
+ * `%%` on such a line is never a delimiter. Inline code spans (single backticks)
+ * are also protected: `%%` inside `` `…` `` is ignored via maskInlineCode().
  */
 
 import { classifyLines } from './md-grammar.js'
+import { maskInlineCode } from './directives.js'
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -103,8 +105,9 @@ export function stripAuthorNotes(body: string, channel: 'prod' | 'qa', slug?: st
     const line = lines[i]
     const lineNum = i + 1 // 1-based
 
-    // Lines inside a code block are never touched.
-    if (classes[i]?.kind === 'code') {
+    // Lines inside a code block or HTML block are never touched — `%%` there
+    // is literal (e.g. prose documenting the %% syntax inside an HTML comment).
+    if (classes[i]?.kind === 'code' || classes[i]?.kind === 'html') {
       out.push(line)
       i++
       continue
@@ -121,8 +124,8 @@ export function stripAuthorNotes(body: string, channel: 'prod' | 'qa', slug?: st
 
       let closed = false
       while (i < lines.length) {
-        if (classes[i]?.kind === 'code') {
-          // A code line inside a block note counts as content.
+        if (classes[i]?.kind === 'code' || classes[i]?.kind === 'html') {
+          // A code/html line inside a block note counts as content.
           contentLines.push(lines[i])
           i++
           continue
@@ -164,41 +167,51 @@ export function stripAuthorNotes(body: string, channel: 'prod' | 'qa', slug?: st
     }
 
     // -----------------------------------------------------------------------
-    // Inline notes: %% ... %% on a single line
+    // Inline notes: %% ... %% on a single line.
+    // Detect against a copy with inline code spans masked out, so `%%` inside
+    // `` `…` `` is NOT treated as a delimiter (e.g. prose documenting the
+    // syntax). Ranges are spliced from the ORIGINAL line (positions preserved
+    // by maskInlineCode), so backtick content survives verbatim.
     // -----------------------------------------------------------------------
-    if (line.includes('%%')) {
-      // Check if there is any inline note pattern on this line.
-      if (INLINE_NOTE_RE.test(line)) {
-        INLINE_NOTE_RE.lastIndex = 0 // reset after .test()
+    const masked = line.includes('%%') ? maskInlineCode(line) : line
+    if (masked.includes('%%')) {
+      // Collect inline-note ranges from the masked line.
+      INLINE_NOTE_RE.lastIndex = 0
+      const ranges: Array<{ start: number; end: number }> = []
+      let m: RegExpExecArray | null
+      while ((m = INLINE_NOTE_RE.exec(masked)) !== null) {
+        ranges.push({ start: m.index, end: m.index + m[0].length })
+      }
 
-        if (channel === 'prod') {
-          out.push(line.replace(INLINE_NOTE_RE, ''))
-        } else {
-          out.push(
-            line.replace(INLINE_NOTE_RE, (match) => {
-              // Strip the surrounding %% delimiters.
-              const inner = match.slice(2, -2).trim()
-              return renderInlineQA(inner)
-            })
-          )
+      if (ranges.length > 0) {
+        // Rebuild the line, replacing each note range (taken from the ORIGINAL
+        // line) while leaving the rest — including inline code — untouched.
+        let rebuilt = ''
+        let cursor = 0
+        for (const r of ranges) {
+          rebuilt += line.slice(cursor, r.start)
+          if (channel !== 'prod') {
+            const inner = line.slice(r.start + 2, r.end - 2).trim()
+            rebuilt += renderInlineQA(inner)
+          }
+          cursor = r.end
         }
+        rebuilt += line.slice(cursor)
+        out.push(rebuilt)
         i++
         continue
       }
 
-      // `%%` present but no closed inline pattern → could be an opening inline
-      // that runs to a later line. This is handled as an unterminated note.
-      // Find where the opening `%%` is on this line.
-      const openPos = line.indexOf('%%')
+      // `%%` present (outside code) but no closed inline pattern → unterminated.
+      const openPos = masked.indexOf('%%')
       if (openPos !== -1) {
-        // Unclosed inline note.
         if (channel === 'qa') {
           throw new AuthorNoteError('Unterminated author note', lineNum)
         } else {
           console.warn(
             `[author-notes] unterminated note at line ${lineNum}${slug ? ` in ${slug}` : ''} — stripped to end-of-step`
           )
-          // Strip from %% to end-of-line on PROD.
+          // Strip from %% to end-of-line on PROD (original line, same offset).
           out.push(line.slice(0, openPos))
           i++
           continue

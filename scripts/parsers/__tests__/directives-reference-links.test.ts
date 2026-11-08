@@ -1,7 +1,7 @@
 // scripts/parsers/__tests__/directives-reference-links.test.ts
 //
 // Tests for Task 3 smart reference link directives:
-//   :tutorial-ref, :note-ref, :help-ref, :api-ref, :since
+//   :tutorial, :note, :help, :api, :since
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { expandDirectives, renderDirectivesAsText } from '../directives.js';
@@ -30,9 +30,9 @@ afterEach(() => {
   resetRegistry();
 });
 
-// ─── :tutorial-ref ───────────────────────────────────────────────────────────
+// ─── :tutorial ───────────────────────────────────────────────────────────
 
-describe(':tutorial-ref directive', () => {
+describe(':tutorial directive', () => {
   it('known slug → renders with catalog title as label', () => {
     const ctx: ExpandDirectivesContext = {
       slug: 'test-tutorial',
@@ -40,8 +40,8 @@ describe(':tutorial-ref directive', () => {
         ['hana-cloud-tutorial-1', { title: 'Get Started with HANA Cloud', time: 15 }],
       ]),
     };
-    const result = expandDirectives(':tutorial-ref[hana-cloud-tutorial-1]', ctx);
-    expect(result).toContain('tut-tutorial-ref');
+    const result = expandDirectives(':tutorial[hana-cloud-tutorial-1]', ctx);
+    expect(result).toContain('tut-tutorial');
     expect(result).toContain('label="Get Started with HANA Cloud"');
     expect(result).toContain('slug="hana-cloud-tutorial-1"');
     expect(result).toContain('href="/tutorials/hana-cloud-tutorial-1"');
@@ -54,7 +54,7 @@ describe(':tutorial-ref directive', () => {
         ['my-tutorial', { title: 'My Tutorial', time: 10 }],
       ]),
     };
-    const result = expandDirectives(':tutorial-ref[My-Tutorial]', ctx);
+    const result = expandDirectives(':tutorial[My-Tutorial]', ctx);
     expect(result).toContain('slug="my-tutorial"');
     expect(result).toContain('label="My Tutorial"');
   });
@@ -66,9 +66,9 @@ describe(':tutorial-ref directive', () => {
         ['other-tutorial', { title: 'Other', time: 5 }],
       ]),
     };
-    expect(() => expandDirectives(':tutorial-ref[no-such-slug]', ctx)).toThrow();
+    expect(() => expandDirectives(':tutorial[no-such-slug]', ctx)).toThrow();
     try {
-      expandDirectives(':tutorial-ref[no-such-slug]', ctx);
+      expandDirectives(':tutorial[no-such-slug]', ctx);
     } catch (err: unknown) {
       const e = err as { code?: string };
       expect(e.code).toBe('invalid-attr');
@@ -80,8 +80,8 @@ describe(':tutorial-ref directive', () => {
       slug: 'test-tutorial',
       // catalogBySlug is undefined
     };
-    const result = expandDirectives(':tutorial-ref[some-slug]', ctx);
-    expect(result).toContain('tut-tutorial-ref');
+    const result = expandDirectives(':tutorial[some-slug]', ctx);
+    expect(result).toContain('tut-tutorial');
     expect(result).toContain('label="some-slug"');
     expect(result).toContain('slug="some-slug"');
     expect(result).not.toThrow;
@@ -94,7 +94,7 @@ describe(':tutorial-ref directive', () => {
         ['hana-tutorial', { title: 'Auto Title', time: 5 }],
       ]),
     };
-    const result = expandDirectives(':tutorial-ref[hana-tutorial]{label="Custom Label"}', ctx);
+    const result = expandDirectives(':tutorial[hana-tutorial]{label="Custom Label"}', ctx);
     expect(result).toContain('label="Custom Label"');
   });
 
@@ -105,33 +105,33 @@ describe(':tutorial-ref directive', () => {
         ['cap-tut', { title: 'CAP Tutorial', time: 10 }],
       ]),
     };
-    const result = renderDirectivesAsText(':tutorial-ref[cap-tut]');
+    const result = renderDirectivesAsText(':tutorial[cap-tut]');
     // Without catalogBySlug in renderDirectivesAsText, it falls back to slug
     expect(result).toBe('cap-tut');
   });
 
   it('toText with no catalog → returns slug', () => {
-    const result = renderDirectivesAsText(':tutorial-ref[my-slug]');
+    const result = renderDirectivesAsText(':tutorial[my-slug]');
     expect(result).toBe('my-slug');
   });
 });
 
-// ─── :note-ref ───────────────────────────────────────────────────────────────
+// ─── :note ───────────────────────────────────────────────────────────────
 
-describe(':note-ref directive', () => {
+describe(':note directive', () => {
   it('valid note number → correct href and label', () => {
     const ctx: ExpandDirectivesContext = { slug: 'test-tutorial' };
-    const result = expandDirectives(':note-ref[2471802]', ctx);
-    expect(result).toContain('tut-note-ref');
+    const result = expandDirectives(':note[2471802]', ctx);
+    expect(result).toContain('tut-note');
     expect(result).toContain('href="https://me.sap.com/notes/2471802"');
     expect(result).toContain('label="SAP Note 2471802"');
   });
 
   it('non-digit label → throws with code invalid-attr', () => {
     const ctx: ExpandDirectivesContext = { slug: 'test-tutorial' };
-    expect(() => expandDirectives(':note-ref[abc]', ctx)).toThrow();
+    expect(() => expandDirectives(':note[abc]', ctx)).toThrow();
     try {
-      expandDirectives(':note-ref[abc]', ctx);
+      expandDirectives(':note[abc]', ctx);
     } catch (err: unknown) {
       const e = err as { code?: string };
       expect(e.code).toBe('invalid-attr');
@@ -140,20 +140,20 @@ describe(':note-ref directive', () => {
 
   it('label with mixed digits and non-digits → throws with code invalid-attr', () => {
     const ctx: ExpandDirectivesContext = { slug: 'test-tutorial' };
-    expect(() => expandDirectives(':note-ref[123abc]', ctx)).toThrow();
+    expect(() => expandDirectives(':note[123abc]', ctx)).toThrow();
   });
 
   it('toText returns "SAP Note <n>"', () => {
     // renderDirectivesAsText skips expand hooks; toText must format the raw digit
     // string into "SAP Note <n>" directly, without relying on expand having run.
-    const result = renderDirectivesAsText(':note-ref[3456789]');
+    const result = renderDirectivesAsText(':note[3456789]');
     expect(result).toBe('SAP Note 3456789');
   });
 });
 
-// ─── :help-ref ───────────────────────────────────────────────────────────────
+// ─── :help ───────────────────────────────────────────────────────────────
 
-describe(':help-ref directive', () => {
+describe(':help directive', () => {
   it('uses title from helpTitleCache when available', () => {
     const ctx: ExpandDirectivesContext = {
       slug: 'test-tutorial',
@@ -161,8 +161,8 @@ describe(':help-ref directive', () => {
         ['hana-cloud/guide', 'SAP HANA Cloud Administration Guide'],
       ]),
     };
-    const result = expandDirectives(':help-ref[hana-cloud/guide]', ctx);
-    expect(result).toContain('tut-help-ref');
+    const result = expandDirectives(':help[hana-cloud/guide]', ctx);
+    expect(result).toContain('tut-help');
     expect(result).toContain('label="SAP HANA Cloud Administration Guide"');
     expect(result).toContain('href="https://help.sap.com/docs/hana-cloud/guide"');
   });
@@ -174,7 +174,7 @@ describe(':help-ref directive', () => {
         ['other-path', 'Other Title'],
       ]),
     };
-    const result = expandDirectives(':help-ref[hana-cloud/guide]', ctx);
+    const result = expandDirectives(':help[hana-cloud/guide]', ctx);
     expect(result).toContain('label="hana-cloud/guide"');
     expect(result).toContain('href="https://help.sap.com/docs/hana-cloud/guide"');
   });
@@ -184,7 +184,7 @@ describe(':help-ref directive', () => {
       slug: 'test-tutorial',
       // no helpTitleCache
     };
-    const result = expandDirectives(':help-ref[some/path]', ctx);
+    const result = expandDirectives(':help[some/path]', ctx);
     expect(result).toContain('label="some/path"');
     expect(result).toContain('href="https://help.sap.com/docs/some/path"');
   });
@@ -196,18 +196,18 @@ describe(':help-ref directive', () => {
         ['cap/guide', 'CAP Guide'],
       ]),
     };
-    const result = expandDirectives(':help-ref[cap/guide]', ctx);
+    const result = expandDirectives(':help[cap/guide]', ctx);
     expect(result).toContain('label="CAP Guide"');
   });
 });
 
-// ─── :api-ref ────────────────────────────────────────────────────────────────
+// ─── :api ────────────────────────────────────────────────────────────────
 
-describe(':api-ref directive', () => {
+describe(':api directive', () => {
   it('known lib → correct href containing lib domain, symbol in params', () => {
     const ctx: ExpandDirectivesContext = { slug: 'test-tutorial' };
-    const result = expandDirectives(':api-ref[cds.ql.SELECT]{lib=cap-node}', ctx);
-    expect(result).toContain('tut-api-ref');
+    const result = expandDirectives(':api[cds.ql.SELECT]{lib=cap-node}', ctx);
+    expect(result).toContain('tut-api');
     expect(result).toContain('cap.cloud.sap');
     expect(result).toContain('symbol="cds.ql.SELECT"');
     expect(result).toContain('lib="cap-node"');
@@ -215,22 +215,22 @@ describe(':api-ref directive', () => {
 
   it('href contains the symbol in the anchor', () => {
     const ctx: ExpandDirectivesContext = { slug: 'test-tutorial' };
-    const result = expandDirectives(':api-ref[cds.ql.SELECT]{lib=cap-node}', ctx);
+    const result = expandDirectives(':api[cds.ql.SELECT]{lib=cap-node}', ctx);
     expect(result).toContain('cds.ql.SELECT');
   });
 
   it('ui5 lib → ui5.sap.com domain', () => {
     const ctx: ExpandDirectivesContext = { slug: 'test-tutorial' };
-    const result = expandDirectives(':api-ref[sap.m.Button]{lib=ui5}', ctx);
+    const result = expandDirectives(':api[sap.m.Button]{lib=ui5}', ctx);
     expect(result).toContain('ui5.sap.com');
     expect(result).toContain('symbol="sap.m.Button"');
   });
 
   it('unknown lib → throws with code invalid-attr', () => {
     const ctx: ExpandDirectivesContext = { slug: 'test-tutorial' };
-    expect(() => expandDirectives(':api-ref[foo]{lib=unknown-lib}', ctx)).toThrow();
+    expect(() => expandDirectives(':api[foo]{lib=unknown-lib}', ctx)).toThrow();
     try {
-      expandDirectives(':api-ref[foo]{lib=unknown-lib}', ctx);
+      expandDirectives(':api[foo]{lib=unknown-lib}', ctx);
     } catch (err: unknown) {
       const e = err as { code?: string };
       expect(e.code).toBe('invalid-attr');
@@ -238,7 +238,7 @@ describe(':api-ref directive', () => {
   });
 
   it('toText returns the symbol', () => {
-    const result = renderDirectivesAsText(':api-ref[cds.ql.SELECT]{lib=cap-node}');
+    const result = renderDirectivesAsText(':api[cds.ql.SELECT]{lib=cap-node}');
     expect(result).toBe('cds.ql.SELECT');
   });
 });
@@ -275,10 +275,10 @@ describe('mixed inline reference directives', () => {
         ['cap-tutorial', { title: 'CAP Tutorial', time: 10 }],
       ]),
     };
-    const md = 'See :tutorial-ref[cap-tutorial] and :note-ref[2471802] for details.';
+    const md = 'See :tutorial[cap-tutorial] and :note[2471802] for details.';
     const result = expandDirectives(md, ctx);
-    expect(result).toContain('tut-tutorial-ref');
-    expect(result).toContain('tut-note-ref');
+    expect(result).toContain('tut-tutorial');
+    expect(result).toContain('tut-note');
     expect(result).toContain('CAP Tutorial');
     expect(result).toContain('SAP Note 2471802');
   });

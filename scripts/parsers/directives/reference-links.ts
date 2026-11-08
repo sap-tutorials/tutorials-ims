@@ -11,7 +11,7 @@
 // (imported by Task 6's register-all.ts)
 //
 // Shortcode name convention: buildShortcode emits `{{< tut-<name> ... >}}`.
-// So directive name "tutorial-ref" → shortcode file "tut-tutorial-ref.html".
+// So directive name "tutorial" → shortcode file "tut-tutorial.html".
 //
 // label auto-param: buildShortcode adds `label="<node.label>"` automatically when
 // node.label is non-empty. Directives that need a computed display label mutate
@@ -33,7 +33,7 @@ const API_LIBS: Record<string, string> = apiLibsJson as Record<string, string>;
 // render: emit { params: { slug, href } } — label comes from (mutated) node.label
 
 export const TUTORIAL_REF_DEF: DirectiveDef = {
-  name: 'tutorial-ref',
+  name: 'tutorial',
   kinds: ['inline'],
   summary: 'Cross-reference to another tutorial by slug.',
   label: { required: true, markdown: false },
@@ -58,7 +58,7 @@ export const TUTORIAL_REF_DEF: DirectiveDef = {
           ctx.slug,
           node.line,
           node.column,
-          'tutorial-ref',
+          'tutorial',
           'invalid-attr',
         );
       }
@@ -113,7 +113,7 @@ export const TUTORIAL_REF_DEF: DirectiveDef = {
 const DIGITS_RE = /^\d+$/;
 
 export const NOTE_REF_DEF: DirectiveDef = {
-  name: 'note-ref',
+  name: 'note',
   kinds: ['inline'],
   summary: 'Link to an SAP Note by number.',
   label: { required: true, markdown: false },
@@ -131,7 +131,7 @@ export const NOTE_REF_DEF: DirectiveDef = {
         (ctx as unknown as { slug?: string }).slug ?? '_note',
         node.line,
         node.column,
-        'note-ref',
+        'note',
         'invalid-attr',
       );
     }
@@ -171,7 +171,7 @@ export const NOTE_REF_DEF: DirectiveDef = {
 // render: emit { params: { href } } — label comes from (mutated) node.label
 
 export const HELP_REF_DEF: DirectiveDef = {
-  name: 'help-ref',
+  name: 'help',
   kinds: ['inline'],
   summary: 'Link to help.sap.com by topic path.',
   label: { required: true, markdown: false },
@@ -214,10 +214,10 @@ export const HELP_REF_DEF: DirectiveDef = {
 // node.label = the API symbol (e.g. "cds.ql.SELECT")
 // render: validate lib, build href; emit { params: { symbol, lib, href } }
 // node.label (symbol) auto-becomes `label` in shortcode — suppressed by clearing it
-// tut-api-ref.html uses `.Get "symbol"`, not `.Get "label"`
+// tut-api.html uses `.Get "symbol"`, not `.Get "label"`
 
 export const API_REF_DEF: DirectiveDef = {
-  name: 'api-ref',
+  name: 'api',
   kinds: ['inline'],
   summary: 'Link to an API symbol in a curated library.',
   label: { required: true, markdown: false },
@@ -231,7 +231,7 @@ export const API_REF_DEF: DirectiveDef = {
     // Store symbol before we clear node.label
     node.attrs['_symbol'] = node.label ?? '';
     // Clear node.label so buildShortcode does NOT auto-emit label="<symbol>".
-    // tut-api-ref.html uses `.Get "symbol"` exclusively.
+    // tut-api.html uses `.Get "symbol"` exclusively.
     node.label = '';
     return '';
   },
@@ -249,7 +249,7 @@ export const API_REF_DEF: DirectiveDef = {
         ctx.slug ?? '_api',
         node.line,
         node.column,
-        'api-ref',
+        'api',
         'invalid-attr',
       );
     }
