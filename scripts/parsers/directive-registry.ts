@@ -26,6 +26,14 @@ export interface DirectiveRenderOutput {
   body?: string;
   /** Plain markdown to emit unwrapped (no shortcode). */
   markdown?: string;
+  /**
+   * Override the emitted Hugo shortcode name. Defaults to `tut-<directive name>`.
+   * Use when several directives share one template — e.g. the callout
+   * directives (details/troubleshoot/result/hint/solution) all render via the
+   * single `tut-alert` shortcode (distinguished by a `type` param), so there is
+   * no `tut-details.html` etc. Value is used verbatim as the shortcode name.
+   */
+  shortcode?: string;
 }
 
 /** Full directive definition registered in the registry. */

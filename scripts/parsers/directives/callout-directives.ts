@@ -25,7 +25,9 @@ function makeCalloutContainer(reg: typeof registerDirective, name: string, since
       const params: Record<string, string | boolean> = { type: name }
       if (node.label) params.title = node.label
       if (node.attrs.open) params.open = true
-      return { params, body: node.body ?? '' }
+      // All callout directives render through the single tut-alert shortcode
+      // (distinguished by the `type` param); there is no per-name template.
+      return { params, body: node.body ?? '', shortcode: 'tut-alert' }
     },
     toText(node: DirectiveNode) {
       const title = node.label ? ` ${node.label}` : ''
