@@ -6,7 +6,6 @@ import { hugoFrontmatterStringify as yamlStringify } from './lib/hugo-yaml.js'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
 import { composeTutorial } from './parsers/compose.js'
 import './parsers/directives/register-all.js' // side-effect: registers all content-reuse directives
-import { getRegistry } from './parsers/directive-registry.js'
 import { findUnexpandedDirectives } from './parsers/guard-unexpanded-directives.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, buildSnippetDeps, fetchSnippets, fetchHelpTitles, EXCLUDED_REPOS, type DiscoveredTutorial, type DiscoverySource } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache, type BrowseFeaturedEntry } from './parsers/cap.js'
@@ -1226,7 +1225,9 @@ async function main() {
   // registry was not populated when compose ran → the raw token would publish
   // and render as literal prose (the directive-ui-instructions leak). Collected
   // per slug below and thrown after the worker pool so the build FAILS loudly.
-  const registeredDirectiveNames = [...getRegistry().keys()]
+  // NB: uses the STATIC EXPECTED_DIRECTIVE_NAMES, NOT the live registry — if a
+  // directive fails to register, its name is absent from getRegistry() and the
+  // guard would be blind to the very failure it exists to catch.
   const unexpandedDirectiveHits: Array<{ slug: string; tokens: string[] }> = []
 
   const tasks = allTutorials.map((t, idx) => async () => {
@@ -1316,7 +1317,7 @@ async function main() {
 
       // Safety net: flag any registered directive left UNEXPANDED in the
       // composed body (raw :name[…] in live prose, code spans/fences excluded).
-      const rawTokens = findUnexpandedDirectives(composed.body, registeredDirectiveNames)
+      const rawTokens = findUnexpandedDirectives(composed.body)
       if (rawTokens.length > 0) {
         unexpandedDirectiveHits.push({ slug: t.slug, tokens: [...new Set(rawTokens)] })
       }

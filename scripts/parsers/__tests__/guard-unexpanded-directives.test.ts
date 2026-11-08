@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findUnexpandedDirectives } from '../guard-unexpanded-directives.js';
+import { findUnexpandedDirectives, EXPECTED_DIRECTIVE_NAMES } from '../guard-unexpanded-directives.js';
 
 const NAMES = ['ui', 'menu', 'kbd', 'icon', 'ask', 'details', 'tutorial', 'note'];
 
@@ -54,5 +54,38 @@ describe('findUnexpandedDirectives', () => {
 
   it('returns empty for an empty registry (nothing to assert)', () => {
     expect(findUnexpandedDirectives(':ui[Save]', [])).toEqual([]);
+  });
+
+  it('defaults to the STATIC EXPECTED_DIRECTIVE_NAMES (not a passed registry)', () => {
+    // The whole point: catch a raw directive even when a live registry would
+    // have omitted it (the registration-failure blind spot). Called with no
+    // names arg, it must still flag :ui[ / :menu[.
+    expect(findUnexpandedDirectives('choose :menu[A > B] then :ui[Go]{type=button}'))
+      .toEqual([':menu[', ':ui[']);
+  });
+
+  it('EXPECTED_DIRECTIVE_NAMES covers the UI directives and excludes qa-only', () => {
+    for (const n of ['ui', 'menu', 'kbd', 'icon', 'ask']) {
+      expect(EXPECTED_DIRECTIVE_NAMES).toContain(n);
+    }
+    // qa-only legitimately survives (channel-dependent strip) — must NOT be guarded.
+    expect(EXPECTED_DIRECTIVE_NAMES).not.toContain('qa-only');
+  });
+});
+
+describe('EXPECTED_DIRECTIVE_NAMES drift guard', () => {
+  it('stays in sync with the actual registered directives (minus qa-only)', async () => {
+    // Load the real registration hub and compare. If someone adds a directive
+    // but forgets EXPECTED_DIRECTIVE_NAMES, the guard would silently stop
+    // covering it — this test fails loudly instead.
+    const { getRegistry } = await import('../directive-registry.js');
+    await import('../directives/register-all.js');
+    // compose.ts pulls the self-registering families; import for completeness.
+    await import('../compose.js');
+    const registered = [...getRegistry().keys()].filter((n) => n !== 'qa-only').sort();
+    const expected = [...EXPECTED_DIRECTIVE_NAMES].sort();
+    // Every registered (non-qa-only) directive must be in the expected set.
+    const missing = registered.filter((n) => !expected.includes(n));
+    expect(missing).toEqual([]);
   });
 });

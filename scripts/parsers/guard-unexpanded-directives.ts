@@ -21,22 +21,41 @@
 import { maskInlineCode } from './directives.js';
 
 /**
- * Scan a composed tutorial body for unexpanded tokens of the given registered
- * directive names. Returns the list of offending tokens (empty = clean).
+ * Canonical set of directive names that MUST expand at compose time. This is a
+ * STATIC list on purpose: the guard must not be driven by the live registry,
+ * because the failure it guards against is *registration not happening* — if we
+ * derived the names from getRegistry() an unregistered directive would simply be
+ * absent from the match set and the guard would pass while the raw token ships
+ * (exactly how the directive-ui-instructions regression slipped through).
  *
- * @param body            The post-compose body (expandDirectives already ran).
- * @param registeredNames Directive names that SHOULD have expanded (from the
- *                        live registry at compose time).
+ * Excludes `qa-only`: it legitimately survives as a stripped/passthrough marker
+ * depending on channel, so a surviving `:::qa-only` is not a failure.
+ * Keep in sync with the directive modules under ./ (a drift test guards this).
+ */
+export const EXPECTED_DIRECTIVE_NAMES: readonly string[] = [
+  'api', 'ask', 'cast', 'compare', 'details', 'diagram', 'figure', 'help',
+  'hint', 'icon', 'image', 'include', 'kbd', 'menu', 'note', 'requires',
+  'result', 'since', 'solution', 'spoiler', 'troubleshoot', 'tutorial', 'ui',
+  'walkthrough',
+];
+
+/**
+ * Scan a composed tutorial body for unexpanded tokens of the given directive
+ * names. Returns the list of offending tokens (empty = clean).
+ *
+ * @param body  The post-compose body (expandDirectives already ran).
+ * @param names Directive names that SHOULD have expanded. Pass a STATIC list
+ *              (EXPECTED_DIRECTIVE_NAMES), NOT the live registry — see above.
  */
 export function findUnexpandedDirectives(
   body: string,
-  registeredNames: Iterable<string>,
+  names: Iterable<string> = EXPECTED_DIRECTIVE_NAMES,
 ): string[] {
-  const names = [...registeredNames].filter((n) => /^[a-z][a-z0-9-]*$/.test(n));
-  if (names.length === 0) return [];
+  const directiveNames = [...names].filter((n) => /^[a-z][a-z0-9-]*$/.test(n));
+  if (directiveNames.length === 0) return [];
   // :name[  /  ::name[  /  :::name  — a leading colon run (1-3) + name + ( [ or EOL-ish ).
-  // Anchored on the registered names so arbitrary prose colons don't match.
-  const alt = names.map((n) => n.replace(/[-]/g, '\\$&')).join('|');
+  // Anchored on the known names so arbitrary prose colons don't match.
+  const alt = directiveNames.map((n) => n.replace(/[-]/g, '\\$&')).join('|');
   const tokenRe = new RegExp(`(?<![:\\w]):{1,3}(?:${alt})(?:\\[|\\b)`, 'g');
 
   // Strip HTML comments first (may span lines). Comment bodies are not rendered
