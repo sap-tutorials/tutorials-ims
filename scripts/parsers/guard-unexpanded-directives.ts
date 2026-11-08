@@ -39,7 +39,13 @@ export function findUnexpandedDirectives(
   const alt = names.map((n) => n.replace(/[-]/g, '\\$&')).join('|');
   const tokenRe = new RegExp(`(?<![:\\w]):{1,3}(?:${alt})(?:\\[|\\b)`, 'g');
 
-  const lines = body.split('\n');
+  // Strip HTML comments first (may span lines). Comment bodies are not rendered
+  // and routinely contain directive EXAMPLES — e.g. directive-authoring-aids'
+  // `<!-- The :::qa-only block above … -->`. Replace with blank lines so line
+  // numbers / fence state are preserved.
+  const commentless = body.replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, ' '));
+
+  const lines = commentless.split('\n');
   const hits: string[] = [];
   let inFence = false;
   for (const line of lines) {
