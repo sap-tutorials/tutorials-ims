@@ -227,6 +227,20 @@ describe('::include expand hook', () => {
     expect(result).not.toContain('::include')
   })
 
+  it('resolves a label with NO extension against a .md-suffixed per-repo key', () => {
+    // Regression: per-repo snippet keys retain `.md`, but authors write the
+    // label without it (::include[btp-trial-setup]). The suffix match must try
+    // `${label}.md` too, else the whole tutorial fails to compose.
+    const snippetMap = new Map([['meta-tutorials/_snippets/btp-trial-setup.md', 'Trial steps here']])
+    const ctx: ExpandDirectivesContext = {
+      slug: 'test-tutorial',
+      snippetMap,
+    }
+    const result = expandDirectives('::include[btp-trial-setup]', ctx)
+    expect(result).toContain('Trial steps here')
+    expect(result).not.toContain('::include')
+  })
+
   it('substitutes {{param:region}}', () => {
     const snippetMap = new Map([['r/_snippets/s.md', 'Region: {{param:region}}']])
     const ctx: ExpandDirectivesContext = {
@@ -357,10 +371,10 @@ describe('::include integration via registerAllDirectives', () => {
     // After registerAllDirectives, all content-reuse directives should be in the registry
     const reg = getRegistry()
     expect(reg.has('include')).toBe(true)
-    expect(reg.has('tutorial-ref')).toBe(true)
-    expect(reg.has('note-ref')).toBe(true)
-    expect(reg.has('help-ref')).toBe(true)
-    expect(reg.has('api-ref')).toBe(true)
+    expect(reg.has('tutorial')).toBe(true)
+    expect(reg.has('note')).toBe(true)
+    expect(reg.has('help')).toBe(true)
+    expect(reg.has('api')).toBe(true)
     expect(reg.has('since')).toBe(true)
     expect(reg.has('requires')).toBe(true)
   })

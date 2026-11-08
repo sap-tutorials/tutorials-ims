@@ -220,8 +220,11 @@ function splitAttrTokens(raw: string): string[] {
 /**
  * Returns a version of the line with all inline code spans replaced by spaces,
  * preserving original character positions.
+ *
+ * Exported so other passes (e.g. author-note stripping) can detect delimiters
+ * like `%%` that must be ignored inside inline code spans.
  */
-function maskInlineCode(line: string): string {
+export function maskInlineCode(line: string): string {
   const chars = line.split('');
   let i = 0;
   while (i < chars.length) {
