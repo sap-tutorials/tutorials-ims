@@ -6,6 +6,8 @@ import { hugoFrontmatterStringify as yamlStringify } from './lib/hugo-yaml.js'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
 import { composeTutorial } from './parsers/compose.js'
 import './parsers/directives/register-all.js' // side-effect: registers all content-reuse directives
+import { getRegistry } from './parsers/directive-registry.js'
+import { findUnexpandedDirectives } from './parsers/guard-unexpanded-directives.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, buildSnippetDeps, fetchSnippets, fetchHelpTitles, EXCLUDED_REPOS, type DiscoveredTutorial, type DiscoverySource } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache, type BrowseFeaturedEntry } from './parsers/cap.js'
 import {
@@ -1219,6 +1221,14 @@ async function main() {
     console.log(`[snippets] fetched ${snippetMap.size} snippet(s) from ${uniqueRepos.length} repo(s)`)
   }
 
+  // Build-time safety net (#directive-rollout): names of directives that SHOULD
+  // expand at compose time. If a token survives raw in a composed body, the
+  // registry was not populated when compose ran → the raw token would publish
+  // and render as literal prose (the directive-ui-instructions leak). Collected
+  // per slug below and thrown after the worker pool so the build FAILS loudly.
+  const registeredDirectiveNames = [...getRegistry().keys()]
+  const unexpandedDirectiveHits: Array<{ slug: string; tokens: string[] }> = []
+
   const tasks = allTutorials.map((t, idx) => async () => {
     const tutStart = performance.now()
     const label = `[${idx + 1}/${allTutorials.length}] ${t.repo}/${t.slug}`
@@ -1303,6 +1313,13 @@ async function main() {
         helpTitleCache,
       })
       const { title, description, youWillLearn, prerequisites, level, frontmatter } = composed
+
+      // Safety net: flag any registered directive left UNEXPANDED in the
+      // composed body (raw :name[…] in live prose, code spans/fences excluded).
+      const rawTokens = findUnexpandedDirectives(composed.body, registeredDirectiveNames)
+      if (rawTokens.length > 0) {
+        unexpandedDirectiveHits.push({ slug: t.slug, tokens: [...new Set(rawTokens)] })
+      }
 
       // Populate intrinsic-dimension cache for the Hugo render-image hook.
       // The hook reads site.Data.image_dimensions to emit width/height attrs;
@@ -1684,6 +1701,20 @@ async function main() {
 
   await runWithConcurrency(tasks, CONCURRENCY)
   const processMs = performance.now() - processStart
+
+  // Fail the build if any registered directive survived unexpanded in a composed
+  // body — means the directive registry was not populated at compose time, which
+  // would silently publish raw `:name[…]` tokens (the directive-ui-instructions
+  // regression). Fail loudly here instead of shipping literal directive prose.
+  if (unexpandedDirectiveHits.length > 0) {
+    const detail = unexpandedDirectiveHits
+      .map((h) => `  ${h.slug}: ${h.tokens.join(' ')}`)
+      .join('\n')
+    throw new Error(
+      `Unexpanded directive tokens in ${unexpandedDirectiveHits.length} composed tutorial(s) — ` +
+      `the directive registry was not populated at compose time (raw tokens would publish as literal prose):\n${detail}`,
+    )
+  }
 
   // ── Phase 4: Missions & Groups from CAP ──
   console.log('\nPhase 4: Fetching missions & groups from CAP...\n')
