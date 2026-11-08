@@ -1,9 +1,17 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
 import { resetRegistry, registerDirective, type DirectiveDef } from '../directive-registry.js'
 import { DirectiveParseError, expandDirectives } from '../directives.js'
 
 // Import the walkthrough def directly from the module
 import { walkthroughDef } from '../directives/tut-walkthrough.js'
+
+const SHORTCODES_DIR = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..', '..', '..', 'hugo', 'layouts', 'shortcodes',
+)
 
 const CTX = { slug: 'test-tutorial' }
 
@@ -104,4 +112,20 @@ describe('walkthrough directive — end-to-end shortcode serialization', () => {
     expect(out).toContain('&#10;')
     expect(out).toContain('{{% tut-walkthrough')
   })
+})
+
+describe('container directive shortcode templates must evaluate .Inner', () => {
+  // buildShortcode wraps every container directive as
+  // {{% tut-name ... %}}<body>{{% /tut-name %}} — an opening AND closing tag.
+  // Hugo errors "shortcode does not evaluate .Inner or .InnerDeindent, yet a
+  // closing tag was provided" if the template never references .Inner. This
+  // broke the full rebuild on directive-code-blocks.md (walkthrough). Guard the
+  // known container directives whose template name matches their directive name.
+  const CONTAINER_TEMPLATES = ['tut-walkthrough', 'tut-figure', 'tut-qa-only']
+  for (const name of CONTAINER_TEMPLATES) {
+    it(`${name}.html references .Inner`, () => {
+      const html = readFileSync(join(SHORTCODES_DIR, `${name}.html`), 'utf-8')
+      expect(html).toMatch(/\.Inner\b/)
+    })
+  }
 })
