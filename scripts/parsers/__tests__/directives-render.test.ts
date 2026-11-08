@@ -183,6 +183,31 @@ describe('expandDirectives', () => {
       expect(result).toContain('n="1"');
     });
 
+    it('does not duplicate label when render() also returns label in params', () => {
+      // Regression: the serializer auto-emits `label` from node.label, and the
+      // ui/menu/kbd/icon/ask directives ALSO return label in output.params.
+      // Before the fix this produced `label="x" label="x"` in the shortcode.
+      resetRegistry();
+      const LABEL_IN_PARAMS: DirectiveDef = {
+        name: 'labelecho',
+        kinds: ['inline'],
+        summary: 'Fixture that returns label in params (like real UI directives)',
+        label: { required: true, markdown: false },
+        attrs: {},
+        classes: [],
+        render: (node: any): DirectiveRenderOutput => ({
+          params: { label: node.label, type: 'button' },
+        }),
+      };
+      registerDirective(LABEL_IN_PARAMS);
+
+      const result = expandDirectives(':labelecho[Save]', { slug: 'test' });
+      const labelMatches = result.match(/\blabel=/g) ?? [];
+      expect(labelMatches).toHaveLength(1);
+      expect(result).toContain('label="Save"');
+      expect(result).toContain('type="button"');
+    });
+
     it('escapes attribute values in inline shortcode', () => {
       const md = ':echo[Save]{title="Learn"}';
       const result = expandDirectives(md, { slug: 'test' });
