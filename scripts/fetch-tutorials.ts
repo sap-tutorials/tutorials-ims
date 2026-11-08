@@ -1196,8 +1196,13 @@ async function main() {
     }
   }
   const allHelpPaths = Array.from(allHelpPathsSet)
+  // GitHub token for help-title prefetch (same resolution as the snippet
+  // prefetch below). Was an undefined `token` reference — a latent bug that
+  // only fires once some tutorial actually contains a :help[...] directive
+  // (allHelpPaths.length > 0), which the directive rollout made true in PROD.
+  const helpToken = process.env.GITHUB_TOKEN ?? process.env.TUTORIALS_GITHUB_TOKEN ?? ''
   const helpTitleCache: Map<string, string> = allHelpPaths.length > 0
-    ? await fetchHelpTitles(allHelpPaths, token)
+    ? await fetchHelpTitles(allHelpPaths, helpToken)
     : new Map()
   if (allHelpPaths.length > 0) {
     console.log(`[help-titles] fetched/cached ${helpTitleCache.size} title(s) for ${allHelpPaths.length} path(s)`)
