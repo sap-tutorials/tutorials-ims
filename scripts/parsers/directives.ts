@@ -871,16 +871,23 @@ export function expandDirectives(body: string, ctx: ExpandDirectivesContext): st
 
     // Build params from output.params, escaping each value
     const params: string[] = [];
+    const emitted = new Set<string>();
 
     // Add label as first param if present
     if (node.label) {
       params.push(`label="${escapeShortcodeParam(node.label)}"`);
+      emitted.add('label');
     }
 
-    // Add remaining params from output.params
+    // Add remaining params from output.params, skipping any key already
+    // emitted above. Newer directives (ui/menu/kbd/icon/ask) also return
+    // `label` in output.params; without this guard it is emitted twice,
+    // producing `label="x" label="x"` in the shortcode.
     if (output.params) {
       for (const [k, v] of Object.entries(output.params)) {
+        if (emitted.has(k)) continue;
         params.push(`${k}="${escapeShortcodeParam(String(v))}"`);
+        emitted.add(k);
       }
     }
 
