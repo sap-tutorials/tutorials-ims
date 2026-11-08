@@ -20,7 +20,8 @@ export default defineConfig({
     'developers/README.md': 'developers/index.md',
     'historic/README.md': 'historic/index.md',
     'postmortems/README.md': 'postmortems/index.md',
-    'decisions/README.md': 'decisions/index.md'
+    'decisions/README.md': 'decisions/index.md',
+    'blog/README.md': 'blog/index.md'
   },
 
   ignoreDeadLinks: [
@@ -81,7 +82,8 @@ export default defineConfig({
       { text: 'End Users',  link: '/end-users/' },
       { text: 'Authors',    link: '/authors/' },
       { text: 'Developers', link: '/developers/' },
-      { text: 'Historic',   link: '/historic/' }
+      { text: 'Historic',   link: '/historic/' },
+      { text: 'Blog',       link: '/blog/' }
     ],
 
     sidebar: {
@@ -99,6 +101,13 @@ export default defineConfig({
           { text: 'Accessibility',            link: '/end-users/accessibility' },
           { text: 'Experimental features',   link: '/end-users/experimental-features' },
           { text: 'Your profile page',        link: '/end-users/me-page' }
+        ]}
+      ],
+
+      '/blog/': [
+        { text: 'Blog', items: [
+          { text: 'All posts', link: '/blog/' },
+          { text: "What's new — TechEd, Markdown & Kasimir (Nov 2026)", link: '/blog/2026-11-07-whats-new-teched-markdown-kasimir' }
         ]}
       ],
 
