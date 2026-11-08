@@ -81,17 +81,23 @@ function loadRepoBySlug(): Record<string, string> {
  * masked by carry-forward of prior versions; new tutorials with spaced closes
  * just go missing — see #382 phase E cookbook).
  *
- * Both opens and closes patterns now allow optional whitespace around `/`. They
- * are mutually exclusive: the open pattern requires the next non-whitespace
- * char to be a letter (NOT `/`), and the close pattern requires a `/` between
- * `{{<` and the letter.
+ * Only PAIRED angle-form shortcodes (`{{< os-panel >}}…{{< /os-panel >}}`) have a
+ * matching close. INLINE/LEAF directive shortcodes are emitted self-closing as
+ * `{{< tut-xxx … >}}` with NO close tag by design (directives.ts:909 — tut-ui,
+ * tut-menu, tut-kbd, tut-icon, tut-ask, tut-compare, tut-cast, …). Counting those
+ * `tut-*` tags as "opens" produced e.g. `11 opens, 0 closes` for a tutorial using
+ * the UI directives, falsely quarantining it so its directives never reached the
+ * published HTML (the directive-ui-instructions raw-token leak). Exclude `tut-*`
+ * from the opens count: it is self-closing and never has `{{< /tut-* >}}`.
  *
  * @returns `null` if balanced, otherwise a reason string for quarantine.
  */
 export function shortcodeBalanceCheck(body: string): string | null {
-  // Open: `{{<` + optional whitespace + a letter (excluding `/`).
-  const opens = (body.match(/\{\{<\s*[A-Za-z]/g) || []).length
+  // Open: `{{<` + optional whitespace + a letter (excluding `/`), but NOT the
+  // self-closing `tut-*` directive shortcodes (inline/leaf, no close tag).
+  const opens = (body.match(/\{\{<\s*(?!\/)(?!tut-)[A-Za-z][\w-]*/g) || []).length
   // Close: `{{<` + optional whitespace + `/` + optional whitespace + a letter.
+  // (tut-* never appears here — it is self-closing — so no exclusion needed.)
   const closes = (body.match(/\{\{<\s*\/\s*[A-Za-z]/g) || []).length
   if (opens !== closes) {
     return `Possible unclosed Hugo shortcode (${opens} opens, ${closes} closes)`
