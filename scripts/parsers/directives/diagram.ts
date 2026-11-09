@@ -10,15 +10,16 @@
 // Registration:
 //   registerDiagramDirective() — call once at pipeline init.
 
-import { registerDirective } from '../directive-registry.js';
+import { registerDirective, getRegistry } from '../directive-registry.js';
 import { resolveSrc } from './resolve-src.js';
 import { DirectiveParseError } from '../directives.js';
 import type { DirectiveNode } from '../directives.js';
 
 /**
- * Register the `diagram` (leaf) directive definition.
+ * Register the `diagram` (leaf) directive definition. Idempotent.
  */
 export function registerDiagramDirective(): void {
+  if (getRegistry().has('diagram')) return;
   registerDirective({
     name: 'diagram',
     kinds: ['leaf'],
