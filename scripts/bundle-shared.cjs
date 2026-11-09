@@ -123,6 +123,17 @@ for (const cjsFile of CHANNELS_CJS) {
   console.log('copied', dst);
 }
 
+// #3075 — freshness-detector.js loads the CLI-deprecation ruleset at module
+// eval time. The source lives under scripts/lint-rules/data/ (shared with the
+// deprecated-cli lint rule), which `cds build --production` does NOT package
+// into gen/srv (only srv/ is copied). Shipping it beside the srv bundle keeps
+// the deployed require('./_shared/cli-deprecations.json') resolvable at CF
+// runtime. Only srv/ needs it (srv-qa/srv-mcp closures don't touch freshness).
+const CLI_DEPRECATIONS_SRC = path.resolve(
+  __dirname, 'lint-rules', 'data', 'cli-deprecations.json');
+fs.copyFileSync(CLI_DEPRECATIONS_SRC, path.join(outDir, 'cli-deprecations.json'));
+console.log('copied', path.join(outDir, 'cli-deprecations.json'));
+
 // srv-qa/lib/_shared/ — core + content only (srv-qa closure = content-store + secret-resolver).
 const outDirQa = 'srv-qa/lib/_shared';
 fs.mkdirSync(outDirQa, { recursive: true });

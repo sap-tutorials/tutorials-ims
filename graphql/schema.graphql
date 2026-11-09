@@ -8,6 +8,7 @@ type DeveloperService {
   Tutorials(top: Int, skip: Int, filter: [DeveloperService_Tutorials_filter], orderBy: [DeveloperService_Tutorials_orderBy]): DeveloperService_Tutorials_connection
   Steps(top: Int, skip: Int, filter: [DeveloperService_Steps_filter], orderBy: [DeveloperService_Steps_orderBy]): DeveloperService_Steps_connection
   TutorialCategories(top: Int, skip: Int, filter: [DeveloperService_TutorialCategories_filter], orderBy: [DeveloperService_TutorialCategories_orderBy]): DeveloperService_TutorialCategories_connection
+  TutorialVariables(top: Int, skip: Int, filter: [DeveloperService_TutorialVariables_filter], orderBy: [DeveloperService_TutorialVariables_orderBy]): DeveloperService_TutorialVariables_connection
   TutorialConceptLinks(top: Int, skip: Int, filter: [DeveloperService_TutorialConceptLinks_filter], orderBy: [DeveloperService_TutorialConceptLinks_orderBy]): DeveloperService_TutorialConceptLinks_connection
   TaskRecords(top: Int, skip: Int, filter: [DeveloperService_TaskRecords_filter], orderBy: [DeveloperService_TaskRecords_orderBy]): DeveloperService_TaskRecords_connection
   Events(top: Int, skip: Int, filter: [DeveloperService_Events_filter], orderBy: [DeveloperService_Events_orderBy]): DeveloperService_Events_connection
@@ -18,6 +19,7 @@ type DeveloperService {
   AdvocateTopics(top: Int, skip: Int, filter: [DeveloperService_AdvocateTopics_filter], orderBy: [DeveloperService_AdvocateTopics_orderBy]): DeveloperService_AdvocateTopics_connection
   AdvocateLinks(top: Int, skip: Int, filter: [DeveloperService_AdvocateLinks_filter], orderBy: [DeveloperService_AdvocateLinks_orderBy]): DeveloperService_AdvocateLinks_connection
   AdvocatePhotos(top: Int, skip: Int, filter: [DeveloperService_AdvocatePhotos_filter], orderBy: [DeveloperService_AdvocatePhotos_orderBy]): DeveloperService_AdvocatePhotos_connection
+  DevAdvocates(top: Int, skip: Int, filter: [DeveloperService_DevAdvocates_filter], orderBy: [DeveloperService_DevAdvocates_orderBy]): DeveloperService_DevAdvocates_connection
 }
 
 type DeveloperService_Tutorials_connection {
@@ -39,14 +41,20 @@ type DeveloperService_Tutorials {
   primaryTag: String
   experienceTag: String
   averageTimeToComplete: Int
+  linkStatus: String
+  lastChecked: Timestamp
+  linkStatusOverride: String
   slug: String
   mdFileUrl: String
   featuredOrder: Int
   stepCount: Int
+  optionalSteps: String
   redirectTo: DeveloperService_Tutorials
+  redirectUrl: String
   steps(top: Int, skip: Int, filter: [DeveloperService_Steps_filter], orderBy: [DeveloperService_Steps_orderBy]): DeveloperService_Steps_connection
   tags(top: Int, skip: Int): com_sap_developers_ims_TutorialTags_connection
   categories(top: Int, skip: Int, filter: [DeveloperService_TutorialCategories_filter], orderBy: [DeveloperService_TutorialCategories_orderBy]): DeveloperService_TutorialCategories_connection
+  variables(top: Int, skip: Int, filter: [DeveloperService_TutorialVariables_filter], orderBy: [DeveloperService_TutorialVariables_orderBy]): DeveloperService_TutorialVariables_connection
   author: com_sap_developers_ims_Users
   conceptLinks(top: Int, skip: Int, filter: [DeveloperService_TutorialConceptLinks_filter], orderBy: [DeveloperService_TutorialConceptLinks_orderBy]): DeveloperService_TutorialConceptLinks_connection
   authorEmail: String
@@ -192,16 +200,22 @@ type com_sap_developers_ims_Tutorials {
   primaryTag: String
   experienceTag: String
   averageTimeToComplete: Int
+  linkStatus: String
+  lastChecked: Timestamp
+  linkStatusOverride: String
   slug: String
   mdFileUrl: String
   featuredOrder: Int
   stepCount: Int
+  optionalSteps: String
   redirectTo: com_sap_developers_ims_Tutorials
+  redirectUrl: String
   steps(top: Int, skip: Int, filter: [com_sap_developers_ims_Steps_filter], orderBy: [com_sap_developers_ims_Steps_orderBy]): com_sap_developers_ims_Steps_connection
   tags(top: Int, skip: Int): com_sap_developers_ims_TutorialTags_connection
   meta(top: Int, skip: Int, filter: [com_sap_developers_ims_TutorialMeta_filter], orderBy: [com_sap_developers_ims_TutorialMeta_orderBy]): com_sap_developers_ims_TutorialMeta_connection
   contributors(top: Int, skip: Int, filter: [com_sap_developers_ims_TutorialContributors_filter], orderBy: [com_sap_developers_ims_TutorialContributors_orderBy]): com_sap_developers_ims_TutorialContributors_connection
   categories(top: Int, skip: Int, filter: [com_sap_developers_ims_TutorialCategories_filter], orderBy: [com_sap_developers_ims_TutorialCategories_orderBy]): com_sap_developers_ims_TutorialCategories_connection
+  variables(top: Int, skip: Int, filter: [com_sap_developers_ims_TutorialVariables_filter], orderBy: [com_sap_developers_ims_TutorialVariables_orderBy]): com_sap_developers_ims_TutorialVariables_connection
   author: com_sap_developers_ims_Users
   conceptLinks(top: Int, skip: Int, filter: [com_sap_developers_ims_TutorialConceptLinks_filter], orderBy: [com_sap_developers_ims_TutorialConceptLinks_orderBy]): com_sap_developers_ims_TutorialConceptLinks_connection
 }
@@ -303,6 +317,9 @@ type com_sap_developers_ims_TutorialContributors {
   name: String
   email: String
   role: String
+  login: String
+  avatarUrl: String
+  profileUrl: String
   user: com_sap_developers_ims_Users
 }
 
@@ -323,12 +340,14 @@ type com_sap_developers_ims_Users {
   khorosLogin: String
   khorosAvatarUrl: String
   khorosLinkedAt: Timestamp
+  pictureUrl: String
   githubLogin: String
   taskRecords(top: Int, skip: Int, filter: [com_sap_developers_ims_TaskRecords_filter], orderBy: [com_sap_developers_ims_TaskRecords_orderBy]): com_sap_developers_ims_TaskRecords_connection
   prizeRecords(top: Int, skip: Int, filter: [com_sap_developers_ims_PrizeRecords_filter], orderBy: [com_sap_developers_ims_PrizeRecords_orderBy]): com_sap_developers_ims_PrizeRecords_connection
   accomplishments(top: Int, skip: Int, filter: [com_sap_developers_ims_AccomplishmentRecords_filter], orderBy: [com_sap_developers_ims_AccomplishmentRecords_orderBy]): com_sap_developers_ims_AccomplishmentRecords_connection
   metadata(top: Int, skip: Int, filter: [com_sap_developers_ims_UserMetaData_filter], orderBy: [com_sap_developers_ims_UserMetaData_orderBy]): com_sap_developers_ims_UserMetaData_connection
   environmentTabs(top: Int, skip: Int, filter: [com_sap_developers_ims_DeveloperEnvironmentTabs_filter], orderBy: [com_sap_developers_ims_DeveloperEnvironmentTabs_orderBy]): com_sap_developers_ims_DeveloperEnvironmentTabs_connection
+  identities(top: Int, skip: Int, filter: [com_sap_developers_ims_UserIdentities_filter], orderBy: [com_sap_developers_ims_UserIdentities_orderBy]): com_sap_developers_ims_UserIdentities_connection
   authoredTutorials(top: Int, skip: Int, filter: [com_sap_developers_ims_Tutorials_filter], orderBy: [com_sap_developers_ims_Tutorials_orderBy]): com_sap_developers_ims_Tutorials_connection
   tutorialContributions(top: Int, skip: Int, filter: [com_sap_developers_ims_TutorialContributors_filter], orderBy: [com_sap_developers_ims_TutorialContributors_orderBy]): com_sap_developers_ims_TutorialContributors_connection
 }
@@ -375,13 +394,20 @@ type com_sap_developers_ims_Events {
   modifiedBy: String
   legacyId: Int
   name: String
+  description: String
   startDate: Timestamp
   endDate: Timestamp
   timeZone: String
+  location: String
+  eventUrl: String
+  attendanceMode: String
   eventType: String
   mission: com_sap_developers_ims_Missions
   taskRecords(top: Int, skip: Int, filter: [com_sap_developers_ims_TaskRecords_filter], orderBy: [com_sap_developers_ims_TaskRecords_orderBy]): com_sap_developers_ims_TaskRecords_connection
   prizes(top: Int, skip: Int, filter: [com_sap_developers_ims_Prizes_filter], orderBy: [com_sap_developers_ims_Prizes_orderBy]): com_sap_developers_ims_Prizes_connection
+  hasLogo: Boolean
+  logoUpdatedAt: Timestamp
+  logo: com_sap_developers_ims_EventLogo
 }
 
 type com_sap_developers_ims_Missions {
@@ -398,6 +424,9 @@ type com_sap_developers_ims_Missions {
   primaryTag: String
   experienceTag: String
   averageTimeToComplete: Int
+  linkStatus: String
+  lastChecked: Timestamp
+  linkStatusOverride: String
   slug: String
   communityMissionId: String
   sourceKgCommunityId: Int
@@ -438,6 +467,9 @@ type com_sap_developers_ims_Groups {
   primaryTag: String
   experienceTag: String
   averageTimeToComplete: Int
+  linkStatus: String
+  lastChecked: Timestamp
+  linkStatusOverride: String
   slug: String
   published: Boolean
   primaryTagRef: com_sap_developers_ims_Tags
@@ -466,6 +498,9 @@ input com_sap_developers_ims_Missions_filter {
   primaryTag: [String_filter]
   experienceTag: [String_filter]
   averageTimeToComplete: [Int_filter]
+  linkStatus: [String_filter]
+  lastChecked: [Timestamp_filter]
+  linkStatusOverride: [String_filter]
   slug: [String_filter]
   communityMissionId: [String_filter]
   sourceKgCommunityId: [Int_filter]
@@ -493,6 +528,9 @@ input com_sap_developers_ims_Missions_orderBy {
   primaryTag: SortDirection
   experienceTag: SortDirection
   averageTimeToComplete: SortDirection
+  linkStatus: SortDirection
+  lastChecked: SortDirection
+  linkStatusOverride: SortDirection
   slug: SortDirection
   communityMissionId: SortDirection
   sourceKgCommunityId: SortDirection
@@ -615,6 +653,7 @@ type com_sap_developers_ims_CompletionPaths {
   name: String
   description: String
   slug: String
+  pathOrder: Int
   items(top: Int, skip: Int, filter: [com_sap_developers_ims_CompletionPathItems_filter], orderBy: [com_sap_developers_ims_CompletionPathItems_orderBy]): com_sap_developers_ims_CompletionPathItems_connection
 }
 
@@ -682,6 +721,7 @@ input com_sap_developers_ims_CompletionPaths_filter {
   name: [String_filter]
   description: [String_filter]
   slug: [String_filter]
+  pathOrder: [Int_filter]
 }
 
 input com_sap_developers_ims_CompletionPaths_orderBy {
@@ -690,6 +730,7 @@ input com_sap_developers_ims_CompletionPaths_orderBy {
   name: SortDirection
   description: SortDirection
   slug: SortDirection
+  pathOrder: SortDirection
 }
 
 type com_sap_developers_ims_MissionTags_connection {
@@ -803,6 +844,22 @@ input com_sap_developers_ims_Prizes_orderBy {
   legacyId: SortDirection
   name: SortDirection
 }
+
+type com_sap_developers_ims_EventLogo {
+  event: com_sap_developers_ims_Events
+  image: Binary
+  mimeType: String
+  sizeBytes: Int
+  sha256: String
+  width: Int
+  height: Int
+  uploadedAt: Timestamp
+}
+
+"""
+The `Binary` scalar type represents binary values as `base64url` encoded strings.
+"""
+scalar Binary
 
 type com_sap_developers_ims_PrizeRecords_connection {
   nodes: [com_sap_developers_ims_PrizeRecords]
@@ -949,6 +1006,54 @@ input com_sap_developers_ims_DeveloperEnvironmentTabs_orderBy {
   tabOrder: SortDirection
 }
 
+type com_sap_developers_ims_UserIdentities_connection {
+  nodes: [com_sap_developers_ims_UserIdentities]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_UserIdentities {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  user: com_sap_developers_ims_Users
+  issuer: String
+  subject: String
+  provider: String
+  email: String
+  emailVerified: Boolean
+  linkedAt: Timestamp
+}
+
+input com_sap_developers_ims_UserIdentities_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  issuer: [String_filter]
+  subject: [String_filter]
+  provider: [String_filter]
+  email: [String_filter]
+  emailVerified: [Boolean_filter]
+  linkedAt: [Timestamp_filter]
+}
+
+input com_sap_developers_ims_UserIdentities_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  issuer: SortDirection
+  subject: SortDirection
+  provider: SortDirection
+  email: SortDirection
+  emailVerified: SortDirection
+  linkedAt: SortDirection
+}
+
 type com_sap_developers_ims_Tutorials_connection {
   nodes: [com_sap_developers_ims_Tutorials]
   totalCount: Int
@@ -968,10 +1073,15 @@ input com_sap_developers_ims_Tutorials_filter {
   primaryTag: [String_filter]
   experienceTag: [String_filter]
   averageTimeToComplete: [Int_filter]
+  linkStatus: [String_filter]
+  lastChecked: [Timestamp_filter]
+  linkStatusOverride: [String_filter]
   slug: [String_filter]
   mdFileUrl: [String_filter]
   featuredOrder: [Int_filter]
   stepCount: [Int_filter]
+  optionalSteps: [String_filter]
+  redirectUrl: [String_filter]
 }
 
 input com_sap_developers_ims_Tutorials_orderBy {
@@ -988,10 +1098,15 @@ input com_sap_developers_ims_Tutorials_orderBy {
   primaryTag: SortDirection
   experienceTag: SortDirection
   averageTimeToComplete: SortDirection
+  linkStatus: SortDirection
+  lastChecked: SortDirection
+  linkStatusOverride: SortDirection
   slug: SortDirection
   mdFileUrl: SortDirection
   featuredOrder: SortDirection
   stepCount: SortDirection
+  optionalSteps: SortDirection
+  redirectUrl: SortDirection
 }
 
 type com_sap_developers_ims_TutorialContributors_connection {
@@ -1005,6 +1120,9 @@ input com_sap_developers_ims_TutorialContributors_filter {
   name: [String_filter]
   email: [String_filter]
   role: [String_filter]
+  login: [String_filter]
+  avatarUrl: [String_filter]
+  profileUrl: [String_filter]
 }
 
 input com_sap_developers_ims_TutorialContributors_orderBy {
@@ -1013,6 +1131,9 @@ input com_sap_developers_ims_TutorialContributors_orderBy {
   name: SortDirection
   email: SortDirection
   role: SortDirection
+  login: SortDirection
+  avatarUrl: SortDirection
+  profileUrl: SortDirection
 }
 
 input com_sap_developers_ims_TutorialMeta_filter {
@@ -1069,6 +1190,57 @@ input com_sap_developers_ims_TutorialCategories_orderBy {
   score: SortDirection
 }
 
+type com_sap_developers_ims_TutorialVariables_connection {
+  nodes: [com_sap_developers_ims_TutorialVariables]
+  totalCount: Int
+}
+
+type com_sap_developers_ims_TutorialVariables {
+  ID: ID
+  legacyId: Int
+  tutorial: com_sap_developers_ims_Tutorials
+  varName: String
+  varLabel: String
+  varType: String
+  maxLength: Int
+  isRequired: Boolean
+  placeholder: String
+  defaultFrom: String
+  defaultPattern: String
+  configJson: String
+  sortOrder: Int
+}
+
+input com_sap_developers_ims_TutorialVariables_filter {
+  ID: [ID_filter]
+  legacyId: [Int_filter]
+  varName: [String_filter]
+  varLabel: [String_filter]
+  varType: [String_filter]
+  maxLength: [Int_filter]
+  isRequired: [Boolean_filter]
+  placeholder: [String_filter]
+  defaultFrom: [String_filter]
+  defaultPattern: [String_filter]
+  configJson: [String_filter]
+  sortOrder: [Int_filter]
+}
+
+input com_sap_developers_ims_TutorialVariables_orderBy {
+  ID: SortDirection
+  legacyId: SortDirection
+  varName: SortDirection
+  varLabel: SortDirection
+  varType: SortDirection
+  maxLength: SortDirection
+  isRequired: SortDirection
+  placeholder: SortDirection
+  defaultFrom: SortDirection
+  defaultPattern: SortDirection
+  configJson: SortDirection
+  sortOrder: SortDirection
+}
+
 type com_sap_developers_ims_TutorialConceptLinks_connection {
   nodes: [com_sap_developers_ims_TutorialConceptLinks]
   totalCount: Int
@@ -1116,6 +1288,9 @@ type com_sap_developers_ims_Concepts {
   slug: String
   name: String
   description: String
+  descriptionStatus: String
+  descriptionReviewedAt: Timestamp
+  descriptionReviewedBy: String
   embedding: Binary
   status: String
   mergedInto: com_sap_developers_ims_Concepts
@@ -1136,11 +1311,6 @@ type com_sap_developers_ims_Concepts {
   aliases(top: Int, skip: Int, filter: [com_sap_developers_ims_ConceptAliases_filter], orderBy: [com_sap_developers_ims_ConceptAliases_orderBy]): com_sap_developers_ims_ConceptAliases_connection
   aliasSearchBlob: String
 }
-
-"""
-The `Binary` scalar type represents binary values as `base64url` encoded strings.
-"""
-scalar Binary
 
 input com_sap_developers_ims_TutorialConceptLinks_filter {
   ID: [ID_filter]
@@ -1291,6 +1461,57 @@ input DeveloperService_TutorialCategories_orderBy {
   score: SortDirection
 }
 
+type DeveloperService_TutorialVariables_connection {
+  nodes: [DeveloperService_TutorialVariables]
+  totalCount: Int
+}
+
+type DeveloperService_TutorialVariables {
+  ID: ID
+  legacyId: Int
+  tutorial: DeveloperService_Tutorials
+  varName: String
+  varLabel: String
+  varType: String
+  maxLength: Int
+  isRequired: Boolean
+  placeholder: String
+  defaultFrom: String
+  defaultPattern: String
+  configJson: String
+  sortOrder: Int
+}
+
+input DeveloperService_TutorialVariables_filter {
+  ID: [ID_filter]
+  legacyId: [Int_filter]
+  varName: [String_filter]
+  varLabel: [String_filter]
+  varType: [String_filter]
+  maxLength: [Int_filter]
+  isRequired: [Boolean_filter]
+  placeholder: [String_filter]
+  defaultFrom: [String_filter]
+  defaultPattern: [String_filter]
+  configJson: [String_filter]
+  sortOrder: [Int_filter]
+}
+
+input DeveloperService_TutorialVariables_orderBy {
+  ID: SortDirection
+  legacyId: SortDirection
+  varName: SortDirection
+  varLabel: SortDirection
+  varType: SortDirection
+  maxLength: SortDirection
+  isRequired: SortDirection
+  placeholder: SortDirection
+  defaultFrom: SortDirection
+  defaultPattern: SortDirection
+  configJson: SortDirection
+  sortOrder: SortDirection
+}
+
 type DeveloperService_TutorialConceptLinks_connection {
   nodes: [DeveloperService_TutorialConceptLinks]
   totalCount: Int
@@ -1365,10 +1586,15 @@ input DeveloperService_Tutorials_filter {
   primaryTag: [String_filter]
   experienceTag: [String_filter]
   averageTimeToComplete: [Int_filter]
+  linkStatus: [String_filter]
+  lastChecked: [Timestamp_filter]
+  linkStatusOverride: [String_filter]
   slug: [String_filter]
   mdFileUrl: [String_filter]
   featuredOrder: [Int_filter]
   stepCount: [Int_filter]
+  optionalSteps: [String_filter]
+  redirectUrl: [String_filter]
   authorEmail: [String_filter]
   authorDisplayName: [String_filter]
   authorFirstName: [String_filter]
@@ -1389,10 +1615,15 @@ input DeveloperService_Tutorials_orderBy {
   primaryTag: SortDirection
   experienceTag: SortDirection
   averageTimeToComplete: SortDirection
+  linkStatus: SortDirection
+  lastChecked: SortDirection
+  linkStatusOverride: SortDirection
   slug: SortDirection
   mdFileUrl: SortDirection
   featuredOrder: SortDirection
   stepCount: SortDirection
+  optionalSteps: SortDirection
+  redirectUrl: SortDirection
   authorEmail: SortDirection
   authorDisplayName: SortDirection
   authorFirstName: SortDirection
@@ -1605,6 +1836,9 @@ type DeveloperService_TutorialContributors {
   name: String
   email: String
   role: String
+  login: String
+  avatarUrl: String
+  profileUrl: String
   user: com_sap_developers_ims_Users
 }
 
@@ -1614,6 +1848,9 @@ input DeveloperService_TutorialContributors_filter {
   name: [String_filter]
   email: [String_filter]
   role: [String_filter]
+  login: [String_filter]
+  avatarUrl: [String_filter]
+  profileUrl: [String_filter]
 }
 
 input DeveloperService_TutorialContributors_orderBy {
@@ -1622,6 +1859,9 @@ input DeveloperService_TutorialContributors_orderBy {
   name: SortDirection
   email: SortDirection
   role: SortDirection
+  login: SortDirection
+  avatarUrl: SortDirection
+  profileUrl: SortDirection
 }
 
 type com_sap_developers_ims_MyTutorialsByUserId_connection {
@@ -1833,6 +2073,81 @@ input DeveloperService_AdvocatePhotos_orderBy {
   uploadedAt: SortDirection
 }
 
+type DeveloperService_DevAdvocates_connection {
+  nodes: [DeveloperService_DevAdvocates]
+  totalCount: Int
+}
+
+type DeveloperService_DevAdvocates {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  slug: String
+  firstName: String
+  lastName: String
+  title: String
+  pronouns: String
+  location: String
+  region: String
+  bio: String
+  isActive: Boolean
+  sortOverride: Int
+  joinedDate: Date
+  hasPhoto: Boolean
+  photoUpdatedAt: Timestamp
+  photoUrl: String
+  user: com_sap_developers_ims_Users
+  authoredTutorials(top: Int, skip: Int, filter: [DeveloperService_Tutorials_filter], orderBy: [DeveloperService_Tutorials_orderBy]): DeveloperService_Tutorials_connection
+  contributedTutorials(top: Int, skip: Int, filter: [DeveloperService_TutorialContributors_filter], orderBy: [DeveloperService_TutorialContributors_orderBy]): DeveloperService_TutorialContributors_connection
+  ownedTutorials(top: Int, skip: Int, filter: [com_sap_developers_ims_MyTutorialsByUserId_filter], orderBy: [com_sap_developers_ims_MyTutorialsByUserId_orderBy]): com_sap_developers_ims_MyTutorialsByUserId_connection
+}
+
+input DeveloperService_DevAdvocates_filter {
+  ID: [ID_filter]
+  createdAt: [Timestamp_filter]
+  createdBy: [String_filter]
+  modifiedAt: [Timestamp_filter]
+  modifiedBy: [String_filter]
+  slug: [String_filter]
+  firstName: [String_filter]
+  lastName: [String_filter]
+  title: [String_filter]
+  pronouns: [String_filter]
+  location: [String_filter]
+  region: [String_filter]
+  bio: [String_filter]
+  isActive: [Boolean_filter]
+  sortOverride: [Int_filter]
+  joinedDate: [Date_filter]
+  hasPhoto: [Boolean_filter]
+  photoUpdatedAt: [Timestamp_filter]
+  photoUrl: [String_filter]
+}
+
+input DeveloperService_DevAdvocates_orderBy {
+  ID: SortDirection
+  createdAt: SortDirection
+  createdBy: SortDirection
+  modifiedAt: SortDirection
+  modifiedBy: SortDirection
+  slug: SortDirection
+  firstName: SortDirection
+  lastName: SortDirection
+  title: SortDirection
+  pronouns: SortDirection
+  location: SortDirection
+  region: SortDirection
+  bio: SortDirection
+  isActive: SortDirection
+  sortOverride: SortDirection
+  joinedDate: SortDirection
+  hasPhoto: SortDirection
+  photoUpdatedAt: SortDirection
+  photoUrl: SortDirection
+}
+
 type KnowledgeGraphService {
   Concepts(top: Int, skip: Int, filter: [KnowledgeGraphService_Concepts_filter], orderBy: [KnowledgeGraphService_Concepts_orderBy]): KnowledgeGraphService_Concepts_connection
   TutorialConceptLinks(top: Int, skip: Int, filter: [KnowledgeGraphService_TutorialConceptLinks_filter], orderBy: [KnowledgeGraphService_TutorialConceptLinks_orderBy]): KnowledgeGraphService_TutorialConceptLinks_connection
@@ -1861,6 +2176,9 @@ type KnowledgeGraphService_Concepts {
   slug: String
   name: String
   description: String
+  descriptionStatus: String
+  descriptionReviewedAt: Timestamp
+  descriptionReviewedBy: String
   status: String
   mergedInto: KnowledgeGraphService_Concepts
   extractionCount: Int
@@ -2047,6 +2365,9 @@ input KnowledgeGraphService_Concepts_filter {
   slug: [String_filter]
   name: [String_filter]
   description: [String_filter]
+  descriptionStatus: [String_filter]
+  descriptionReviewedAt: [Timestamp_filter]
+  descriptionReviewedBy: [String_filter]
   status: [String_filter]
   extractionCount: [Int_filter]
   firstSeenAt: [Timestamp_filter]
@@ -2067,6 +2388,9 @@ input KnowledgeGraphService_Concepts_orderBy {
   slug: SortDirection
   name: SortDirection
   description: SortDirection
+  descriptionStatus: SortDirection
+  descriptionReviewedAt: SortDirection
+  descriptionReviewedBy: SortDirection
   status: SortDirection
   extractionCount: SortDirection
   firstSeenAt: SortDirection
@@ -2143,6 +2467,7 @@ type KnowledgeGraphService_PublishedConcepts {
   slug: String
   name: String
   description: String
+  descriptionStatus: String
   publishedAt: Timestamp
   publishedBy: String
   status: String
@@ -2153,6 +2478,7 @@ input KnowledgeGraphService_PublishedConcepts_filter {
   slug: [String_filter]
   name: [String_filter]
   description: [String_filter]
+  descriptionStatus: [String_filter]
   publishedAt: [Timestamp_filter]
   publishedBy: [String_filter]
   status: [String_filter]
@@ -2163,6 +2489,7 @@ input KnowledgeGraphService_PublishedConcepts_orderBy {
   slug: SortDirection
   name: SortDirection
   description: SortDirection
+  descriptionStatus: SortDirection
   publishedAt: SortDirection
   publishedBy: SortDirection
   status: SortDirection
@@ -2325,6 +2652,7 @@ type DeveloperService_input {
   Tutorials: DeveloperService_Tutorials_input
   Steps: DeveloperService_Steps_input
   TutorialCategories: DeveloperService_TutorialCategories_input
+  TutorialVariables: DeveloperService_TutorialVariables_input
   TutorialConceptLinks: DeveloperService_TutorialConceptLinks_input
   TaskRecords: DeveloperService_TaskRecords_input
   Events: DeveloperService_Events_input
@@ -2335,6 +2663,7 @@ type DeveloperService_input {
   AdvocateTopics: DeveloperService_AdvocateTopics_input
   AdvocateLinks: DeveloperService_AdvocateLinks_input
   AdvocatePhotos: DeveloperService_AdvocatePhotos_input
+  DevAdvocates: DeveloperService_DevAdvocates_input
 }
 
 type DeveloperService_Tutorials_input {
@@ -2357,14 +2686,20 @@ input DeveloperService_Tutorials_C {
   primaryTag: String
   experienceTag: String
   averageTimeToComplete: Int
+  linkStatus: String
+  lastChecked: Timestamp
+  linkStatusOverride: String
   slug: String
   mdFileUrl: String
   featuredOrder: Int
   stepCount: Int
+  optionalSteps: String
   redirectTo: DeveloperService_Tutorials_C
+  redirectUrl: String
   steps: [DeveloperService_Steps_C]
   tags: [com_sap_developers_ims_TutorialTags_C]
   categories: [DeveloperService_TutorialCategories_C]
+  variables: [DeveloperService_TutorialVariables_C]
   author: com_sap_developers_ims_Users_C
   conceptLinks: [DeveloperService_TutorialConceptLinks_C]
   authorEmail: String
@@ -2411,16 +2746,22 @@ input com_sap_developers_ims_Tutorials_C {
   primaryTag: String
   experienceTag: String
   averageTimeToComplete: Int
+  linkStatus: String
+  lastChecked: Timestamp
+  linkStatusOverride: String
   slug: String
   mdFileUrl: String
   featuredOrder: Int
   stepCount: Int
+  optionalSteps: String
   redirectTo: com_sap_developers_ims_Tutorials_C
+  redirectUrl: String
   steps: [com_sap_developers_ims_Steps_C]
   tags: [com_sap_developers_ims_TutorialTags_C]
   meta: [com_sap_developers_ims_TutorialMeta_C]
   contributors: [com_sap_developers_ims_TutorialContributors_C]
   categories: [com_sap_developers_ims_TutorialCategories_C]
+  variables: [com_sap_developers_ims_TutorialVariables_C]
   author: com_sap_developers_ims_Users_C
   conceptLinks: [com_sap_developers_ims_TutorialConceptLinks_C]
 }
@@ -2476,6 +2817,9 @@ input com_sap_developers_ims_TutorialContributors_C {
   name: String
   email: String
   role: String
+  login: String
+  avatarUrl: String
+  profileUrl: String
   user: com_sap_developers_ims_Users_C
 }
 
@@ -2496,12 +2840,14 @@ input com_sap_developers_ims_Users_C {
   khorosLogin: String
   khorosAvatarUrl: String
   khorosLinkedAt: Timestamp
+  pictureUrl: String
   githubLogin: String
   taskRecords: [com_sap_developers_ims_TaskRecords_C]
   prizeRecords: [com_sap_developers_ims_PrizeRecords_C]
   accomplishments: [com_sap_developers_ims_AccomplishmentRecords_C]
   metadata: [com_sap_developers_ims_UserMetaData_C]
   environmentTabs: [com_sap_developers_ims_DeveloperEnvironmentTabs_C]
+  identities: [com_sap_developers_ims_UserIdentities_C]
   authoredTutorials: [com_sap_developers_ims_Tutorials_C]
   tutorialContributions: [com_sap_developers_ims_TutorialContributors_C]
 }
@@ -2538,13 +2884,20 @@ input com_sap_developers_ims_Events_C {
   modifiedBy: String
   legacyId: Int
   name: String
+  description: String
   startDate: Timestamp
   endDate: Timestamp
   timeZone: String
+  location: String
+  eventUrl: String
+  attendanceMode: String
   eventType: String
   mission: com_sap_developers_ims_Missions_C
   taskRecords: [com_sap_developers_ims_TaskRecords_C]
   prizes: [com_sap_developers_ims_Prizes_C]
+  hasLogo: Boolean
+  logoUpdatedAt: Timestamp
+  logo: com_sap_developers_ims_EventLogo_C
 }
 
 input com_sap_developers_ims_Missions_C {
@@ -2561,6 +2914,9 @@ input com_sap_developers_ims_Missions_C {
   primaryTag: String
   experienceTag: String
   averageTimeToComplete: Int
+  linkStatus: String
+  lastChecked: Timestamp
+  linkStatusOverride: String
   slug: String
   communityMissionId: String
   sourceKgCommunityId: Int
@@ -2601,6 +2957,9 @@ input com_sap_developers_ims_Groups_C {
   primaryTag: String
   experienceTag: String
   averageTimeToComplete: Int
+  linkStatus: String
+  lastChecked: Timestamp
+  linkStatusOverride: String
   slug: String
   published: Boolean
   primaryTagRef: com_sap_developers_ims_Tags_C
@@ -2653,6 +3012,7 @@ input com_sap_developers_ims_CompletionPaths_C {
   name: String
   description: String
   slug: String
+  pathOrder: Int
   items: [com_sap_developers_ims_CompletionPathItems_C]
 }
 
@@ -2692,6 +3052,17 @@ input com_sap_developers_ims_MissionCategories_C {
   mission: com_sap_developers_ims_Missions_C
   category: com_sap_developers_ims_Categories_C
   score: Decimal
+}
+
+input com_sap_developers_ims_EventLogo_C {
+  event: com_sap_developers_ims_Events_C
+  image: Binary
+  mimeType: String
+  sizeBytes: Int
+  sha256: String
+  width: Int
+  height: Int
+  uploadedAt: Timestamp
 }
 
 input com_sap_developers_ims_PrizeRecords_C {
@@ -2746,11 +3117,42 @@ input com_sap_developers_ims_DeveloperEnvironmentLinks_C {
   linkOrder: Int
 }
 
+input com_sap_developers_ims_UserIdentities_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  user: com_sap_developers_ims_Users_C
+  issuer: String
+  subject: String
+  provider: String
+  email: String
+  emailVerified: Boolean
+  linkedAt: Timestamp
+}
+
 input com_sap_developers_ims_TutorialCategories_C {
   ID: ID
   tutorial: com_sap_developers_ims_Tutorials_C
   category: com_sap_developers_ims_Categories_C
   score: Decimal
+}
+
+input com_sap_developers_ims_TutorialVariables_C {
+  ID: ID
+  legacyId: Int
+  tutorial: com_sap_developers_ims_Tutorials_C
+  varName: String
+  varLabel: String
+  varType: String
+  maxLength: Int
+  isRequired: Boolean
+  placeholder: String
+  defaultFrom: String
+  defaultPattern: String
+  configJson: String
+  sortOrder: Int
 }
 
 input com_sap_developers_ims_TutorialConceptLinks_C {
@@ -2778,6 +3180,9 @@ input com_sap_developers_ims_Concepts_C {
   slug: String
   name: String
   description: String
+  descriptionStatus: String
+  descriptionReviewedAt: Timestamp
+  descriptionReviewedBy: String
   embedding: Binary
   status: String
   mergedInto: com_sap_developers_ims_Concepts_C
@@ -2828,6 +3233,22 @@ input DeveloperService_TutorialCategories_C {
   score: Decimal
 }
 
+input DeveloperService_TutorialVariables_C {
+  ID: ID
+  legacyId: Int
+  tutorial: DeveloperService_Tutorials_C
+  varName: String
+  varLabel: String
+  varType: String
+  maxLength: Int
+  isRequired: Boolean
+  placeholder: String
+  defaultFrom: String
+  defaultPattern: String
+  configJson: String
+  sortOrder: Int
+}
+
 input DeveloperService_TutorialConceptLinks_C {
   ID: ID
   createdAt: Timestamp
@@ -2857,14 +3278,20 @@ input DeveloperService_Tutorials_U {
   primaryTag: String
   experienceTag: String
   averageTimeToComplete: Int
+  linkStatus: String
+  lastChecked: Timestamp
+  linkStatusOverride: String
   slug: String
   mdFileUrl: String
   featuredOrder: Int
   stepCount: Int
+  optionalSteps: String
   redirectTo: DeveloperService_Tutorials_C
+  redirectUrl: String
   steps: [DeveloperService_Steps_C]
   tags: [com_sap_developers_ims_TutorialTags_C]
   categories: [DeveloperService_TutorialCategories_C]
+  variables: [DeveloperService_TutorialVariables_C]
   author: com_sap_developers_ims_Users_C
   conceptLinks: [DeveloperService_TutorialConceptLinks_C]
   authorEmail: String
@@ -2907,6 +3334,27 @@ input DeveloperService_TutorialCategories_U {
   tutorial: DeveloperService_Tutorials_C
   category: com_sap_developers_ims_Categories_C
   score: Decimal
+}
+
+type DeveloperService_TutorialVariables_input {
+  create(input: [DeveloperService_TutorialVariables_C]!): [DeveloperService_TutorialVariables]
+  update(filter: [DeveloperService_TutorialVariables_filter]!, input: DeveloperService_TutorialVariables_U!): [DeveloperService_TutorialVariables]
+  delete(filter: [DeveloperService_TutorialVariables_filter]!): Int
+}
+
+input DeveloperService_TutorialVariables_U {
+  legacyId: Int
+  tutorial: DeveloperService_Tutorials_C
+  varName: String
+  varLabel: String
+  varType: String
+  maxLength: Int
+  isRequired: Boolean
+  placeholder: String
+  defaultFrom: String
+  defaultPattern: String
+  configJson: String
+  sortOrder: Int
 }
 
 type DeveloperService_TutorialConceptLinks_input {
@@ -3086,6 +3534,9 @@ input DeveloperService_TutorialContributors_C {
   name: String
   email: String
   role: String
+  login: String
+  avatarUrl: String
+  profileUrl: String
   user: com_sap_developers_ims_Users_C
 }
 
@@ -3175,6 +3626,9 @@ input DeveloperService_TutorialContributors_U {
   name: String
   email: String
   role: String
+  login: String
+  avatarUrl: String
+  profileUrl: String
   user: com_sap_developers_ims_Users_C
 }
 
@@ -3218,6 +3672,63 @@ input DeveloperService_AdvocatePhotos_U {
   uploadedAt: Timestamp
 }
 
+type DeveloperService_DevAdvocates_input {
+  create(input: [DeveloperService_DevAdvocates_C]!): [DeveloperService_DevAdvocates]
+  update(filter: [DeveloperService_DevAdvocates_filter]!, input: DeveloperService_DevAdvocates_U!): [DeveloperService_DevAdvocates]
+  delete(filter: [DeveloperService_DevAdvocates_filter]!): Int
+}
+
+input DeveloperService_DevAdvocates_C {
+  ID: ID
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  slug: String
+  firstName: String
+  lastName: String
+  title: String
+  pronouns: String
+  location: String
+  region: String
+  bio: String
+  isActive: Boolean
+  sortOverride: Int
+  joinedDate: Date
+  hasPhoto: Boolean
+  photoUpdatedAt: Timestamp
+  photoUrl: String
+  user: com_sap_developers_ims_Users_C
+  authoredTutorials: [DeveloperService_Tutorials_C]
+  contributedTutorials: [DeveloperService_TutorialContributors_C]
+  ownedTutorials: [com_sap_developers_ims_MyTutorialsByUserId_C]
+}
+
+input DeveloperService_DevAdvocates_U {
+  createdAt: Timestamp
+  createdBy: String
+  modifiedAt: Timestamp
+  modifiedBy: String
+  slug: String
+  firstName: String
+  lastName: String
+  title: String
+  pronouns: String
+  location: String
+  region: String
+  bio: String
+  isActive: Boolean
+  sortOverride: Int
+  joinedDate: Date
+  hasPhoto: Boolean
+  photoUpdatedAt: Timestamp
+  photoUrl: String
+  user: com_sap_developers_ims_Users_C
+  authoredTutorials: [DeveloperService_Tutorials_C]
+  contributedTutorials: [DeveloperService_TutorialContributors_C]
+  ownedTutorials: [com_sap_developers_ims_MyTutorialsByUserId_C]
+}
+
 type KnowledgeGraphService_input {
   Concepts: KnowledgeGraphService_Concepts_input
   TutorialConceptLinks: KnowledgeGraphService_TutorialConceptLinks_input
@@ -3243,6 +3754,9 @@ input KnowledgeGraphService_Concepts_C {
   slug: String
   name: String
   description: String
+  descriptionStatus: String
+  descriptionReviewedAt: Timestamp
+  descriptionReviewedBy: String
   status: String
   mergedInto: KnowledgeGraphService_Concepts_C
   extractionCount: Int
@@ -3311,6 +3825,9 @@ input KnowledgeGraphService_Concepts_U {
   slug: String
   name: String
   description: String
+  descriptionStatus: String
+  descriptionReviewedAt: Timestamp
+  descriptionReviewedBy: String
   status: String
   mergedInto: KnowledgeGraphService_Concepts_C
   extractionCount: Int
@@ -3432,6 +3949,7 @@ input KnowledgeGraphService_PublishedConcepts_C {
   slug: String
   name: String
   description: String
+  descriptionStatus: String
   publishedAt: Timestamp
   publishedBy: String
   status: String
@@ -3441,6 +3959,7 @@ input KnowledgeGraphService_PublishedConcepts_U {
   slug: String
   name: String
   description: String
+  descriptionStatus: String
   publishedAt: Timestamp
   publishedBy: String
   status: String

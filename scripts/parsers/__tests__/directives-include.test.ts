@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { extractFrontmatter } from '../frontmatter.js'
 import { expandDirectives } from '../directives.js'
+import { DirectiveParseError } from '../directives.js'
 import type { ExpandDirectivesContext } from '../directives.js'
 import type { SnippetDeps } from '../types.js'
 import { resetRegistry, registerDirective, getRegistry } from '../directive-registry.js'
@@ -267,6 +268,19 @@ describe('::include expand hook', () => {
       snippetMap,
     }
     expect(() => expandDirectives('::include[missing]', ctx)).toThrow('directive/include-not-found')
+  })
+
+  it('throws a DirectiveParseError (not a plain Error) on missing snippet — fetch-tutorials classifies on this type to fail the rebuild loudly instead of silently dropping the tutorial', () => {
+    const ctx: ExpandDirectivesContext = {
+      slug: 'directive-content-reuse',
+      snippetMap: new Map<string, string>(),
+    }
+    // The CI symptom: SNIPPETS_ENABLED_REPOS unset → empty map →
+    // ::include[btp-trial-setup] throws. fetch-tutorials' task catch keys on
+    // `instanceof DirectiveParseError` to route this to a hard build failure,
+    // so the error's TYPE (not just its message) is load-bearing.
+    expect(() => expandDirectives('::include[btp-trial-setup]{region=eu10}', ctx))
+      .toThrow(DirectiveParseError)
   })
 
   it('rejects direct cycle: snippet includes itself', () => {
