@@ -4,7 +4,7 @@
 //   :tutorial, :note, :help, :api, :since
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { expandDirectives, renderDirectivesAsText } from '../directives.js';
+import { expandDirectives, renderDirectivesAsText, DirectiveParseError } from '../directives.js';
 import type { ExpandDirectivesContext } from '../directives.js';
 import { registerDirective, resetRegistry } from '../directive-registry.js';
 import {
@@ -66,10 +66,14 @@ describe(':tutorial directive', () => {
         ['other-tutorial', { title: 'Other', time: 5 }],
       ]),
     };
-    expect(() => expandDirectives(':tutorial[no-such-slug]', ctx)).toThrow();
+    // Type assertion is load-bearing: the fetch-tutorials compose-fail-loud path
+    // (#3078) classifies errors by `instanceof DirectiveParseError` to decide
+    // whether a dead cross-ref FAILS the rebuild vs. is a soft source error.
+    expect(() => expandDirectives(':tutorial[no-such-slug]', ctx)).toThrow(DirectiveParseError);
     try {
       expandDirectives(':tutorial[no-such-slug]', ctx);
     } catch (err: unknown) {
+      expect(err).toBeInstanceOf(DirectiveParseError);
       const e = err as { code?: string };
       expect(e.code).toBe('invalid-attr');
     }
