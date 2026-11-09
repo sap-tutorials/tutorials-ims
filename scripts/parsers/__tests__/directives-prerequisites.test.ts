@@ -3,7 +3,7 @@
 // Tests for Task 5: ::requires prerequisite cards directive.
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { expandDirectives, renderDirectivesAsText } from '../directives.js';
+import { expandDirectives, renderDirectivesAsText, DirectiveParseError } from '../directives.js';
 import type { ExpandDirectivesContext } from '../directives.js';
 import { registerDirective, resetRegistry } from '../directive-registry.js';
 import { REQUIRES_DEF } from '../directives/prerequisites.js';
@@ -83,10 +83,14 @@ describe('::requires directive', () => {
         ['known-tutorial', { title: 'Known Tutorial', time: 5 }],
       ]),
     };
-    expect(() => expandDirectives('::requires[no-such-slug]', ctx)).toThrow();
+    // Type assertion is load-bearing: the fetch-tutorials compose-fail-loud path
+    // (#3078) classifies by `instanceof DirectiveParseError` to turn a dead
+    // ::requires cross-ref into a hard rebuild failure.
+    expect(() => expandDirectives('::requires[no-such-slug]', ctx)).toThrow(DirectiveParseError);
     try {
       expandDirectives('::requires[no-such-slug]', ctx);
     } catch (err: unknown) {
+      expect(err).toBeInstanceOf(DirectiveParseError);
       const e = err as { code?: string };
       expect(e.code).toBe('invalid-attr');
     }

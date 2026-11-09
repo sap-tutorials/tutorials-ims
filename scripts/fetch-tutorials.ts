@@ -881,6 +881,10 @@ async function main() {
   }
 
   let allTutorials: DiscoveredTutorial[]
+  // Tier of the discovery result. Only 'github' is authoritative enough to drive
+  // the fail-loud slug-existence catalog below — a disk/hana/rest fallback may be
+  // a stale or partial slug set, so we fail-open (undefined catalog) on those.
+  let discoverySource: DiscoverySource | undefined
   let discoveryMs = 0
   let metaMs = 0
 
@@ -943,6 +947,7 @@ async function main() {
 
     const discovery = await discoverAllTutorials()
     allTutorials = discovery.tutorials
+    discoverySource = discovery.source
 
     // #2974 — Fail LOUD on a degraded QA fetch. QA discovery that fell back to
     // the disk/HANA cache means the github.com token couldn't reach the private
@@ -1221,6 +1226,30 @@ async function main() {
     console.log(`[snippets] fetched ${snippetMap.size} snippet(s) from ${uniqueRepos.length} repo(s)`)
   }
 
+  // #directive-xref-validation: existence catalog for the `:tutorial` and
+  // `::requires` directives. Both validate their slug against ctx.catalogBySlug
+  // and throw DirectiveParseError (→ fatal composeFailures) when it's present but
+  // the slug is missing; when it's undefined they fail-open. We enable the fatal
+  // path ONLY when discovery came from the authoritative GitHub tier, because the
+  // key set is the FULL discovery slug list (complete even on slug-targeted runs —
+  // the filter never shrinks allTutorials). A disk/hana/rest fallback could be a
+  // stale/partial set and would throw false positives, so we pass undefined there.
+  //
+  // Value carries slug-as-title (existence is the load-bearing check; there is no
+  // pre-compose source of real titles for ALL slugs) + time 0. `::requires` reads
+  // entry.title into its card; a real title is a nice-to-have, not required to
+  // catch a dead cross-ref. Keyed lowercase to match the directives' slug casing.
+  let catalogBySlug: Map<string, { title: string; time: number }> | undefined
+  if (discoverySource === 'github') {
+    catalogBySlug = new Map()
+    for (const t of allTutorials) {
+      catalogBySlug.set(t.slug.toLowerCase(), { title: t.slug, time: 0 })
+    }
+    console.log(`[xref] slug-existence catalog enabled (${catalogBySlug.size} slugs; dead :tutorial/::requires refs now fail the build)`)
+  } else {
+    console.log(`[xref] slug-existence catalog DISABLED — discovery source '${discoverySource ?? 'cache'}' is not authoritative (fail-open on cross-ref validation)`)
+  }
+
   // Build-time safety net (#directive-rollout): names of directives that SHOULD
   // expand at compose time. If a token survives raw in a composed body, the
   // registry was not populated when compose ran → the raw token would publish
@@ -1321,7 +1350,7 @@ async function main() {
       const composed = composeTutorial(rawMd, {
         repo: t.repo, branch: t.branch, slug: t.slug, target, rewriteImages: true,
         snippetMap,
-        catalogBySlug: undefined,
+        catalogBySlug,
         helpTitleCache,
       })
       const { title, description, youWillLearn, prerequisites, level, frontmatter } = composed
