@@ -97,11 +97,17 @@
 
 {{/* Read Markdown attributes: ```js {filename="server.js" hl_lines="2-4 7"} */}}
 {{- $attrs := .Attributes | default dict -}}
+{{- $opts := .Options | default dict -}}
 {{- $filename := index $attrs "filename" | default "" -}}
 {{- $title := index $attrs "title" | default "" -}}
 {{- if and (eq $filename "") (ne $title "") -}}{{- $filename = $title -}}{{- end -}}
-{{- $hlLines := index $attrs "hl_lines" | default "" -}}
-{{- $linenos := index $attrs "linenos" | default "" -}}
+{{/* [#3076] hl_lines / linenos are Goldmark HIGHLIGHTING options, so Hugo puts
+     them on .Options, NOT .Attributes (which only carries generic attrs like
+     filename/diff/copy). Read .Options first, fall back to .Attributes for
+     resilience. Without this, `{hl_lines="..."}` fences — including those the
+     legacy `LANG[4,9]` parser rewrites to — silently rendered no highlight. */}}
+{{- $hlLines := index $opts "hl_lines" | default (index $attrs "hl_lines") | default "" -}}
+{{- $linenos := index $opts "linenos" | default (index $attrs "linenos") | default "" -}}
 
 {{/* Build Chroma options string */}}
 {{- $opts := slice -}}
