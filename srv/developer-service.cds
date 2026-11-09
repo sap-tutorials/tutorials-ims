@@ -328,10 +328,31 @@ service DeveloperService {
   // Public clients construct photo URLs as /api/advocates/:slug/photo from
   // slug + photoUpdatedAt. Spec: docs/superpowers/specs/2026-06-17-developer-advocates-design.md
   @(requires: 'any')
+  @cds.redirection.target: true
   @readonly entity Advocates as projection on ims.Advocates {
     *,
     topics, links
   };
+
+  // DevAdvocates — same projection as `Advocates`, exposed under a second name
+  // ONLY so there is a reachable OData collection that supports $filter/$select/
+  // $expand. The OData adapter mounts under @path '/api', but a custom public
+  // Express route owns `/api/advocates` (registered in server.js bootstrap,
+  // before CAP serves; Express matches case-insensitively, so /api/Advocates,
+  // /api/ADVOCATES all hit the custom JSON route and never reach OData —
+  // silently ignoring $filter). `/api/DevAdvocates` is collision-free.
+  // `Advocates` is kept for GraphQL continuity (it was in the last release
+  // baseline and is a live GraphQL query field); do NOT remove it without a
+  // deprecate-then-remove cycle (see scripts/check-graphql-breaking.ts).
+  // Scalar-only on purpose: the topics/links associations stay on `Advocates`
+  // (the @cds.redirection.target) to avoid a distant-backlink redirect; expand
+  // consumers use `Advocates`, filter/select consumers use `DevAdvocates`.
+  // See srv/routes/advocates-public.js.
+  @(requires: 'any')
+  @cds.redirection.target: false
+  @readonly entity DevAdvocates as projection on ims.Advocates {
+    *
+  } excluding { topics, links, photo };
 
   // #2641 — account history merge: caller (A) requests merge of B's history into A.
   // A magic-link token is emailed to B; B confirms via confirmAccountMerge (Task 5).
