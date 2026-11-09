@@ -35,7 +35,13 @@ const TEMPERATURE = 0;
 
 const _require = createRequire(import.meta.url);
 /** @type {Array<{tool:string,match:string,severity:string,since:string,message:string,replacement:string,docs:string}>} */
-const CLI_DEPRECATIONS = _require('../../scripts/lint-rules/data/cli-deprecations.json');
+// Workspace-first / bundle fallback (mirrors the directives import below):
+// the CF deploy copies only srv/ — scripts/lint-rules/data/ is NOT packaged —
+// so prod resolves the ruleset from the bundle copy at ./_shared/ (seeded by
+// scripts/bundle-shared.cjs). Local dev / unit tests hit the workspace source.
+let CLI_DEPRECATIONS;
+try { CLI_DEPRECATIONS = _require('../../scripts/lint-rules/data/cli-deprecations.json'); }
+catch { CLI_DEPRECATIONS = _require('./_shared/cli-deprecations.json'); }
 
 const SHELL_LANGS = /^(bash|sh|shell|console|terminal|powershell|cmd)$/i;
 const PROMPT_RE = /^(\$ |PS> |> |# )/;
