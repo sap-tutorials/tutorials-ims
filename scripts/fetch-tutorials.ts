@@ -5,6 +5,7 @@ import { performance } from 'node:perf_hooks'
 import { hugoFrontmatterStringify as yamlStringify } from './lib/hugo-yaml.js'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
 import { composeTutorial } from './parsers/compose.js'
+import { DirectiveParseError } from './parsers/directives.js'
 import './parsers/directives/register-all.js' // side-effect: registers all content-reuse directives
 import { findUnexpandedDirectives } from './parsers/guard-unexpanded-directives.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, buildSnippetDeps, fetchSnippets, fetchHelpTitles, EXCLUDED_REPOS, type DiscoveredTutorial, type DiscoverySource } from './parsers/github.js'
@@ -1230,6 +1231,16 @@ async function main() {
   // guard would be blind to the very failure it exists to catch.
   const unexpandedDirectiveHits: Array<{ slug: string; tokens: string[] }> = []
 
+  // A compose-time DirectiveParseError (e.g. ::include of a snippet that didn't
+  // resolve, or any directive that can't expand) is a content-integrity bug, NOT
+  // an author typo like a 404'd <slug>.md. The per-slug catch below is non-fatal
+  // by design (one bad source file shouldn't nuke a rebuild), which means a
+  // directive that throws would silently DROP the tutorial and leave PROD serving
+  // stale/raw-token content (the directive-content-reuse incident). Collect those
+  // slugs here and fail the build loudly after the pool — same contract as
+  // unexpandedDirectiveHits above.
+  const composeFailures: Array<{ slug: string; repo: string; error: string }> = []
+
   const tasks = allTutorials.map((t, idx) => async () => {
     const tutStart = performance.now()
     const label = `[${idx + 1}/${allTutorials.length}] ${t.repo}/${t.slug}`
@@ -1695,6 +1706,15 @@ async function main() {
       errors.push({ slug: t.slug, repo: t.repo, error: message, timestamp: new Date().toISOString() })
       console.error(`  ✗ ${label}: ${message}`)
 
+      // A DirectiveParseError means a directive could not expand (missing
+      // snippet, parse error, cycle, …). Unlike a source-fetch 404 (plain Error,
+      // a genuine author typo that stays non-fatal), this is a content-integrity
+      // failure: leaving it non-fatal silently drops the tutorial and ships stale
+      // or raw-token content to PROD. Flag it for a hard fail after the pool.
+      if (err instanceof DirectiveParseError) {
+        composeFailures.push({ slug: t.slug, repo: t.repo, error: message })
+      }
+
       const tutMs = performance.now() - tutStart
       timings.push({ slug: t.slug, repo: t.repo, durationMs: tutMs })
     }
@@ -1702,6 +1722,25 @@ async function main() {
 
   await runWithConcurrency(tasks, CONCURRENCY)
   const processMs = performance.now() - processStart
+
+  // Fail the build if any tutorial's compose threw a DirectiveParseError — a
+  // directive that could not expand (missing snippet, parse error, cycle). The
+  // per-slug catch is non-fatal by design for author source errors, but a
+  // directive failure is a content-integrity bug: left non-fatal it silently
+  // drops the tutorial and leaves PROD serving stale/raw-token content (the
+  // directive-content-reuse incident — ::include[btp-trial-setup] threw because
+  // SNIPPETS_ENABLED_REPOS wasn't set in CI, so the slug never re-published).
+  // Fail loudly here so a dropped directive tutorial can never pass as success.
+  if (composeFailures.length > 0) {
+    const detail = composeFailures
+      .map((f) => `  ${f.slug} (${f.repo}): ${f.error}`)
+      .join('\n')
+    throw new Error(
+      `Directive compose failed in ${composeFailures.length} tutorial(s) — a directive could not expand ` +
+      `(missing snippet / parse error). These slugs were dropped from the rebuild and would leave stale ` +
+      `or raw-token content on the target env:\n${detail}`,
+    )
+  }
 
   // Fail the build if any registered directive survived unexpanded in a composed
   // body — means the directive registry was not populated at compose time, which

@@ -595,6 +595,16 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.TUTORIALS_GITHUB_TOKEN }}
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
+          # Enable `::include` snippet resolution from repo `_snippets/` dirs.
+          # fetchSnippets() (scripts/parsers/github.ts) is gated by this var and
+          # returns an empty map when it's unset — which made every repo-snippet
+          # `::include` throw directive/include-not-found at compose time, silently
+          # dropping the tutorial (e.g. directive-content-reuse's
+          # ::include[btp-trial-setup] left PROD serving raw :tutorial[…] prose).
+          # Only meta-tutorials has a _snippets/ dir today; the shared
+          # tutorial-snippets repo is auto-added by fetchSnippets when any repo is
+          # enabled. Comma-separate to add more repos later.
+          SNIPPETS_ENABLED_REPOS: meta-tutorials
           TUTORIAL_SLUG: ${{ inputs.slug || steps.mode.outputs.dispatch_slug }}
           TUTORIAL_SLUGS: ${{ inputs.slugs || steps.mode-override.outputs.dispatch_slugs || steps.mode.outputs.dispatch_slugs }}
           # [retired-slug-noop] Lets fetch-tutorials distinguish a human manual
