@@ -2958,6 +2958,29 @@ html.dark .diff-added  { background: rgba(0,200,80,.18); }
 html.dark .diff-removed { background: rgba(220,50,50,.18); }
 html.dark .diff-highlight { background: rgba(200,160,0,.18); }
 
+/* Line highlighting (#3076) — legacy `LANG[4, 9, 12]` fences compile (via
+   scripts/parsers/code-highlight-lines.ts → Hugo hl_lines) to Chroma's `.hl`
+   line class. Style it as an intentional SAP-blue attention band ("look here")
+   rather than Chroma's flat-gray default. Full-bleed: `.chroma` has 1rem side
+   padding, so negative margin + matching padding extends the band to the code
+   window edges. A left accent bar matches the site's Information-callout idiom
+   (--sapInformationBorderColor). Purely additive — non-highlighted lines are
+   untouched. NOTE: CDS blocks are re-highlighted by Shiki post-build and do
+   not carry `.hl` — known gap, not covered here. */
+.code-block-body .chroma .hl {
+  display: block;
+  background-color: var(--sapInformationBackground, #e1f4ff);
+  box-shadow: inset 3px 0 0 0 var(--sapInformationBorderColor, #0070f2);
+  margin: 0 -1rem;
+  padding: 0 calc(1rem - 3px);
+}
+html.dark .code-block-body .chroma .hl {
+  /* Horizon dark Information background is too light against the code window;
+     use a translucent SAP-blue wash so syntax tokens stay legible. */
+  background-color: rgba(0, 112, 242, 0.16);
+  box-shadow: inset 3px 0 0 0 var(--sapInformationBorderColor, #4db1ff);
+}
+
 /* Tree fences */
 [data-tree] [role="tree"] { list-style: none; padding-left: 0; margin: 0; font-family: var(--sapFontCodeFamily, monospace); font-size: .9em; }
 [data-tree] [role="treeitem"] { display: block; padding: .1rem 0; white-space: pre; }
