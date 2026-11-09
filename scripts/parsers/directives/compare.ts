@@ -10,14 +10,15 @@
 // Registration:
 //   registerCompareDirective() — call once at pipeline init.
 
-import { registerDirective } from '../directive-registry.js';
+import { registerDirective, getRegistry } from '../directive-registry.js';
 import { resolveSrc } from './resolve-src.js';
 import type { DirectiveNode } from '../directives.js';
 
 /**
- * Register the `compare` (leaf) directive definition.
+ * Register the `compare` (leaf) directive definition. Idempotent.
  */
 export function registerCompareDirective(): void {
+  if (getRegistry().has('compare')) return;
   registerDirective({
     name: 'compare',
     kinds: ['leaf'],

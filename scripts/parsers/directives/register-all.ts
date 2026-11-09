@@ -17,8 +17,27 @@ import { INCLUDE_DEF } from './include.js'
 import { TUTORIAL_REF_DEF, NOTE_REF_DEF, HELP_REF_DEF, API_REF_DEF, SINCE_DEF } from './reference-links.js'
 import { REQUIRES_DEF } from './prerequisites.js'
 import { registerUiDirectives } from './ui.js'
+import { registerCalloutDirectives } from './callout-directives.js'
+import { registerCastDirective } from './cast.js'
+import { registerCompareDirective } from './compare.js'
+import { registerDiagramDirective } from './diagram.js'
+import { registerFigureDirectives } from './figure.js'
 
 const ALL_DEFS = [INCLUDE_DEF, TUTORIAL_REF_DEF, NOTE_REF_DEF, HELP_REF_DEF, API_REF_DEF, SINCE_DEF, REQUIRES_DEF]
+
+// Every directive family's register fn, now internally idempotent (each early-
+// returns if its sentinel directive is already registered). Calling them from
+// the hub guarantees ALL families are registered on the pipeline's import AND
+// re-armed after a resetRegistry() — closing the import-order/one-shot hole that
+// let :ui[…] (and potentially any family) ship raw to PROD.
+const REGISTER_FNS: Array<() => void> = [
+  registerUiDirectives,
+  registerCalloutDirectives,
+  registerCastDirective,
+  registerCompareDirective,
+  registerDiagramDirective,
+  registerFigureDirectives,
+]
 
 let _registered = false
 
@@ -32,16 +51,10 @@ export function registerAllDirectives(): void {
       registerDirective(def)
     }
   }
-  // UI directives (menu/ui/icon/kbd/ask) were the registration orphan: unlike
-  // the other families (callout/cast/compare/diagram/figure via index.js, which
-  // self-register on their own side-effect imports), nothing RE-ARMED the UI
-  // family after a registry reset or in a process graph where ui.js's top-level
-  // register didn't run — so :ui[…] shipped raw to PROD. register-all is the
-  // one hub guaranteed to run on the pipeline's import, and its empty-registry
-  // re-arm (above) now also covers UI. registerUiDirectives is internally
-  // idempotent (has()-guarded), so this is safe alongside ui.js's own import.
-  if (!registry.has('ui')) {
-    registerUiDirectives()
+  // Each fn is idempotent (has()-guarded internally), so this is safe alongside
+  // the families' own side-effect imports in compose.ts.
+  for (const fn of REGISTER_FNS) {
+    fn()
   }
 }
 

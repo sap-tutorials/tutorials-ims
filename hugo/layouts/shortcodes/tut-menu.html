@@ -11,10 +11,16 @@
   Two-pass split: first on " > ", then on "→" for any remaining unsplit segments.
   aria-label joins segments with ", then " for screen reader readability.
 
-  Security note: .Get "label" uses Hugo's default HTML auto-escaping.
+  escapeShortcodeParam HTML-encodes the param at publish time, so a `>`
+  separator arrives here as `&gt;` (and `&`→`&amp;`). Decode those back BEFORE
+  splitting, else the split on " > " never matches and the whole path renders as
+  one segment showing the literal `&gt;`. Segment text is auto-escaped by Hugo
+  on output below, so decoding the input is safe (no raw-HTML injection).
+
+  Security note: .Get "label" uses Hugo's default HTML auto-escaping on output.
   Never mark directive-supplied values as raw HTML.
 */}}
-{{- $raw := .Get "label" -}}
+{{- $raw := .Get "label" | replaceRE "&gt;" ">" | replaceRE "&lt;" "<" | replaceRE "&amp;" "&" -}}
 {{- $firstPass := split $raw " > " -}}
 {{- $segments := slice -}}
 {{- range $firstPass -}}

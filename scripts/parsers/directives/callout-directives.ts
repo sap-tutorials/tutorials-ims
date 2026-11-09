@@ -9,6 +9,7 @@
 // resetRegistry() between cases can call this to repopulate the registry
 // without relying on module re-import (ES modules are cached after first load).
 import { registerDirective } from '../directive-registry.js'
+import { getRegistry } from '../directive-registry.js'
 import type { DirectiveNode } from '../directives.js'
 
 const COLLAPSIBLE = new Set(['details', 'troubleshoot', 'hint', 'solution'])
@@ -38,6 +39,8 @@ function makeCalloutContainer(reg: typeof registerDirective, name: string, since
 }
 
 export function registerCalloutDirectives(): void {
+  // Idempotent — safe to re-arm (register-all) after resetRegistry().
+  if (getRegistry().has('details')) return;
   ;(['details', 'troubleshoot', 'result', 'hint', 'solution'] as const).forEach(
     (name) => makeCalloutContainer(registerDirective, name),
   )

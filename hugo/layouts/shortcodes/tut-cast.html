@@ -9,7 +9,7 @@
   {{- with .Get "rows" }} data-rows="{{ . }}"{{ end }}
   {{- with .Get "cols" }} data-cols="{{ . }}"{{ end }}
   {{- with .Get "speed" }} data-speed="{{ . }}"{{ end }}
-  {{- with .Get "poster" }} data-poster="{{ . }}"{{ end }}
+  {{- with .Get "poster" }} {{ printf "data-poster=%q" . | safeHTMLAttr }}{{ end }}
   {{- with .Get "idle-limit" }} data-idle-limit="{{ . }}"{{ end }}>
   <pre class="tut-cast__placeholder" aria-label="Terminal recording (loading...)">&#9658; Loading terminal recording&#8230;</pre>
 </div>
