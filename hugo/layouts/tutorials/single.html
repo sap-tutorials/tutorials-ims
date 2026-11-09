@@ -50,13 +50,6 @@
 <script id="tutorial-data" type="application/json">{{ . | jsonify }}</script>
 {{ end }}
 
-{{/* rich-media.css — compare slider + cast player styles. Loaded only when the
-     tutorial contains a tut-compare or tut-cast shortcode, same as u1-object-page.html. */}}
-{{- if or .Params.hasCast .Params.hasCompare -}}
-{{- $richMediaCss := resources.Get "css/rich-media.css" | minify | fingerprint -}}
-<link rel="stylesheet" href="{{ $richMediaCss.RelPermalink }}">
-{{- end -}}
-
 {{ $js := resources.Get "js/tutorial.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $js.RelPermalink }}" defer></script>
 {{/* [tutorial-step-pacing] see u1-object-page.html for rationale. */}}
@@ -67,14 +60,6 @@
 {{- if .Params.hasWalkthrough -}}
 {{ $wt := resources.Get "js/code-walkthrough.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $wt.RelPermalink }}" defer></script>
-{{- end -}}
-{{- if .Params.hasCast -}}
-{{ $cast := resources.Get "js/cast.ts" | js.Build (dict "minify" true) }}
-<script src="{{ $cast.RelPermalink }}" defer></script>
-{{- end -}}
-{{- if .Params.hasCompare -}}
-{{ $compare := resources.Get "js/compare.ts" | js.Build (dict "minify" true) }}
-<script src="{{ $compare.RelPermalink }}" defer></script>
 {{- end -}}
 {{/* kbd-os.ts: swap <kbd data-kbd> labels to match the active OS preference.
      Loaded unconditionally on all tutorial pages (every tutorial may contain

@@ -573,14 +573,21 @@
 <link rel="stylesheet" href="{{ $richMediaCss.RelPermalink }}">
 {{- $hotspotsJs := resources.Get "js/hotspots.ts" | js.Build (dict "minify" true) -}}
 <script src="{{ $hotspotsJs.RelPermalink }}" defer></script>
-{{ if .Params.hasCompare -}}
+{{/* rich-media interactivity: compare slider, asciinema cast player, and
+     code-walkthrough line-click. Loaded UNCONDITIONALLY (like hotspots.ts
+     above) — each script query-selects its own target elements
+     ([data-compare] / .tut-cast[data-tut-cast] / [data-walkthrough]) and
+     no-ops when none are present, so there is no page-weight concern for
+     non-media tutorials. This deliberately does NOT gate on hasCompare/hasCast
+     frontmatter flags: those flags are never threaded from writeHugoPage into
+     the published frontmatter (#3081 follow-up), so a conditional guard here
+     would never fire and the player/slider/walkthrough would stay dead. */}}
 {{- $compareJs := resources.Get "js/compare.ts" | js.Build (dict "minify" true) -}}
 <script src="{{ $compareJs.RelPermalink }}" defer></script>
-{{- end }}
-{{ if .Params.hasCast -}}
 {{- $castJs := resources.Get "js/cast.ts" | js.Build (dict "minify" true) -}}
 <script src="{{ $castJs.RelPermalink }}" defer></script>
-{{- end }}
+{{- $walkthroughJs := resources.Get "js/code-walkthrough.ts" | js.Build (dict "minify" true) -}}
+<script src="{{ $walkthroughJs.RelPermalink }}" defer></script>
 {{/* kbd-os.ts: swap <kbd data-kbd> labels to match the active OS preference.
      Loaded unconditionally on all tutorial pages (every tutorial may contain
      :kbd directives) unless we are in QA/preview mode where the authoring
