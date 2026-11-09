@@ -43,6 +43,9 @@ export interface RenderHugoFrontmatterArgs {
   hasCast?: boolean
   /** When true, page body contains at least one sortable/filterable/sticky table. */
   hasSortable?: boolean
+  /** When true, page body contains at least one :::walkthrough directive. Drives
+   *  conditional loading of code-walkthrough.ts in single.html. */
+  hasWalkthrough?: boolean
   /**
    * [#655] Verbatim rules.vr source. When set + non-empty, emitted as a top-level
    * frontmatter field so Hugo's baseof.html can render
@@ -140,6 +143,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     osList,
     hasCompare,
     hasCast,
+    hasWalkthrough,
     hasSortable,
     rulesVrSource,
     hasAi,
@@ -235,6 +239,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
   if (osList && osList.length) fm.osList = osList
   if (hasCompare) fm.hasCompare = true
   if (hasCast) fm.hasCast = true
+  if (hasWalkthrough) fm.hasWalkthrough = true
   if (hasSortable) fm.hasSortable = true
 
   // [tutorial-step-pacing] Optional-step numbers, mirrored at the top level
