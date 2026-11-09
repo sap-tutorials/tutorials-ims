@@ -1,5 +1,6 @@
 import { extractFrontmatter } from './frontmatter.js'
 import { normalizeBlockquotedFences } from './blockquote-fence.js'
+import { rewriteHighlightLineFences } from './code-highlight-lines.js'
 import { mergeBlockquoteNoteDividers } from './blockquote-notes.js'
 import { normalizeBlockquoteAlerts } from './blockquote-alerts.js'
 import { extractIntro } from './intro.js'
@@ -168,6 +169,13 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   // step 2). Run before every downstream transform so both steps and intro get
   // the healed markdown.
   const healedBody = normalizeBlockquotedFences(body)
+  // [#3076] Rewrite the legacy AEM `LANG[4, 9, 12]` line-highlight fence form
+  // into Hugo's native `LANG {hl_lines="4 9 12"}` attribute so Chroma emits the
+  // `.hl` line class. Runs right after the blockquote-fence heal so a healed
+  // `>`-quoted fence is also normalized, and before every step/directive
+  // transform (none of which read the info string's bracket). Fence-aware: a
+  // bracket inside code content or a nested fence line is left untouched.
+  const highlightedBody = rewriteHighlightLineFences(healedBody)
   // [#parser-commonmark-realign] The three fence healers that used to run here
   // (normalizeListContinuationFences #1931, normalizeListFenceColumnZero #2720,
   // dedentListContinuationProse) are REMOVED. Step segmentation now uses the
@@ -178,7 +186,7 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
   // fences/prose/images) is now fixed AT SOURCE by scripts/scan-markdown-source
   // + author-time lint, not healed invisibly at build. The transforms remain
   // exported and are reused by scan-markdown-source as source fixers.
-  const listProseHealedBody = healedBody
+  const listProseHealedBody = highlightedBody
   // [#1741] Collapse the AEM-legacy "additional details" note pattern where a
   // multi-paragraph blockquote is split by blockquoted thematic breaks (`>---`).
   // CommonMark otherwise renders each `>` block as its own info box with a
