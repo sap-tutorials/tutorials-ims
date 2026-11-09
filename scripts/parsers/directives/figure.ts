@@ -16,7 +16,7 @@
 //   functions close over them; otherwise ctx values are read from the second arg
 //   of render (via expandDirectives ctx.repo / ctx.branch / ctx.slug).
 
-import { registerDirective } from '../directive-registry.js';
+import { registerDirective, getRegistry } from '../directive-registry.js';
 import { resolveSrc } from './resolve-src.js';
 import type { DirectiveNode } from '../directives.js';
 
@@ -36,6 +36,8 @@ export interface FigureDirectivesCtx {
  *   (i.e., via `expandDirectives` second arg with `repo`/`branch`/`slug`).
  */
 export function registerFigureDirectives(ctx: FigureDirectivesCtx = {}): void {
+  // Idempotent — safe to re-arm (register-all) after resetRegistry().
+  if (getRegistry().has('figure')) return;
   const closedRepo = ctx.repo;
   const closedBranch = ctx.branch;
   const closedSlug = ctx.slug;

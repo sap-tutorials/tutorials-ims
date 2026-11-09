@@ -10,14 +10,16 @@
 // Registration:
 //   registerCastDirective() — call once at pipeline init.
 
-import { registerDirective } from '../directive-registry.js';
+import { registerDirective, getRegistry } from '../directive-registry.js';
 import { resolveSrc } from './resolve-src.js';
 import type { DirectiveNode } from '../directives.js';
 
 /**
- * Register the `cast` (leaf) directive definition.
+ * Register the `cast` (leaf) directive definition. Idempotent — safe to call
+ * repeatedly (e.g. re-armed by register-all after resetRegistry()).
  */
 export function registerCastDirective(): void {
+  if (getRegistry().has('cast')) return;
   registerDirective({
     name: 'cast',
     kinds: ['leaf'],
