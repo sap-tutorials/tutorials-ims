@@ -17,8 +17,33 @@
 */}}
 {{- $code := .Get "code" | replaceRE "&#13;" "" | replaceRE "&#10;" "\n" -}}
 {{- $notes := .Get "notes" | replaceRE "&#13;" "" | replaceRE "&#10;" "\n" -}}
+{{/* Render the fenced code through Hugo's `highlight` function rather than
+     markdownify. code-walkthrough.ts highlights per-line by selecting
+     `.tut-walkthrough-code .line`, and Chroma's `highlight` output wraps every
+     line in `<span class="line">` (noClasses=false in hugo.toml) — whereas a
+     plain `markdownify` of the same fence emits NO per-line spans, so the
+     click-to-highlight found zero `.line` elements and highlighted nothing.
+     Strip the ``` fences and extract the language token from the first line. */}}
+{{- $codeTrimmed := trim $code "\n" -}}
+{{- $codeLines := split $codeTrimmed "\n" -}}
+{{- $lang := "" -}}
+{{- $body := $codeTrimmed -}}
+{{- if and (gt (len $codeLines) 0) (hasPrefix (index $codeLines 0) "```") -}}
+  {{- $lang = trim (strings.TrimPrefix "```" (index $codeLines 0)) " \t" -}}
+  {{/* Drop the opening fence line and any trailing closing fence line. */}}
+  {{- $inner := after 1 $codeLines -}}
+  {{- if and (gt (len $inner) 0) (eq (trim (index $inner (sub (len $inner) 1)) " \t") "```") -}}
+    {{- $inner = first (sub (len $inner) 1) $inner -}}
+  {{- end -}}
+  {{- $body = delimit $inner "\n" -}}
+{{- end -}}
+{{- if eq $lang "" -}}{{- $lang = "text" -}}{{- end -}}
 <div class="tut-walkthrough" data-walkthrough>
-  <div class="tut-walkthrough-code">{{ $code | markdownify }}</div>
+  {{/* security-reviewed: $body is the author's fenced code content; `highlight`
+       renders it through Chroma which HTML-escapes the source. $lang is the
+       fence's language token (alnum). Only Chroma's fixed line/token span
+       scaffold is emitted — no attacker-controlled HTML. */}}
+  <div class="tut-walkthrough-code">{{ highlight $body $lang "" }}</div>
   <div class="tut-walkthrough-notes">{{ $notes | markdownify }}</div>
   {{- with .Inner }}{{ . }}{{ end -}}
 </div>

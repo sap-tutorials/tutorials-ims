@@ -847,6 +847,11 @@ a:hover {
   margin: 0;
   border-radius: 0;
   border: none;
+  /* Long single lines (e.g. a console command with a full URL) must not run off
+     the page. Default to horizontal scroll; the opt-in data-tut-code-wrap="on"
+     preference (ui5-overrides.css) switches this to wrapping. */
+  white-space: pre;
+  overflow-x: auto;
 }
 
 pre {
