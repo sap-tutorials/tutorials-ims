@@ -5,6 +5,7 @@ import { performance } from 'node:perf_hooks'
 import { hugoFrontmatterStringify as yamlStringify } from './lib/hugo-yaml.js'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
 import { composeTutorial } from './parsers/compose.js'
+import { extractFrontmatter } from './parsers/frontmatter.js'
 import { DirectiveParseError } from './parsers/directives.js'
 import './parsers/directives/register-all.js' // side-effect: registers all content-reuse directives
 import { findUnexpandedDirectives } from './parsers/guard-unexpanded-directives.js'
@@ -1226,8 +1227,8 @@ async function main() {
     console.log(`[snippets] fetched ${snippetMap.size} snippet(s) from ${uniqueRepos.length} repo(s)`)
   }
 
-  // #directive-xref-validation: existence catalog for the `:tutorial` and
-  // `::requires` directives. Both validate their slug against ctx.catalogBySlug
+  // #directive-xref-validation: existence + metadata catalog for the `:tutorial`
+  // and `::requires` directives. Both validate their slug against ctx.catalogBySlug
   // and throw DirectiveParseError (→ fatal composeFailures) when it's present but
   // the slug is missing; when it's undefined they fail-open. We enable the fatal
   // path ONLY when discovery came from the authoritative GitHub tier, because the
@@ -1235,19 +1236,52 @@ async function main() {
   // the filter never shrinks allTutorials). A disk/hana/rest fallback could be a
   // stale/partial set and would throw false positives, so we pass undefined there.
   //
-  // Value carries slug-as-title (existence is the load-bearing check; there is no
-  // pre-compose source of real titles for ALL slugs) + time 0. `::requires` reads
-  // entry.title into its card; a real title is a nice-to-have, not required to
-  // catch a dead cross-ref. Keyed lowercase to match the directives' slug casing.
+  // Value carries the REAL title + time, read from each tutorial's frontmatter in
+  // the on-disk cache (every <slug>.md is already written to CACHE_DIR by this
+  // point — the :help prefetch loop above reads the same files). `::requires`
+  // renders entry.title/entry.time into its card and `:tutorial` uses entry.title
+  // as the link label; without real values they showed the raw slug + "0 min".
+  // Fail-open to slug/0 when the file or field is missing (existence still holds).
   let catalogBySlug: Map<string, { title: string; time: number }> | undefined
   if (discoverySource === 'github') {
     catalogBySlug = new Map()
+    // #3091 follow-up: the CAP /build/catalog carries a real title for EVERY
+    // tutorial slug (not just the ones composed this run). On a slug-targeted
+    // rebuild the referenced tutorial's own <slug>.md is NOT fetched into
+    // CACHE_DIR, so the per-file lookup below falls back to slug-as-title and the
+    // xref/prereq card renders a raw slug. Seed a slug→title map from the cached
+    // catalog first; the on-disk frontmatter (which also has `time`) overrides it
+    // when present. loadCapCache() is already read at the fingerprint step above,
+    // so this is a cheap disk read with no extra network.
+    const catalogTitleBySlug = new Map<string, string>()
+    try {
+      for (const m of (loadCapCache()?.tutorialMetas ?? [])) {
+        if (m.title) catalogTitleBySlug.set(m.slug.toLowerCase(), m.title)
+      }
+    } catch { /* no cache yet — per-file + slug fallback still hold */ }
     for (const t of allTutorials) {
-      catalogBySlug.set(t.slug.toLowerCase(), { title: t.slug, time: 0 })
+      const slugLc = t.slug.toLowerCase()
+      let title = catalogTitleBySlug.get(slugLc) ?? t.slug
+      let time = 0
+      const cacheFile = join(CACHE_DIR, `${t.slug}.md`)
+      if (existsSync(cacheFile)) {
+        try {
+          const fm = extractFrontmatter(readFileSync(cacheFile, 'utf-8'))
+          // title is a top-level field on FrontmatterResult; time lives on the
+          // nested `frontmatter` object (coerced to a number by extractFrontmatter).
+          if (fm.title) title = fm.title
+          const t = fm.frontmatter?.time
+          if (typeof t === 'number' && Number.isFinite(t)) time = t
+        } catch {
+          // Corrupt/unreadable cache entry — keep catalog/slug fallback (existence
+          // check is what the fatal guard depends on; metadata is best-effort).
+        }
+      }
+      catalogBySlug.set(slugLc, { title, time })
     }
-    console.log(`[xref] slug-existence catalog enabled (${catalogBySlug.size} slugs; dead :tutorial/::requires refs now fail the build)`)
+    console.log(`[xref] slug catalog enabled (${catalogBySlug.size} slugs; ${catalogTitleBySlug.size} titles from CAP catalog, frontmatter overrides where cached; dead :tutorial/::requires refs now fail the build)`)
   } else {
-    console.log(`[xref] slug-existence catalog DISABLED — discovery source '${discoverySource ?? 'cache'}' is not authoritative (fail-open on cross-ref validation)`)
+    console.log(`[xref] slug catalog DISABLED — discovery source '${discoverySource ?? 'cache'}' is not authoritative (fail-open on cross-ref validation)`)
   }
 
   // Build-time safety net (#directive-rollout): names of directives that SHOULD
