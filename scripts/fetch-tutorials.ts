@@ -651,6 +651,8 @@ export function writeHugoPage(
   variables?: import('./parsers/variables.js').TutorialVariable[],
   syncKeysUsed?: Set<string>,
   syncGroups?: import('./parsers/types.js').TutorialFrontmatter['syncGroups'],
+  testedWith?: import('./parsers/types.js').TutorialFrontmatter['testedWith'],
+  requires?: import('./parsers/types.js').TutorialFrontmatter['requires'],
 ): void {
   const content = renderHugoFrontmatter({
     slug,
@@ -679,6 +681,8 @@ export function writeHugoPage(
     variables,
     syncKeysUsed,
     syncGroups,
+    testedWith,
+    requires,
   })
 
   mkdirSync(outputDir, { recursive: true })
@@ -1721,6 +1725,8 @@ async function main() {
           composed.variables,
           composed.syncKeysUsed.size > 0 ? composed.syncKeysUsed : undefined,
           composed.syncGroups,
+          composed.testedWith,
+          composed.requires,
         )
         authorRows.push({
           authorProfile: frontmatter.author_profile ?? '',

@@ -88,6 +88,14 @@ enableRobotsTXT = false  # we ship our own via the robots output format
     [markup.goldmark.renderer]
       unsafe = true
     [markup.goldmark.parser]
+      # #directive-hotspots: a standalone image with a following block-attribute
+      # line (`![](img)\n{hotspots=…}`) only has its attributes delivered to the
+      # image render hook's .Attributes when the image is NOT wrapped in a <p>.
+      # With the default (true) goldmark wraps it and the attribute block never
+      # attaches, so `{hotspots=…}` leaked as literal text and no overlay rendered.
+      # The render hooks already emit <figure>/<div> wrappers, so dropping the
+      # redundant <p> is also cleaner HTML. No CSS depends on p>img (checked).
+      wrapStandAloneImageWithinParagraph = false
       [markup.goldmark.parser.attribute]
         block = true
         title = true
