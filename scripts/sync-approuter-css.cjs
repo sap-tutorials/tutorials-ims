@@ -127,6 +127,43 @@ async function main() {
   const base = approuterUrl.replace(/\/+$/, '');
   const pages = page ? [page] : DEFAULT_PAGES;
 
+  // 0) PREFER SOURCE WHEN THE DEPLOY ALREADY SHIPPED IT (#3091 follow-up).
+  //    #2920's sync-from-approuter exists to avoid baking a hash the approuter
+  //    does NOT serve (→ 404 / unstyled). But it has a failure mode: a CSS-only
+  //    SOURCE change ships on a deploy (build:css rotates the fingerprinted file,
+  //    and the new file IS served) yet NEVER reaches HANA pages — every rebuild
+  //    re-pins the OLD hash it scrapes from the (still-stale) served pages, a
+  //    self-perpetuating loop (observed 2026-11-10: console line-wrap CSS fix
+  //    deployed as 863da9b0… but all pages kept referencing 9dbb07c7…).
+  //
+  //    Break it WITHOUT reintroducing drift: build from source, then verify the
+  //    approuter actually SERVES the source-built hash (200). If it does, the
+  //    deploy already shipped these exact bytes — baking the source hash is safe
+  //    (no 404) AND propagates the new CSS to republished pages. If it does not
+  //    (source is ahead of the deploy — the pre-#2920 drift the guard blocks),
+  //    fall through to the sync-from-approuter path below unchanged.
+  try {
+    buildFromSource();
+    const srcBytes = fs.readFileSync(outFile);
+    const srcHash = crypto.createHash('sha256').update(srcBytes).digest('hex');
+    const srcUrl = `/css/sap-fundamental.${srcHash}.css`;
+    const probe = await fetchWithRetry(base + srcUrl, { asBuffer: true });
+    if (probe.ok && probe.body) {
+      const servedHash = crypto.createHash('sha256').update(probe.body).digest('hex');
+      if (servedHash === srcHash) {
+        log(`source CSS hash ${srcHash.slice(0, 12)} IS served by the approuter → keeping source build (deploy already shipped it; new CSS will propagate to republished pages)`);
+        return 0;
+      }
+      // Served bytes at the source URL don't match (edge-mangled / corrupt) —
+      // don't trust it; fall through to the canonical discover-and-pin path.
+      log(`source hash ${srcHash.slice(0, 12)} returned 200 but bytes mismatch — falling through to approuter sync`);
+    } else {
+      log(`approuter does NOT serve source hash ${srcHash.slice(0, 12)} (HTTP ${probe.status}) → source is ahead of the deploy; syncing from approuter to avoid drift`);
+    }
+  } catch (e) {
+    log(`source pre-build/probe failed (${e && e.message ? e.message : e}); syncing from approuter`);
+  }
+
   // 1) Discover the served sap-fundamental href from a rendered page.
   let href = '';
   for (const p of pages) {

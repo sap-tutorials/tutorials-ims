@@ -80,12 +80,16 @@ export async function fetchBuildCatalog(baseUrl: string): Promise<{
     hierarchies: MissionHierarchy[]
     standaloneGroups?: StandaloneGroup[]
     categories?: CategoryMeta[]
-    tutorials?: Array<{ slug: string; categorySlugs?: string[] }>
+    tutorials?: Array<{ slug: string; title?: string; categorySlugs?: string[] }>
     featured?: BrowseFeaturedEntry[]
   }
   const tutorialMetas: CatalogTutorialMeta[] = (data.tutorials ?? []).map(t => ({
     slug: t.slug,
     categorySlugs: t.categorySlugs ?? [],
+    // #3091 follow-up: carry the real title so the xref/prereq catalog can label
+    // :tutorial / ::requires links with it even on slug-targeted rebuilds (where
+    // the referenced tutorial's own <slug>.md is not fetched into CACHE_DIR).
+    ...(typeof t.title === 'string' && t.title ? { title: t.title } : {}),
   }))
   return {
     missions: data.missions,
