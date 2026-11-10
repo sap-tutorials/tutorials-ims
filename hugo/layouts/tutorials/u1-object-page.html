@@ -329,6 +329,22 @@
             <ul>{{ range . }}<li><span class="check-icon">✔</span><span class="check-text">{{ . | markdownify }}</span></li>{{ end }}</ul>
           </div>
           {{ end }}
+          {{/* "Tested with" panel — rendered from the testedWith frontmatter map.
+               The tut-tested-with shortcode is never injected into the composed
+               body (render-frontmatter.ts emits the param but no call), so the
+               layout renders it here directly. Mirrors shortcodes/tut-tested-with.html. */}}
+          {{ with .Params.testedWith }}
+          <div class="tut-tested-with">
+            <details>
+              <summary>Tested with</summary>
+              <ul>
+                {{- range $k, $v := . -}}
+                <li><span class="pkg">{{ $k }}</span> <span class="ver">{{ $v }}</span></li>
+                {{- end -}}
+              </ul>
+            </details>
+          </div>
+          {{ end }}
           {{ partial "tutorial-author.html" . }}
           {{ if not site.Params.previewMode }}{{ partial "more-from-author.html" . }}{{ end }}
         </section>
