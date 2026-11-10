@@ -777,16 +777,20 @@ html[data-tut-header="autohide"][data-page-kind="tutorial"] .op-header:focus-wit
 }
 
 /* Auto-hide footer: park it off the bottom edge; reveal on hover. Taskbar-style —
-   content is not padded for it; it overlays on reveal. */
-html[data-tut-footer="autohide"][data-page-kind="tutorial"] footer {
+   content is not padded for it; it overlays on reveal.
+   Scoped to `body > footer.site-footer` (the page footer) — a bare `footer`
+   descendant selector also matched the Joule panel's nested
+   `<footer class="joule-panel__footer">`, forcing it position:fixed/left:0/right:0
+   so the chat input spanned the whole viewport instead of docking in the panel. */
+html[data-tut-footer="autohide"][data-page-kind="tutorial"] body > footer.site-footer {
   position: fixed;
   left: 0; right: 0; bottom: 0;
   transform: translateY(calc(100% - 8px)); /* 8px reveal strip keeps footer hover-reachable */
   transition: transform 200ms ease;
   z-index: 25;
 }
-html[data-tut-footer="autohide"][data-page-kind="tutorial"] footer:hover,
-html[data-tut-footer="autohide"][data-page-kind="tutorial"] footer:focus-within {
+html[data-tut-footer="autohide"][data-page-kind="tutorial"] body > footer.site-footer:hover,
+html[data-tut-footer="autohide"][data-page-kind="tutorial"] body > footer.site-footer:focus-within {
   transform: translateY(0);
 }
 
@@ -796,7 +800,7 @@ html[data-tut-feedback="off"][data-page-kind="tutorial"] #op-discussion { displa
 
 @media (prefers-reduced-motion: reduce) {
   html[data-tut-header="autohide"][data-page-kind="tutorial"] .op-header,
-  html[data-tut-footer="autohide"][data-page-kind="tutorial"] footer { transition: none; }
+  html[data-tut-footer="autohide"][data-page-kind="tutorial"] body > footer.site-footer { transition: none; }
 }
 
 /* #1966 batch 2 — reading preferences. All rules tutorial-scoped. */

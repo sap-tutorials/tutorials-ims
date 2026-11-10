@@ -47,5 +47,30 @@ export function resolveImageURLs(content: string, opts: ImageResolveOpts): strin
     )
   }
 
+  result = moveInlineImageAttributesToBlock(result)
   return stripImageDirectiveComments(result)
+}
+
+/**
+ * Hugo's goldmark attribute parser (`markup.goldmark.parser.attribute.block=true`)
+ * attaches `{key=val}` attribute lists to BLOCK elements only — NOT to an inline
+ * image sitting inside a paragraph. Authors write image hotspots as an inline
+ * suffix: `![alt](img.png){hotspots="1:22%,34% …"}` — which goldmark leaves as
+ * literal text after the image (the leak observed on directive-rich-media), so
+ * the render-image hook never sees `hotspots` in `.Attributes` and no overlay
+ * dots render.
+ *
+ * Fix: when an image is ALONE on its line with a trailing `{…}` attribute block,
+ * move the `{…}` onto the FOLLOWING line. A standalone image is its own block,
+ * and a block-attribute line directly beneath it IS attached by goldmark → the
+ * render hook receives `.Attributes`. Images that are not alone on their line
+ * (inline in prose) are left untouched — an attribute block can't attach there
+ * anyway, and splitting would corrupt the sentence.
+ */
+export function moveInlineImageAttributesToBlock(content: string): string {
+  return content.replace(
+    // ^(indent)(![alt](path))(  {attrs})$  — the whole line is image + attr block
+    /^([ \t]*)(!\[[^\]]*\]\([^)]+\))[ \t]*(\{[^}\n]*\})[ \t]*$/gm,
+    (_m, indent: string, img: string, attrs: string) => `${indent}${img}\n${indent}${attrs}`
+  )
 }
