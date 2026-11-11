@@ -1829,10 +1829,23 @@ export default class AdminService extends cds.ApplicationService {
     });
 
     // --- Feedback moderation ---
+    //
+    // #3080: the action is bound to TutorialFeedback, but the admin UI renders
+    // its button inside the feedbackItems LineItem on a Tutorials object page,
+    // so it is invoked through the navigation path
+    //   Tutorials(...)/feedbackItems(<feedbackID>)/markFeedbackIrrelevant
+    // In that case req.params is [tutorialKey, feedbackKey] — the bound
+    // entity's own key is the LAST element, not req.params[0] (the tutorial
+    // key). Read the last param so BOTH the direct path (1 key) and the
+    // navigation path (2 keys) resolve the correct feedback row.
+    const feedbackKeyOf = (req) => {
+      const last = req.params[req.params.length - 1];
+      return last?.ID ?? last;
+    };
 
     this.on('markFeedbackIrrelevant', 'TutorialFeedback', async (req) => {
       const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
-      const id = req.params[0]?.ID ?? req.params[0];
+      const id = feedbackKeyOf(req);
       if (!id) return req.error(400, 'Missing entity key');
       const row = await SELECT.one.from(TutorialFeedback).where({ ID: id });
       if (!row) return req.error(404, 'Feedback entry not found');
@@ -1842,7 +1855,7 @@ export default class AdminService extends cds.ApplicationService {
 
     this.on('unmarkFeedbackIrrelevant', 'TutorialFeedback', async (req) => {
       const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
-      const id = req.params[0]?.ID ?? req.params[0];
+      const id = feedbackKeyOf(req);
       if (!id) return req.error(400, 'Missing entity key');
       const row = await SELECT.one.from(TutorialFeedback).where({ ID: id });
       if (!row) return req.error(404, 'Feedback entry not found');

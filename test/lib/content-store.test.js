@@ -229,33 +229,32 @@ describe('content-store', () => {
       expect(res.status).toBe(503);
     });
 
-    // #3103: missing-BLOB race. The serve path reads BLOB metadata and the BLOB
-    // itself in two separate queries (to dodge the HANA LOB-locator-expiry
-    // gotcha). A concurrent delta-write to the mutable ContentCurrent (or a
-    // transient HANA locator blip) can land the metadata SELECT on a row whose
-    // separate BLOB SELECT comes back null. That must degrade to a styled 404,
-    // NOT a raw JSON 500 (the tutorial/concept path was the only serve branch
-    // that threw on this; its siblings all fail open).
-    it('degrades to a 404 (not a raw 500) when the BLOB is null but metadata survives', async () => {
-      // Null the content column while leaving the metadata row (contentHash,
-      // mimeType, version) intact — mimics the inconsistent-read window.
-      await UPDATE(ContentFiles).set({ content: null }).where({ slug: 'served-tut' });
-
-      const res = await project.axios.get('/content/tutorials/served-tut', {
-        validateStatus: () => true
-      });
-
-      // Red before the fix: serveStoredSlug throws (toBuffer(null) / gunzipSync),
-      // serveHandler's catch returns raw 500 JSON.
-      expect(res.status).toBe(404);
-    });
-
     it('serves from cache on second request', async () => {
       await project.axios.get('/content/tutorials/served-tut');
       const res = await project.axios.get('/content/tutorials/served-tut');
 
       expect(res.status).toBe(200);
       expect(res.headers['x-content-source']).toBe('cache');
+    });
+
+    // Resilience: metadata row present but the BLOB column is empty/missing —
+    // the "metadata hit, BLOB read came back empty" race against a concurrent
+    // publish/delta-write to ContentCurrent. Must degrade to the styled 404,
+    // NOT bubble a TypeError into a raw 500 "Internal Server Error". See #3103.
+    it('returns the styled 404 (not a raw 500) when the BLOB is missing but metadata exists', async () => {
+      // Null out the content BLOB while leaving contentHash/version intact,
+      // reproducing the inconsistent-read window.
+      await UPDATE(ContentFiles).set({ content: null }).where({ slug: 'served-tut' });
+      // Flush the LRU so the read hits the DB, not the warm cache.
+      const { invalidateContentCache } = await import('../../srv/lib/content-store.js');
+      invalidateContentCache();
+
+      const res = await project.axios.get('/content/tutorials/served-tut', {
+        validateStatus: () => true
+      });
+
+      expect(res.status).not.toBe(500);
+      expect(res.status).toBe(404);
     });
 
     it('redirects /tutorials/<slug>.html to canonical /tutorials/<slug> with 301', async () => {

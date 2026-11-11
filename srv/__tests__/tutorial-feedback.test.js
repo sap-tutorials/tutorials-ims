@@ -319,4 +319,44 @@ describe('markFeedbackIrrelevant / unmarkFeedbackIrrelevant', () => {
     );
     expect(status).toBe(404);
   });
+
+  // Regression for #3080: the admin UI renders the action button inside the
+  // feedbackItems LineItem on a Tutorials object page, so it invokes the
+  // action through the navigation path Tutorials(...)/feedbackItems(...)/
+  // markFeedbackIrrelevant. In that case req.params carries BOTH keys
+  // ([tutorialKey, feedbackKey]); the handler must resolve the feedback row
+  // from its OWN (last) key, not req.params[0] (the tutorial key).
+  it('marks irrelevant via the Tutorials/feedbackItems navigation path (#3080)', async () => {
+    const { Tutorials, TutorialFeedback } = cds.entities('com.sap.developers.ims');
+    const tutorialId = cds.utils.uuid();
+    const navFeedbackId = cds.utils.uuid();
+    await INSERT.into(Tutorials).entries([{ ID: tutorialId, slug: 'nav-demo-tutorial' }]);
+    await INSERT.into(TutorialFeedback).entries([
+      { ID: navFeedbackId, tutorialSlug: 'nav-demo-tutorial', npsScore: 5 }
+    ]);
+
+    const { status } = await project.post(
+      `/admin/Tutorials(ID=${tutorialId},IsActiveEntity=true)/feedbackItems(${navFeedbackId})/markFeedbackIrrelevant`,
+      { reason: 'Off-topic' },
+      { ...auth, validateStatus: () => true }
+    );
+    expect(status).toBe(200);
+    const [row] = await SELECT.from('com.sap.developers.ims.TutorialFeedback').where({ ID: navFeedbackId });
+    expect(row.isIrrelevant).toBe(true);
+    expect(row.irrelevantReason).toBe('Off-topic');
+
+    // and unmark via the same navigation path
+    const { status: unmarkStatus } = await project.post(
+      `/admin/Tutorials(ID=${tutorialId},IsActiveEntity=true)/feedbackItems(${navFeedbackId})/unmarkFeedbackIrrelevant`,
+      {},
+      { ...auth, validateStatus: () => true }
+    );
+    expect(unmarkStatus).toBe(200);
+    const [after] = await SELECT.from('com.sap.developers.ims.TutorialFeedback').where({ ID: navFeedbackId });
+    expect(after.isIrrelevant).toBe(false);
+    expect(after.irrelevantReason).toBeNull();
+
+    await DELETE.from(TutorialFeedback).where({ ID: navFeedbackId });
+    await DELETE.from(Tutorials).where({ ID: tutorialId });
+  });
 });
