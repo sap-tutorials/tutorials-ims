@@ -1070,12 +1070,22 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
               `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`,
               [slug, meta.version]
             );
-        contentBuf = blobRow.CONTENT;
+        contentBuf = blobRow?.CONTENT;
       } else {
         const blobRow = source === 'current'
           ? await SELECT.one.from(ContentCurrent).where({ slug }).columns('content') // slug-canonical: caller-canonicalizes
           : await SELECT.one.from(ContentFiles).where({ slug, version: meta.version }).columns('content'); // slug-canonical: caller-canonicalizes
-        contentBuf = await toBuffer(blobRow.content);
+        contentBuf = blobRow?.content != null ? await toBuffer(blobRow.content) : null;
+      }
+      // #3103: missing-BLOB race. The metadata SELECT above and this BLOB SELECT
+      // are separate queries (deliberately — CDS QL LOB locators expire). During
+      // a concurrent delta-write to the mutable ContentCurrent (overwrite-in-
+      // place, no version pin) or a transient HANA locator blip, the metadata
+      // row can survive while the BLOB comes back null/empty. Degrade to a styled
+      // 404 instead of throwing a raw 500 (sibling serve branches all fail open).
+      if (!Buffer.isBuffer(contentBuf) || contentBuf.length === 0) {
+        metrics.counter('content.blob.missing');  // #3103
+        return 'not-found';
       }
       const decompressed = gunzipSync(contentBuf);
       const advisory = await computeAdvisory(slug);
@@ -1339,7 +1349,10 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       return serveNotFound(res, slug);
     } catch (err) {
       console.error('[content/serve]', err instanceof Error ? err.message : String(err));
-      res.status(500).json({ error: 'Content retrieval failed' });
+      // #3103: align with sibling serve branches (pageServeHandler, authorServeHandler,
+      // advocateServeHandler) — all call serveNotFound on unexpected errors. Raw JSON
+      // 500 was the outlier; keep status=500 for monitoring but serve the styled page.
+      return serveNotFound(res, slug, 500);
     }
   }
 

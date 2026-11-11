@@ -229,6 +229,27 @@ describe('content-store', () => {
       expect(res.status).toBe(503);
     });
 
+    // #3103: missing-BLOB race. The serve path reads BLOB metadata and the BLOB
+    // itself in two separate queries (to dodge the HANA LOB-locator-expiry
+    // gotcha). A concurrent delta-write to the mutable ContentCurrent (or a
+    // transient HANA locator blip) can land the metadata SELECT on a row whose
+    // separate BLOB SELECT comes back null. That must degrade to a styled 404,
+    // NOT a raw JSON 500 (the tutorial/concept path was the only serve branch
+    // that threw on this; its siblings all fail open).
+    it('degrades to a 404 (not a raw 500) when the BLOB is null but metadata survives', async () => {
+      // Null the content column while leaving the metadata row (contentHash,
+      // mimeType, version) intact — mimics the inconsistent-read window.
+      await UPDATE(ContentFiles).set({ content: null }).where({ slug: 'served-tut' });
+
+      const res = await project.axios.get('/content/tutorials/served-tut', {
+        validateStatus: () => true
+      });
+
+      // Red before the fix: serveStoredSlug throws (toBuffer(null) / gunzipSync),
+      // serveHandler's catch returns raw 500 JSON.
+      expect(res.status).toBe(404);
+    });
+
     it('serves from cache on second request', async () => {
       await project.axios.get('/content/tutorials/served-tut');
       const res = await project.axios.get('/content/tutorials/served-tut');
