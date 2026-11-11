@@ -356,3 +356,60 @@ command-palette concept search): `@cache: { ttl: 300000, tags: [{ value:
   re-enabled metrics actually accumulate against the deployed DEV container (clear
   the stale zeroed rows first), then let PROD traffic post-cutover give the
   baseline before annotating more surfaces.
+
+## `KeyvCDS.set` UPSERT patch (#3102)
+
+**Symptom (PROD, 2026-11-11):** recurring `level:"error"` lines from the
+`cds-caching` logger:
+
+```
+KeyvCDS set error for key kg:rl:api:auth:auth:<hash>: unique constraint violated:
+Table(PLUGIN_CDS_CACHING_CACHESTORE), Index(_SYS_TREE_CS_#..._#P0) ... key: ID=kg:rl:...
+```
+
+Two namespaces seen — both the KG rate-limiter (`srv/lib/rate-limit/shared-limiter.js`,
+key prefix `kg:rl:`): `kg:rl:api:auth:auth:<hash>` and `kg:rl:homepage:anon:<ip>`.
+
+**Root cause:** the plugin's CDS-DB store adapter,
+`node_modules/cds-caching/lib/support/KeyvCDS.js`, implemented `set()` as a
+**read-then-create/update** (TOCTOU):
+
+```js
+const existing = await db.read(entity, key);
+if (existing) { await db.update(entity, key).with({ value, expiresAt }); }
+else          { await db.create(entity, { ID: key, value, expiresAt }); }
+```
+
+Under multi-instance (HA) CF, two instances both read "no row" for the same
+`kg:rl:*` counter, both take the `else` branch, and the second `create` violates
+the `CacheStore` PK unique index. The adapter's own `catch` logs at **error**
+level and swallows the exception — so the collision never reaches our
+`shared-limiter.js` fail-open (the limiter already over-allows under races, which
+is acceptable), but it spams PROD error monitoring and the losing write is
+dropped.
+
+**Fix:** a committed **patch-package** patch,
+`patches/cds-caching+2.1.0.patch`, replaces that branch with a single atomic
+UPSERT:
+
+```js
+await db.run(cds.ql.UPSERT.into(entity).entries({ ID: key, value, expiresAt }));
+```
+
+`CacheStore` has a single-column PK (`ID : String(900)`), so UPSERT compiles to
+HANA `UPSERT ... WITH PRIMARY KEY` and to SQLite `INSERT OR REPLACE` —
+last-write-wins, no read-then-write race, no unique-constraint collision. The
+patch re-applies on every `npm ci` / `npm install` via the `postinstall` hook
+(`patch-package`). Regression test:
+`srv/lib/__tests__/keyv-cds-upsert.test.js` (drives the real `KeyvCDS` against an
+in-memory CAP fixture, modelling the TOCTOU window deterministically).
+
+**Upstream:** the same read-then-insert is still present on `cds-caching` `main`.
+Filed upstream as an issue + PR against
+[mikezaschka/cds-caching](https://github.com/mikezaschka/cds-caching) (links in
+the #3102 PR). **Drop condition:** once a published `cds-caching` release carries
+the upstream fix and we adopt it, delete `patches/cds-caching+2.1.0.patch`.
+**Re-verify the patch on any `cds-caching` version bump** — `patch-package`
+fails the install loudly if the target file drifted, so the drift surfaces at
+`npm ci`, not silently.
+
