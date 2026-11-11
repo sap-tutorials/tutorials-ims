@@ -323,7 +323,8 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         } else {
           // slug-canonical: caller-canonicalizes
           const b = await SELECT.one.from(ContentCurrent).where({ slug }).columns('content');
-          buffer = b ? await toBuffer(b.content) : null;
+          // #3103: toBuffer(null) throws — guard the raw column (same race as serveStoredSlug).
+          buffer = b?.content != null ? await toBuffer(b.content) : null;
         }
         return { contentHash: cur.contentHash, mimeType: cur.mimeType, version: cur.sourceVersion, buffer, source: 'current' };
       }
@@ -340,7 +341,8 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     } else {
       // slug-canonical: caller-canonicalizes
       const b = await SELECT.one.from(ContentFiles).where({ slug, version: meta.version }).columns('content');
-      buffer = b ? await toBuffer(b.content) : null;
+      // #3103: toBuffer(null) throws — guard the raw column (same race as serveStoredSlug).
+      buffer = b?.content != null ? await toBuffer(b.content) : null;
     }
     return { contentHash: meta.contentHash, mimeType: meta.mimeType, version: meta.version, buffer, source: 'files' };
   }
@@ -942,7 +944,9 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
       res.status(status);
       res.setHeader('Content-Type', `${resolved.mimeType}; charset=utf-8`);
-      res.setHeader('Cache-Control', 'public, max-age=60');
+      // #3103: never let the edge cache a 5xx — a transient DB blip served as a
+      // styled 500 must not be pinned for 60s to later users. 404s stay cacheable.
+      res.setHeader('Cache-Control', status >= 500 ? 'no-store' : 'public, max-age=60');
       res.setHeader('X-Content-Source', resolved.source === 'current' ? 'db-current' : 'db');
       return res.send(decompressed);
     } catch (err) {
@@ -1070,12 +1074,28 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
               `SELECT TOP 1 "CONTENT" FROM "${hanaTableName()}" WHERE "SLUG" = ? AND "VERSION" = ?`,
               [slug, meta.version]
             );
-        contentBuf = blobRow.CONTENT;
+        // Raw SQL returns CONTENT as a Buffer (see comment above), but coerce
+        // defensively via toBuffer so a stream/string LOB isn't mis-flagged as a
+        // miss by the Buffer.isBuffer guard below — symmetric with the else branch.
+        contentBuf = blobRow?.CONTENT != null ? await toBuffer(blobRow.CONTENT) : undefined;
       } else {
         const blobRow = source === 'current'
           ? await SELECT.one.from(ContentCurrent).where({ slug }).columns('content') // slug-canonical: caller-canonicalizes
           : await SELECT.one.from(ContentFiles).where({ slug, version: meta.version }).columns('content'); // slug-canonical: caller-canonicalizes
-        contentBuf = await toBuffer(blobRow.content);
+        // Guard the raw column before toBuffer — toBuffer(null) itself throws,
+        // which would bubble past the Buffer.isBuffer check below.
+        contentBuf = blobRow?.content != null ? await toBuffer(blobRow.content) : undefined;
+      }
+      // Resilience (#3103): the metadata SELECT above hit, but this SEPARATE BLOB
+      // read came back empty — the inconsistent-read window when a concurrent
+      // publish/delta-write to ContentCurrent (overwrite-in-place, no version
+      // pin) lands between the two queries, or a transient HANA locator blip.
+      // Treat a missing/non-Buffer BLOB as a soft miss → caller serves the styled
+      // 404, rather than letting `gunzipSync(undefined)` throw into the raw-500
+      // catch and show the user "Internal Server Error".
+      if (!Buffer.isBuffer(contentBuf) || contentBuf.length === 0) {
+        metrics.counter('content.blob.missing'); // observability for the race
+        return 'not-found';
       }
       const decompressed = gunzipSync(contentBuf);
       const advisory = await computeAdvisory(slug);
@@ -1339,7 +1359,12 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       return serveNotFound(res, slug);
     } catch (err) {
       console.error('[content/serve]', err instanceof Error ? err.message : String(err));
-      res.status(500).json({ error: 'Content retrieval failed' });
+      metrics.counter('render.error'); // #3103: align with catalog-branch observability
+      // #3103: serve the styled error page (with 500 status for monitoring)
+      // instead of raw JSON "Content retrieval failed" — mirrors the catalog
+      // branch (line ~1260) and the fail-open pages path. A transient DB blip
+      // should never surface a bare "Internal Server Error" to the user.
+      return serveNotFound(res, slug, 500);
     }
   }
 
