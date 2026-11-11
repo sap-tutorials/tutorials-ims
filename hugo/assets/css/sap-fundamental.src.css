@@ -2772,7 +2772,11 @@ html.dark .tutorial-main img:hover {
     font-size: 1.5rem;
   }
   .mission-body,
-  .group-body {
+  .group-body,
+  .concept-page,
+  .topic-detail,
+  .channel-detail,
+  .channels-page {
     padding: 1rem;
   }
   .group-card {
@@ -3059,6 +3063,38 @@ html.dark .chroma .nd { color: #e2c5ff; font-weight: bold; }
   }
 }
 
+
+/* #3095: container base rule for CAP/Hugo page bodies that render into the
+   shell's bare <main> with no shared wrapper. Without this the article/section
+   root sits flush to the viewport edge (reported on /concepts/, /channels/).
+   Values match the sibling .group-body/.mission-body rule for site consistency. */
+.concept-page,
+.topic-detail,
+.channel-detail,
+.channels-page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem 3rem;
+}
+
+/* #3095: no-JS collapse for capped KG-relationship sections. The overflow past
+   the first N tiles lives in a <details>; style the summary as a text button. */
+.concept-card-grid__more {
+  margin-top: 0.75rem;
+}
+.concept-card-grid__more > summary {
+  cursor: pointer;
+  display: inline-block;
+  padding: 0.375rem 0.75rem;
+  font-weight: 600;
+  color: var(--sapButton_Emphasized_Background, var(--sapLinkColor, #0070f2));
+}
+.concept-card-grid__more > summary:hover {
+  text-decoration: underline;
+}
+.concept-card-grid__more[open] > summary {
+  margin-bottom: 0.75rem;
+}
 
 /* Phase 4.4 (#447 §9): concept-page "Videos teaching this" inline
    thumbnail. 120×68 hot-linked from i.ytimg.com (CSP `img-src` already

@@ -237,6 +237,26 @@ describe('content-store', () => {
       expect(res.headers['x-content-source']).toBe('cache');
     });
 
+    // Resilience: metadata row present but the BLOB column is empty/missing —
+    // the "metadata hit, BLOB read came back empty" race against a concurrent
+    // publish/delta-write to ContentCurrent. Must degrade to the styled 404,
+    // NOT bubble a TypeError into a raw 500 "Internal Server Error". See #3103.
+    it('returns the styled 404 (not a raw 500) when the BLOB is missing but metadata exists', async () => {
+      // Null out the content BLOB while leaving contentHash/version intact,
+      // reproducing the inconsistent-read window.
+      await UPDATE(ContentFiles).set({ content: null }).where({ slug: 'served-tut' });
+      // Flush the LRU so the read hits the DB, not the warm cache.
+      const { invalidateContentCache } = await import('../../srv/lib/content-store.js');
+      invalidateContentCache();
+
+      const res = await project.axios.get('/content/tutorials/served-tut', {
+        validateStatus: () => true
+      });
+
+      expect(res.status).not.toBe(500);
+      expect(res.status).toBe(404);
+    });
+
     it('redirects /tutorials/<slug>.html to canonical /tutorials/<slug> with 301', async () => {
       const res = await project.axios.get('/content/tutorials/served-tut.html', {
         maxRedirects: 0,

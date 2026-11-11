@@ -24,6 +24,30 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+// #3095: KG-relationship sections (teaches/requires/requiredBy/relatedTo) can
+// grow unbounded — hub concepts render hundreds of tiles (e.g. 235 on
+// sap-btp-fundamentals). renderCappedGrid renders the first `visible` items as
+// direct <li> children and moves any overflow into a no-JS <details> collapse,
+// so the initial view stays readable while every link remains reachable with
+// JS disabled. renderItem(item) returns the <li>…</li> HTML for one item and is
+// responsible for its own escaping (callers use escapeHtml). Returns the full
+// `<ul class="concept-card-grid">…</ul>` markup. No <details> when the list
+// fits within `visible`.
+function renderCappedGrid(items, renderItem, { visible = 24, label = 'items' } = {}) {
+  const list = Array.isArray(items) ? items : [];
+  const head = list.slice(0, visible);
+  const rest = list.slice(visible);
+  const liOf = (arr) => arr.map(renderItem).join('');
+  let out = `<ul class="concept-card-grid">${liOf(head)}</ul>`;
+  if (rest.length) {
+    out += `<details class="concept-card-grid__more">`
+      + `<summary>Show all ${escapeHtml(String(list.length))} ${escapeHtml(label)}</summary>`
+      + `<ul class="concept-card-grid">${liOf(rest)}</ul>`
+      + `</details>`;
+  }
+  return out;
+}
+
 /**
  * Renders one concept detail page BODY — the `<article class="concept-page">`
  * fragment that goes inside `<main>`. The full document is produced by the
@@ -72,6 +96,7 @@ export function renderConceptDetail(concept, phase4) {
     communityEvents: p4.communityEvents || [],
     escapeHtml,
     renderMarkdown,
+    renderCappedGrid,
   };
   // Wrap in <main> so the served concept page has a top-level landmark. The
   // __shell__ chrome only provides a <!-- MAIN --> marker (its own <main> was

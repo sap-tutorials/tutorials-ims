@@ -50,19 +50,19 @@
   <% if (teaches.length) { %>
   <section class="concept-page__section">
     <h2>Tutorials that teach this</h2>
-    <ul class="concept-card-grid">
-      <% teaches.forEach(t => { %>
-      <li>
-        <a class="concept-card" href="/tutorials/<%= t.slug %>/">
-          <span class="concept-card__type concept-card__type--tutorial">Tutorial</span>
-          <span class="concept-card__title"><%= t.title %></span>
-          <% if (t.experienceTag || t.stepCount) { %>
-          <span class="concept-card__meta"><% if (t.experienceTag) { %><span class="kg-difficulty"><%= t.experienceTag %></span><% } %><% if (t.experienceTag && t.stepCount) { %> · <% } %><% if (t.stepCount) { %><%= t.stepCount %> step<%= t.stepCount === 1 ? '' : 's' %><% } %></span>
-          <% } %>
-        </a>
-      </li>
-      <% }) %>
-    </ul>
+    <%- renderCappedGrid(teaches, t => {
+      const meta = (t.experienceTag || t.stepCount)
+        ? `<span class="concept-card__meta">`
+          + (t.experienceTag ? `<span class="kg-difficulty">${escapeHtml(t.experienceTag)}</span>` : ``)
+          + (t.experienceTag && t.stepCount ? ` · ` : ``)
+          + (t.stepCount ? `${escapeHtml(String(t.stepCount))} step${t.stepCount === 1 ? '' : 's'}` : ``)
+          + `</span>`
+        : ``;
+      return `<li><a class="concept-card" href="/tutorials/${escapeHtml(t.slug)}/">`
+        + `<span class="concept-card__type concept-card__type--tutorial">Tutorial</span>`
+        + `<span class="concept-card__title">${escapeHtml(t.title)}</span>`
+        + meta + `</a></li>`;
+    }, { label: 'tutorials' }) %>
   </section>
   <% } %>
 
@@ -171,49 +171,34 @@
   <% if (requires.length) { %>
   <section class="concept-page__section">
     <h2>Prerequisites</h2>
-    <ul class="concept-card-grid">
-      <% requires.forEach(r => { %>
-      <li>
-        <a class="concept-card" href="/concepts/<%= r.slug %>/">
-          <span class="concept-card__type concept-card__type--concept">Concept</span>
-          <span class="concept-card__title"><%= r.title %></span>
-          <% if (r.description) { %><span class="concept-card__body"><%= r.description %></span><% } %>
-        </a>
-      </li>
-      <% }) %>
-    </ul>
+    <%- renderCappedGrid(requires, r =>
+      `<li><a class="concept-card" href="/concepts/${escapeHtml(r.slug)}/">`
+      + `<span class="concept-card__type concept-card__type--concept">Concept</span>`
+      + `<span class="concept-card__title">${escapeHtml(r.title)}</span>`
+      + (r.description ? `<span class="concept-card__body">${escapeHtml(r.description)}</span>` : ``)
+      + `</a></li>`, { label: 'prerequisites' }) %>
   </section>
   <% } %>
 
   <% if (requiredBy.length) { %>
   <section class="concept-page__section">
     <h2>Concepts that build on this</h2>
-    <ul class="concept-card-grid">
-      <% requiredBy.forEach(r => { %>
-      <li>
-        <a class="concept-card" href="/concepts/<%= r.slug %>/">
-          <span class="concept-card__type concept-card__type--concept">Concept</span>
-          <span class="concept-card__title"><%= r.title %></span>
-        </a>
-      </li>
-      <% }) %>
-    </ul>
+    <%- renderCappedGrid(requiredBy, r =>
+      `<li><a class="concept-card" href="/concepts/${escapeHtml(r.slug)}/">`
+      + `<span class="concept-card__type concept-card__type--concept">Concept</span>`
+      + `<span class="concept-card__title">${escapeHtml(r.title)}</span>`
+      + `</a></li>`, { label: 'concepts' }) %>
   </section>
   <% } %>
 
   <% if (relatedTo.length) { %>
   <section class="concept-page__section">
     <h2>Related concepts</h2>
-    <ul class="concept-card-grid">
-      <% relatedTo.forEach(r => { %>
-      <li>
-        <a class="concept-card" href="/concepts/<%= r.slug %>/">
-          <span class="concept-card__type concept-card__type--concept">Concept</span>
-          <span class="concept-card__title"><%= r.title %></span>
-        </a>
-      </li>
-      <% }) %>
-    </ul>
+    <%- renderCappedGrid(relatedTo, r =>
+      `<li><a class="concept-card" href="/concepts/${escapeHtml(r.slug)}/">`
+      + `<span class="concept-card__type concept-card__type--concept">Concept</span>`
+      + `<span class="concept-card__title">${escapeHtml(r.title)}</span>`
+      + `</a></li>`, { label: 'related concepts' }) %>
   </section>
   <% } %>
 

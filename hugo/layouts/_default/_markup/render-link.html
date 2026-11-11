@@ -11,9 +11,14 @@
 {{- $isAttachment := and (hasPrefix $dest "https://raw.githubusercontent.com/") (in $exts $ext) -}}
 {{- if $isAttachment -}}
 {{- /* Encode the raw GitHub URL as base64url (no colons = WAF-safe).
-       Hugo's base64Encode produces standard base64; convert to base64url by replacing +/= with -_. */ -}}
+       Hugo's base64Encode produces standard base64; convert to base64url by replacing + → -, / → _, and stripping = padding.
+       NOTE: Hugo's `replace` is `replace INPUT OLD NEW`. It MUST be called with the
+       string as the FIRST positional arg — a pipe chain (`$b64 | replace "+" "-"`)
+       appends $b64 as the THIRD arg (NEW), so each step searches the literal "+"/"/"/"="
+       and discards the base64 entirely, collapsing the param to "u=/=/" (issue #3098).
+       Keep these as nested calls, not a pipe chain. */ -}}
 {{- $b64 := $dest | base64Encode -}}
-{{- $b64url := $b64 | replace "+" "-" | replace "/" "_" | replace "=" "" -}}
+{{- $b64url := replace (replace (replace $b64 "+" "-") "/" "_") "=" "" -}}
 {{- $view := printf "/content/attachment-source?u=%s" $b64url -}}
 {{- $dl := printf "/content/attachment-source?u=%s&dl=1" $b64url -}}
 {{- /* $view/$dl are server-constructed, server-relative /content/attachment-source paths using base64url
