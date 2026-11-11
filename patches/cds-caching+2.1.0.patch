@@ -1,0 +1,22 @@
+diff --git a/node_modules/cds-caching/lib/support/KeyvCDS.js b/node_modules/cds-caching/lib/support/KeyvCDS.js
+index 0000000..0000001 100644
+--- a/node_modules/cds-caching/lib/support/KeyvCDS.js
++++ b/node_modules/cds-caching/lib/support/KeyvCDS.js
+@@ -63,12 +63,11 @@
+             const { db, entity } = await this._getDB();
+             if (!db || !entity) return;
+             const expiresAt = ttl ? Date.now() + ttl : null;
+-            const existing = await db.read(entity, key);
+-            if (existing) {
+-                await db.update(entity, key).with({ value, expiresAt });
+-            } else {
+-                await db.create(entity, { ID: key, value, expiresAt });
+-            }
++            // Atomic last-write-wins. CacheStore has a single-column PK (ID),
++            // so UPSERT compiles to HANA `UPSERT ... WITH PRIMARY KEY` and to
++            // SQLite `INSERT OR REPLACE` — no read-then-write race, no unique
++            // constraint collision under multi-instance concurrency (#3102).
++            await db.run(cds.ql.UPSERT.into(entity).entries({ ID: key, value, expiresAt }));
+         } catch (error) {
+             this.log.error(`KeyvCDS set error for key ${key}:`, error);
+         }

@@ -1,0 +1,9 @@
+{
+  "name": "keyv-cds-fixture",
+  "private": true,
+  "cds": {
+    "requires": {
+      "db": { "kind": "sqlite", "credentials": { "url": ":memory:" } }
+    }
+  }
+}
