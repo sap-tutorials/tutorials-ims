@@ -2772,7 +2772,11 @@ html.dark .tutorial-main img:hover {
     font-size: 1.5rem;
   }
   .mission-body,
-  .group-body {
+  .group-body,
+  .concept-page,
+  .topic-detail,
+  .channel-detail,
+  .channels-page {
     padding: 1rem;
   }
   .group-card {
@@ -3059,6 +3063,19 @@ html.dark .chroma .nd { color: #e2c5ff; font-weight: bold; }
   }
 }
 
+
+/* #3095: container base rule for CAP/Hugo page bodies that render into the
+   shell's bare <main> with no shared wrapper. Without this the article/section
+   root sits flush to the viewport edge (reported on /concepts/, /channels/).
+   Values match the sibling .group-body/.mission-body rule for site consistency. */
+.concept-page,
+.topic-detail,
+.channel-detail,
+.channels-page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem 3rem;
+}
 
 /* Phase 4.4 (#447 §9): concept-page "Videos teaching this" inline
    thumbnail. 120×68 hot-linked from i.ytimg.com (CSP `img-src` already
