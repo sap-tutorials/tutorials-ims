@@ -67,11 +67,12 @@ export function replaceCdsBlocks(
   html: string,
   highlightFn: (rawCode: string) => string,
   marker = 'data-lang=cds'
-): { result: string; changed: boolean; processedBlocks: number } {
+): { result: string; changed: boolean; processedBlocks: number; skippedDiffBlocks: number } {
   let result = '';
   let cursor = 0;
   let changed = false;
   let processedBlocks = 0;
+  let skippedDiffBlocks = 0;
 
   while (true) {
     const markerIdx = html.indexOf(marker, cursor);
@@ -105,6 +106,27 @@ export function replaceCdsBlocks(
     if (bodyEnd === -1) { cursor = markerIdx + 1; continue; }
 
     const bodyContent = html.substring(bodyContentStart, bodyEnd);
+
+    // Preserve Chroma's diff/highlight markup. When a `cds` fence carries inline
+    // `// [!code highlight|focus|++|--]` markers, render-codeblock.html injects
+    // `diff-highlight` / `diff-focus` / `diff-added` / `diff-removed` line classes
+    // into the Chroma output (and the matching CSS targets those). Shiki is called
+    // WITHOUT notation transformers, so replacing the block with Shiki's output
+    // silently drops every highlight — the step-2 "highlight not working" bug.
+    // Leave those blocks as Chroma so the highlight survives; Shiki still takes
+    // over plain cds blocks (its grammar is nicer) where nothing is lost.
+    if (/\bdiff-(highlight|focus|added|removed)\b/.test(bodyContent)) {
+      skippedDiffBlocks++;
+      // Keep this block exactly as Chroma rendered it: emit everything from the
+      // current cursor THROUGH the block's closing tags, then advance past them.
+      // (A bare `cursor = …; continue` would drop the block from `result`, since
+      // result only accumulates on the replace path below.)
+      const blockEnd = bodyEnd + bodyEndTag.length;
+      result += html.substring(cursor, blockEnd);
+      cursor = blockEnd;
+      continue;
+    }
+
     const rawCode = extractCode(bodyContent);
 
     if (!rawCode) { cursor = bodyEnd + bodyEndTag.length; continue; }
@@ -125,7 +147,7 @@ export function replaceCdsBlocks(
   }
 
   result += html.substring(cursor);
-  return { result, changed, processedBlocks };
+  return { result, changed, processedBlocks, skippedDiffBlocks };
 }
 
 async function main() {
@@ -142,13 +164,14 @@ async function main() {
   let filesWithMarker = 0;
 
   const MARKER = 'data-lang=cds';
+  let skippedDiffBlocks = 0;
 
   for (const file of htmlFiles) {
     let html = readFileSync(file, 'utf-8');
     if (!html.includes(MARKER)) continue;
     filesWithMarker++;
 
-    const { result, changed, processedBlocks: blocksInFile } = replaceCdsBlocks(
+    const { result, changed, processedBlocks: blocksInFile, skippedDiffBlocks: skippedInFile } = replaceCdsBlocks(
       html,
       (rawCode) => highlighter.codeToHtml(rawCode, {
         lang: 'cds',
@@ -158,6 +181,7 @@ async function main() {
       MARKER
     );
     processedBlocks += blocksInFile;
+    skippedDiffBlocks += skippedInFile;
 
     if (changed) {
       writeFileSync(file, result, 'utf-8');
@@ -165,15 +189,18 @@ async function main() {
     }
   }
 
-  console.log(`CDS highlighting: ${processedBlocks} blocks in ${processedFiles} files (dir: ${OUTPUT_DIR})`);
+  console.log(`CDS highlighting: ${processedBlocks} blocks in ${processedFiles} files (${skippedDiffBlocks} diff/highlight block(s) kept as Chroma) (dir: ${OUTPUT_DIR})`);
   highlighter.dispose();
 
   // Regression guard (#1657): if the `data-lang=cds` marker is present but we
-  // replaced zero blocks, the block structure this matcher relies on (emitted
-  // by render-codeblock.html, minified by Hugo) has drifted. Failing here turns
-  // a silent revert-to-Chroma-SQL (braces rendered as red `.err` tokens) into a
-  // red build BEFORE the un-highlighted HTML is published to HANA.
-  if (filesWithMarker > 0 && processedBlocks === 0) {
+  // neither replaced NOR intentionally skipped any block, the block structure
+  // this matcher relies on (emitted by render-codeblock.html, minified by Hugo)
+  // has drifted. Failing here turns a silent revert-to-Chroma-SQL (braces
+  // rendered as red `.err` tokens) into a red build BEFORE the un-highlighted
+  // HTML is published to HANA. A block deliberately kept as Chroma because it
+  // carries `// [!code …]` diff/highlight markers (skippedDiffBlocks) is NOT
+  // drift — those blocks render correctly via Chroma's diff-* line classes.
+  if (filesWithMarker > 0 && processedBlocks === 0 && skippedDiffBlocks === 0) {
     console.error(
       `highlight-cds: found ${filesWithMarker} file(s) with the '${MARKER}' marker but replaced 0 CDS blocks — ` +
         `the code-block markup likely drifted from what this script matches. Refusing to leave the Chroma-SQL fallback in place.`

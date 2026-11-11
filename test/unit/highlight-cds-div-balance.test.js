@@ -63,6 +63,27 @@ describe('replaceCdsBlocks div balance (#1657)', () => {
     expect(result).not.toContain('class=chroma');
   });
 
+  it('keeps a diff/highlight-marked CDS block as Chroma (preserves diff-* line classes)', () => {
+    // A cds fence with `// [!code focus]` markers: render-codeblock.html injects
+    // diff-focus line classes into the Chroma output. Replacing with Shiki (no
+    // notation transformers) would drop every highlight — the step-2 bug. The
+    // block must be LEFT as Chroma, and counted as skippedDiffBlocks (not drift).
+    const DIFF_BLOCK =
+      '<div class=code-block data-lang=cds>' +
+        '<div class=code-block-body data-diff=true>' +
+          '<div class=highlight><pre tabindex=0 class=chroma><code>' +
+            '<span class=line>entity Books {</span>' +
+            '<span class="line diff-focus">key ID : UUID;</span>' +
+          '</code></pre></div>' +
+        '</div>' +
+      '</div>';
+    const { result, processedBlocks, skippedDiffBlocks } = replaceCdsBlocks(DIFF_BLOCK, shikiStub);
+    expect(processedBlocks, 'diff block must NOT be replaced by Shiki').toBe(0);
+    expect(skippedDiffBlocks, 'diff block must be counted as an intentional skip').toBe(1);
+    expect(result, 'Chroma output (with diff-focus) must survive untouched').toContain('diff-focus');
+    expect(result).not.toContain('class="shiki"');
+  });
+
   it('processes a LONG collapsible block (#2228: data-collapsed body)', () => {
     const { result, processedBlocks } = replaceCdsBlocks(CDS_BLOCK_LONG, shikiStub);
     expect(processedBlocks, 'long-block body-open tag must be matched despite attributes').toBe(1);

@@ -158,6 +158,103 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * tut-prereq-card — the ::requires[slug] prerequisite card
+ * Emitted by layouts/shortcodes/tut-requires.html. Without these rules the card
+ * collapses to 0x0 (the selectors existed in no stylesheet before this).
+ * ------------------------------------------------------------------------- */
+
+.tut-prereq-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--sapList_BorderColor, #d9d9d9);
+  border-left: 4px solid var(--sapUiHighlight, #0070f2);
+  border-radius: 6px;
+  background: var(--sapList_Background, #fff);
+}
+
+.tut-prereq-card > a {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  text-decoration: none;
+  color: inherit;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tut-prereq-card > a:hover .prereq-title {
+  text-decoration: underline;
+}
+
+.tut-prereq-card .prereq-title {
+  font-weight: 600;
+  color: var(--sapLinkColor, #0070f2);
+}
+
+.tut-prereq-card .prereq-meta {
+  font-size: 0.85em;
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+
+.tut-prereq-card .prereq-status {
+  flex: 0 0 auto;
+  font-size: 0.85em;
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+
+.tut-prereq-card .prereq-status:empty {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * tut-tested-with — collapsible panel of tested tool versions, from the
+ * testedWith frontmatter map. Rendered inline by u1-object-page.html (the
+ * shortcode is never injected into the composed body).
+ * ------------------------------------------------------------------------- */
+
+.tut-tested-with {
+  margin: 1rem 0;
+}
+
+.tut-tested-with details {
+  border: 1px solid var(--sapList_BorderColor, #d9d9d9);
+  border-radius: 6px;
+  background: var(--sapList_Background, #fff);
+  padding: 0.5rem 0.75rem;
+}
+
+.tut-tested-with summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
+}
+
+.tut-tested-with ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  list-style: none;
+}
+
+.tut-tested-with li {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.15rem 0;
+}
+
+.tut-tested-with .pkg {
+  font-family: var(--sapCode_FontFamily, monospace);
+  color: var(--sapTextColor, #32363a);
+}
+
+.tut-tested-with .ver {
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+
+/* ---------------------------------------------------------------------------
  * Print: hide interactive / icon-only elements
  * tut-menu and tut-kbd print as-is (their text content is meaningful in print)
  * ------------------------------------------------------------------------- */

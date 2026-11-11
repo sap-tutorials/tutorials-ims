@@ -67,4 +67,40 @@ describe('resolveImageURLs', () => {
       expect(result).toContain(`${base}/27.png`)
     })
   })
+
+  describe('moves inline image {attributes} to a block-attribute line (hotspots)', () => {
+    // goldmark only attaches {key=val} attribute lists to BLOCK elements, not to
+    // an inline image inside a paragraph. Authors write hotspots inline:
+    //   ![alt](img.png){hotspots="1:22%,34% …"}
+    // which leaks as literal text (no overlay). Moving the {…} onto the next line
+    // under a standalone image makes goldmark attach it → render-image hook reads
+    // .Attributes.hotspots and emits the .tut-hotspot overlay anchors.
+    it('splits a standalone image + attr onto two lines', () => {
+      const input = '![Deployed apps](cockpit-space-apps.png){hotspots="1:22%,34% 2:55%,34%"}'
+      const result = resolveImageURLs(input, opts)
+      expect(result).toBe(
+        `![Deployed apps](${base}/cockpit-space-apps.png)\n{hotspots="1:22%,34% 2:55%,34%"}`
+      )
+    })
+
+    it('preserves leading indentation on both lines', () => {
+      const input = '  ![a](27.png){hotspots="1:10%,10%"}'
+      const result = resolveImageURLs(input, opts)
+      expect(result).toBe(`  ![a](${base}/27.png)\n  {hotspots="1:10%,10%"}`)
+    })
+
+    it('does NOT split an image that is inline within prose', () => {
+      // An attribute block cannot attach to an inline image anyway, and splitting
+      // mid-sentence would corrupt the paragraph.
+      const input = 'see ![a](27.png){x=1} here'
+      const result = resolveImageURLs(input, opts)
+      expect(result).toContain(`![a](${base}/27.png){x=1}`)
+      expect(result).not.toContain('\n{x=1}')
+    })
+
+    it('leaves a plain standalone image (no attrs) unchanged aside from URL', () => {
+      const input = '![a](27.png)'
+      expect(resolveImageURLs(input, opts)).toBe(`![a](${base}/27.png)`)
+    })
+  })
 })

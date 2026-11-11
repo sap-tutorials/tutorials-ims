@@ -235,18 +235,27 @@
              ├── or └── connectors → stripped (depth comes from │ count);
              lone ─ → stripped */}}
         {{- $normalized := $line | replaceRE `│\s{0,3}` "  " | replaceRE `[├└]─*\s*` "" | replaceRE `─` "" -}}
-        {{/* Count leading spaces for depth using strings.TrimLeft */}}
-        {{- $stripped := strings.TrimLeft $normalized " " -}}
+        {{/* State prefix (+ ~ -): the author writes the glyph in column 0, so a
+             state line indents one level LESS than a same-depth unprefixed line.
+             Replace a single leading glyph with ONE space so indentation (and thus
+             depth) is measured consistently — e.g. "+ srv/" → "  srv/" (depth 1,
+             sibling of "  db/"), "+   cat-service.cds" → "    cat-service.cds"
+             (depth 2). Capture the glyph first for the state CSS class. */}}
+        {{- $state := "" -}}
+        {{- if findRE `^[+~-] ` $normalized -}}
+          {{- $state = substr $normalized 0 1 -}}
+          {{- $normalized = printf " %s" (substr $normalized 1 (len $normalized)) -}}
+        {{- end -}}
+        {{/* Count leading spaces for depth. NB: Hugo's strings.TrimLeft takes the
+             CUTSET first, then the string — `strings.TrimLeft " " $s` strips
+             leading spaces from $s. (The old code had the args reversed, which
+             trimmed the filename chars off a single space and produced garbage
+             depths + empty labels — the step-4 tree rendering bug.) */}}
+        {{- $stripped := strings.TrimLeft " " $normalized -}}
         {{- $leading := sub (len $normalized) (len $stripped) -}}
-        {{/* depth = floor(leading / 2) — use integer division (truncating = floor for positive) */}}
+        {{/* depth = floor(leading / 2) — integer division (floor for positive) */}}
         {{- $depth := div $leading 2 -}}
         {{- $rest := trim $stripped " \t" -}}
-        {{/* Extract state prefix (+ ~ -) */}}
-        {{- $state := "" -}}
-        {{- if or (hasPrefix $rest "+ ") (hasPrefix $rest "~ ") (hasPrefix $rest "- ") -}}
-          {{- $state = substr $rest 0 1 -}}
-          {{- $rest = substr $rest 2 (len $rest) -}}
-        {{- end -}}
         {{/* Extract annotation: two or more spaces + # */}}
         {{- $annotation := "" -}}
         {{- if findRE `\s{2,}# ` $rest -}}
