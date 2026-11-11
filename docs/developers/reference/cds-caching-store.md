@@ -405,10 +405,12 @@ patch re-applies on every `npm ci` / `npm install` via the `postinstall` hook
 in-memory CAP fixture, modelling the TOCTOU window deterministically).
 
 **Upstream:** the same read-then-insert is still present on `cds-caching` `main`.
-Filed upstream as an issue + PR against
-[mikezaschka/cds-caching](https://github.com/mikezaschka/cds-caching) (links in
-the #3102 PR). **Drop condition:** once a published `cds-caching` release carries
-the upstream fix and we adopt it, delete `patches/cds-caching+2.1.0.patch`.
+Filed upstream as
+[mikezaschka/cds-caching#44](https://github.com/mikezaschka/cds-caching/issues/44)
+(issue) +
+[mikezaschka/cds-caching#45](https://github.com/mikezaschka/cds-caching/pull/45)
+(PR). **Drop condition:** once a published `cds-caching` release carries the
+upstream fix and we adopt it, delete `patches/cds-caching+2.1.0.patch`.
 **Re-verify the patch on any `cds-caching` version bump** — `patch-package`
 fails the install loudly if the target file drifted, so the drift surfaces at
 `npm ci`, not silently.
