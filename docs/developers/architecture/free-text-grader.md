@@ -206,5 +206,6 @@ the design sketch.
 - Sibling docs:
   - [Validation widget](./validation-widget.md) (PR #226 — local-first widget this extends)
   - AI code-check spike: `docs/superpowers/specs/2026-06-02-ai-code-check-spike-design.md` (PR #205 — same prompt redaction + rate-limit pattern)
+  - [Tutorial-level grading context](../reference/grading-context.md) (#3090 — `[GRADING_CONTEXT]` block in `rules.vr` for domain grounding; applies to all three graders)
 - Spec: `docs/superpowers/specs/2026-06-04-209-free-text-grader-design.md`
 - Tracking: [sap-tutorials/tutorials-ims#209](https://github.com/sap-tutorials/tutorials-ims/issues/209)
