@@ -15,6 +15,8 @@ export const PARAM = {
   topics: 'topic',
   isNew: 'new',
   noLicense: 'noLicense',
+  completed: 'completed',
+  inProgress: 'inProgress',
   page: 'page',
   categories: 'category',
 } as const
@@ -35,6 +37,8 @@ export interface NavState {
   categories: string[]
   isNew: boolean
   noLicense: boolean
+  completed: boolean
+  inProgress: boolean
   /** 1-indexed; 1 means "no page param emitted". */
   page: number
 }
@@ -48,6 +52,8 @@ export const EMPTY_STATE: NavState = Object.freeze({
   categories: [],
   isNew: false,
   noLicense: false,
+  completed: false,
+  inProgress: false,
   page: 1,
 }) as NavState
 
@@ -87,10 +93,12 @@ export function parseNavState(href: string, ls: Storage | null = null): NavState
   const categories = categoriesRaw === undefined ? [...EMPTY_STATE.categories] : categoriesRaw
   const isNew     = asBool(sp.get(PARAM.isNew))           ?? persisted.isNew     ?? false
   const noLicense = asBool(sp.get(PARAM.noLicense))       ?? persisted.noLicense ?? false
+  const completed = asBool(sp.get(PARAM.completed))       ?? persisted.completed ?? false
+  const inProgress = asBool(sp.get(PARAM.inProgress))     ?? persisted.inProgress ?? false
 
   return {
     q: sp.get(PARAM.q) ?? '',                              // q is URL-only, never persisted
-    types, levels, products, topics, categories, isNew, noLicense,
+    types, levels, products, topics, categories, isNew, noLicense, completed, inProgress,
     page: asPage(sp.get(PARAM.page)),
   }
 }
@@ -107,6 +115,8 @@ export function serializeNavState(href: string, state: NavState): string {
   if (state.q) sp.set(PARAM.q, state.q); else sp.delete(PARAM.q)
   if (state.isNew) sp.set(PARAM.isNew, '1'); else sp.delete(PARAM.isNew)
   if (state.noLicense) sp.set(PARAM.noLicense, '1'); else sp.delete(PARAM.noLicense)
+  if (state.completed) sp.set(PARAM.completed, '1'); else sp.delete(PARAM.completed)
+  if (state.inProgress) sp.set(PARAM.inProgress, '1'); else sp.delete(PARAM.inProgress)
   if (state.page > 1) sp.set(PARAM.page, String(state.page)); else sp.delete(PARAM.page)
 
   setOrDelete(sp, PARAM.types,      state.types)
@@ -136,6 +146,8 @@ interface PersistedShape {
   topics?: string[]
   isNew?: boolean
   noLicense?: boolean
+  completed?: boolean
+  inProgress?: boolean
 }
 
 export function persistFilters(state: NavState, ls: Storage): void {
@@ -146,6 +158,8 @@ export function persistFilters(state: NavState, ls: Storage): void {
     topics:    state.topics,
     isNew:     state.isNew,
     noLicense: state.noLicense,
+    completed: state.completed,
+    inProgress: state.inProgress,
   }
   ls.setItem(LS_KEY_V1, JSON.stringify(payload))
 }
@@ -163,6 +177,8 @@ export function readPersistedFilters(ls: Storage): Partial<NavState> {
       if (Array.isArray(parsed.topics))    out.topics    = parsed.topics.filter(s => typeof s === 'string')
       if (typeof parsed.isNew === 'boolean')     out.isNew     = parsed.isNew
       if (typeof parsed.noLicense === 'boolean') out.noLicense = parsed.noLicense
+      if (typeof parsed.completed === 'boolean') out.completed = parsed.completed
+      if (typeof parsed.inProgress === 'boolean') out.inProgress = parsed.inProgress
       return out
     } catch {
       // Truncated / hand-edited JSON — fall through to legacy keys.
