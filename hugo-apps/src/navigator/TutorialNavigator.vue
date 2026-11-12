@@ -206,11 +206,11 @@ const {
 
 // Partition filter lists so selected items float to the top (#3112).
 const orderedTopics = computed(() =>
-  partitionSelected(filteredTopics, topic => filters.topics.includes(topic))
+  partitionSelected(filteredTopics.value, topic => filters.topics.includes(topic))
 )
 
 const orderedProducts = computed(() =>
-  partitionSelected(filteredProducts, product => isProductSelected(product.slugs))
+  partitionSelected(filteredProducts.value, product => isProductSelected(product.slugs))
 )
 
 const orderedLevels = computed(() =>
