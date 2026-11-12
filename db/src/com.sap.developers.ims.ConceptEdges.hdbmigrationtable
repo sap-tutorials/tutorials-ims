@@ -1,0 +1,17 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_ConceptEdges (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  source_ID NVARCHAR(36),
+  target_ID NVARCHAR(36),
+  predicate NVARCHAR(20),
+  confidence DECIMAL(3, 2),
+  evidence NVARCHAR(500),
+  status NVARCHAR(20) DEFAULT 'ACTIVE',
+  extractedAt TIMESTAMP,
+  modelVersion NVARCHAR(40),
+  PRIMARY KEY(ID)
+)

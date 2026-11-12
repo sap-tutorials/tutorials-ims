@@ -1,0 +1,16 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_external_DevtoberfestSessionConceptLinks (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  session_ID NVARCHAR(36),
+  concept_ID NVARCHAR(36),
+  predicate NVARCHAR(20) DEFAULT 'presents',
+  confidence DECIMAL(3, 2),
+  snippet NVARCHAR(200),
+  extractedAt TIMESTAMP,
+  modelVersion NVARCHAR(40),
+  PRIMARY KEY(ID)
+)

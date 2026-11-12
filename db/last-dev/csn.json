@@ -1264,6 +1264,432 @@
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TUTORIALVARIABLES"
     },
+    "com.sap.developers.ims.TutorialConceptLinks": {
+      "kind": "entity",
+      "doc": "Per-tutorial extracted concepts. Caches both content hash and concept list\nso we skip re-extraction when tutorial content is unchanged.\n\nINVARIANT (enforced by PR 3 extractor; not by the schema):\n  predicate = 'teaches'  ⇒  concept IS NOT NULL,    extendsTutorial IS NULL\n  predicate = 'extends'  ⇒  extendsTutorial IS NOT NULL, concept IS NULL\n\nThe @assert.unique.tutorialConcept guard catches duplicate (tutorial,\nconcept, predicate) but does NOT prevent duplicate (tutorial, NULL,\n'extends') rows — HANA's UNIQUE on NULL is permissive. PR 3 must enforce\nthe XOR at write time and have a hybrid-test for the negative path.",
+      "@assert.unique.tutorialConcept": [
+        {
+          "=": "tutorial"
+        },
+        {
+          "=": "concept"
+        },
+        {
+          "=": "predicate"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "tutorial_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "tutorial",
+          "@cds.persistence.name": "TUTORIAL_ID"
+        },
+        "concept_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "concept",
+          "@cds.persistence.name": "CONCEPT_ID"
+        },
+        "predicate": {
+          "type": "cds.String",
+          "length": 20,
+          "default": {
+            "val": "teaches"
+          },
+          "@cds.persistence.name": "PREDICATE"
+        },
+        "extendsTutorial_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "extendsTutorial",
+          "@cds.persistence.name": "EXTENDSTUTORIAL_ID"
+        },
+        "confidence": {
+          "type": "cds.Decimal",
+          "precision": 3,
+          "scale": 2,
+          "@cds.persistence.name": "CONFIDENCE"
+        },
+        "extractedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "EXTRACTEDAT"
+        },
+        "contentHash": {
+          "type": "cds.String",
+          "length": 64,
+          "@cds.persistence.name": "CONTENTHASH"
+        },
+        "modelVersion": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "MODELVERSION"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "tutorialConcept": {
+            "paths": [
+              {
+                "ref": [
+                  "tutorial_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "concept_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "predicate"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.TutorialConceptLinks"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS"
+    },
+    "com.sap.developers.ims.Concepts": {
+      "kind": "entity",
+      "doc": "Canonical registry of extracted concepts.\nAI-extracted, admin-reviewable. Slug is the stable identifier (kebab-case).",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "slug": {
+          "@assert.unique": true,
+          "type": "cds.String",
+          "length": 80,
+          "@cds.persistence.name": "SLUG"
+        },
+        "name": {
+          "type": "cds.String",
+          "length": 120,
+          "@cds.persistence.name": "NAME"
+        },
+        "description": {
+          "type": "cds.String",
+          "length": 5000,
+          "@cds.persistence.name": "DESCRIPTION"
+        },
+        "descriptionStatus": {
+          "type": "cds.String",
+          "length": 10,
+          "@cds.persistence.name": "DESCRIPTIONSTATUS"
+        },
+        "descriptionReviewedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "DESCRIPTIONREVIEWEDAT"
+        },
+        "descriptionReviewedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "DESCRIPTIONREVIEWEDBY"
+        },
+        "embedding": {
+          "type": "cds.LargeBinary",
+          "@cds.persistence.name": "EMBEDDING"
+        },
+        "embeddingVec": {
+          "type": "cds.Vector",
+          "length": 1536,
+          "@cds.persistence.name": "EMBEDDINGVEC"
+        },
+        "status": {
+          "type": "cds.String",
+          "length": 20,
+          "default": {
+            "val": "ACTIVE"
+          },
+          "@cds.persistence.name": "STATUS"
+        },
+        "mergedInto_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "mergedInto",
+          "@cds.persistence.name": "MERGEDINTO_ID"
+        },
+        "extractionCount": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 0
+          },
+          "@cds.persistence.name": "EXTRACTIONCOUNT"
+        },
+        "firstSeenAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "FIRSTSEENAT"
+        },
+        "lastSeenAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "LASTSEENAT"
+        },
+        "publishedAt": {
+          "doc": "Set by the admin `publishConcept` action and cleared by `unpublishConcept`.\n`publishedAt IS NOT NULL AND status = 'ACTIVE'` is the gate for a\n/concepts/<slug>/ page to be generated by the Hugo build (see PR 2/3).",
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "PUBLISHEDAT"
+        },
+        "publishedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "PUBLISHEDBY"
+        },
+        "aliasSearchBlob": {
+          "type": "cds.String",
+          "length": 2000,
+          "@cds.persistence.name": "ALIASSEARCHBLOB"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CONCEPTS"
+    },
+    "com.sap.developers.ims.ConceptEdges": {
+      "kind": "entity",
+      "doc": "Concept-to-concept edges (requires, relatedTo). AI-extracted with confidence.",
+      "@assert.unique.conceptEdge": [
+        {
+          "=": "source"
+        },
+        {
+          "=": "target"
+        },
+        {
+          "=": "predicate"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "source_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "source",
+          "@cds.persistence.name": "SOURCE_ID"
+        },
+        "target_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "target",
+          "@cds.persistence.name": "TARGET_ID"
+        },
+        "predicate": {
+          "type": "cds.String",
+          "length": 20,
+          "@cds.persistence.name": "PREDICATE"
+        },
+        "confidence": {
+          "type": "cds.Decimal",
+          "precision": 3,
+          "scale": 2,
+          "@cds.persistence.name": "CONFIDENCE"
+        },
+        "evidence": {
+          "type": "cds.String",
+          "length": 500,
+          "@cds.persistence.name": "EVIDENCE"
+        },
+        "status": {
+          "type": "cds.String",
+          "length": 20,
+          "default": {
+            "val": "ACTIVE"
+          },
+          "@cds.persistence.name": "STATUS"
+        },
+        "extractedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "EXTRACTEDAT"
+        },
+        "modelVersion": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "MODELVERSION"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "conceptEdge": {
+            "paths": [
+              {
+                "ref": [
+                  "source_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "target_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "predicate"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.ConceptEdges"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CONCEPTEDGES"
+    },
+    "com.sap.developers.ims.ConceptAliases": {
+      "kind": "entity",
+      "doc": "Search synonyms for concepts — LLM-backfilled, admin-editable (#1046).\nPowers the ⌘K palette's CONCEPTS group so acronym queries hit\n(e.g. \"SLT\" → sap-landscape-transformation).\n\naliasLower is populated by a before('CREATE'|'UPDATE') hook on\nKnowledgeGraphService — kept case-preserved in `alias` so admins see\nnatural casing (IDoc, S/4HANA), matched case-insensitively via a\nHANA index on `aliasLower`.",
+      "@assert.unique.conceptAlias": [
+        {
+          "=": "concept"
+        },
+        {
+          "=": "aliasLower"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "concept_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "concept",
+          "@cds.persistence.name": "CONCEPT_ID"
+        },
+        "alias": {
+          "type": "cds.String",
+          "length": 120,
+          "@cds.persistence.name": "ALIAS"
+        },
+        "aliasLower": {
+          "type": "cds.String",
+          "length": 120,
+          "@cds.persistence.name": "ALIASLOWER"
+        },
+        "source": {
+          "type": "cds.String",
+          "length": 20,
+          "default": {
+            "val": "LLM"
+          },
+          "@cds.persistence.name": "SOURCE"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "conceptAlias": {
+            "paths": [
+              {
+                "ref": [
+                  "concept_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "aliasLower"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.ConceptAliases"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CONCEPTALIASES"
+    },
     "com.sap.developers.ims.CompletionPaths": {
       "kind": "entity",
       "@assert.unique.slug": [
@@ -1809,6 +2235,52 @@
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TUTORIALVALIDATIONRULES"
+    },
+    "com.sap.developers.ims.TutorialRank": {
+      "kind": "entity",
+      "@cds.autoexpose": false,
+      "@cds.persistence.journal": true,
+      "elements": {
+        "slug": {
+          "key": true,
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "SLUG"
+        },
+        "score": {
+          "type": "cds.Double",
+          "@cds.persistence.name": "SCORE"
+        },
+        "computedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "COMPUTEDAT"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TUTORIALRANK"
+    },
+    "com.sap.developers.ims.CoCompletions": {
+      "kind": "entity",
+      "doc": "CoCompletions — pre-materialized tutorial co-completion graph.\n\nThe runtime signal is \"users who completed A also completed B, with weight\n= number of users.\" Computed nightly by srv/jobs/materialize-co-completions.js\nover the (~1M-row on prod) TaskRecords table, then upserted here so the\nneighborhood handler can do a single indexed lookup per request instead of\npaying a ~60s scan on every cold start.\n\nStorage semantics:\n  - Each undirected edge (A ↔ B) is stored TWICE — once as (A → B) and once\n    as (B → A) — so `WHERE sourceSlug = ?` returns all neighbors of `?` in\n    one query, sorted by score DESC.\n  - `score` is the raw co-completion count. Downstream consumers cap and\n    re-rank as needed (rankNeighborhood applies a whatToLearnNext boost).\n  - No `cuid` / `managed` — this is a rebuilt-nightly derived table; no\n    audit trail, no soft delete. Composite key (sourceSlug, targetSlug)\n    dedupes naturally.\n\nCache invalidation: the cron truncates + repopulates the whole table\ninside one transaction. Readers see the old snapshot until commit, then\natomically see the new one.",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "sourceSlug": {
+          "key": true,
+          "type": "cds.String",
+          "length": 120,
+          "@cds.persistence.name": "SOURCESLUG"
+        },
+        "targetSlug": {
+          "key": true,
+          "type": "cds.String",
+          "length": 120,
+          "@cds.persistence.name": "TARGETSLUG"
+        },
+        "score": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "SCORE"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_COCOMPLETIONS"
     },
     "com.sap.developers.ims.Puzzles": {
       "kind": "entity",
@@ -3525,6 +3997,227 @@
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHECKPOINTS"
     },
+    "com.sap.developers.ims.HomepageFeaturedTopics": {
+      "kind": "entity",
+      "@assert.unique.concept": [
+        {
+          "=": "concept"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "concept_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "concept",
+          "@cds.persistence.name": "CONCEPT_ID"
+        },
+        "displayTitle": {
+          "type": "cds.String",
+          "length": 80,
+          "@cds.persistence.name": "DISPLAYTITLE"
+        },
+        "sortOrder": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 100
+          },
+          "@cds.persistence.name": "SORTORDER"
+        },
+        "validFrom": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "VALIDFROM"
+        },
+        "validUntil": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "VALIDUNTIL"
+        },
+        "missionSlugs": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "MISSIONSLUGS"
+        },
+        "isActive": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": true
+          },
+          "@cds.persistence.name": "ISACTIVE"
+        },
+        "notes": {
+          "type": "cds.String",
+          "length": 500,
+          "@cds.persistence.name": "NOTES"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "concept": {
+            "paths": [
+              {
+                "ref": [
+                  "concept_ID"
+                ]
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.HomepageFeaturedTopics"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_HOMEPAGEFEATUREDTOPICS"
+    },
+    "com.sap.developers.ims.FeaturedTopicsSnapshot": {
+      "kind": "entity",
+      "@cds.autoexpose": false,
+      "@cds.persistence.journal": true,
+      "elements": {
+        "slotOrder": {
+          "key": true,
+          "type": "cds.Integer",
+          "@cds.persistence.name": "SLOTORDER"
+        },
+        "source": {
+          "type": "cds.String",
+          "length": 10,
+          "@cds.persistence.name": "SOURCE"
+        },
+        "conceptSlug": {
+          "type": "cds.String",
+          "length": 80,
+          "@cds.persistence.name": "CONCEPTSLUG"
+        },
+        "displayTitle": {
+          "type": "cds.String",
+          "length": 120,
+          "@cds.persistence.name": "DISPLAYTITLE"
+        },
+        "missionSlugs": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "MISSIONSLUGS"
+        },
+        "computedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "COMPUTEDAT"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_FEATUREDTOPICSSNAPSHOT"
+    },
+    "com.sap.developers.ims.external.VideoConceptLinks": {
+      "kind": "entity",
+      "@assert.unique.videoConcept": [
+        {
+          "=": "video"
+        },
+        {
+          "=": "concept"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "video_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "video",
+          "@cds.persistence.name": "VIDEO_ID"
+        },
+        "concept_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "concept",
+          "@cds.persistence.name": "CONCEPT_ID"
+        },
+        "predicate": {
+          "type": "cds.String",
+          "length": 20,
+          "default": {
+            "val": "teaches"
+          },
+          "@cds.persistence.name": "PREDICATE"
+        },
+        "confidence": {
+          "type": "cds.Decimal",
+          "precision": 3,
+          "scale": 2,
+          "@cds.persistence.name": "CONFIDENCE"
+        },
+        "extractedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "EXTRACTEDAT"
+        },
+        "modelVersion": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "MODELVERSION"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "videoConcept": {
+            "paths": [
+              {
+                "ref": [
+                  "video_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "concept_ID"
+                ]
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.external.VideoConceptLinks"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_EXTERNAL_VIDEOCONCEPTLINKS"
+    },
     "AnalyticsService.MetricSnapshots": {
       "kind": "entity",
       "@cds.persistence.journal": true,
@@ -4204,6 +4897,919 @@
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CATGAMEAWARDS"
     },
+    "com.sap.developers.ims.external.LearningJourneyConceptLinks": {
+      "kind": "entity",
+      "@assert.unique.journeyConcept": [
+        {
+          "=": "journey"
+        },
+        {
+          "=": "concept"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "journey_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "journey",
+          "@cds.persistence.name": "JOURNEY_ID"
+        },
+        "concept_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "concept",
+          "@cds.persistence.name": "CONCEPT_ID"
+        },
+        "predicate": {
+          "type": "cds.String",
+          "length": 20,
+          "default": {
+            "val": "covers"
+          },
+          "@cds.persistence.name": "PREDICATE"
+        },
+        "confidence": {
+          "type": "cds.Decimal",
+          "precision": 3,
+          "scale": 2,
+          "@cds.persistence.name": "CONFIDENCE"
+        },
+        "extractedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "EXTRACTEDAT"
+        },
+        "modelVersion": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "MODELVERSION"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "journeyConcept": {
+            "paths": [
+              {
+                "ref": [
+                  "journey_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "concept_ID"
+                ]
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.external.LearningJourneyConceptLinks"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_EXTERNAL_LEARNINGJOURNEYCONCEPTLINKS"
+    },
+    "com.sap.developers.ims.external.BlogPostConceptLinks": {
+      "kind": "entity",
+      "@assert.unique.postConcept": [
+        {
+          "=": "post"
+        },
+        {
+          "=": "concept"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "post_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "post",
+          "@cds.persistence.name": "POST_ID"
+        },
+        "concept_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "concept",
+          "@cds.persistence.name": "CONCEPT_ID"
+        },
+        "predicate": {
+          "type": "cds.String",
+          "length": 20,
+          "default": {
+            "val": "discusses"
+          },
+          "@cds.persistence.name": "PREDICATE"
+        },
+        "confidence": {
+          "type": "cds.Decimal",
+          "precision": 3,
+          "scale": 2,
+          "@cds.persistence.name": "CONFIDENCE"
+        },
+        "extractedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "EXTRACTEDAT"
+        },
+        "modelVersion": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "MODELVERSION"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "postConcept": {
+            "paths": [
+              {
+                "ref": [
+                  "post_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "concept_ID"
+                ]
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.external.BlogPostConceptLinks"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_EXTERNAL_BLOGPOSTCONCEPTLINKS"
+    },
+    "com.sap.developers.ims.external.DiscoveryMissionConceptLinks": {
+      "kind": "entity",
+      "@assert.unique.missionConcept": [
+        {
+          "=": "mission"
+        },
+        {
+          "=": "concept"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "mission_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "mission",
+          "@cds.persistence.name": "MISSION_ID"
+        },
+        "concept_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "concept",
+          "@cds.persistence.name": "CONCEPT_ID"
+        },
+        "predicate": {
+          "type": "cds.String",
+          "length": 20,
+          "default": {
+            "val": "teaches"
+          },
+          "@cds.persistence.name": "PREDICATE"
+        },
+        "confidence": {
+          "type": "cds.Decimal",
+          "precision": 3,
+          "scale": 2,
+          "@cds.persistence.name": "CONFIDENCE"
+        },
+        "extractedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "EXTRACTEDAT"
+        },
+        "modelVersion": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "MODELVERSION"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "missionConcept": {
+            "paths": [
+              {
+                "ref": [
+                  "mission_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "concept_ID"
+                ]
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.external.DiscoveryMissionConceptLinks"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_EXTERNAL_DISCOVERYMISSIONCONCEPTLINKS"
+    },
+    "com.sap.developers.ims.external.ApiDocConceptLinks": {
+      "kind": "entity",
+      "@assert.unique.apiDocConcept": [
+        {
+          "=": "apiDoc"
+        },
+        {
+          "=": "concept"
+        },
+        {
+          "=": "predicate"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "apiDoc_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "apiDoc",
+          "@cds.persistence.name": "APIDOC_ID"
+        },
+        "concept_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "concept",
+          "@cds.persistence.name": "CONCEPT_ID"
+        },
+        "predicate": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "PREDICATE"
+        },
+        "confidence": {
+          "type": "cds.Decimal",
+          "precision": 3,
+          "scale": 2,
+          "@cds.persistence.name": "CONFIDENCE"
+        },
+        "extractedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "EXTRACTEDAT"
+        },
+        "modelVersion": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "MODELVERSION"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "apiDocConcept": {
+            "paths": [
+              {
+                "ref": [
+                  "apiDoc_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "concept_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "predicate"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.external.ApiDocConceptLinks"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_EXTERNAL_APIDOCCONCEPTLINKS"
+    },
+    "com.sap.developers.ims.external.SampleConceptLinks": {
+      "kind": "entity",
+      "@assert.unique.sampleConcept": [
+        {
+          "=": "sample"
+        },
+        {
+          "=": "concept"
+        },
+        {
+          "=": "predicate"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "sample_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "sample",
+          "@cds.persistence.name": "SAMPLE_ID"
+        },
+        "concept_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "concept",
+          "@cds.persistence.name": "CONCEPT_ID"
+        },
+        "predicate": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "PREDICATE"
+        },
+        "confidence": {
+          "type": "cds.Decimal",
+          "precision": 3,
+          "scale": 2,
+          "@cds.persistence.name": "CONFIDENCE"
+        },
+        "extractedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "EXTRACTEDAT"
+        },
+        "modelVersion": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "MODELVERSION"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "sampleConcept": {
+            "paths": [
+              {
+                "ref": [
+                  "sample_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "concept_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "predicate"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.external.SampleConceptLinks"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_EXTERNAL_SAMPLECONCEPTLINKS"
+    },
+    "com.sap.developers.ims.external.HelpDocConceptLinks": {
+      "kind": "entity",
+      "@assert.unique.helpDocConceptAnchor": [
+        {
+          "=": "helpDoc"
+        },
+        {
+          "=": "concept"
+        },
+        {
+          "=": "predicate"
+        },
+        {
+          "=": "anchor"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "helpDoc_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "helpDoc",
+          "@cds.persistence.name": "HELPDOC_ID"
+        },
+        "concept_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "concept",
+          "@cds.persistence.name": "CONCEPT_ID"
+        },
+        "predicate": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "PREDICATE"
+        },
+        "confidence": {
+          "type": "cds.Decimal",
+          "precision": 3,
+          "scale": 2,
+          "@cds.persistence.name": "CONFIDENCE"
+        },
+        "anchor": {
+          "type": "cds.String",
+          "length": 120,
+          "@cds.persistence.name": "ANCHOR"
+        },
+        "snippet": {
+          "type": "cds.String",
+          "length": 200,
+          "@cds.persistence.name": "SNIPPET"
+        },
+        "extractedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "EXTRACTEDAT"
+        },
+        "modelVersion": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "MODELVERSION"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "helpDocConceptAnchor": {
+            "paths": [
+              {
+                "ref": [
+                  "helpDoc_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "concept_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "predicate"
+                ],
+                "isChecked": true
+              },
+              {
+                "ref": [
+                  "anchor"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.external.HelpDocConceptLinks"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_EXTERNAL_HELPDOCCONCEPTLINKS"
+    },
+    "com.sap.developers.ims.external.CommunityEventConceptLinks": {
+      "kind": "entity",
+      "@assert.unique.pair": [
+        {
+          "=": "event"
+        },
+        {
+          "=": "concept"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "event_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "event",
+          "@cds.persistence.name": "EVENT_ID"
+        },
+        "concept_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "concept",
+          "@cds.persistence.name": "CONCEPT_ID"
+        },
+        "predicate": {
+          "type": "cds.String",
+          "length": 20,
+          "@cds.persistence.name": "PREDICATE"
+        },
+        "confidence": {
+          "type": "cds.Decimal",
+          "precision": 3,
+          "scale": 2,
+          "@cds.persistence.name": "CONFIDENCE"
+        },
+        "snippet": {
+          "type": "cds.String",
+          "length": 200,
+          "@cds.persistence.name": "SNIPPET"
+        },
+        "extractedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "EXTRACTEDAT"
+        },
+        "modelVersion": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "MODELVERSION"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "pair": {
+            "paths": [
+              {
+                "ref": [
+                  "event_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "concept_ID"
+                ]
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.external.CommunityEventConceptLinks"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_EXTERNAL_COMMUNITYEVENTCONCEPTLINKS"
+    },
+    "com.sap.developers.ims.external.DevtoberfestSessionConceptLinks": {
+      "kind": "entity",
+      "@assert.unique.sessionConcept": [
+        {
+          "=": "session"
+        },
+        {
+          "=": "concept"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "session_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "session",
+          "@cds.persistence.name": "SESSION_ID"
+        },
+        "concept_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "concept",
+          "@cds.persistence.name": "CONCEPT_ID"
+        },
+        "predicate": {
+          "type": "cds.String",
+          "length": 20,
+          "default": {
+            "val": "presents"
+          },
+          "@cds.persistence.name": "PREDICATE"
+        },
+        "confidence": {
+          "type": "cds.Decimal",
+          "precision": 3,
+          "scale": 2,
+          "@cds.persistence.name": "CONFIDENCE"
+        },
+        "snippet": {
+          "type": "cds.String",
+          "length": 200,
+          "@cds.persistence.name": "SNIPPET"
+        },
+        "extractedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "EXTRACTEDAT"
+        },
+        "modelVersion": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "MODELVERSION"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "sessionConcept": {
+            "paths": [
+              {
+                "ref": [
+                  "session_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "concept_ID"
+                ]
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.external.DevtoberfestSessionConceptLinks"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_EXTERNAL_DEVTOBERFESTSESSIONCONCEPTLINKS"
+    },
+    "com.sap.developers.ims.GraphMetadata": {
+      "kind": "entity",
+      "doc": "Single-row projection metadata. Updated at the end of every graphRebuild.\nRead by the query-layer cache to mint a graphVersion cache key.\n\nPredicate-count fields (#526): populated by graphRebuild() from the\nin-memory tally maintained during projection. Cheap signal for\n\"did the last rebuild emit roughly the predicate cardinalities I expected?\"\n— useful for catching extractor regressions before the next deploy.\nSource-of-truth for what predicates ARE projected is in\nsrv/lib/kg-projection.js; the 9 fields below mirror that list 1:1.",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "graphVersion": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "GRAPHVERSION"
+        },
+        "lastRebuiltAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "LASTREBUILTAT"
+        },
+        "tripleCount": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "TRIPLECOUNT"
+        },
+        "durationMs": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "DURATIONMS"
+        },
+        "conceptCount": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "CONCEPTCOUNT"
+        },
+        "edgeCount": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "EDGECOUNT"
+        },
+        "teachesCount": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 0
+          },
+          "@cds.persistence.name": "TEACHESCOUNT"
+        },
+        "requiresCount": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 0
+          },
+          "@cds.persistence.name": "REQUIRESCOUNT"
+        },
+        "relatedToCount": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 0
+          },
+          "@cds.persistence.name": "RELATEDTOCOUNT"
+        },
+        "extendsCount": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 0
+          },
+          "@cds.persistence.name": "EXTENDSCOUNT"
+        },
+        "partOfCount": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 0
+          },
+          "@cds.persistence.name": "PARTOFCOUNT"
+        },
+        "taggedWithCount": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 0
+          },
+          "@cds.persistence.name": "TAGGEDWITHCOUNT"
+        },
+        "aboutProductCount": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 0
+          },
+          "@cds.persistence.name": "ABOUTPRODUCTCOUNT"
+        },
+        "inCategoryCount": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 0
+          },
+          "@cds.persistence.name": "INCATEGORYCOUNT"
+        },
+        "coCompletedWithCount": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 0
+          },
+          "@cds.persistence.name": "COCOMPLETEDWITHCOUNT"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_GRAPHMETADATA"
+    },
+    "com.sap.developers.ims.ConceptRank": {
+      "kind": "entity",
+      "doc": "PageRank sidecar tables (#916).\n\nPopulated nightly by KG_PAGERANK.hdbprocedure (GraphScript sibling of\nKG_SHORTEST_PATH_GRAPH) over KG_PG_WORKSPACE. Consumed at request\ntime by rankNeighborhood in srv/knowledge-graph-service.js when\nKG_PAGERANK_ENABLED === 'true'.\n\nNOT exposed on any OData surface (@cds.autoexpose: false + no service\nprojection) — issue #916 non-goal #1 is \"not exposing scores on the\nOData surface for admin editing\".\n\nNOT `managed` — nightly TRUNCATE+INSERT overwrite semantics; the\n`managed` timestamps/user columns would be trigger noise on a rebuilt-\nfrom-scratch aggregate table. `computedAt` captures the batch time.\n\nCache invalidation: the nightly job wraps TRUNCATE + TRUNCATE + CALL\nin one db.tx, so readers see either the old snapshot or the new one,\nnever a partial write.\n\nSlug widths mirror the source entities' Concepts.slug (String(80)) and\nTutorials.slug (String(255)) — kept exact so a JOIN on slug never\nneeds implicit casting.",
+      "@cds.autoexpose": false,
+      "@cds.persistence.journal": true,
+      "elements": {
+        "slug": {
+          "key": true,
+          "type": "cds.String",
+          "length": 80,
+          "@cds.persistence.name": "SLUG"
+        },
+        "score": {
+          "type": "cds.Double",
+          "@cds.persistence.name": "SCORE"
+        },
+        "computedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "COMPUTEDAT"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CONCEPTRANK"
+    },
     "com.sap.developers.ims.GroupSlugRedirects": {
       "kind": "entity",
       "@cds.persistence.journal": true,
@@ -4530,6 +6136,72 @@
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CONTENTMANIFEST"
+    },
+    "com.sap.developers.ims.external.TechEdSessionConceptLinks": {
+      "kind": "entity",
+      "@assert.unique.pair": [
+        {
+          "=": "session"
+        },
+        {
+          "=": "concept"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "session_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "session",
+          "@cds.persistence.name": "SESSION_ID"
+        },
+        "concept_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "concept",
+          "@cds.persistence.name": "CONCEPT_ID"
+        },
+        "predicate": {
+          "type": "cds.String",
+          "length": 20,
+          "default": {
+            "val": "covers"
+          },
+          "@cds.persistence.name": "PREDICATE"
+        },
+        "confidence": {
+          "type": "cds.Decimal",
+          "precision": 3,
+          "scale": 2,
+          "@cds.persistence.name": "CONFIDENCE"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "pair": {
+            "paths": [
+              {
+                "ref": [
+                  "session_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "concept_ID"
+                ]
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.external.TechEdSessionConceptLinks"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_EXTERNAL_TECHEDSESSIONCONCEPTLINKS"
     }
   },
   "meta": {

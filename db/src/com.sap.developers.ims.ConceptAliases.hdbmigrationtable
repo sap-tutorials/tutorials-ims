@@ -1,0 +1,13 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_ConceptAliases (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  concept_ID NVARCHAR(36),
+  alias NVARCHAR(120),
+  aliasLower NVARCHAR(120),
+  source NVARCHAR(20) DEFAULT 'LLM',
+  PRIMARY KEY(ID)
+)

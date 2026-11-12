@@ -1,0 +1,24 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_GraphMetadata (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  graphVersion NVARCHAR(40),
+  lastRebuiltAt TIMESTAMP,
+  tripleCount INTEGER,
+  durationMs INTEGER,
+  conceptCount INTEGER,
+  edgeCount INTEGER,
+  teachesCount INTEGER DEFAULT 0,
+  requiresCount INTEGER DEFAULT 0,
+  relatedToCount INTEGER DEFAULT 0,
+  extendsCount INTEGER DEFAULT 0,
+  partOfCount INTEGER DEFAULT 0,
+  taggedWithCount INTEGER DEFAULT 0,
+  aboutProductCount INTEGER DEFAULT 0,
+  inCategoryCount INTEGER DEFAULT 0,
+  coCompletedWithCount INTEGER DEFAULT 0,
+  PRIMARY KEY(ID)
+)

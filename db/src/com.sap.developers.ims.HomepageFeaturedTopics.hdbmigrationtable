@@ -1,0 +1,17 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_HomepageFeaturedTopics (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  concept_ID NVARCHAR(36),
+  displayTitle NVARCHAR(80),
+  sortOrder INTEGER DEFAULT 100,
+  validFrom TIMESTAMP,
+  validUntil TIMESTAMP,
+  missionSlugs NCLOB,
+  isActive BOOLEAN DEFAULT TRUE,
+  notes NVARCHAR(500),
+  PRIMARY KEY(ID)
+)

@@ -1,0 +1,15 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_external_SampleConceptLinks (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  sample_ID NVARCHAR(36),
+  concept_ID NVARCHAR(36),
+  predicate NVARCHAR(40),
+  confidence DECIMAL(3, 2),
+  extractedAt TIMESTAMP,
+  modelVersion NVARCHAR(40),
+  PRIMARY KEY(ID)
+)

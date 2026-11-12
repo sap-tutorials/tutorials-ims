@@ -1,0 +1,7 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_ConceptRank (
+  slug NVARCHAR(80) NOT NULL,
+  "SCORE" DOUBLE,
+  computedAt TIMESTAMP,
+  PRIMARY KEY(slug)
+)

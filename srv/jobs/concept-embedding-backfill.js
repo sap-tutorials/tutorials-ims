@@ -43,24 +43,19 @@ async function resolveModel() {
 }
 
 async function fetchCandidates(db) {
+  // #1113: pick up rows missing EITHER the legacy BLOB OR the new vector column.
+  // Rows with a BLOB but no vector column are the transition case — they'll get
+  // both columns re-written in the UPDATE below. See spec §Backfill.
   if (isHana(db)) {
-    // #2810: embeddingVec is now a GENERATED ALWAYS column on HANA — it is
-    // auto-maintained and is never NULL for rows with valid text. Selecting on
-    // EMBEDDINGVEC IS NULL would loop indefinitely. Select on EMBEDDING IS NULL
-    // only; the generated column will self-populate after each EMBEDDING write.
     return await db.run(
       `SELECT ID as id, SLUG as slug, NAME as name, DESCRIPTION as description
        FROM COM_SAP_DEVELOPERS_IMS_CONCEPTS
        WHERE STATUS = 'ACTIVE'
          AND PUBLISHEDAT IS NOT NULL
          AND MERGEDINTO_ID IS NULL
-         AND EMBEDDING IS NULL`
+         AND (EMBEDDING IS NULL OR EMBEDDINGVEC IS NULL)`
     ) || [];
   }
-  // #1113: pick up rows missing EITHER the legacy BLOB OR the new vector column.
-  // Rows with a BLOB but no vector column are the transition case — they'll get
-  // both columns re-written in the UPDATE below. See spec §Backfill.
-  // SQLite has no generated column, so the original predicate is unchanged.
   return await db.run(
     `SELECT ID as id, slug, name, description
      FROM com_sap_developers_ims_Concepts
@@ -135,14 +130,11 @@ export async function runConceptEmbeddingBackfill({ db, embedClient, telemetry, 
         // matches the query-side serialization in srv/lib/kg/concept-embedding-query.js.
         const vecStr = '[' + Array.from(vec, x => x.toFixed(6)).join(',') + ']';
         if (isHana(dbHandle)) {
-          // #2810: EMBEDDINGVEC is now a GENERATED ALWAYS column on HANA — writing
-          // it explicitly throws. Write only the EMBEDDING BLOB; the DB-side
-          // VECTOR_EMBEDDING calc element auto-populates EMBEDDINGVEC from it.
           await dbHandle.run(
             `UPDATE COM_SAP_DEVELOPERS_IMS_CONCEPTS
-             SET EMBEDDING = ?
+             SET EMBEDDING = ?, EMBEDDINGVEC = TO_REAL_VECTOR(?)
              WHERE ID = ?`,
-            [blob, id]
+            [blob, vecStr, id]
           );
         } else {
           // SQLite has no REAL_VECTOR — store the string form so the unit test

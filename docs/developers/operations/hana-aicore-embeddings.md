@@ -214,52 +214,50 @@ is retained for re-provisioning / a fresh environment.
 
 ---
 
-## Appendix 1 — Automatic embedding generation (for the later rewrite)
+## Appendix 1 — Why `Concepts.embeddingVec` stayed Node-written (#2810)
 
-> **Shipped (Unit 1, #2810 / #3115):** `Concepts.embeddingVec` is the
-> **first feature moved DB-side.** Because `Concepts.name`/`description`
-> are bounded `String(n)` (NVARCHAR), the CAP-native `GENERATED ALWAYS AS`
-> route applies — no hand-written HDI artifact. The clause is declared
-> HANA-only in `db/hana/concepts-embedding.cds` (loads only for
-> `[hybrid]`/`[production]`); the SQLite/unit path keeps the Node writer.
-> On HANA the column is read-only: the Node backfill
-> (`srv/jobs/concept-embedding-backfill.js`) and the concept-mint path
-> (`packages/kg/kg-merge-on-write.js`) no longer write it.
+> **Outcome (Unit 1, #2810 / #3115): DB-side generation was attempted and
+> reverted.** `Concepts.embeddingVec` remains a **plain `REAL_VECTOR(1536)`
+> column written by the Node pipeline** (`srv/jobs/concept-embedding-backfill.js`
+> backfill + `packages/kg/kg-merge-on-write.js` mint). The CAP-native
+> `GENERATED ALWAYS AS (VECTOR_EMBEDDING(..., TUTORIALS_AICORE))` route was
+> built, shipped to DEV, and found not to take effect — then removed.
 >
-> **Comparability (spike #3114):** DB-side `VECTOR_EMBEDDING(..., 'DOCUMENT',
-> ..., TUTORIALS_AICORE)` and the Node `@sap-ai-sdk` path produce the
-> identical 1536-dim vector; `DOCUMENT`/`QUERY` is a no-op for
-> `text-embedding-3-small`. So new DB-generated rows cosine-compare with
-> the existing corpus.
+> **What actually fixed something (kept):** the entire knowledge-graph
+> subsystem was **never journaled** — none of the ~19 KG tables carried
+> `@cds.persistence.journal`, so they compiled to plain `.hdbtable`, which
+> this container's `.hdiconfig` (hdbmigrationtable plugin only, no hdbtable)
+> **silently ignores**. No KG schema change had ever deployed; the live KG
+> tables were pre-restriction fossils. #2810 journals all KG tables
+> (`db/persistence.cds`) so they deploy as `.hdbmigrationtable` and schema
+> changes finally land. **This is the real, shipped win.**
 >
-> **Enable on an env:** deploy `db/hana/concepts-embedding.cds` (it ships
-> in the normal MTA build). The HDI delta deploy ALTERs `embeddingVec`
-> from a plain column to `GENERATED ALWAYS AS`, which **recomputes
-> embeddings for all ACTIVE Concepts rows synchronously at deploy** (one
-> AI Core call per row — size the deploy window accordingly; this also
-> refreshes the stale pre-existing corpus, spike #3114).
-> **Rollback:** revert `db/hana/concepts-embedding.cds` and restore the
-> Node `embeddingVec` write in the backfill + mint path, then redeploy.
-> **Deploy-time prereq (design Q1, verify on first real deploy):** the HDI
-> deploy identity needs `EXECUTE` on `TUTORIALS_AICORE` when the generated
-> column is created; a container `_RT` identity has it via
-> `::external_privileges_role` (Tier B), but confirm the deploy identity
-> on the first DEV deploy.
-> **Hybrid proof:** `test/hybrid/concepts-dbside-embedding.hybrid.test.js`
-> (run post-deploy via `npm run test:hybrid`).
+> **Why the generated column could not work here (the learning):** converting
+> an **already-populated** plain column into `GENERATED ALWAYS` is a
+> data-loss-class change HANA will not `ALTER` in place. And the
+> `hdbtable → hdbmigrationtable` transition (journal + add the old `.hdbtable`
+> to `undeploy.json`) is **data-preserving by design** — HDI *adopts* the
+> existing table as migration version 1 and applies **no DDL**. So v1 never
+> applies the generated clause to the live table: the column stays plain.
+> The only way to get a true DB-side generated column on this populated table
+> would be a genuine drop/recreate (`.hdbdropcreatetable` or an undeploy that
+> drops the table), which — because `Concepts` has no CSV seed and is
+> repopulated by a non-deterministic LLM corpus re-extraction that mints fresh
+> IDs — would wipe and rebuild the whole knowledge graph (15 dependent
+> link/edge tables left with dangling FKs in between, the #787 crash
+> condition). Not worth it to move one column's computation DB-side.
 >
-> **Known-clean Concepts writers:** `scripts/seed-sapphire-2026-concepts.js`
-> (INSERT) and `scripts/publish-top-concepts.js` (UPDATE) also write the
-> Concepts table but are unaffected — they do not write `embeddingVec` or
-> `embedding`. Warning: re-adding an `embeddingVec`/`embedding` column to
-> the seed INSERT would silently fail on HANA (generated column is
-> read-only).
+> **Deferred finding (flag):** the entire **external-content subsystem**
+> (Videos, BlogPosts, ApiDocs, Samples, HelpDocs, DiscoveryMissions,
+> CommunityEvents, Devtoberfest/TechEd sessions, LearningJourneys, NewsItems)
+> is **also** non-journaled/ignored — the same fossil bug, a separate
+> repo-wide effort. #2810 journals only the KG set.
 >
-> **Seed cost after generated column:** each INSERT from
-> `seed-sapphire-2026-concepts.js` now triggers a synchronous AI Core
-> embedding call (previously the vector was async-backfilled by cron), so
-> a seed of N rows is N synchronous AI Core calls — size seed runs
-> accordingly.
+> **Takeaway for any future DB-side-embedding move:** a `GENERATED ALWAYS AS
+> VECTOR_EMBEDDING` column only lands cleanly on a **fresh/empty** table (v1
+> create applies its DDL) or an NVARCHAR text column via the procedure/trigger
+> routes below. It cannot retrofit a populated REAL_VECTOR column without a
+> destructive rebuild.
 
 Once the remote source works, HANA can keep embeddings in sync with
 source text with no application pipeline. Four mechanisms:
