@@ -247,6 +247,19 @@ is retained for re-provisioning / a fresh environment.
 > on the first DEV deploy.
 > **Hybrid proof:** `test/hybrid/concepts-dbside-embedding.hybrid.test.js`
 > (run post-deploy via `npm run test:hybrid`).
+>
+> **Known-clean Concepts writers:** `scripts/seed-sapphire-2026-concepts.js`
+> (INSERT) and `scripts/publish-top-concepts.js` (UPDATE) also write the
+> Concepts table but are unaffected — they do not write `embeddingVec` or
+> `embedding`. Warning: re-adding an `embeddingVec`/`embedding` column to
+> the seed INSERT would silently fail on HANA (generated column is
+> read-only).
+>
+> **Seed cost after generated column:** each INSERT from
+> `seed-sapphire-2026-concepts.js` now triggers a synchronous AI Core
+> embedding call (previously the vector was async-backfilled by cron), so
+> a seed of N rows is N synchronous AI Core calls — size seed runs
+> accordingly.
 
 Once the remote source works, HANA can keep embeddings in sync with
 source text with no application pipeline. Four mechanisms:
