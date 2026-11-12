@@ -127,48 +127,46 @@ describe.skipIf(!hasBaseUrl())('e2e: navigator search & filter improvements (#31
       const totalMissions = parseInt(lozengeText.replace(/\D/g, ''), 10);
       if (isNaN(totalMissions) || totalMissions === 0) return; // no missions — skip
 
-      // Type a search term broad enough to match at least one mission.
-      // "SAP BTP" is a stable, widely-used tag across mission content.
-      const searchInput = page.locator('#navigator-search-input, [data-testid="navigator-search"], input[type="search"]').first();
-      const searchVisible = await searchInput.isVisible().catch(() => false);
-      if (!searchVisible) {
-        // Try a more permissive selector — the search box may use a different markup.
-        // Attempt to find any visible text input inside the navigator.
-        const fallback = page.locator('#tutorial-navigator input[type="text"], #tutorial-navigator input[type="search"]').first();
-        const fallbackVisible = await fallback.isVisible().catch(() => false);
-        if (!fallbackVisible) return; // no search box found — graceful skip
-        await fallback.fill('SAP BTP');
-        await page.keyboard.press('Enter');
-      } else {
-        await searchInput.fill('SAP BTP');
-        await page.keyboard.press('Enter');
-      }
+      // Verified selector: TutorialNavigator.vue:361-362 renders an fd-input with
+      // placeholder="Search for a tutorial" and no id/data-testid/type=search.
+      // getByPlaceholder is stable and unambiguous (the per-column filter boxes use
+      // "Search for a topic" / "Search for a product" — different placeholders).
+      // If this locator is not found the test FAILS loudly (no graceful skip) so
+      // a regression in the search-input markup surfaces immediately.
+      const searchInput = page.getByPlaceholder('Search for a tutorial');
+      await expect(searchInput, 'main search input not found — check TutorialNavigator.vue').toBeVisible({ timeout: 10_000 });
+
+      // Use a single common word broad enough to reliably match a mission on the
+      // live site (avoids "SAP BTP" matching zero missions if content varies).
+      await searchInput.fill('SAP');
+      await page.keyboard.press('Enter');
 
       // Wait for the results to update (debounce + fetch).
       await page.waitForTimeout(2_000);
 
-      // After search, check whether the mission lozenge still shows ≥ 1.
-      // If the lozenge count is 0 the search term found no missions — graceful skip
-      // (live content may vary; we only assert when missions are present).
+      // Read the mission lozenge count after the search. If it shows ≥ 1 we must
+      // find a matching mission card — this is the consistency invariant the feature
+      // guarantees. If it shows 0 the search term returned no missions on this env
+      // which is still a valid state (content varies); we skip the card assertion
+      // only in that case, never earlier.
       const lozengeAfterText = await missionLozenge.textContent().catch(() => '0') ?? '0';
       const missionsAfterCount = parseInt(lozengeAfterText.replace(/\D/g, ''), 10);
-      if (isNaN(missionsAfterCount) || missionsAfterCount === 0) return; // no match — skip
 
-      expect(
-        missionsAfterCount,
-        'mission lozenge shows 0 missions after search',
-      ).toBeGreaterThanOrEqual(1);
-
-      // Assert that at least one mission card is present in the result grid.
-      // Mission cards have an href with a /missions/ segment.
-      const missionCard = page.locator(
-        '#tutorial-navigator a[href*="/missions/"], .mission-card, [data-type="mission"]',
-      ).first();
-      const missionCardVisible = await missionCard.isVisible().catch(() => false);
-      expect(
-        missionCardVisible,
-        'mission lozenge ≥ 1 but no mission card visible in the result grid',
-      ).toBe(true);
+      if (!isNaN(missionsAfterCount) && missionsAfterCount >= 1) {
+        // Lozenge says ≥ 1 mission — a mission card MUST be visible in the grid.
+        // Mission catalog URLs are /tutorials/mission-<slug> (verified from
+        // MissionCard / mapToCardItem: hrefBase + '/mission-' + slug).
+        // Check first page; if a .navigator-pagination pager exists the mission
+        // may be on a later page — but lozenge ≥ 1 with no visible card on page 1
+        // is still a bug worth surfacing (the feature should surface missions first).
+        const missionCard = page.locator('#tutorial-navigator a[href*="/tutorials/mission-"]').first();
+        await expect(
+          missionCard,
+          `mission lozenge shows ${missionsAfterCount} but no a[href*="/tutorials/mission-"] card visible`,
+        ).toBeVisible({ timeout: 5_000 });
+      }
+      // missionsAfterCount === 0 → search returned no missions for "SAP" on this env;
+      // the lozenge/card consistency invariant cannot be violated — no assertion needed.
     } finally {
       await context.close();
     }
@@ -202,7 +200,9 @@ describe.skipIf(!hasBaseUrl())('e2e: navigator search & filter improvements (#31
 
       // Count cards before applying the Completed filter.
       const allCards = page.locator(
-        '#tutorial-navigator a[href*="/tutorials/"], #tutorial-navigator a[href*="/missions/"], #tutorial-navigator a[href*="/groups/"]',
+        // All card types share /tutorials/ in their href; missions are
+        // /tutorials/mission-<slug>, groups are /tutorials/group-<slug>.
+        '#tutorial-navigator a[href*="/tutorials/"]',
       );
       const cardsBefore = await allCards.count();
 
@@ -264,9 +264,8 @@ describe.skipIf(!hasBaseUrl())('e2e: navigator search & filter improvements (#31
 
       // At least one card must be visible — the anon-scrub must have stripped the
       // completed filter so results are not empty.
-      const anyCard = page.locator(
-        '#tutorial-navigator a[href*="/tutorials/"], #tutorial-navigator a[href*="/missions/"], #tutorial-navigator a[href*="/groups/"]',
-      ).first();
+      // All card types (tutorials, missions, groups) share /tutorials/ in their href.
+      const anyCard = page.locator('#tutorial-navigator a[href*="/tutorials/"]').first();
       const cardVisible = await anyCard.isVisible().catch(() => false);
       expect(
         cardVisible,
