@@ -1587,10 +1587,12 @@ cds.on('bootstrap', (app) => {
   // Challenge-widget freeText AI grader (#2441). Same auth + rate-limit shape
   // as /api/validate-answer, which it mirrors; gated on the flag.challengeWidget
   // ImsConfig kill switch inside the dispatch (fail-open). defaultCallModel is
-  // reused as-is; the loader reads ChallengeAnswers.
+  // reused as-is; the loader reads ChallengeAnswers. loadGradingContext (#3090)
+  // is optional — ChatSettings.gradingContextEnabled gates its use inside dispatch.
   const challengeGradeHandler = makeChallengeGradeHandler({
     callModel: defaultCallModel,
     loadAnswer: defaultLoadChallengeAnswer,
+    loadGradingContext: defaultLoadGradingContext,
   });
   app.post('/api/challenge-grade',
     express.json({ limit: '64kb' }),
