@@ -135,12 +135,11 @@ Batch / stored-row embedding writers (from the codebase survey):
 | **external.RelevanceSeedExemplars** (`db/external-content.cds:510-516`) | `text : LargeString` (NCLOB) | `embedding : Vector(1536)` | `embed()` in after-CREATE/UPDATE handler (`srv/content-moderation-service.js`) | trigger (NCLOB, event-triggered) |
 | **TutorialEmbedding** (`db/schema.cds:915-924`) | `stepText : LargeString` (NCLOB) | `embedding : Vector(1536)` | `embedSlugs` + `embedding-reconciliation` job | **defer** — NCLOB **and** hash-drift / per-row model-rotation logic |
 
-### Cosine comparability with the existing Node corpus (load-bearing)
+### Cosine comparability with the existing Node corpus (RESOLVED ✅ — #3114)
 
-The incremental, flag-gated, reversible rollout in this doc assumes
-DB-side vectors **co-exist and cosine-compare** with the thousands of
-rows already embedded by the Node path. That assumption is at risk and
-must be the **first thing the DEV spike proves** (Q5):
+**The DEV spike (#3114) confirmed DB-side and Node vectors are identical
+(cosine 1.000), so the incremental/reversible rollout below holds.** The
+original concern and what the spike found:
 
 - The live Node writer (`packages/core/embedding-client.js`) calls
   `AzureOpenAiEmbeddingClient(model).embed(...)` with **no input-type
@@ -150,11 +149,13 @@ must be the **first thing the DEV spike proves** (Q5):
   `QUERY` for search text). SAP does **not** guarantee a `DOCUMENT`
   embedding is numerically interchangeable with a differently-produced
   one.
-- **If** the `DOCUMENT` type changes the embedded representation vs the
-  untyped Node call, the DB-side vector will not match the existing
-  corpus → the whole corpus must be re-embedded **in one shot**, which
-  **invalidates the incremental/reversible rollout** and makes each
-  unit a flag-day migration instead.
+- **If** the `DOCUMENT` type changed the embedded representation vs the
+  untyped Node call, the corpus would need a one-shot re-embed. **The
+  spike proved it does not** (DOCUMENT=QUERY=Node, all cosine 1.000).
+  **However** the spike separately found the *already-stored* vectors are
+  stale (0.828 vs the live model on identical text), so a one-shot
+  re-embed per table is still wanted — to refresh stale vectors, not
+  because DB-side differs.
 - The hybrid test must assert the DB-side vector cosine-matches a
   **pre-existing Node-generated row** (not two freshly-generated
   vectors), or it won't catch this.
@@ -298,12 +299,16 @@ a second wave, out of scope here.
 - **Q3 — CAP dialect-gating:** cleanest way to emit the calc element for
   HANA only while SQLite tests keep the Node writer.
 - **Q4 — Unit 2 online-sync:** trigger vs bulk-only.
-- **Q5 — cosine comparability (gating, spike first):** does
-  `VECTOR_EMBEDDING(..., 'DOCUMENT', ...)` produce vectors that
-  cosine-match the existing untyped Node `text-embedding-3-small` corpus?
-  If not, the rollout becomes a one-shot full re-embed per table, not the
-  incremental/reversible model this doc assumes. See "Cosine
-  comparability" above. **This is the single assumption most likely to
-  reshape the whole phase** — prove it against a pre-existing row before
-  any other work.
+- **Q5 — cosine comparability (RESOLVED ✅ by the DEV spike, #3114):**
+  DB-side `VECTOR_EMBEDDING(..., 'DOCUMENT', ..., TUTORIALS_AICORE)` and
+  the Node `@sap-ai-sdk` path produce the **identical** vector today
+  (cosine **1.000** on byte-identical text), and `DOCUMENT` vs `QUERY`
+  is a **no-op** for `text-embedding-3-small` (cosine 1.000). The
+  DOCUMENT-asymmetry fear was unfounded — **the incremental /
+  reversible / co-existence rollout is valid.** Separately, the spike
+  found the **already-stored corpus is stale** (0.828 self-similarity
+  on identical text — older model/deployment), so each table should get
+  a **one-shot re-embed** when migrated to refresh stale vectors (not
+  because DB-side differs), and a last-embedded-model provenance signal
+  is worth adding. Full data on #3114.
 ```
