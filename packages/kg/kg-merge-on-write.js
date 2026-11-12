@@ -305,24 +305,22 @@ export function vectorToJsonLiteral(vec) {
 }
 
 /**
- * INSERT one minted Concept, populating BOTH the legacy `embedding` BLOB
- * (full-precision Float32-LE, source of truth for dedup/consolidation) AND
- * the `embeddingVec` Vector(1536) column at mint time (#1123). Previously
- * only the BLOB was written and `embeddingVec` was backfilled later by an
- * async cron — meaning freshly-minted concepts were invisible to the HANA
- * native cosine search until the next backfill pass. Writing both here closes
- * that window.
+ * INSERT one minted Concept, populating the legacy `embedding` BLOB
+ * (full-precision Float32-LE, source of truth for dedup/consolidation) at
+ * mint time (#1123). On HANA, `embeddingVec` is a GENERATED ALWAYS AS column
+ * (VECTOR_EMBEDDING(name, description, ...)) — it auto-populates from the
+ * name/description on INSERT (#2810). No follow-up UPDATE is issued on HANA;
+ * the generated column fills itself.
  *
- * Why INSERT-then-UPDATE (not a single raw INSERT like embedding-pipeline.js):
+ * On SQLite (unit tests) there is no GENERATED column — `embeddingVec` is a
+ * plain Vector column, so the JSON-array literal goes in with the CQL INSERT
+ * directly.
+ *
+ * Why CQL INSERT (not raw SQL like embedding-pipeline.js):
  * Concepts is `cuid, managed` with `@cds.on.insert: firstSeenAt = $now`. A raw
  * `INSERT INTO ... VALUES (...)` bypasses CAP's managed-field + default-value
- * handling. Keeping the CQL INSERT preserves createdAt/modifiedAt/firstSeenAt
- * and the status/extractionCount defaults; the follow-up UPDATE only sets the
- * one column CQL can't express (TO_REAL_VECTOR is not valid CQL).
- *
- * On SQLite (unit tests) there is no REAL_VECTOR type — the Vector column is a
- * plain column, so the JSON-array string goes in with the CQL INSERT directly
- * and no follow-up UPDATE is needed.
+ * handling. The CQL INSERT preserves createdAt/modifiedAt/firstSeenAt and
+ * the status/extractionCount defaults.
  *
  * @param {object} args
  * @param {import('@sap/cds/apis/services').Service} args.db  db service (HANA detection)
@@ -404,15 +402,11 @@ export async function insertMintedConcept({ db, tx, entry }) {
   };
 
   if (isHana(db)) {
-    // CQL INSERT keeps managed/cuid/@cds.on.insert handling; the Vector column
-    // is set by the follow-up raw UPDATE because TO_REAL_VECTOR isn't valid CQL.
+    // CQL INSERT keeps managed/cuid/@cds.on.insert handling. On HANA,
+    // embeddingVec is GENERATED ALWAYS AS (VECTOR_EMBEDDING(name, description, ...))
+    // and auto-populates from the row's name/description — no follow-up UPDATE
+    // needed or allowed (#2810).
     await runner.run(INSERT.into(Concepts).entries(row));
-    if (vecLiteral != null) {
-      await runner.run(
-        `UPDATE "COM_SAP_DEVELOPERS_IMS_CONCEPTS" SET "EMBEDDINGVEC" = TO_REAL_VECTOR(?) WHERE "ID" = ?`,
-        [vecLiteral, entry.ID],
-      );
-    }
   } else {
     // SQLite: no REAL_VECTOR type — store the JSON-array string in the column
     // directly alongside the CQL INSERT.
