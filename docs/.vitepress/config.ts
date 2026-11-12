@@ -258,6 +258,7 @@ export default defineConfig({
           { text: 'External integrations',     link: '/developers/reference/external-integrations' },
           { text: 'Generative UI Research',    link: '/developers/reference/generative-ui-research' },
           { text: 'GraphQL API',               link: '/developers/reference/graphql-api' },
+          { text: 'Grading context',           link: '/developers/reference/grading-context' },
           { text: 'HANA / HDI / SQL gotchas',  link: '/developers/reference/hana-hdi-gotchas' },
           { text: 'HCQL protocol adapter support', link: '/developers/reference/hcql-support' },
           { text: 'Iframe allowlist',          link: '/developers/reference/iframe-allowlist' },
