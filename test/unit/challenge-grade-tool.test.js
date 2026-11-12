@@ -219,6 +219,55 @@ describe('dispatchChallengeGrade', () => {
     expect(userArg).not.toContain('Tutorial grading context');
   });
 
+  it('cds.entities throws during ChatSettings read → catch block fires, grade still runs ungrounded (fail-open)', async () => {
+    // Simulate the srv-qa scenario where cds.entities() throws when called
+    // from the grounding IIFE — this exercises the try/catch block, NOT the
+    // missing-row early-return path (which the test above covers separately).
+    //
+    // cds.entities is a getter on the cds object (read-only via normal assignment).
+    // We use Object.defineProperty to temporarily replace it with a call-count
+    // function: passes through on call #1 (isChallengeGradingEnabled → ImsConfig),
+    // throws on call #2 (grounding IIFE → ChatSettings).
+    const descriptor = Object.getOwnPropertyDescriptor(cds, 'entities')
+      || Object.getOwnPropertyDescriptor(Object.getPrototypeOf(cds), 'entities');
+    const originalGet = descriptor?.get;
+    const originalValue = descriptor?.value ?? cds.entities;
+    let callCount = 0;
+    const fakeEntities = function (...args) {
+      callCount++;
+      if (callCount === 2) throw new Error('model unavailable');
+      return (originalGet ? originalGet.call(cds) : originalValue).call(cds, ...args);
+    };
+    Object.defineProperty(cds, 'entities', { value: fakeEntities, configurable: true, writable: true });
+
+    const callModel = vi.fn().mockResolvedValue({
+      verdict: { verdict: 'pass', summary: 'Still graded despite entity throw' },
+      promptTokens: 80, completionTokens: 30, modelName: 'test-model',
+    });
+    const loadGradingContext = vi.fn().mockResolvedValue('Some context');
+
+    let out;
+    try {
+      out = await dispatchChallengeGrade(
+        { tutorialSlug: 'sample', stepNumber: 2, nodeId: 'challenge-2-0', submittedAnswer: 'four' },
+        { callModel, loadAnswer: okLoad(), loadGradingContext },
+      );
+    } finally {
+      // Restore the original descriptor
+      if (descriptor) {
+        Object.defineProperty(cds, 'entities', descriptor);
+      }
+    }
+
+    // Grade must still run — catch block swallowed the entity throw
+    expect(out.verdict).toBe('pass');
+    expect(callModel).toHaveBeenCalledOnce();
+    // No grounding section — loader was never reached
+    const userArg = callModel.mock.calls[0][0].user;
+    expect(userArg).not.toContain('Tutorial grading context');
+    expect(loadGradingContext).not.toHaveBeenCalled();
+  });
+
   it('flag.challengeWidget OFF still short-circuits the grade (unchanged behavior)', async () => {
     await setFlag('false');
 
