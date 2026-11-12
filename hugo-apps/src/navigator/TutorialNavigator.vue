@@ -4,6 +4,7 @@ import type { TutorialEntry, CardItem, MissionRef, GroupRef } from '@shared/type
 import Skeleton from '@shared/Skeleton.vue'
 import { toLookup, emptyProgress, type ProgressPayload } from './cardProgress'
 import { isWithinNewWindow } from '../shared/freshness'
+import { partitionSelected } from '@shared/partitionSelected'
 import { useNavigatorFilters } from '@shared/composables/useNavigatorFilters'
 import { wireTracker } from '@shared/analytics/wire-tracker'
 // /browse/ ships ?sort= via browseUrl.ts. Reusing that module here (#199)
@@ -201,7 +202,29 @@ const {
   hrefBase,
   navBase,
   clientSearch,
+  progress,
 })
+
+// Partition filter lists so selected items float to the top (#3112).
+const orderedTopics = computed(() =>
+  partitionSelected(filteredTopics.value, topic => filters.topics.includes(topic))
+)
+
+const orderedProducts = computed(() =>
+  partitionSelected(filteredProducts.value, product => isProductSelected(product.slugs))
+)
+
+const orderedLevels = computed(() =>
+  partitionSelected(['beginner', 'intermediate', 'advanced'], level =>
+    filters.levels.includes(level)
+  )
+)
+
+const orderedTypes = computed(() =>
+  partitionSelected(['mission', 'group', 'tutorial'], type =>
+    filters.types.includes(type)
+  )
+)
 
 // Sort UI (#199): reuse /browse/'s ?sort= URL contract via browseUrl.ts —
 // keeps the URL behavior identical across both surfaces. The composable
@@ -379,7 +402,7 @@ onMounted(async () => {
               />
             </div>
             <div class="filter-list">
-              <label v-for="topic in filteredTopics" :key="topic" class="filter-option">
+              <label v-for="topic in orderedTopics" :key="topic" class="filter-option">
                 <input type="checkbox" :checked="filters.topics.includes(topic)" @change="toggleFilter(filters.topics, topic)" class="filter-checkbox" />
                 <span class="filter-label">{{ topic }}</span>
               </label>
@@ -397,7 +420,7 @@ onMounted(async () => {
               />
             </div>
             <div class="filter-list">
-              <label v-for="product in filteredProducts" :key="product.label" class="filter-option">
+              <label v-for="product in orderedProducts" :key="product.label" class="filter-option">
                 <input type="checkbox"
                        :checked="isProductSelected(product.slugs)"
                        @change="toggleProduct(product.slugs)"
@@ -410,7 +433,7 @@ onMounted(async () => {
           <div class="filter-column">
             <h3 class="filter-title">Experience</h3>
             <div class="filter-list filter-list--static">
-              <label v-for="level in ['beginner', 'intermediate', 'advanced']" :key="level" class="filter-option">
+              <label v-for="level in orderedLevels" :key="level" class="filter-option">
                 <input type="checkbox" :checked="filters.levels.includes(level)" @change="toggleFilter(filters.levels, level)" class="filter-checkbox" />
                 <span class="filter-label">{{ capitalizeLevel(level) }}</span>
               </label>
@@ -420,7 +443,7 @@ onMounted(async () => {
           <div class="filter-column">
             <h3 class="filter-title">Type</h3>
             <div class="filter-list filter-list--static">
-              <label v-for="type in ['mission', 'group', 'tutorial']" :key="type" class="filter-option">
+              <label v-for="type in orderedTypes" :key="type" class="filter-option">
                 <input type="checkbox" :checked="filters.types.includes(type)" @change="toggleFilter(filters.types, type)" class="filter-checkbox" />
                 <span class="filter-label">{{ type.charAt(0).toUpperCase() + type.slice(1) }}</span>
               </label>
@@ -432,6 +455,20 @@ onMounted(async () => {
               <label class="filter-option">
                 <input type="checkbox" v-model="filters.noLicense" class="filter-checkbox" />
                 <span class="filter-label">No license</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="filter-column" v-if="progress.authenticated">
+            <h3 class="filter-title">My progress</h3>
+            <div class="filter-list filter-list--static">
+              <label class="filter-option">
+                <input type="checkbox" v-model="filters.completed" class="filter-checkbox" />
+                <span class="filter-label">Completed</span>
+              </label>
+              <label class="filter-option">
+                <input type="checkbox" v-model="filters.inProgress" class="filter-checkbox" />
+                <span class="filter-label">In progress</span>
               </label>
             </div>
           </div>
@@ -533,7 +570,7 @@ onMounted(async () => {
       </div>
 
       <!-- Section: Pagination -->
-      <nav v-if="totalPages > 1 && !searchMode" class="navigator-pagination" aria-label="Page navigation">
+      <nav v-if="totalPages > 1" class="navigator-pagination" aria-label="Page navigation">
         <button
           class="pagination-btn pagination-prev"
           :disabled="currentPage === 1"
@@ -722,7 +759,7 @@ onMounted(async () => {
 
 .filters-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1.5rem;
 }
 

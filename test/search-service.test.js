@@ -23,10 +23,17 @@ describe('SearchService', () => {
       // Description-only match (rank=2): proves the 3-tier rank arithmetic
       // (title=3 > description=2 > tag-only=1) instead of just "title row first".
       { ID: 'search-tdesc',      legacyId: 90021, slug: 'rankprobe-desc-tutorial', title: 'Generic Tutorial Title', description: 'Body mentions rankprobe in passing.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
+      // missionprobe: two tutorial body-only matches to prove the MISSION title-match still ranks first.
+      { ID: 'search-mprobe-tdesc1', legacyId: 90031, slug: 'missionprobe-desc-tut1', title: 'Generic Tutorial Alpha', description: 'This tutorial body mentions missionprobe in passing.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
+      { ID: 'search-mprobe-tdesc2', legacyId: 90032, slug: 'missionprobe-desc-tut2', title: 'Generic Tutorial Beta',  description: 'Another tutorial body also references missionprobe.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
     ]);
 
     await INSERT.into(Missions).entries([
       { ID: 'search-m1', legacyId: 90101, slug: 'full-stack-mission', title: 'Full-Stack CAP Application', description: 'Build end-to-end', primaryTag: 'SAP Cloud Application Programming Model', experienceTag: 'intermediate', averageTimeToComplete: 180, status: 'ACTIVE', published: true },
+      // missionprobe: used to prove type-boost — mission with body-only match must beat
+      // tutorial body-only matches. Without the boost both rank=2 (tied); with boost W=2
+      // the mission reaches 2+2=4 vs tutorial 2+0=2.
+      { ID: 'search-mprobe', legacyId: 90102, slug: 'missionprobe-mission', title: 'A Generic Learning Path', description: 'This learning path body mentions missionprobe in its intro.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 60, status: 'ACTIVE', published: true },
     ]);
 
     await INSERT.into(Groups).entries([
@@ -74,6 +81,7 @@ describe('SearchService', () => {
       { slug: 'tag-only-1' }, { slug: 'tag-only-2' }, { slug: 'tag-only-3' },
       { slug: 'tag-only-4' }, { slug: 'tag-only-5' },
       { slug: 'rankprobe-tutorial' }, { slug: 'rankprobe-desc-tutorial' },
+      { slug: 'missionprobe-desc-tut1' }, { slug: 'missionprobe-desc-tut2' },
     ]);
   });
 
@@ -220,6 +228,62 @@ describe('SearchService', () => {
       const result = await srv.send({ event: 'getFacets', data: { search: 'xyznonexistent999' } });
       expect(result.totalCount).toBe(0);
     });
+
+    it('products filter excludes rows whose primaryTag is not in the list', async () => {
+      const srv = await cds.connect.to('SearchService');
+      // 'SAP HANA Cloud' tag — only search-t1 (TUTORIAL) has this primaryTag among active items
+      const filtered = await srv.send({ event: 'getFacets', data: { products: ['SAP HANA Cloud'] } });
+      // Every row returned must have primaryTag === 'SAP HANA Cloud'
+      // (bucketing only counts rows so we verify via totalCount vs unfiltered)
+      const unfiltered = await srv.send({ event: 'getFacets', data: {} });
+      expect(filtered.totalCount).toBeGreaterThan(0);
+      expect(filtered.totalCount).toBeLessThan(unfiltered.totalCount);
+      // tagCounts should only contain the filtered primaryTag
+      const tagNames = filtered.tagCounts.map(t => t.name);
+      expect(tagNames).toContain('SAP HANA Cloud');
+      expect(tagNames).not.toContain('SAP Cloud Application Programming Model');
+      expect(tagNames).not.toContain('SAP Fiori');
+    });
+
+    it('isNewCutoffISO filter excludes rows created at or before the cutoff (strict >)', async () => {
+      const { Tutorials } = cds.entities('com.sap.developers.ims');
+      // Seed three tutorials with explicit createdAt dates so the cutoff boundary is deterministic:
+      //   facet-old-tut  : well before the cutoff → excluded
+      //   facet-exact-tut: EXACTLY at the cutoff  → excluded (proves strict >, not >=)
+      //   facet-new-tut  : after the cutoff        → included
+      const OLD_DATE   = '2020-01-01T00:00:00.000Z';
+      const CUTOFF     = '2025-06-01T00:00:00.000Z';
+      const NEW_DATE   = '2026-01-01T00:00:00.000Z';
+      await INSERT.into(Tutorials).entries([
+        { ID: 'facet-old-tut',   legacyId: 91001, slug: 'facet-old-tut',   title: 'Old Facet Tutorial',   description: 'old',   primaryTag: 'SAP HANA Cloud', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE', createdAt: OLD_DATE },
+        { ID: 'facet-exact-tut', legacyId: 91003, slug: 'facet-exact-tut', title: 'Exact Facet Tutorial', description: 'exact', primaryTag: 'SAP HANA Cloud', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE', createdAt: CUTOFF  },
+        { ID: 'facet-new-tut',   legacyId: 91002, slug: 'facet-new-tut',   title: 'New Facet Tutorial',   description: 'new',   primaryTag: 'SAP HANA Cloud', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE', createdAt: NEW_DATE },
+      ]);
+
+      const srv = await cds.connect.to('SearchService');
+      const result = await srv.send({ event: 'getFacets', data: {
+        products: ['SAP HANA Cloud'],
+        isNewCutoffISO: CUTOFF,
+      } });
+
+      // Only 'facet-new-tut' (2026-01-01 > cutoff) and search-t1 ($now > cutoff) survive.
+      // 'facet-old-tut'   (2020-01-01 < cutoff) → excluded
+      // 'facet-exact-tut' (== cutoff)            → excluded (strict >)
+      const noDateFilter = await srv.send({ event: 'getFacets', data: { products: ['SAP HANA Cloud'] } });
+      expect(result.totalCount).toBeLessThan(noDateFilter.totalCount);
+      expect(result.totalCount).toBeGreaterThan(0);
+
+      // The at-cutoff row must NOT appear: noDateFilter sees old+exact+new+search-t1 (≥4),
+      // result sees only new+search-t1 (≥2), so the difference must be at least 2.
+      expect(noDateFilter.totalCount - result.totalCount).toBeGreaterThanOrEqual(2);
+    });
+
+    it('default call (no products, empty cutoff) still returns all active rows', async () => {
+      const srv = await cds.connect.to('SearchService');
+      const withDefaults = await srv.send({ event: 'getFacets', data: { products: [], isNewCutoffISO: '' } });
+      const withNoParams = await srv.send({ event: 'getFacets', data: {} });
+      expect(withDefaults.totalCount).toBe(withNoParams.totalCount);
+    });
   });
 
   describe('Security', () => {
@@ -262,6 +326,28 @@ describe('SearchService', () => {
         expect(slugs).toContain(s);
         expect(slugs.indexOf(s)).toBeGreaterThan(slugs.indexOf('rankprobe-desc-tutorial'));
       }
+    });
+
+    it('boosts MISSION/GROUP type so a mission body-only match ranks above tutorial body-only matches (#3112)', async () => {
+      // search-mprobe (MISSION) has "missionprobe" only in its description → rank = 2 without boost.
+      // search-mprobe-tdesc1/2 (TUTORIALS) also have "missionprobe" only in description → rank = 2.
+      // Without the type boost both rank equally and ordering is non-deterministic.
+      // With boost W=2: mission reaches 2+2=4 while tutorials stay at 2+0=2 → mission first.
+      const { data } = await project.get('/search/SearchableItems?$search=missionprobe');
+      const items = data.value;
+      const missionIdx = items.findIndex(i => i.slug === 'missionprobe-mission');
+      const tutDesc1Idx = items.findIndex(i => i.slug === 'missionprobe-desc-tut1');
+      const tutDesc2Idx = items.findIndex(i => i.slug === 'missionprobe-desc-tut2');
+      expect(missionIdx).toBeGreaterThanOrEqual(0);
+      expect(tutDesc1Idx).toBeGreaterThanOrEqual(0);
+      expect(tutDesc2Idx).toBeGreaterThanOrEqual(0);
+      // Mission (description-match + type-boost) must rank above BOTH tutorial body-only matches.
+      expect(missionIdx).toBeLessThan(tutDesc1Idx);
+      expect(missionIdx).toBeLessThan(tutDesc2Idx);
+      // Verify searchScore reflects the boost: mission score must exceed tutorial desc score.
+      const missionScore  = items[missionIdx].searchScore;
+      const tutDesc1Score = items[tutDesc1Idx].searchScore;
+      expect(missionScore).toBeGreaterThan(tutDesc1Score);
     });
 
     it('does not leak _searchRank via OData response', async () => {
