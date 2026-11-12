@@ -113,7 +113,7 @@ content publish pipeline.
 - Parser: [`scripts/parsers/rules.ts`](../../../scripts/parsers/rules.ts)
   (look for `GRADING_CONTEXT` section handling)
 - Loader: [`srv/lib/grading-context-loader.js`](../../../srv/lib/grading-context-loader.js)
-- DB entity: [`db/tutorial-grading-context.cds`](../../../db/tutorial-grading-context.cds)
+- DB entity: [`db/schema.cds` — `TutorialGradingContext`](../../../db/schema.cds)
 - Grader prompts:
   - [`srv/lib/validate-answer-prompt.js`](../../../srv/lib/validate-answer-prompt.js)
     (`buildUserMessage` — also used by `challenge-grade`)

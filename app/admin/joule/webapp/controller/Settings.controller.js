@@ -27,10 +27,10 @@ sap.ui.define([
         validateAnswerEnabled: false,
         codeCheckEnabled: false,
         // Grading context flag (#3090). Default false to mirror schema default
-        // (db/schema.cds). When on, the challenge grader reads each tutorial's
-        // TutorialGradingContext row to ground the LLM call with domain-specific
-        // context about what correct answers look like. No token cost unless
-        // validateAnswerEnabled is also on.
+        // (db/schema.cds). When on, all three AI graders (validate-answer,
+        // code-check, challenge-grade) read each tutorial's TutorialGradingContext
+        // row to ground the LLM call with domain-specific context about what
+        // correct answers look like. No extra token cost beyond what the active graders consume.
         gradingContextEnabled: false,
         // Issue #172 pilot master flag. Default false to mirror the schema
         // default (db/schema.cds:530). When off, the public /api/ChatConfig
