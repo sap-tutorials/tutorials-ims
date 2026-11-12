@@ -216,6 +216,38 @@ is retained for re-provisioning / a fresh environment.
 
 ## Appendix 1 — Automatic embedding generation (for the later rewrite)
 
+> **Shipped (Unit 1, #2810 / #3115):** `Concepts.embeddingVec` is the
+> **first feature moved DB-side.** Because `Concepts.name`/`description`
+> are bounded `String(n)` (NVARCHAR), the CAP-native `GENERATED ALWAYS AS`
+> route applies — no hand-written HDI artifact. The clause is declared
+> HANA-only in `db/hana/concepts-embedding.cds` (loads only for
+> `[hybrid]`/`[production]`); the SQLite/unit path keeps the Node writer.
+> On HANA the column is read-only: the Node backfill
+> (`srv/jobs/concept-embedding-backfill.js`) and the concept-mint path
+> (`packages/kg/kg-merge-on-write.js`) no longer write it.
+>
+> **Comparability (spike #3114):** DB-side `VECTOR_EMBEDDING(..., 'DOCUMENT',
+> ..., TUTORIALS_AICORE)` and the Node `@sap-ai-sdk` path produce the
+> identical 1536-dim vector; `DOCUMENT`/`QUERY` is a no-op for
+> `text-embedding-3-small`. So new DB-generated rows cosine-compare with
+> the existing corpus.
+>
+> **Enable on an env:** deploy `db/hana/concepts-embedding.cds` (it ships
+> in the normal MTA build). The HDI delta deploy ALTERs `embeddingVec`
+> from a plain column to `GENERATED ALWAYS AS`, which **recomputes
+> embeddings for all ACTIVE Concepts rows synchronously at deploy** (one
+> AI Core call per row — size the deploy window accordingly; this also
+> refreshes the stale pre-existing corpus, spike #3114).
+> **Rollback:** revert `db/hana/concepts-embedding.cds` and restore the
+> Node `embeddingVec` write in the backfill + mint path, then redeploy.
+> **Deploy-time prereq (design Q1, verify on first real deploy):** the HDI
+> deploy identity needs `EXECUTE` on `TUTORIALS_AICORE` when the generated
+> column is created; a container `_RT` identity has it via
+> `::external_privileges_role` (Tier B), but confirm the deploy identity
+> on the first DEV deploy.
+> **Hybrid proof:** `test/hybrid/concepts-dbside-embedding.hybrid.test.js`
+> (run post-deploy via `npm run test:hybrid`).
+
 Once the remote source works, HANA can keep embeddings in sync with
 source text with no application pipeline. Four mechanisms:
 

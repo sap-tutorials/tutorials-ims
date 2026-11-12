@@ -208,6 +208,17 @@ reversible:
 
 ### Unit 1 (first target, proof of pattern): Concepts.embeddingVec, CAP-native
 
+> **SHIPPED (#3115).** `db/hana/concepts-embedding.cds` declares the
+> HANA-only `@sql.append 'GENERATED ALWAYS AS (VECTOR_EMBEDDING(...))'`
+> on `embeddingVec`; the Node backfill
+> (`srv/jobs/concept-embedding-backfill.js`) and concept-mint path
+> (`packages/kg/kg-merge-on-write.js`) no longer write the column on
+> HANA; hybrid proof at
+> `test/hybrid/concepts-dbside-embedding.hybrid.test.js`. Gating decided:
+> **deploy-gated, no runtime flag**. Live DEV deploy + corpus re-embed
+> deferred to a maintainer-run deploy. Enable/rollback runbook:
+> `docs/developers/operations/hana-aicore-embeddings.md` Appendix 1.
+
 Concepts is the cleanest first target: source is **bounded NVARCHAR**,
 so the CAP-native calc element applies with **no hand-written HDI
 artifacts**. The deliberate `String(5000)` typing of `description`
