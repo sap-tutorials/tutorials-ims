@@ -66,8 +66,8 @@ annotate ims.UserIdentities with @cds.persistence.journal;
 // #2810 — Knowledge-graph tables were never journaled, so (per the .hdiconfig
 // note above) their plain .hdbtable artifacts were silently ignored by HDI and
 // no KG schema change ever deployed; the live tables are pre-restriction fossils.
-// Journal them so they deploy as .hdbmigrationtable. Concepts.embeddingVec's
-// GENERATED ALWAYS column (db/hana/concepts-embedding.cds) depends on this.
+// Journal them so they deploy as .hdbmigrationtable and schema changes land.
+// (embeddingVec stays a Node-written plain column — see concept-embedding-backfill.js.)
 annotate ims.Concepts with @cds.persistence.journal;
 annotate ims.TutorialConceptLinks with @cds.persistence.journal;
 annotate ims.ConceptEdges with @cds.persistence.journal;
