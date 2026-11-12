@@ -18,6 +18,15 @@
                         "SPARQL UPDATE"
                     ]
                 }
+            ],
+            "global_object_privileges": [
+                {
+                    "name": "TUTORIALS_AICORE",
+                    "type": "REMOTE SOURCE",
+                    "privileges": [
+                        "EXECUTE"
+                    ]
+                }
             ]
         }
     }
