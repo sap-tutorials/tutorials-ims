@@ -138,6 +138,7 @@ modules:
       memory: 2048M
       disk-quota: 1024M
       buildpack: nodejs_buildpack
+      stack: cflinuxfs5           # cflinuxfs4→5 migration (#3111)
       # DO NOT raise instances without addressing in-process rate limiters in
       # srv/developer-service.js, srv/lib/ip-rate-limit.js, srv/lib/chat-rate-limit.js.
       # See docs/developers/operations/mta-deployment.md "Scaling Constraints" and TODO §22.
@@ -194,6 +195,7 @@ modules:
       memory: 2048M
       disk-quota: 1024M
       buildpack: nodejs_buildpack
+      stack: cflinuxfs5           # cflinuxfs4→5 migration (#3111)
       instances: 1
       health-check-type: http
       health-check-http-endpoint: /health/ready
@@ -220,6 +222,7 @@ modules:
     path: gen/db
     parameters:
       buildpack: nodejs_buildpack
+      stack: cflinuxfs5           # cflinuxfs4→5 migration (#3111)
     properties:
       # Two HDI services bound (own container + devtoberfest-planner-db grantor),
       # so the HDI deployer cannot auto-detect the target — name it explicitly.
@@ -235,6 +238,7 @@ modules:
     path: gen/db-qa
     parameters:
       buildpack: nodejs_buildpack
+      stack: cflinuxfs5           # cflinuxfs4→5 migration (#3111)
     requires:
       - name: tutorials-hana-qa
       - name: tutorials-cloud-logging   # same as tutorials-db-deployer; mirrors the prod binding for QA forensic parity.
@@ -250,6 +254,7 @@ modules:
     parameters:
       disk-quota: 2048M
       memory: 512M
+      stack: cflinuxfs5           # cflinuxfs4→5 migration (#3111)
       app-name: tutorials-approuter
       instances: 1                  # Lower bound; Autoscaler manages up to instance_max_count via binding-level config in requires below (#749)
     properties:

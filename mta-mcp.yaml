@@ -43,6 +43,7 @@ modules:
       memory: 1024M
       disk-quota: 1024M
       buildpack: nodejs_buildpack
+      stack: cflinuxfs5           # cflinuxfs4→5 migration (#3111)
       instances: 1
     properties:
       NODE_ENV: production
