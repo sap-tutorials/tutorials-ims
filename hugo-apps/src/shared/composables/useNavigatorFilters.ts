@@ -248,6 +248,22 @@ function tutorialMatchesTopic(item: CardItem, topic: string): boolean {
   return item.displayTagSlugs.some(slug => (PRODUCT_TO_TOPICS[slug] ?? []).includes(topic))
 }
 
+/**
+ * Pure helper: branch totalPages on searchMode.
+ * Exported for unit testing. Called by the `totalPages` computed in
+ * useNavigatorFilters; Task 8 can extend the first arg to a broader guard.
+ */
+export function computeTotalPages(
+  serverMode: boolean,
+  searchTotalCount: number,
+  filteredLen: number,
+  pageSize: number,
+): number {
+  return serverMode
+    ? Math.ceil(searchTotalCount / pageSize)
+    : Math.ceil(filteredLen / pageSize)
+}
+
 export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   const {
     allCards,
@@ -321,7 +337,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   // is true — which is the documented browse-page behaviour.
   const {
     searchMode, isSubThreshold, searchResults, searchFacets,
-    searchTotalCount, isSearching, searchError,
+    searchTotalCount, isSearching, searchError, executeSearch,
   } = useSearch({
     searchTerm: searchQuery,
     filterTypes: computed(() => filters.types.map(t => t.toUpperCase())),
@@ -607,7 +623,14 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
       filters.noLicense
   })
 
-  const totalPages = computed(() => Math.ceil(filteredItems.value.length / pageSize))
+  const totalPages = computed(() =>
+    computeTotalPages(
+      searchMode.value && !!tutorials && !clientSearch,
+      searchTotalCount.value,
+      filteredItems.value.length,
+      pageSize,
+    )
+  )
 
   // ─── Display pipeline (server-search OR client-filter+sort+paginate) ───
   // displayedItems consults server search results only when `tutorials` is
@@ -703,6 +726,28 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
      () => filters.isNew, () => filters.noLicense],
     () => { currentPage.value = 1 },
     { deep: true },
+  )
+
+  // ─── currentPage → executeSearch watcher (server-search pagination, #3112) ───
+  // Fires when the user navigates to a different page while in search mode.
+  // currentPage is 1-based; executeSearch is 0-based.
+  //
+  // Double-fetch analysis: the reset watcher above sets currentPage = 1 on
+  // query/filter changes. When the page was ALREADY 1 (most common), the value
+  // does not change so this watcher does NOT fire — no double-fetch. When the
+  // page was >1 (user was on page 2, then changed query), the reset fires this
+  // watcher once (page N→1), fetching page 0 — that is correct and desired.
+  // The useSearch internal debounce watcher fires independently on
+  // term/filter changes and does its own page-0 fetch via debouncedSearch();
+  // the two are distinct triggers so both are needed (debounce for fresh
+  // queries, this watcher for "same query, different page").
+  watch(
+    currentPage,
+    (p) => {
+      if (searchMode.value && tutorials && !clientSearch) {
+        executeSearch(p - 1, pageSize)
+      }
+    },
   )
 
   return {

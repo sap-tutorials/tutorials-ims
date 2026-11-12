@@ -555,7 +555,7 @@ onMounted(async () => {
       </div>
 
       <!-- Section: Pagination -->
-      <nav v-if="totalPages > 1 && !searchMode" class="navigator-pagination" aria-label="Page navigation">
+      <nav v-if="totalPages > 1" class="navigator-pagination" aria-label="Page navigation">
         <button
           class="pagination-btn pagination-prev"
           :disabled="currentPage === 1"
