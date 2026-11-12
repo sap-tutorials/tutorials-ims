@@ -26,6 +26,12 @@ sap.ui.define([
         // in the view makes the cost trade-off explicit.
         validateAnswerEnabled: false,
         codeCheckEnabled: false,
+        // Grading context flag (#3090). Default false to mirror schema default
+        // (db/schema.cds). When on, the challenge grader reads each tutorial's
+        // TutorialGradingContext row to ground the LLM call with domain-specific
+        // context about what correct answers look like. No token cost unless
+        // validateAnswerEnabled is also on.
+        gradingContextEnabled: false,
         // Issue #172 pilot master flag. Default false to mirror the schema
         // default (db/schema.cds:530). When off, the public /api/ChatConfig
         // singleton reports branchingEnabled=false and the Learning
@@ -108,6 +114,7 @@ sap.ui.define([
             embeddingMinScore: data.embeddingMinScore != null ? data.embeddingMinScore : 0.25,
             validateAnswerEnabled: !!data.validateAnswerEnabled,
             codeCheckEnabled: !!data.codeCheckEnabled,
+            gradingContextEnabled: !!data.gradingContextEnabled,
             branchingEnabled: !!data.branchingEnabled,
             communityPeersEnabled: !!data.communityPeersEnabled,
             communityLabelLlmBudgetPerDay: data.communityLabelLlmBudgetPerDay != null ? data.communityLabelLlmBudgetPerDay : 50,
@@ -154,6 +161,7 @@ sap.ui.define([
         embeddingMinScore: data.embeddingMinScore === "" || data.embeddingMinScore == null ? null : Number(data.embeddingMinScore),
         validateAnswerEnabled: !!data.validateAnswerEnabled,
         codeCheckEnabled: !!data.codeCheckEnabled,
+        gradingContextEnabled: !!data.gradingContextEnabled,
         branchingEnabled: !!data.branchingEnabled,
         communityPeersEnabled: !!data.communityPeersEnabled,
         communityLabelLlmBudgetPerDay: parseInt(data.communityLabelLlmBudgetPerDay, 10) || 50,

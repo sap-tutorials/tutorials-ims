@@ -71,6 +71,7 @@ service AdminService {
     validationSubmissions : Association to many ValidateAnswerSubmissions  on validationSubmissions.tutorialSlug = slug,
     codeCheckSpecs        : Association to many CodeCheckSpecs             on codeCheckSpecs.tutorial = $self,
     codeCheckSubmissions  : Association to many CodeCheckSubmissions       on codeCheckSubmissions.tutorialSlug = slug,
+    gradingContext        : Association to TutorialGradingContext          on gradingContext.tutorial = $self,
     aiRequests            : Association to many AuthorAiRequests           on aiRequests.tutorial = $self,
     completionStats       : Association to TutorialCompletionStats         on completionStats.tutorialSlug = slug,
     // Read-only flattened User fields for the new Tutorials.author FK
@@ -723,6 +724,7 @@ service AdminService {
   @readonly entity AuthorAiRequests          as projection on ims.AuthorAiRequests;
   @readonly entity TutorialCompletionStats   as projection on ims.TutorialCompletionStats;
   @readonly entity TutorialValidationRules   as projection on ims.TutorialValidationRules;
+  @readonly entity TutorialGradingContext    as projection on ims.TutorialGradingContext;
 
   // Media facet (task-3): read-only projections of the object-store image and
   // asset metadata entities. The content Attachments composition auto-exposes
