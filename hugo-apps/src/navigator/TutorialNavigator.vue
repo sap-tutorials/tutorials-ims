@@ -202,6 +202,7 @@ const {
   hrefBase,
   navBase,
   clientSearch,
+  progress,
 })
 
 // Partition filter lists so selected items float to the top (#3112).

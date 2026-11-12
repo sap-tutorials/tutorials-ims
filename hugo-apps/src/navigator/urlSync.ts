@@ -75,7 +75,7 @@ function asPage(raw: string | null): number {
   return Number.isFinite(n) && n >= 2 ? n : 1
 }
 
-export function parseNavState(href: string, ls: Storage | null = null): NavState {
+export function parseNavState(href: string, ls: Storage | null = null, authenticated = true): NavState {
   const sp = new URL(href).searchParams
 
   const persisted = ls ? readPersistedFilters(ls) : {}
@@ -93,8 +93,13 @@ export function parseNavState(href: string, ls: Storage | null = null): NavState
   const categories = categoriesRaw === undefined ? [...EMPTY_STATE.categories] : categoriesRaw
   const isNew     = asBool(sp.get(PARAM.isNew))           ?? persisted.isNew     ?? false
   const noLicense = asBool(sp.get(PARAM.noLicense))       ?? persisted.noLicense ?? false
-  const completed = asBool(sp.get(PARAM.completed))       ?? persisted.completed ?? false
-  const inProgress = asBool(sp.get(PARAM.inProgress))     ?? persisted.inProgress ?? false
+  // Anon scrub: when the caller explicitly passes authenticated=false, force
+  // progress-gated flags to false so anonymous users never see a stale "My
+  // progress" filter that would always yield 0 results.
+  const rawCompleted  = asBool(sp.get(PARAM.completed))   ?? persisted.completed  ?? false
+  const rawInProgress = asBool(sp.get(PARAM.inProgress))  ?? persisted.inProgress ?? false
+  const completed  = authenticated ? rawCompleted  : false
+  const inProgress = authenticated ? rawInProgress : false
 
   return {
     q: sp.get(PARAM.q) ?? '',                              // q is URL-only, never persisted

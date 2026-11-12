@@ -18,6 +18,7 @@ import {
   parseNavState, writeNavStateToWindow, EMPTY_STATE, type NavState,
 } from '../../navigator/urlSync'
 import { parseTagParams, parseLevelParams, extractExperienceLevels } from '../../navigator/url-params'
+import { cardProgress, type ProgressPayload } from '../../navigator/cardProgress'
 import { isWithinNewWindow } from '../freshness'
 import { requiresLicense, LICENSE_SLUG } from '../license'
 import type { CardItem, TutorialEntry } from '@shared/types'
@@ -37,6 +38,47 @@ export interface UseNavigatorFiltersOptions {
   // filteredItems pipeline) and the server $search fetch is suppressed. Used by
   // the QA channel (#1939) where srv-qa exposes no SearchableItems/getFacets.
   clientSearch?: boolean
+  // User progress ref — optional so /browse/ (no progress) is unaffected.
+  // When absent, progress predicates are always no-ops.
+  progress?: Ref<ProgressPayload>
+}
+
+/**
+ * Pure helper: decide whether a card passes the progress filter flags.
+ *
+ * Semantics:
+ *   completed  → keep items where cardProgress(item, progress)?.complete === true
+ *   inProgress → keep items where cardProgress result exists with complete === false (percent>0)
+ *                (missions/groups are binary so they never match inProgress)
+ *   both       → union (OR) of the above two sets
+ *   neither    → no constraint — pass all
+ *   progress undefined → no constraint — pass all regardless of flags
+ *
+ * Exported for unit testing.
+ */
+export function matchesProgress(
+  item: CardItem,
+  flags: { completed: boolean; inProgress: boolean },
+  progress: ProgressPayload | undefined,
+): boolean {
+  // No constraint when neither flag is set
+  if (!flags.completed && !flags.inProgress) return true
+  // No constraint when progress data is unavailable (e.g. /browse/ path)
+  if (!progress) return true
+
+  const cp = cardProgress(item, progress)
+
+  if (flags.completed && flags.inProgress) {
+    // Union: pass if item matches either predicate
+    const isComplete  = cp?.complete === true
+    const isInProgress = cp !== null && cp.complete === false
+    return isComplete || isInProgress
+  }
+  if (flags.completed) {
+    return cp?.complete === true
+  }
+  // flags.inProgress only
+  return cp !== null && cp.complete === false
 }
 
 const SORT_COMPARATORS: Record<Sort, (a: CardItem, b: CardItem) => number> = {
@@ -275,6 +317,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     hrefBase = '/tutorials',
     navBase = '/tutorials',
     clientSearch = false,
+    progress,
   } = opts
 
   // ─── Reactive filter state ───
@@ -292,6 +335,8 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     categories: [] as string[],
     isNew: false,
     noLicense: false,
+    completed: false,
+    inProgress: false,
   })
 
   function currentNavState(): NavState {
@@ -304,6 +349,8 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
       categories: [...filters.categories],
       isNew: filters.isNew,
       noLicense: filters.noLicense,
+      completed: filters.completed,
+      inProgress: filters.inProgress,
       page: currentPage.value,
     }
   }
@@ -322,7 +369,8 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     watch(
       [searchQuery, () => filters.levels, () => filters.types,
        () => filters.products, () => filters.topics, () => filters.categories,
-       () => filters.isNew, () => filters.noLicense, currentPage],
+       () => filters.isNew, () => filters.noLicense,
+       () => filters.completed, () => filters.inProgress, currentPage],
       scheduleURLSync,
       { deep: true },
     )
@@ -366,6 +414,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
         initial = parseNavState(
           window.location.href,
           typeof localStorage !== 'undefined' ? localStorage : null,
+          progress?.value.authenticated ?? false,
         )
       } catch {
         initial = { ...EMPTY_STATE }
@@ -378,6 +427,8 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
       filters.categories = initial.categories
       filters.isNew     = initial.isNew
       filters.noLicense = initial.noLicense
+      filters.completed  = initial.completed
+      filters.inProgress = initial.inProgress
 
       // Issue #161: deep-link from clickable tutorial-page chips uses `?tag=` /
       // `?level=` (multi-value) instead of urlSync's `?product=` / `?level=`.
@@ -559,6 +610,10 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
         return false
       }
 
+      if (!matchesProgress(item, { completed: filters.completed, inProgress: filters.inProgress }, progress?.value)) {
+        return false
+      }
+
       return true
     })
   })
@@ -607,6 +662,8 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     filters.categories = []
     filters.isNew = false
     filters.noLicense = false
+    filters.completed = false
+    filters.inProgress = false
     productSearch.value = ''
     topicSearch.value = ''
     currentPage.value = 1   // also reset page so URL drops `?page=` cleanly
@@ -620,7 +677,9 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
       filters.topics.length > 0 ||
       filters.categories.length > 0 ||
       filters.isNew ||
-      filters.noLicense
+      filters.noLicense ||
+      filters.completed ||
+      filters.inProgress
   })
 
   const totalPages = computed(() =>
@@ -729,7 +788,8 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   watch(
     [searchQuery, () => filters.levels, () => filters.types,
      () => filters.products, () => filters.topics, () => filters.categories,
-     () => filters.isNew, () => filters.noLicense],
+     () => filters.isNew, () => filters.noLicense,
+     () => filters.completed, () => filters.inProgress],
     () => {
       if (currentPage.value !== 1) suppressNextPageFetch = true
       currentPage.value = 1
