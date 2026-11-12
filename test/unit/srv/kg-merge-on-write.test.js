@@ -493,3 +493,110 @@ describe('insertMintedConcept ACTIVE-slug uniqueness guard (KG vertex-dup)', () 
     expect(res.ID).toBe(id);
   });
 });
+
+describe('insertMintedConcept HANA path — no UPDATE EMBEDDINGVEC (#2810)', () => {
+  // Mock runner that records every statement issued to it.
+  function makeMockRunner(selectResult = []) {
+    const issued = [];
+    const runner = {
+      issued,
+      run: vi.fn(async (stmt, params) => {
+        // Record the SQL string (or a tag for CQL objects)
+        const sql = typeof stmt === 'string' ? stmt : '[CQL]';
+        issued.push({ sql, params });
+        // SELECT returns the provided selectResult (empty = no existing row)
+        if (typeof stmt !== 'string') {
+          // CQL SELECT — check if it's a SELECT by inspecting the object
+          const tag = Object.prototype.toString.call(stmt);
+          // CQL objects from SELECT.from have a `SELECT` key
+          if (stmt.SELECT) return selectResult;
+        }
+        return selectResult;
+      }),
+    };
+    return runner;
+  }
+
+  function makeHanaDb() {
+    // Minimal db object that isHana() detects as HANA.
+    return { options: { kind: 'hana' } };
+  }
+
+  it('issues ONLY the CQL INSERT — no UPDATE EMBEDDINGVEC — when isHana is true', async () => {
+    const db = makeHanaDb();
+    const runner = makeMockRunner([]); // no existing row → will attempt mint
+
+    const id = cds.utils.uuid();
+    const res = await insertMintedConcept({
+      db,
+      tx: runner,
+      entry: {
+        ID: id,
+        slug: 'hana-mint-2810',
+        name: 'HANA Mint',
+        embeddingBuf: buf(0.1, 0.2, 0.3, 0.4),
+        embeddingVec: vec(0.1, 0.2, 0.3, 0.4),
+        lastSeenAt: new Date().toISOString(),
+      },
+    });
+
+    expect(res.action).toBe('minted');
+
+    // There must be NO raw SQL UPDATE statement targeting EMBEDDINGVEC or TO_REAL_VECTOR.
+    const updateStatements = runner.issued.filter(
+      ({ sql }) =>
+        typeof sql === 'string' &&
+        (sql.toUpperCase().includes('EMBEDDINGVEC') ||
+          sql.toUpperCase().includes('TO_REAL_VECTOR')),
+    );
+    expect(updateStatements, 'no UPDATE EMBEDDINGVEC should be issued on HANA').toHaveLength(0);
+
+    // The CQL INSERT must have been issued exactly once (after the SELECT guard).
+    const cqlStatements = runner.issued.filter(({ sql }) => sql === '[CQL]');
+    // One SELECT (guard) + one INSERT = 2 CQL calls total; no raw UPDATE.
+    const rawSqlStatements = runner.issued.filter(({ sql }) => sql !== '[CQL]');
+    expect(rawSqlStatements, 'no raw SQL statements should be issued on HANA').toHaveLength(0);
+  });
+
+  it('includes embeddingVec in the CQL INSERT when SQLite (else branch unchanged)', async () => {
+    // SQLite: db.options.kind !== 'hana'
+    const db = { options: { kind: 'sqlite' } };
+    const issued = [];
+    let insertedEntry = null;
+    const runner = {
+      run: vi.fn(async (stmt, params) => {
+        if (stmt && stmt.SELECT) return []; // SELECT guard → no existing row
+        if (stmt && stmt.INSERT) {
+          // Capture what was INSERTed
+          insertedEntry = stmt.INSERT?.entries?.[0] ?? stmt.INSERT?.rows?.[0] ?? null;
+        }
+        issued.push(stmt);
+        return [];
+      }),
+    };
+
+    const id = cds.utils.uuid();
+    await insertMintedConcept({
+      db,
+      tx: runner,
+      entry: {
+        ID: id,
+        slug: 'sqlite-mint-2810',
+        name: 'SQLite Mint',
+        embeddingBuf: buf(0.1, 0.2, 0.3, 0.4),
+        embeddingVec: vec(0.1, 0.2, 0.3, 0.4),
+        lastSeenAt: new Date().toISOString(),
+      },
+    });
+
+    // The INSERT entry must include embeddingVec for SQLite.
+    expect(
+      insertedEntry,
+      'SQLite INSERT should carry embeddingVec in the entry',
+    ).not.toBeNull();
+    expect(
+      insertedEntry?.embeddingVec,
+      'embeddingVec must be present in SQLite INSERT entry',
+    ).toBeTruthy();
+  });
+});
