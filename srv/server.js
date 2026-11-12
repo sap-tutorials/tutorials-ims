@@ -1561,6 +1561,7 @@ cds.on('bootstrap', (app) => {
   const codeCheckHandler = makeCodeCheckHandler({
     callModel: defaultCallModel,
     loadStepText: defaultLoadStepText,
+    loadGradingContext: defaultLoadGradingContext,
   });
   app.post('/api/codecheck',
     express.json({ limit: '64kb' }),

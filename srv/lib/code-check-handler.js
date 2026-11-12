@@ -84,18 +84,21 @@ function rateLimitResponse(res, arr, now, limit) {
 /**
  * Create the POST /api/codecheck Express handler.
  *
- * Both deps MUST be provided — there are no module-level defaults.
+ * Both `callModel` and `loadStepText` MUST be provided — there are no module-level defaults.
+ * `loadGradingContext` is optional; when provided it is forwarded to `dispatchCheckCode`
+ * which gates on `ChatSettings.gradingContextEnabled` before invoking it.
  * Production wires real implementations at the call site (srv/server.js);
  * tests inject mocks.  Passing neither throws at factory time so the
  * misconfiguration is caught at boot rather than on first request.
  *
  * @param {object} deps
- * @param {Function} deps.callModel     - LLM caller.
- * @param {Function} deps.loadStepText  - Step-text loader.
+ * @param {Function} deps.callModel           - LLM caller.
+ * @param {Function} deps.loadStepText        - Step-text loader.
+ * @param {Function} [deps.loadGradingContext] - Grading-context loader: (slug) → string|null.
  * @returns {import('express').RequestHandler}
  */
 export function makeCodeCheckHandler(deps = {}) {
-  const { callModel, loadStepText } = deps;
+  const { callModel, loadStepText, loadGradingContext } = deps;
   if (typeof callModel !== 'function') {
     throw new Error('makeCodeCheckHandler requires deps.callModel to be a function');
   }
@@ -145,7 +148,7 @@ export function makeCodeCheckHandler(deps = {}) {
     try {
       verdict = await dispatchCheckCode(
         { tutorialSlug, stepNumber, submittedCode, language },
-        { user, callModel, loadStepText }
+        { user, callModel, loadStepText, loadGradingContext }
       );
     } catch (err) {
       return res.status(500).json({ error: 'internal' });

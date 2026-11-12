@@ -269,4 +269,116 @@ describe('dispatchCheckCode', () => {
     expect(capturedUserMsg).toContain('- use cds.ql');
     expect(capturedUserMsg).toContain('- see srv/cat-service.js');
   });
+
+  // ─── Test 9: Grading context — flag ON + context present ─────────────────
+
+  it('gradingContextEnabled ON + context present → user message contains grading-context section', async () => {
+    // Enable gradingContextEnabled in ChatSettings.
+    const { ChatSettings } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(ChatSettings);
+    await INSERT.into(ChatSettings).entries({
+      ID: '00000000-0000-0000-0000-000000000001',
+      enabled: true,
+      codeCheckEnabled: true,
+      gradingContextEnabled: true,
+    });
+
+    let capturedUserMsg;
+    const callModel = vi.fn().mockImplementation(async ({ user }) => {
+      capturedUserMsg = user;
+      return {
+        verdict: { verdict: 'pass', summary: 'Good code', correctAspects: ['correct'], suggestions: [] },
+        promptTokens: 200,
+        completionTokens: 60,
+        modelName: 'gpt-4o',
+      };
+    });
+    const loadGradingContext = vi.fn().mockResolvedValue(
+      'Domain: SAP CAP\nCommonMistakes: Using raw SQL instead of cds.ql.'
+    );
+
+    const out = await dispatchCheckCode(
+      { tutorialSlug: 'sample', stepNumber: 2, submittedCode: 'cds.ql.SELECT.from(Books)' },
+      { user: { id: 'u1' }, callModel, loadStepText: async () => 'STEP TEXT', loadGradingContext },
+    );
+
+    expect(out.verdict).toBe('pass');
+    expect(callModel).toHaveBeenCalledOnce();
+
+    // The user message must contain the grading-context section.
+    expect(capturedUserMsg).toContain('Tutorial grading context');
+    expect(capturedUserMsg).toContain('Domain: SAP CAP');
+    expect(capturedUserMsg).toContain('CommonMistakes: Using raw SQL instead of cds.ql.');
+
+    expect(loadGradingContext).toHaveBeenCalledWith('sample');
+  });
+
+  // ─── Test 10: Grading context — flag OFF → no grading-context section, grade still runs ──
+
+  it('gradingContextEnabled OFF → no grading-context section in user message, grade still runs', async () => {
+    // ChatSettings has gradingContextEnabled = false (default from beforeEach setup).
+    let capturedUserMsg;
+    const callModel = vi.fn().mockImplementation(async ({ user }) => {
+      capturedUserMsg = user;
+      return {
+        verdict: { verdict: 'pass', summary: 'Correct', correctAspects: ['x'], suggestions: [] },
+        promptTokens: 80,
+        completionTokens: 40,
+        modelName: 'gpt-4o',
+      };
+    });
+    const loadGradingContext = vi.fn().mockResolvedValue('Some context');
+
+    const out = await dispatchCheckCode(
+      { tutorialSlug: 'sample', stepNumber: 2, submittedCode: 'console.log(1)' },
+      { user: { id: 'u1' }, callModel, loadStepText: async () => null, loadGradingContext },
+    );
+
+    // Grade still runs.
+    expect(out.verdict).toBe('pass');
+    expect(callModel).toHaveBeenCalledOnce();
+
+    // User message must NOT contain grading-context section.
+    expect(capturedUserMsg).not.toContain('Tutorial grading context');
+
+    // loadGradingContext must NOT have been called (flag was off).
+    expect(loadGradingContext).not.toHaveBeenCalled();
+  });
+
+  // ─── Test 11: Grading context — loader throws → grade still runs (fail-open) ──
+
+  it('loadGradingContext throws → grade still runs ungrounded (fail-open)', async () => {
+    const { ChatSettings } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(ChatSettings);
+    await INSERT.into(ChatSettings).entries({
+      ID: '00000000-0000-0000-0000-000000000001',
+      enabled: true,
+      codeCheckEnabled: true,
+      gradingContextEnabled: true,
+    });
+
+    let capturedUserMsg;
+    const callModel = vi.fn().mockImplementation(async ({ user }) => {
+      capturedUserMsg = user;
+      return {
+        verdict: { verdict: 'pass', summary: 'Still graded', correctAspects: ['x'], suggestions: [] },
+        promptTokens: 80,
+        completionTokens: 40,
+        modelName: 'gpt-4o',
+      };
+    });
+    const loadGradingContext = vi.fn().mockRejectedValue(new Error('HANA connection lost'));
+
+    const out = await dispatchCheckCode(
+      { tutorialSlug: 'sample', stepNumber: 2, submittedCode: 'x' },
+      { user: { id: 'u1' }, callModel, loadStepText: async () => null, loadGradingContext },
+    );
+
+    // Grade still runs — fail-open.
+    expect(out.verdict).toBe('pass');
+    expect(callModel).toHaveBeenCalledOnce();
+
+    // No grading-context section in the user message.
+    expect(capturedUserMsg).not.toContain('Tutorial grading context');
+  });
 });
