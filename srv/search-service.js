@@ -548,7 +548,7 @@ export default class SearchService extends cds.ApplicationService {
     });
 
     this.on('getFacets', async (req) => {
-      const { search, taskTypes, experience } = req.data;
+      const { search, taskTypes, experience, products, isNewCutoffISO } = req.data;
 
       // CAP's .search() composed with .groupBy() over a UNION ALL view emits
       // SQL that returns empty groups on HANA (chip counts came back as 0
@@ -560,6 +560,8 @@ export default class SearchService extends cds.ApplicationService {
       const tokens = search ? applyWordBoundarySearch(q, search) : [];
       if (taskTypes?.length) q.where({ taskType: { in: taskTypes } });
       if (experience?.length) q.where({ experienceTag: { in: experience } });
+      if (products?.length) q.where({ primaryTag: { in: products } });
+      if (isNewCutoffISO) q.where`createdAt > ${isNewCutoffISO}`;
       const rows = await q;
 
       const bump = (map, key) => {

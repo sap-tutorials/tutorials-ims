@@ -67,9 +67,11 @@ service SearchService {
   entity Tags as projection on ims.Tags;
 
   function getFacets(
-    search     : String,
-    taskTypes  : array of String,
-    experience : array of String
+    search           : String,
+    taskTypes        : array of String,
+    experience       : array of String,
+    products         : array of String,
+    isNewCutoffISO   : String
   ) returns FacetResult;
 
   /**

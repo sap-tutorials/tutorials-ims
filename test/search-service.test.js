@@ -228,6 +228,56 @@ describe('SearchService', () => {
       const result = await srv.send({ event: 'getFacets', data: { search: 'xyznonexistent999' } });
       expect(result.totalCount).toBe(0);
     });
+
+    it('products filter excludes rows whose primaryTag is not in the list', async () => {
+      const srv = await cds.connect.to('SearchService');
+      // 'SAP HANA Cloud' tag — only search-t1 (TUTORIAL) has this primaryTag among active items
+      const filtered = await srv.send({ event: 'getFacets', data: { products: ['SAP HANA Cloud'] } });
+      // Every row returned must have primaryTag === 'SAP HANA Cloud'
+      // (bucketing only counts rows so we verify via totalCount vs unfiltered)
+      const unfiltered = await srv.send({ event: 'getFacets', data: {} });
+      expect(filtered.totalCount).toBeGreaterThan(0);
+      expect(filtered.totalCount).toBeLessThan(unfiltered.totalCount);
+      // tagCounts should only contain the filtered primaryTag
+      const tagNames = filtered.tagCounts.map(t => t.name);
+      expect(tagNames).toContain('SAP HANA Cloud');
+      expect(tagNames).not.toContain('SAP Cloud Application Programming Model');
+      expect(tagNames).not.toContain('SAP Fiori');
+    });
+
+    it('isNewCutoffISO filter excludes rows created before or on the cutoff', async () => {
+      const { Tutorials } = cds.entities('com.sap.developers.ims');
+      // Seed two tutorials with explicit createdAt dates so the cutoff behaviour is deterministic
+      const OLD_DATE = '2020-01-01T00:00:00.000Z';
+      const NEW_DATE = '2026-01-01T00:00:00.000Z';
+      const CUTOFF   = '2025-06-01T00:00:00.000Z';
+      await INSERT.into(Tutorials).entries([
+        { ID: 'facet-old-tut', legacyId: 91001, slug: 'facet-old-tut', title: 'Old Facet Tutorial', description: 'old', primaryTag: 'SAP HANA Cloud', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE', createdAt: OLD_DATE },
+        { ID: 'facet-new-tut', legacyId: 91002, slug: 'facet-new-tut', title: 'New Facet Tutorial', description: 'new', primaryTag: 'SAP HANA Cloud', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE', createdAt: NEW_DATE },
+      ]);
+
+      const srv = await cds.connect.to('SearchService');
+      // Only the row with NEW_DATE (> CUTOFF) should survive
+      const result = await srv.send({ event: 'getFacets', data: {
+        products: ['SAP HANA Cloud'],
+        isNewCutoffISO: CUTOFF,
+      } });
+
+      // 'facet-new-tut' created 2026-01-01 is after the cutoff → included
+      // 'facet-old-tut' created 2020-01-01 is before the cutoff → excluded
+      // search-t1 ('SAP HANA Cloud') has no explicit createdAt, so CAP sets $now → after cutoff → included
+      // Either way, filtering must reduce the count vs no-cutoff
+      const noDateFilter = await srv.send({ event: 'getFacets', data: { products: ['SAP HANA Cloud'] } });
+      expect(result.totalCount).toBeLessThan(noDateFilter.totalCount);
+      expect(result.totalCount).toBeGreaterThan(0);
+    });
+
+    it('default call (no products, empty cutoff) still returns all active rows', async () => {
+      const srv = await cds.connect.to('SearchService');
+      const withDefaults = await srv.send({ event: 'getFacets', data: { products: [], isNewCutoffISO: '' } });
+      const withNoParams = await srv.send({ event: 'getFacets', data: {} });
+      expect(withDefaults.totalCount).toBe(withNoParams.totalCount);
+    });
   });
 
   describe('Security', () => {
