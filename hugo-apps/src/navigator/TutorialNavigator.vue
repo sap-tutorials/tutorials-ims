@@ -458,6 +458,20 @@ onMounted(async () => {
               </label>
             </div>
           </div>
+
+          <div class="filter-column" v-if="progress.authenticated">
+            <h3 class="filter-title">My progress</h3>
+            <div class="filter-list filter-list--static">
+              <label class="filter-option">
+                <input type="checkbox" v-model="filters.completed" class="filter-checkbox" />
+                <span class="filter-label">Completed</span>
+              </label>
+              <label class="filter-option">
+                <input type="checkbox" v-model="filters.inProgress" class="filter-checkbox" />
+                <span class="filter-label">In progress</span>
+              </label>
+            </div>
+          </div>
         </div>
       </section>
 
