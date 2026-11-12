@@ -3115,6 +3115,13 @@
           },
           "@cds.persistence.name": "VALIDATEANSWERENABLED"
         },
+        "gradingContextEnabled": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "GRADINGCONTEXTENABLED"
+        },
         "branchingEnabled": {
           "type": "cds.Boolean",
           "default": {
