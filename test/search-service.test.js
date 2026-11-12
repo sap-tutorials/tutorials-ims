@@ -341,7 +341,7 @@ describe('SearchService', () => {
       expect(missionIdx).toBeGreaterThanOrEqual(0);
       expect(tutDesc1Idx).toBeGreaterThanOrEqual(0);
       expect(tutDesc2Idx).toBeGreaterThanOrEqual(0);
-      // Mission (title-match + type-boost) must rank above BOTH tutorial body-only matches.
+      // Mission (description-match + type-boost) must rank above BOTH tutorial body-only matches.
       expect(missionIdx).toBeLessThan(tutDesc1Idx);
       expect(missionIdx).toBeLessThan(tutDesc2Idx);
       // Verify searchScore reflects the boost: mission score must exceed tutorial desc score.

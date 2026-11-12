@@ -690,7 +690,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   // Anonymous users (authenticated=false) are unaffected — progressFilterActive
   // is false and server search continues as before.
   const progressFilterActive = computed(() =>
-    !!(progress?.value?.authenticated && (filters.completed || filters.inProgress))
+    !!(progress?.value.authenticated && (filters.completed || filters.inProgress))
   )
 
   const totalPages = computed(() =>
