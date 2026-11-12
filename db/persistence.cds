@@ -1,4 +1,5 @@
 using { com.sap.developers.ims as ims } from './schema';
+using { com.sap.developers.ims.external as ext } from './external-content';
 
 // Deploy as .hdbmigrationtable for schema evolution (ALTER TABLE instead of DROP+CREATE)
 annotate ims.Tutorials with @cds.persistence.journal;
@@ -61,3 +62,31 @@ annotate ims.KttLessons with @cds.persistence.journal;
 // #2552 identity-linkage: this container's .hdiconfig maps only hdbmigrationtable
 // (no plain-hdbtable plugin), so a persisted entity MUST be journaled to deploy.
 annotate ims.UserIdentities with @cds.persistence.journal;
+
+// #2810 — Knowledge-graph tables were never journaled, so (per the .hdiconfig
+// note above) their plain .hdbtable artifacts were silently ignored by HDI and
+// no KG schema change ever deployed; the live tables are pre-restriction fossils.
+// Journal them so they deploy as .hdbmigrationtable. Concepts.embeddingVec's
+// GENERATED ALWAYS column (db/hana/concepts-embedding.cds) depends on this.
+annotate ims.Concepts with @cds.persistence.journal;
+annotate ims.TutorialConceptLinks with @cds.persistence.journal;
+annotate ims.ConceptEdges with @cds.persistence.journal;
+annotate ims.ConceptAliases with @cds.persistence.journal;
+annotate ims.GraphMetadata with @cds.persistence.journal;
+annotate ims.CoCompletions with @cds.persistence.journal;
+annotate ims.ConceptRank with @cds.persistence.journal;
+annotate ims.TutorialRank with @cds.persistence.journal;
+annotate ims.HomepageFeaturedTopics with @cds.persistence.journal;
+annotate ims.FeaturedTopicsSnapshot with @cds.persistence.journal;
+
+// External-namespace concept-link tables (com.sap.developers.ims.external).
+annotate ext.LearningJourneyConceptLinks with @cds.persistence.journal;
+annotate ext.BlogPostConceptLinks with @cds.persistence.journal;
+annotate ext.DiscoveryMissionConceptLinks with @cds.persistence.journal;
+annotate ext.VideoConceptLinks with @cds.persistence.journal;
+annotate ext.ApiDocConceptLinks with @cds.persistence.journal;
+annotate ext.SampleConceptLinks with @cds.persistence.journal;
+annotate ext.HelpDocConceptLinks with @cds.persistence.journal;
+annotate ext.CommunityEventConceptLinks with @cds.persistence.journal;
+annotate ext.DevtoberfestSessionConceptLinks with @cds.persistence.journal;
+annotate ext.TechEdSessionConceptLinks with @cds.persistence.journal;

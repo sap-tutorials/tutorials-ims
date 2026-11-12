@@ -21,4 +21,10 @@
 
 using { com.sap.developers.ims.Concepts } from '../knowledge-graph';
 
+// NOTE: @cds.persistence.journal for Concepts (and all KG tables) lives in
+// db/persistence.cds alongside the other journaled entities — this container's
+// .hdiconfig registers only the hdbmigrationtable plugin (no plain hdbtable),
+// so a non-journaled entity's .hdbtable artifact is silently ignored by HDI.
+// Journaling is why the GENERATED ALWAYS column below can actually reach the DB.
+
 annotate Concepts:embeddingVec with @sql.append: `GENERATED ALWAYS AS (VECTOR_EMBEDDING(COALESCE(name,'') || CASE WHEN name IS NOT NULL AND LENGTH(name)>0 AND description IS NOT NULL AND LENGTH(description)>0 THEN ' — ' ELSE '' END || COALESCE(description,''), 'DOCUMENT', 'text-embedding-3-small', TUTORIALS_AICORE))`;
