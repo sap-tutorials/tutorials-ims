@@ -88,12 +88,13 @@ function rateLimitResponse(res, arr, now, limit) {
  * misconfiguration is caught at boot rather than on first request.
  *
  * @param {object} deps
- * @param {Function} deps.callModel    - LLM caller.
- * @param {Function} deps.loadQuestion - Question loader: (slug, step, qid) → row|null.
+ * @param {Function} deps.callModel         - LLM caller.
+ * @param {Function} deps.loadQuestion      - Question loader: (slug, step, qid) → row|null.
+ * @param {Function} [deps.loadGradingContext] - Grading-context loader: (slug) → string|null.
  * @returns {import('express').RequestHandler}
  */
 export function makeValidateAnswerHandler(deps = {}) {
-  const { callModel, loadQuestion } = deps;
+  const { callModel, loadQuestion, loadGradingContext } = deps;
   if (typeof callModel !== 'function') {
     throw new Error('makeValidateAnswerHandler requires deps.callModel to be a function');
   }
@@ -146,7 +147,7 @@ export function makeValidateAnswerHandler(deps = {}) {
     try {
       verdict = await dispatchValidateAnswer(
         { tutorialSlug, stepNumber, questionId, submittedAnswer },
-        { user, callModel, loadQuestion }
+        { user, callModel, loadQuestion, loadGradingContext }
       );
     } catch (err) {
       return res.status(500).json({ error: 'internal' });

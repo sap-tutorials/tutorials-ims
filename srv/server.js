@@ -92,6 +92,7 @@ import { resolveSearchSettings } from './lib/runtime-config/search-settings.js';
 import { resolveTenantSettings } from './lib/runtime-config/tenant-settings.js';
 import { makeValidateAnswerHandler } from './lib/validate-answer-handler.js';
 import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
+import { defaultLoadGradingContext } from './lib/grading-context-loader.js';
 import { makeChallengeGradeHandler } from './lib/challenge-grade-handler.js';
 import { defaultLoadChallengeAnswer } from './lib/challenge-grade-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
@@ -1574,6 +1575,7 @@ cds.on('bootstrap', (app) => {
   const validateAnswerHandler = makeValidateAnswerHandler({
     callModel: defaultCallModel,
     loadQuestion: defaultLoadQuestion,
+    loadGradingContext: defaultLoadGradingContext,
   });
   app.post('/api/validate-answer',
     express.json({ limit: '64kb' }),
