@@ -84,7 +84,7 @@ const encodeODataValue = (v: string) => encodeURIComponent(v)
 //
 // See issues #869 (initial fix) and #943 (regression + this fix), plus
 // the note above encodeODataValue for the space-encoding gotcha.
-export function buildFacetsUrl(term: string, taskTypes: string[], experience: string[], searchBase = '/search'): string {
+export function buildFacetsUrl(term: string, taskTypes: string[], experience: string[], searchBase = '/search', products: string[] = [], isNewCutoffISO = ''): string {
   const parts: string[] = ['search=@s']
   const query: string[] = [`@s=${encodeODataValue(`'${escOData(term)}'`)}`]
   if (taskTypes.length) {
@@ -94,6 +94,14 @@ export function buildFacetsUrl(term: string, taskTypes: string[], experience: st
   if (experience.length) {
     parts.push('experience=@e')
     query.push(`@e=${encodeODataValue(JSON.stringify(experience))}`)
+  }
+  if (products.length) {
+    parts.push('products=@p')
+    query.push(`@p=${encodeODataValue(JSON.stringify(products))}`)
+  }
+  if (isNewCutoffISO) {
+    parts.push('isNewCutoffISO=@n')
+    query.push(`@n=${encodeODataValue(`'${escOData(isNewCutoffISO)}'`)}`)
   }
   return `${searchBase}/getFacets(${parts.join(',')})?${query.join('&')}`
 }
@@ -200,7 +208,7 @@ export function useSearch(options: UseSearchOptions) {
 
       const [itemsRes, facetsRes] = await Promise.all([
         fetch(`${searchBase}/SearchableItems?${qs.join('&')}`),
-        fetch(buildFacetsUrl(term, filterTypes.value, filterLevels.value, searchBase)),
+        fetch(buildFacetsUrl(term, filterTypes.value, filterLevels.value, searchBase, filterProducts.value, isNewCutoffISO)),
       ])
 
       if (!itemsRes.ok || !facetsRes.ok) {
