@@ -682,9 +682,20 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
       filters.inProgress
   })
 
+  // Task 8 (#3112): when a progress toggle is active for an authenticated user,
+  // the server-search path cannot honour the progress predicate (the server
+  // doesn't know the user's completion state). Force the client-filter path so
+  // filteredItems (which already applies searchQuery + matchesProgress) drives
+  // displayedItems / displayedTotalCount / displayedCounts / totalPages.
+  // Anonymous users (authenticated=false) are unaffected — progressFilterActive
+  // is false and server search continues as before.
+  const progressFilterActive = computed(() =>
+    !!(progress?.value?.authenticated && (filters.completed || filters.inProgress))
+  )
+
   const totalPages = computed(() =>
     computeTotalPages(
-      searchMode.value && !!tutorials && !clientSearch,
+      searchMode.value && !!tutorials && !clientSearch && !progressFilterActive.value,
       searchTotalCount.value,
       filteredItems.value.length,
       pageSize,
@@ -697,7 +708,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   // fall through to the client path even in searchMode — server search would
   // crash on the slug→createdAt enrichment.
   const displayedItems = computed(() => {
-    if (searchMode.value && tutorials && !clientSearch) {
+    if (searchMode.value && tutorials && !clientSearch && !progressFilterActive.value) {
       const bySlug = new Map(tutorials.value.map(t => [t.slug, t.createdAt]))
       return searchResults.value.map(item => {
         if (item.type !== 'tutorial') return item
@@ -716,12 +727,12 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   })
 
   const displayedTotalCount = computed(() => {
-    if (searchMode.value && tutorials && !clientSearch) return searchTotalCount.value
+    if (searchMode.value && tutorials && !clientSearch && !progressFilterActive.value) return searchTotalCount.value
     return filteredItems.value.length
   })
 
   const displayedCounts = computed(() => {
-    if (searchMode.value && tutorials && !clientSearch && searchFacets.value) {
+    if (searchMode.value && tutorials && !clientSearch && !progressFilterActive.value && searchFacets.value) {
       const facets = searchFacets.value
       return {
         missions: facets.typeCounts.find(t => t.name === 'MISSION')?.count ?? 0,
@@ -813,7 +824,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     currentPage,
     (p) => {
       if (suppressNextPageFetch) { suppressNextPageFetch = false; return }
-      if (searchMode.value && tutorials && !clientSearch) {
+      if (searchMode.value && tutorials && !clientSearch && !progressFilterActive.value) {
         executeSearch(p - 1, pageSize)
       }
     },
