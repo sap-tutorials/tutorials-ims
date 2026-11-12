@@ -22,9 +22,17 @@ const LOG = cds.log('validate-answer-publish');
 const MAX_FIELD_BYTES = 10_000;
 
 export async function publishValidateAnswerSpecs(req, res) {
-  const { slug, specs } = req.body || {};
+  const { slug, specs, gradingContext } = req.body || {};
   if (typeof slug !== 'string' || !slug || !Array.isArray(specs)) {
     return res.status(400).json({ error: 'invalid_body' });
+  }
+
+  // [#3090] Byte-cap for gradingContext — same limit as individual spec fields.
+  // Absent/null/empty strings are allowed (they trigger DELETE only, no INSERT).
+  if (typeof gradingContext === 'string' && gradingContext.length > 0) {
+    if (Buffer.byteLength(gradingContext, 'utf8') > MAX_FIELD_BYTES) {
+      return res.status(400).json({ error: 'too_long' });
+    }
   }
 
   // Fail-fast spec-shape validation BEFORE any DB write.
@@ -75,7 +83,7 @@ export async function publishValidateAnswerSpecs(req, res) {
   }
 
   const lcSlug = slug.toLowerCase();
-  const { Tutorials, ValidateAnswerSpecs } = cds.entities('com.sap.developers.ims');
+  const { Tutorials, ValidateAnswerSpecs, TutorialGradingContext } = cds.entities('com.sap.developers.ims');
 
   // Entity-resolution guard (#1375): this handler hardcodes the prod
   // namespace `com.sap.developers.ims`. If it is ever mounted in an app whose
@@ -86,6 +94,12 @@ export async function publishValidateAnswerSpecs(req, res) {
   // precise, log-visible reason instead. srv-qa no longer registers this
   // route (see srv-qa/server.js), so in practice this only fires if a future
   // caller reintroduces the mismatch.
+  //
+  // [#3090] TutorialGradingContext is also in the prod namespace. On srv-qa
+  // (or any future restricted model), it may resolve to `undefined` — in that
+  // case we skip the grading-context write but do NOT fail the whole publish.
+  // The grading-context write is a best-effort side-channel; the core
+  // ValidateAnswerSpecs REPLACE must still succeed.
   if (!Tutorials || !ValidateAnswerSpecs) {
     LOG.error('validate-answer-spec-publish: entities unresolved', {
       namespace: 'com.sap.developers.ims',
@@ -119,6 +133,19 @@ export async function publishValidateAnswerSpecs(req, res) {
             videoContext: s.videoContext ?? null,  // [#2345] null for step-sourced quizzes
           }))
         );
+      }
+
+      // [#3090] REPLACE the grading context row for this slug (inside the same
+      // tx so the whole publish is atomic). On srv-qa (TutorialGradingContext
+      // entity absent), skip without throwing — the main publish must succeed.
+      if (TutorialGradingContext) {
+        await DELETE.from(TutorialGradingContext).where({ tutorial_ID: tut.ID });
+        if (typeof gradingContext === 'string' && gradingContext.length > 0) {
+          await INSERT.into(TutorialGradingContext).entries({
+            tutorial_ID: tut.ID,
+            context: gradingContext,
+          });
+        }
       }
     });
     LOG.info('validate-answer-spec-publish', { slug: lcSlug, count: specs.length });

@@ -1,0 +1,25 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_Concepts (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  slug NVARCHAR(80),
+  name NVARCHAR(120),
+  description NVARCHAR(5000),
+  descriptionStatus NVARCHAR(10),
+  descriptionReviewedAt TIMESTAMP,
+  descriptionReviewedBy NVARCHAR(255),
+  embedding BLOB,
+  embeddingVec REAL_VECTOR(1536),
+  status NVARCHAR(20) DEFAULT 'ACTIVE',
+  mergedInto_ID NVARCHAR(36),
+  extractionCount INTEGER DEFAULT 0,
+  firstSeenAt TIMESTAMP,
+  lastSeenAt TIMESTAMP,
+  publishedAt TIMESTAMP,
+  publishedBy NVARCHAR(255),
+  aliasSearchBlob NVARCHAR(2000),
+  PRIMARY KEY(ID)
+)

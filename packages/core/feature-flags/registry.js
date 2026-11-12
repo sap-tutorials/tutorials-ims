@@ -179,6 +179,13 @@ export const FEATURE_FLAGS = [
     howToChange: adminTile('joule', '#joule'),
   },
   {
+    key: 'ChatSettings.gradingContextEnabled', label: 'AI grading context', category: 'Chat / AI',
+    kind: 'db-setting', entity: 'ChatSettings', column: 'gradingContextEnabled', resolver: 'chat',
+    valueType: 'boolean', default: false, issue: '#3090', status: 'beta',
+    description: 'Inject each tutorial\'s [GRADING_CONTEXT] into all three AI graders as domain guidance. Off → graders run ungrounded (grade still works).',
+    howToChange: adminTile('joule', '#joule'),
+  },
+  {
     key: 'ChatSettings.branchingEnabled', label: 'Branching learning paths', category: 'Chat / AI',
     kind: 'db-setting', entity: 'ChatSettings', column: 'branchingEnabled', resolver: 'chat',
     valueType: 'boolean', default: false, issue: '#172', status: 'ga',

@@ -43,6 +43,26 @@ You can also have the platform **generate** quiz questions for you at build time
 
 A hand-authored `[VALIDATE_N]` question for a step always wins over any `[AUTOAUTHOR_*]` directive for that step — the generated questions are opt-in *extra* coverage, never an override. If a video has no captions the generated quiz is simply skipped; your build still succeeds.
 
+#### Focusing the AI grader on your tutorial's domain
+
+When your tutorial covers specialized material (for example an n8n workflow in Joule Studio), the AI grader can judge submissions more accurately if you tell it what the domain is and what a good answer looks like. Add **one** `[GRADING_CONTEXT]` block to `rules.vr` — it applies to **every** AI-graded question, code-check, and challenge in the whole tutorial:
+
+```
+[GRADING_CONTEXT]
+###Domain
+This tutorial teaches building n8n workflows in Joule Studio. Submissions are
+the exported workflow JSON.
+###GradingCriteria
+A correct workflow starts with a Trigger node, wires nodes through the
+connections map (not just placing them), and ends with the action the step
+asks for. Node naming is free-form; wiring is not.
+###CommonMistakes
+Learners often paste disconnected nodes, omit the trigger, or submit a
+screenshot's text instead of the exported JSON.
+```
+
+All three sub-sections are optional. The text is **guidance for the grader**, not an answer key — do not put the expected answer here (it is not hidden from the model's reasoning and is not covered by answer-leak protection). Grounding only takes effect once a platform admin enables it; until then your block is parsed and stored but has no effect on grading.
+
 ---
 
 ## 3. Anatomy of a tutorial

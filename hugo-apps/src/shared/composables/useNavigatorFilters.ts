@@ -18,6 +18,7 @@ import {
   parseNavState, writeNavStateToWindow, EMPTY_STATE, type NavState,
 } from '../../navigator/urlSync'
 import { parseTagParams, parseLevelParams, extractExperienceLevels } from '../../navigator/url-params'
+import { cardProgress, type ProgressPayload } from '../../navigator/cardProgress'
 import { isWithinNewWindow } from '../freshness'
 import { requiresLicense, LICENSE_SLUG } from '../license'
 import type { CardItem, TutorialEntry } from '@shared/types'
@@ -37,6 +38,47 @@ export interface UseNavigatorFiltersOptions {
   // filteredItems pipeline) and the server $search fetch is suppressed. Used by
   // the QA channel (#1939) where srv-qa exposes no SearchableItems/getFacets.
   clientSearch?: boolean
+  // User progress ref — optional so /browse/ (no progress) is unaffected.
+  // When absent, progress predicates are always no-ops.
+  progress?: Ref<ProgressPayload>
+}
+
+/**
+ * Pure helper: decide whether a card passes the progress filter flags.
+ *
+ * Semantics:
+ *   completed  → keep items where cardProgress(item, progress)?.complete === true
+ *   inProgress → keep items where cardProgress result exists with complete === false (percent>0)
+ *                (missions/groups are binary so they never match inProgress)
+ *   both       → union (OR) of the above two sets
+ *   neither    → no constraint — pass all
+ *   progress undefined → no constraint — pass all regardless of flags
+ *
+ * Exported for unit testing.
+ */
+export function matchesProgress(
+  item: CardItem,
+  flags: { completed: boolean; inProgress: boolean },
+  progress: ProgressPayload | undefined,
+): boolean {
+  // No constraint when neither flag is set
+  if (!flags.completed && !flags.inProgress) return true
+  // No constraint when progress data is unavailable (e.g. /browse/ path)
+  if (!progress) return true
+
+  const cp = cardProgress(item, progress)
+
+  if (flags.completed && flags.inProgress) {
+    // Union: pass if item matches either predicate
+    const isComplete  = cp?.complete === true
+    const isInProgress = cp !== null && cp.complete === false
+    return isComplete || isInProgress
+  }
+  if (flags.completed) {
+    return cp?.complete === true
+  }
+  // flags.inProgress only
+  return cp !== null && cp.complete === false
 }
 
 const SORT_COMPARATORS: Record<Sort, (a: CardItem, b: CardItem) => number> = {
@@ -248,6 +290,22 @@ function tutorialMatchesTopic(item: CardItem, topic: string): boolean {
   return item.displayTagSlugs.some(slug => (PRODUCT_TO_TOPICS[slug] ?? []).includes(topic))
 }
 
+/**
+ * Pure helper: branch totalPages on searchMode.
+ * Exported for unit testing. Called by the `totalPages` computed in
+ * useNavigatorFilters; Task 8 can extend the first arg to a broader guard.
+ */
+export function computeTotalPages(
+  serverMode: boolean,
+  searchTotalCount: number,
+  filteredLen: number,
+  pageSize: number,
+): number {
+  return serverMode
+    ? Math.ceil(searchTotalCount / pageSize)
+    : Math.ceil(filteredLen / pageSize)
+}
+
 export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   const {
     allCards,
@@ -259,6 +317,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     hrefBase = '/tutorials',
     navBase = '/tutorials',
     clientSearch = false,
+    progress,
   } = opts
 
   // ─── Reactive filter state ───
@@ -276,6 +335,8 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     categories: [] as string[],
     isNew: false,
     noLicense: false,
+    completed: false,
+    inProgress: false,
   })
 
   function currentNavState(): NavState {
@@ -288,6 +349,8 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
       categories: [...filters.categories],
       isNew: filters.isNew,
       noLicense: filters.noLicense,
+      completed: filters.completed,
+      inProgress: filters.inProgress,
       page: currentPage.value,
     }
   }
@@ -306,7 +369,8 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     watch(
       [searchQuery, () => filters.levels, () => filters.types,
        () => filters.products, () => filters.topics, () => filters.categories,
-       () => filters.isNew, () => filters.noLicense, currentPage],
+       () => filters.isNew, () => filters.noLicense,
+       () => filters.completed, () => filters.inProgress, currentPage],
       scheduleURLSync,
       { deep: true },
     )
@@ -321,7 +385,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   // is true — which is the documented browse-page behaviour.
   const {
     searchMode, isSubThreshold, searchResults, searchFacets,
-    searchTotalCount, isSearching, searchError,
+    searchTotalCount, isSearching, searchError, executeSearch,
   } = useSearch({
     searchTerm: searchQuery,
     filterTypes: computed(() => filters.types.map(t => t.toUpperCase())),
@@ -350,6 +414,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
         initial = parseNavState(
           window.location.href,
           typeof localStorage !== 'undefined' ? localStorage : null,
+          progress?.value.authenticated ?? false,
         )
       } catch {
         initial = { ...EMPTY_STATE }
@@ -362,6 +427,8 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
       filters.categories = initial.categories
       filters.isNew     = initial.isNew
       filters.noLicense = initial.noLicense
+      filters.completed  = initial.completed
+      filters.inProgress = initial.inProgress
 
       // Issue #161: deep-link from clickable tutorial-page chips uses `?tag=` /
       // `?level=` (multi-value) instead of urlSync's `?product=` / `?level=`.
@@ -543,6 +610,10 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
         return false
       }
 
+      if (!matchesProgress(item, { completed: filters.completed, inProgress: filters.inProgress }, progress?.value)) {
+        return false
+      }
+
       return true
     })
   })
@@ -591,6 +662,8 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     filters.categories = []
     filters.isNew = false
     filters.noLicense = false
+    filters.completed = false
+    filters.inProgress = false
     productSearch.value = ''
     topicSearch.value = ''
     currentPage.value = 1   // also reset page so URL drops `?page=` cleanly
@@ -604,10 +677,30 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
       filters.topics.length > 0 ||
       filters.categories.length > 0 ||
       filters.isNew ||
-      filters.noLicense
+      filters.noLicense ||
+      filters.completed ||
+      filters.inProgress
   })
 
-  const totalPages = computed(() => Math.ceil(filteredItems.value.length / pageSize))
+  // Task 8 (#3112): when a progress toggle is active for an authenticated user,
+  // the server-search path cannot honour the progress predicate (the server
+  // doesn't know the user's completion state). Force the client-filter path so
+  // filteredItems (which already applies searchQuery + matchesProgress) drives
+  // displayedItems / displayedTotalCount / displayedCounts / totalPages.
+  // Anonymous users (authenticated=false) are unaffected — progressFilterActive
+  // is false and server search continues as before.
+  const progressFilterActive = computed(() =>
+    !!(progress?.value.authenticated && (filters.completed || filters.inProgress))
+  )
+
+  const totalPages = computed(() =>
+    computeTotalPages(
+      searchMode.value && !!tutorials && !clientSearch && !progressFilterActive.value,
+      searchTotalCount.value,
+      filteredItems.value.length,
+      pageSize,
+    )
+  )
 
   // ─── Display pipeline (server-search OR client-filter+sort+paginate) ───
   // displayedItems consults server search results only when `tutorials` is
@@ -615,7 +708,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   // fall through to the client path even in searchMode — server search would
   // crash on the slug→createdAt enrichment.
   const displayedItems = computed(() => {
-    if (searchMode.value && tutorials && !clientSearch) {
+    if (searchMode.value && tutorials && !clientSearch && !progressFilterActive.value) {
       const bySlug = new Map(tutorials.value.map(t => [t.slug, t.createdAt]))
       return searchResults.value.map(item => {
         if (item.type !== 'tutorial') return item
@@ -634,12 +727,12 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   })
 
   const displayedTotalCount = computed(() => {
-    if (searchMode.value && tutorials && !clientSearch) return searchTotalCount.value
+    if (searchMode.value && tutorials && !clientSearch && !progressFilterActive.value) return searchTotalCount.value
     return filteredItems.value.length
   })
 
   const displayedCounts = computed(() => {
-    if (searchMode.value && tutorials && !clientSearch && searchFacets.value) {
+    if (searchMode.value && tutorials && !clientSearch && !progressFilterActive.value && searchFacets.value) {
       const facets = searchFacets.value
       return {
         missions: facets.typeCounts.find(t => t.name === 'MISSION')?.count ?? 0,
@@ -697,12 +790,44 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   // ─── Pagination-reset watcher (LOAD-BEARING for #195 + this composable) ───
   // Without this, filter changes don't reset to page 1 — the user lands on
   // an empty page after narrowing their filters.
+  //
+  // The flag suppressNextPageFetch coordinates with the currentPage watcher
+  // below: when a filter/query change resets currentPage N→1, useSearch's own
+  // debounce watcher already fetches page 0. Setting the flag prevents the
+  // currentPage watcher from issuing a second identical executeSearch call.
+  let suppressNextPageFetch = false
   watch(
     [searchQuery, () => filters.levels, () => filters.types,
      () => filters.products, () => filters.topics, () => filters.categories,
-     () => filters.isNew, () => filters.noLicense],
-    () => { currentPage.value = 1 },
+     () => filters.isNew, () => filters.noLicense,
+     () => filters.completed, () => filters.inProgress],
+    () => {
+      if (currentPage.value !== 1) suppressNextPageFetch = true
+      currentPage.value = 1
+    },
     { deep: true },
+  )
+
+  // ─── currentPage → executeSearch watcher (server-search pagination, #3112) ───
+  // Fires when the user navigates to a different page while in search mode.
+  // currentPage is 1-based; executeSearch is 0-based.
+  //
+  // Exactly one executeSearch fires per user action (5-scenario proof):
+  //   1. New query (page 1): currentPage unchanged → watcher silent; debounce fires ✓
+  //   2. Filter change on page 1: currentPage unchanged → watcher silent; debounce fires ✓
+  //   3. Filter change on page N>1: reset watcher sets suppress=true + currentPage=1;
+  //      this watcher fires (N→1) but consumes the flag and skips; debounce fires ✓
+  //   4. User clicks page 2: no suppress set; currentPage 1→2; this watcher fires → fetch(1) ✓
+  //   5. User clicks page 1 pager button from page N>1: no suppress set (goToPage doesn't
+  //      set it); currentPage N→1; this watcher fires → fetch(0) ✓
+  watch(
+    currentPage,
+    (p) => {
+      if (suppressNextPageFetch) { suppressNextPageFetch = false; return }
+      if (searchMode.value && tutorials && !clientSearch && !progressFilterActive.value) {
+        executeSearch(p - 1, pageSize)
+      }
+    },
   )
 
   return {

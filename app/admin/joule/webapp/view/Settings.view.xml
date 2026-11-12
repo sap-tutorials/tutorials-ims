@@ -79,6 +79,12 @@
 
           <Label text="" />
           <Text text="{i18n>codeCheckEnabledHelp}" wrapping="true" />
+
+          <Label text="{i18n>gradingContextEnabled}" />
+          <Switch state="{settings>/gradingContextEnabled}" />
+
+          <Label text="" />
+          <Text text="{i18n>gradingContextEnabledHelp}" wrapping="true" />
         </f:SimpleForm>
       </Panel>
 

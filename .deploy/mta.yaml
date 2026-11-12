@@ -10,7 +10,7 @@ ID: tutorials-ims
 # Bump this on each release you deploy — it's the version shown by `cf mtas`
 # and in the mtar filename (tutorials-ims_<version>.mtar). Deploy is manual:
 # `cd .deploy && mbt build && cf deploy mta_archives/tutorials-ims_<version>.mtar -e ../deploy/<env>.mtaext -f`.
-version: 1.44.1
+version: 1.44.2
 
 # Top-level parameters (overridable per-env via deploy/<env>.mtaext).
 parameters:
@@ -82,6 +82,7 @@ modules:
     path: ../gen/db
     parameters:
       buildpack: nodejs_buildpack
+      stack: cflinuxfs5           # cflinuxfs4→5 migration (#3111)
     properties:
       # Two HDI services bound (own container + devtoberfest-planner-db grantor),
       # so the HDI deployer cannot auto-detect the target — name it explicitly.
@@ -97,6 +98,7 @@ modules:
     path: ../gen/db-qa
     parameters:
       buildpack: nodejs_buildpack
+      stack: cflinuxfs5           # cflinuxfs4→5 migration (#3111)
     requires:
       - name: tutorials-hana-qa
       - name: tutorials-cloud-logging   # same as tutorials-db-deployer; mirrors the prod binding for QA forensic parity.
@@ -118,6 +120,7 @@ modules:
       # so the next deploy doesn't revert it back to 1GB.
       disk-quota: 2048M
       buildpack: nodejs_buildpack
+      stack: cflinuxfs5           # cflinuxfs4→5 migration (#3111)
       # DO NOT raise instances without addressing in-process rate limiters in
       # srv/developer-service.js, srv/lib/ip-rate-limit.js, srv/lib/chat-rate-limit.js.
       # See docs/developers/operations/mta-deployment.md "Scaling Constraints" and TODO §22.
@@ -190,6 +193,7 @@ modules:
       memory: 2048M
       disk-quota: 1024M
       buildpack: nodejs_buildpack
+      stack: cflinuxfs5           # cflinuxfs4→5 migration (#3111)
       instances: 1
       health-check-type: http
       health-check-http-endpoint: /health/ready
@@ -320,6 +324,7 @@ modules:
       # not baseline. disk-quota already 2048M (logs stream off-container to
       # stdout/stderr, so disk is not the OOM vector — 33% used at steady state).
       memory: 2048M
+      stack: cflinuxfs5           # cflinuxfs4→5 migration (#3111)
       app-name: tutorials-approuter
       instances: 1                  # Lower bound; Autoscaler manages up to instance_max_count via binding-level config in requires below (#749)
     properties:
@@ -566,11 +571,18 @@ resources:
   # using the binding's encryption.client_private_key. Per-environment instance
   # (DEV/QA/PROD each get their own credstore). Provisioning runbook lives in
   # docs/developers/operations/runtime-config.md (Phase 2-C section).
+  # ADOPTED as existing-service (#2810 deploy, 2026-11-12): the credstore
+  # broker began rejecting the no-op `update-service` the MultiApps deployer
+  # issues for a managed-service on every deploy ("Illegal parameters or
+  # arguments used" — broker-side tightening, our params never changed). The
+  # instance is already provisioned (plan standard) and healthy; typing it as
+  # existing-service makes the deployer bind to it WITHOUT create/update, so no
+  # update call is made and the broker rejection disappears. Same adoption
+  # pattern the MCP MTA uses for shared services. The instance lifecycle
+  # (provisioning/rotation) is managed out-of-band per runtime-config.md.
   - name: tutorials-credstore
-    type: org.cloudfoundry.managed-service
+    type: org.cloudfoundry.existing-service
     parameters:
-      service: credstore
-      service-plan: standard
       service-name: tutorials-credstore
 
   # CF Application Autoscaler (#749 phase-1). Binds to tutorials-approuter

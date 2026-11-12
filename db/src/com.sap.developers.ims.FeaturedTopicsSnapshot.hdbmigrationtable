@@ -1,0 +1,10 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_FeaturedTopicsSnapshot (
+  slotOrder INTEGER NOT NULL,
+  source NVARCHAR(10),
+  conceptSlug NVARCHAR(80),
+  displayTitle NVARCHAR(120),
+  missionSlugs NCLOB,
+  computedAt TIMESTAMP,
+  PRIMARY KEY(slotOrder)
+)

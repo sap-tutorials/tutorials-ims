@@ -1,0 +1,7 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_CoCompletions (
+  sourceSlug NVARCHAR(120) NOT NULL,
+  targetSlug NVARCHAR(120) NOT NULL,
+  "SCORE" INTEGER,
+  PRIMARY KEY(sourceSlug, targetSlug)
+)

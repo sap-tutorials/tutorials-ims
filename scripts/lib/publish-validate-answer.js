@@ -60,8 +60,10 @@ export async function publishValidateAnswerSpecs({ cacheDir, baseUrl, apiKey, fe
           'authorization': `Bearer ${apiKey}`,
           'content-type': 'application/json',
         },
-        // Use the raw bytes — Task 3 wrote `{ slug, specs }` exactly in the
-        // shape the endpoint expects, so we don't re-stringify.
+        // Use the raw bytes — Task 3 wrote `{ slug, specs, gradingContext? }`
+        // exactly in the shape the endpoint expects, so we don't re-stringify.
+        // gradingContext is omitted from the file when absent, which triggers
+        // DELETE-only semantics on the server (clears stale context).
         body: raw,
       });
     } catch (err) {

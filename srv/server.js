@@ -92,6 +92,7 @@ import { resolveSearchSettings } from './lib/runtime-config/search-settings.js';
 import { resolveTenantSettings } from './lib/runtime-config/tenant-settings.js';
 import { makeValidateAnswerHandler } from './lib/validate-answer-handler.js';
 import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
+import { defaultLoadGradingContext } from './lib/grading-context-loader.js';
 import { makeChallengeGradeHandler } from './lib/challenge-grade-handler.js';
 import { defaultLoadChallengeAnswer } from './lib/challenge-grade-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
@@ -1560,6 +1561,7 @@ cds.on('bootstrap', (app) => {
   const codeCheckHandler = makeCodeCheckHandler({
     callModel: defaultCallModel,
     loadStepText: defaultLoadStepText,
+    loadGradingContext: defaultLoadGradingContext,
   });
   app.post('/api/codecheck',
     express.json({ limit: '64kb' }),
@@ -1574,6 +1576,7 @@ cds.on('bootstrap', (app) => {
   const validateAnswerHandler = makeValidateAnswerHandler({
     callModel: defaultCallModel,
     loadQuestion: defaultLoadQuestion,
+    loadGradingContext: defaultLoadGradingContext,
   });
   app.post('/api/validate-answer',
     express.json({ limit: '64kb' }),
@@ -1584,10 +1587,12 @@ cds.on('bootstrap', (app) => {
   // Challenge-widget freeText AI grader (#2441). Same auth + rate-limit shape
   // as /api/validate-answer, which it mirrors; gated on the flag.challengeWidget
   // ImsConfig kill switch inside the dispatch (fail-open). defaultCallModel is
-  // reused as-is; the loader reads ChallengeAnswers.
+  // reused as-is; the loader reads ChallengeAnswers. loadGradingContext (#3090)
+  // is optional — ChatSettings.gradingContextEnabled gates its use inside dispatch.
   const challengeGradeHandler = makeChallengeGradeHandler({
     callModel: defaultCallModel,
     loadAnswer: defaultLoadChallengeAnswer,
+    loadGradingContext: defaultLoadGradingContext,
   });
   app.post('/api/challenge-grade',
     express.json({ limit: '64kb' }),

@@ -29,7 +29,15 @@ describe('validate-answer prompt builder', () => {
     // Bumped 2026-09-16 (#2345): buildUserMessage can now carry a
     // videoContext transcript excerpt for video-sourced quizzes. Telemetry
     // that aggregates submissions by promptVersion can compare v3 vs v4.
-    expect(PROMPT_VERSION).toBe('v4');
+    // (#3090 later bumped to v5 for optional grading-context grounding.)
+    expect(PROMPT_VERSION).toBe('v5');
+  });
+
+  it('PROMPT_VERSION reflects the v5 semantics change (optional grading-context grounding)', () => {
+    // Bumped 2026-11-12 (#3090): buildUserMessage can now carry a
+    // gradingContext string for tutorial-level domain guidance. When absent
+    // the user message is byte-identical to the v4 shape.
+    expect(PROMPT_VERSION).toBe('v5');
   });
 
   it('buildUserMessage OMITS the video section when videoContext is absent (byte-identical to v3 shape)', () => {
@@ -151,5 +159,65 @@ describe('validate-answer prompt builder', () => {
     const verdict = { verdict: 'pass', summary: 'OK', hint: '' };
     expect(redactReferenceLeaks(verdict, '')).toEqual(verdict);
     expect(redactReferenceLeaks(verdict, null)).toEqual(verdict);
+  });
+
+  // ── v5 grading-context tests (#3090) ──────────────────────────────────────
+
+  it('buildUserMessage INSERTS gradingContext section before expected-answer when present', () => {
+    const msg = buildUserMessage({
+      question: 'What is CAP?',
+      correctAnswer: 'Cloud Application Programming Model',
+      submittedAnswer: 'a framework',
+      gradingContext: 'This tutorial covers CAP fundamentals for BTP developers.',
+    });
+    expect(msg).toContain('Tutorial grading context');
+    const gcIdx = msg.indexOf('Tutorial grading context');
+    const aIdx = msg.indexOf("Author's expected answer");
+    expect(gcIdx).toBeGreaterThanOrEqual(0);
+    expect(gcIdx).toBeLessThan(aIdx);
+    expect(msg).toContain('This tutorial covers CAP fundamentals');
+  });
+
+  it('buildUserMessage positions gradingContext AFTER videoContext (when both present)', () => {
+    const msg = buildUserMessage({
+      question: 'Q',
+      correctAnswer: 'A',
+      submittedAnswer: 'S',
+      videoContext: 'some video transcript',
+      gradingContext: 'domain guidance here',
+    });
+    const vIdx = msg.indexOf('Video transcript context');
+    const gcIdx = msg.indexOf('Tutorial grading context');
+    const aIdx = msg.indexOf("Author's expected answer");
+    expect(vIdx).toBeLessThan(gcIdx);
+    expect(gcIdx).toBeLessThan(aIdx);
+  });
+
+  it('buildUserMessage absent gradingContext → byte-identical to v4 output (baseline guarantee)', () => {
+    const opts = {
+      question: 'What is CAP?',
+      correctAnswer: 'Cloud Application Programming Model',
+      submittedAnswer: 'a framework',
+      videoContext: 'CAP stands for Cloud Application Programming.',
+    };
+    // Baseline: v4 output (no gradingContext)
+    const baseline = buildUserMessage(opts);
+    // With gradingContext explicitly absent (undefined, null, empty string)
+    const withUndefined = buildUserMessage({ ...opts, gradingContext: undefined });
+    const withNull = buildUserMessage({ ...opts, gradingContext: null });
+    const withEmpty = buildUserMessage({ ...opts, gradingContext: '' });
+    expect(withUndefined).toBe(baseline);
+    expect(withNull).toBe(baseline);
+    expect(withEmpty).toBe(baseline);
+    // Also confirm no grading context header appears
+    expect(baseline).not.toContain('Tutorial grading context');
+    expect(withUndefined).not.toContain('Tutorial grading context');
+  });
+
+  it('system prompt instructs model to weight gradingContext as domain guidance only (v5)', () => {
+    const sys = buildSystemPrompt();
+    expect(sys).toMatch(/tutorial grading context/i);
+    expect(sys).toMatch(/domain guidance/i);
+    expect(sys).toMatch(/never.*quote/i);
   });
 });

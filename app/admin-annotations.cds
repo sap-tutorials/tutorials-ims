@@ -967,6 +967,23 @@ annotate AdminService.CodeCheckSpecs with @UI: {
   }
 };
 
+// TutorialGradingContext — tutorial-level grading context persisted at
+// publish time and consumed by the challenge grader to ground LLM calls.
+// Read-only; the admin facet surfaces the context text for visibility.
+// Joined via the `gradingContext` to-one association on the Tutorials projection.
+annotate AdminService.TutorialGradingContext with {
+  context @Common.Label: 'Grading Context' @UI.MultiLineText;
+};
+
+annotate AdminService.TutorialGradingContext with @UI: {
+  FieldGroup #GradingContext: {
+    $Type: 'UI.FieldGroupType',
+    Data: [
+      { Value: context, Label: 'Grading Context' }
+    ]
+  }
+};
+
 // AuthorAiRequests — per-tutorial AI-author telemetry (OS variant
 // generation today; future flows extend). Joined via `aiRequests`
 // association (PR-3 added the tutorial FK).
@@ -1033,6 +1050,8 @@ annotate AdminService.Tutorials with @UI: {
       Target: 'validationRules/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Code-Check Specs', ID: 'CodeCheckSpecsFacet',
       Target: 'codeCheckSpecs/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'AI Grading Context', ID: 'GradingContextFacet',
+      Target: 'gradingContext/@UI.FieldGroup#GradingContext' },
     { $Type: 'UI.ReferenceFacet', Label: 'AI-Author Requests', ID: 'AiRequestsFacet',
       Target: 'aiRequests/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Freshness Reports', ID: 'FreshnessReportsFacet', Target: 'freshnessReports/@UI.PresentationVariant' },

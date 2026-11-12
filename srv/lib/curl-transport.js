@@ -11,7 +11,7 @@
 //   node  fetch (any UA)    → 403
 // So bumping the User-Agent cannot fix it — headers ride inside a connection
 // whose fingerprint is already flagged. We route the fetch through the curl
-// binary (present in the cflinuxfs4 rootfs) to borrow its TLS fingerprint.
+// binary (present in the cflinuxfs5 rootfs) to borrow its TLS fingerprint.
 //
 // SECURITY: this is a `fetch`-shaped TRANSPORT only. It performs NO SSRF
 // validation of its own — it is designed to be injected into safeFetch()

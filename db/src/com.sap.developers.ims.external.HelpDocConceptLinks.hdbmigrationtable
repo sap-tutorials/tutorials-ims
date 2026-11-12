@@ -1,0 +1,17 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_external_HelpDocConceptLinks (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  helpDoc_ID NVARCHAR(36),
+  concept_ID NVARCHAR(36),
+  predicate NVARCHAR(40),
+  confidence DECIMAL(3, 2),
+  anchor NVARCHAR(120),
+  snippet NVARCHAR(200),
+  extractedAt TIMESTAMP,
+  modelVersion NVARCHAR(40),
+  PRIMARY KEY(ID)
+)
