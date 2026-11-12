@@ -1,0 +1,9 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_external_TechEdSessionConceptLinks (
+  ID NVARCHAR(36) NOT NULL,
+  session_ID NVARCHAR(36),
+  concept_ID NVARCHAR(36),
+  predicate NVARCHAR(20) DEFAULT 'covers',
+  confidence DECIMAL(3, 2),
+  PRIMARY KEY(ID)
+)
