@@ -571,11 +571,18 @@ resources:
   # using the binding's encryption.client_private_key. Per-environment instance
   # (DEV/QA/PROD each get their own credstore). Provisioning runbook lives in
   # docs/developers/operations/runtime-config.md (Phase 2-C section).
+  # ADOPTED as existing-service (#2810 deploy, 2026-11-12): the credstore
+  # broker began rejecting the no-op `update-service` the MultiApps deployer
+  # issues for a managed-service on every deploy ("Illegal parameters or
+  # arguments used" — broker-side tightening, our params never changed). The
+  # instance is already provisioned (plan standard) and healthy; typing it as
+  # existing-service makes the deployer bind to it WITHOUT create/update, so no
+  # update call is made and the broker rejection disappears. Same adoption
+  # pattern the MCP MTA uses for shared services. The instance lifecycle
+  # (provisioning/rotation) is managed out-of-band per runtime-config.md.
   - name: tutorials-credstore
-    type: org.cloudfoundry.managed-service
+    type: org.cloudfoundry.existing-service
     parameters:
-      service: credstore
-      service-plan: standard
       service-name: tutorials-credstore
 
   # CF Application Autoscaler (#749 phase-1). Binds to tutorials-approuter
