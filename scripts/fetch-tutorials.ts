@@ -1413,7 +1413,7 @@ async function main() {
       // Fetch and attach validation questions from rules.vr
       const rulesContent = await fetchRulesVr(t.slug, t.repo, t.branch)
       if (rulesContent) {
-        const { map: validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId, allDirective, handAuthoredSteps } = parseRulesVrEnriched(rulesContent)
+        const { map: validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId, allDirective, handAuthoredSteps, gradingContext } = parseRulesVrEnriched(rulesContent)
 
         // [#208/#312] AI-authored quiz expansion. Always-on as of #312
         // (2026-06-27 — soak window 2026-06-13..2026-06-27 produced 0 errors /
@@ -1497,14 +1497,27 @@ async function main() {
         // The sidecar carries the reference answer + ruleType server-side
         // (publish pipeline, Task 8); the public Hugo frontmatter never
         // includes correctAnswer for AI-graded questions (anti-leak).
+        //
+        // [#3090] Also include gradingContext in the sidecar so the publish
+        // pipeline can persist it to TutorialGradingContext. Write the sidecar
+        // whenever either aiGradedSpecs are present OR a gradingContext was
+        // parsed from the [GRADING_CONTEXT] block — the context can exist on
+        // tutorials that have no AI-graded specs (e.g. context written for
+        // future use, or a hand-authored tutorial whose grader needs domain
+        // framing). Absent gradingContext is omitted from the payload so the
+        // server's DELETE-only logic applies on re-publishes.
         const aiGradedSpecs = collectAiGradedSpecs(validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId)
-        if (aiGradedSpecs.length > 0) {
+        if (aiGradedSpecs.length > 0 || (typeof gradingContext === 'string' && gradingContext.length > 0)) {
           const validateSidecarPath = join(CACHE_DIR, `${t.slug.toLowerCase()}.validate-answer.json`)
           // Lowercase the slug in the JSON payload + filename: Tutorials.slug
           // in HANA is lowercase canonical. Source directories like extend-RAP-App
           // produce mixed-case t.slug; the publish path matches against the
           // lowercase HANA row.
-          writeFileSync(validateSidecarPath, JSON.stringify({ slug: t.slug.toLowerCase(), specs: aiGradedSpecs }, null, 2))
+          const sidecarPayload: Record<string, unknown> = { slug: t.slug.toLowerCase(), specs: aiGradedSpecs }
+          if (typeof gradingContext === 'string' && gradingContext.length > 0) {
+            sidecarPayload.gradingContext = gradingContext
+          }
+          writeFileSync(validateSidecarPath, JSON.stringify(sidecarPayload, null, 2))
         }
 
         // Write full validation-rules sidecar (all rule types, all steps).

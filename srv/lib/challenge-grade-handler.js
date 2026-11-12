@@ -50,15 +50,17 @@ function rateLimitResponse(res, arr, now, limit) {
 
 /**
  * Create the POST /api/challenge-grade Express handler.
- * Both deps MUST be provided — no module-level defaults.
+ * Both callModel and loadAnswer MUST be provided — no module-level defaults.
+ * loadGradingContext is optional (fail-open when absent).
  *
  * @param {object} deps
  * @param {Function} deps.callModel  - LLM caller.
  * @param {Function} deps.loadAnswer - Answer loader: (slug, step, nodeId) → row|null.
+ * @param {Function} [deps.loadGradingContext] - Grading-context loader: (slug) → string|null.
  * @returns {import('express').RequestHandler}
  */
 export function makeChallengeGradeHandler(deps = {}) {
-  const { callModel, loadAnswer } = deps;
+  const { callModel, loadAnswer, loadGradingContext } = deps;
   if (typeof callModel !== 'function') {
     throw new Error('makeChallengeGradeHandler requires deps.callModel to be a function');
   }
@@ -107,7 +109,7 @@ export function makeChallengeGradeHandler(deps = {}) {
     try {
       verdict = await dispatchChallengeGrade(
         { tutorialSlug, stepNumber, nodeId, submittedAnswer },
-        { callModel, loadAnswer }
+        { callModel, loadAnswer, loadGradingContext }
       );
     } catch (err) {
       return res.status(500).json({ error: 'internal' });

@@ -119,6 +119,12 @@ export async function dispatchValidateAnswer(input, deps) {
     return persistError(baseCtx, 'disabled', startedAt, deps);
   }
 
+  // 1b. Load grading context if enabled (fail-open via safeCall).
+  // Only loaded when the flag is on; null when off or loader returns nothing.
+  const grounding = settings?.gradingContextEnabled
+    ? await safeCall(deps?.loadGradingContext, slug)
+    : null;
+
   // 2. Load question via injected callback
   const question = await safeCall(deps?.loadQuestion, slug, stepNumber, questionId);
   if (!question) {
@@ -146,6 +152,9 @@ export async function dispatchValidateAnswer(input, deps) {
     // [#2345] Present for video-sourced quizzes; undefined/null → prompt shape
     // unchanged from v3.
     videoContext: question.videoContext,
+    // [#3090] Tutorial-level domain guidance; undefined → prompt shape unchanged
+    // from v4. grounding is null when flag off or loader returned nothing.
+    gradingContext: grounding || undefined,
   });
 
   // 4. Call LLM

@@ -797,6 +797,11 @@ entity ChatSettings : cuid, managed {
   // and the dispatch short-circuits without calling the LLM.
   validateAnswerEnabled : Boolean default false;
 
+  // Tutorial-level AI grading context (issue #3090). When true, the grading
+  // subsystem uses context from TutorialGradingContext to enhance LLM-based
+  // grading for AI-evaluated quiz questions and challenges.
+  gradingContextEnabled : Boolean default false;
+
   // Branching paths runtime master flag (issue #172). When false:
   //   - /api/branches/decide → 404
   //   - /build/mission/<slug> omits `recommendation`
@@ -1030,6 +1035,15 @@ entity ChallengeAnswers : managed {
   key nodeId     : String(40);
   prompt         : LargeString;
   reference      : LargeString @mandatory;
+}
+
+// Tutorial-level AI grading context (issue #3090). Provides semantic/background
+// information for a tutorial to enhance LLM-based grading. Server-only — context
+// is never shipped to clients and is read by the grading subsystem at request time.
+// One row per tutorial.
+entity TutorialGradingContext : managed {
+  key tutorial : Association to Tutorials;
+  context      : LargeString;
 }
 
 // Full parsed rules.vr rule set for a tutorial, persisted at publish time.

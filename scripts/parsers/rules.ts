@@ -13,6 +13,12 @@ const AUTOAUTHOR_PER_STEP_MARKER = /^\[AUTOAUTHOR_(\d+)(?::(mcq|text))?\]\s*$/
 // the result and lets Phase 3 expand against the actual step count.
 const AUTOAUTHOR_ALL_MARKER = /^\[AUTOAUTHOR_ALL(?::(mcq|text))?\]\s*$/
 
+// [#3090] Tutorial-wide [GRADING_CONTEXT] block — captures Domain, GradingCriteria,
+// and CommonMistakes sub-sections and assembles them into a single string for the
+// AI grader. Top-level sibling marker (like AUTOAUTHOR_ALL); flushes any in-progress
+// VALIDATE block before capturing its content.
+const GRADING_CONTEXT_MARKER = /^\[GRADING_CONTEXT\]\s*$/
+
 // [#2345] Video-transcript variants. Same shape as the markers above plus a
 // mandatory `url=<youtube-url>`. Phase 3 resolves the URL to a transcript and
 // feeds it to generateQuiz(source:'video') instead of step markdown.
@@ -73,6 +79,11 @@ export function parseRulesVrEnriched(content: string): {
   // per-step AUTOAUTHOR materialization both consult this set so AI never
   // fires on top of a hand-authored step.
   handAuthoredSteps: Set<number>
+  // [#3090] Assembled grading context string from [GRADING_CONTEXT] block.
+  // Fixed order: Domain → GradingCriteria → CommonMistakes, each under a
+  // labeled header line. Empty sections omitted. Undefined when block absent
+  // or all sub-sections empty.
+  gradingContext?: string
 } {
   const result = new Map<number, ValidationQuestion[]>()
   const ruleTypeByStepAndId = new Map<string, string>()
@@ -89,6 +100,10 @@ export function parseRulesVrEnriched(content: string): {
 
   let currentNum: number | null = null
   let blockLines: string[] = []
+
+  // [#3090] GRADING_CONTEXT capture state
+  let capturingGradingContext = false
+  let gradingContextLines: string[] = []
 
   // Emits the in-progress block to the result map, then resets state.
   // Idempotent — safe to call when no block is in progress (returns early on currentNum === null).
@@ -118,6 +133,7 @@ export function parseRulesVrEnriched(content: string): {
     const allMatch = line.match(AUTOAUTHOR_ALL_MARKER)
     if (allMatch) {
       flush()
+      capturingGradingContext = false
       allDirective = { types: suffixToTypes(allMatch[1] as 'mcq' | 'text' | undefined), present: true }
       continue
     }
@@ -128,6 +144,7 @@ export function parseRulesVrEnriched(content: string): {
     const videoAllMatch = line.match(AUTOAUTHOR_VIDEO_ALL_MARKER)
     if (videoAllMatch) {
       flush()
+      capturingGradingContext = false
       allDirective = {
         types: suffixToTypes(videoAllMatch[1] as 'mcq' | 'text' | undefined),
         present: true,
@@ -138,6 +155,7 @@ export function parseRulesVrEnriched(content: string): {
     const videoPerStepMatch = line.match(AUTOAUTHOR_VIDEO_PER_STEP_MARKER)
     if (videoPerStepMatch) {
       flush()
+      capturingGradingContext = false
       const num = Number(videoPerStepMatch[1])
       const types = suffixToTypes(videoPerStepMatch[2] as 'mcq' | 'text' | undefined)
       perStepVideoAutoAuthor.set(num, { types, videoUrl: videoPerStepMatch[3] })
@@ -146,9 +164,18 @@ export function parseRulesVrEnriched(content: string): {
     const perStepMatch = line.match(AUTOAUTHOR_PER_STEP_MARKER)
     if (perStepMatch) {
       flush()
+      capturingGradingContext = false
       const num = Number(perStepMatch[1])
       const types = suffixToTypes(perStepMatch[2] as 'mcq' | 'text' | undefined)
       perStepAutoAuthor.set(num, types)
+      continue
+    }
+    // [#3090] GRADING_CONTEXT marker — flush any in-progress VALIDATE block,
+    // stop capturing (idempotent), then start accumulating the context block.
+    if (line.match(GRADING_CONTEXT_MARKER)) {
+      flush()
+      capturingGradingContext = true
+      gradingContextLines = []
       continue
     }
     const match = line.match(VALIDATE_MARKER)
@@ -159,6 +186,7 @@ export function parseRulesVrEnriched(content: string): {
       // blocks (no ###Question), case-only-mismatched [X]/[x] markers, and
       // any other malformed-but-present hand-authored content.
       handAuthoredSteps.add(num)
+      capturingGradingContext = false
       if (currentNum === null) {
         currentNum = num
         blockLines = []
@@ -172,13 +200,36 @@ export function parseRulesVrEnriched(content: string): {
       }
       continue
     }
-    if (currentNum !== null) {
+    if (capturingGradingContext) {
+      gradingContextLines.push(line)
+    } else if (currentNum !== null) {
       blockLines.push(line)
     }
   }
 
   // EOF flush — captures the final block when there's no closing marker.
   flush()
+
+  // [#3090] Assemble gradingContext from captured [GRADING_CONTEXT] lines.
+  // Fixed order: Domain → GradingCriteria → CommonMistakes. Empty sections omitted.
+  let gradingContext: string | undefined
+  if (gradingContextLines.length > 0) {
+    const raw = gradingContextLines.join('\n')
+    // Reuse the section() shape from codecheck.ts: ###Name through next ### or EOF.
+    const sectionRe = (name: string) => {
+      const re = new RegExp(`###${name}[^\n]*\n([\\s\\S]*?)(?=\n###|$)`)
+      const m = raw.match(re)
+      return m ? m[1].trim() : ''
+    }
+    const domain = sectionRe('Domain')
+    const gradingCriteria = sectionRe('GradingCriteria')
+    const commonMistakes = sectionRe('CommonMistakes')
+    const parts: string[] = []
+    if (domain) parts.push(`Domain:\n${domain}`)
+    if (gradingCriteria) parts.push(`Grading criteria:\n${gradingCriteria}`)
+    if (commonMistakes) parts.push(`Common mistakes:\n${commonMistakes}`)
+    if (parts.length > 0) gradingContext = parts.join('\n')
+  }
 
   // [#208] Materialize per-step AUTOAUTHOR placeholders for steps that don't
   // already have hand-authored [VALIDATE_N] content. The sentinel fields
@@ -211,7 +262,7 @@ export function parseRulesVrEnriched(content: string): {
     } as any]) // sentinel fields not on ValidationQuestion's exported type
   }
 
-  return { map: result, ruleTypeByStepAndId, correctAnswerByStepAndId, allDirective, handAuthoredSteps }
+  return { map: result, ruleTypeByStepAndId, correctAnswerByStepAndId, allDirective, handAuthoredSteps, gradingContext }
 }
 
 function parseBlock(

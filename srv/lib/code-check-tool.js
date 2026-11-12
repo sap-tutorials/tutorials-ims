@@ -104,7 +104,7 @@ export async function dispatchCheckCode(input, deps) {
   const { stepNumber, submittedCode } = input;
   const language = input.language || undefined;
 
-  const { user, callModel, loadStepText } = deps;
+  const { user, callModel, loadStepText, loadGradingContext } = deps;
 
   // Base persistence context (reused across all error paths)
   const baseCtx = { tutorialSlug, stepNumber, submittedCode, language, user, startedAt };
@@ -117,6 +117,12 @@ export async function dispatchCheckCode(input, deps) {
     await persistError({ ...baseCtx, extra: { errorReason: 'disabled' } });
     return { verdict: 'error', errorReason: 'disabled' };
   }
+
+  // 2b. Load grading context if enabled (fail-open via safeCall).
+  // Only loaded when the flag is on; null when off or loader returns nothing.
+  const grounding = settings?.gradingContextEnabled
+    ? await safeCall(deps?.loadGradingContext, tutorialSlug)
+    : null;
 
   // 3. Look up Tutorial by slug, then CodeCheckSpecs by (tutorial_ID, stepNumber)
   const { Tutorials, CodeCheckSpecs } = cds.entities('com.sap.developers.ims');
@@ -163,6 +169,7 @@ export async function dispatchCheckCode(input, deps) {
     referenceSolution: spec.referenceSolution || undefined,
     language: language || spec.language || undefined,
     submittedCode,
+    gradingContext: grounding || undefined,
   });
 
   // 7. Call the LLM

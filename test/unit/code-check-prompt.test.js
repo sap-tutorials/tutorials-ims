@@ -23,8 +23,8 @@ describe('code-check prompt builder', () => {
     // never asked for (e.g. a String length annotation).
     expect(sys).toMatch(/GRADE AGAINST THE GOAL/i);
     expect(sys).toMatch(/floor for grading, not the ceiling/i);
-    // v2 prompt vintage so telemetry can split before/after the fix.
-    expect(PROMPT_VERSION).toBe('v2');
+    // v3 prompt vintage so telemetry can split before/after grading-context grounding (#3090).
+    expect(PROMPT_VERSION).toBe('v3');
   });
 
   it('user message orders sections deterministically', () => {
@@ -121,5 +121,65 @@ describe('code-check prompt builder', () => {
     const verdict = { verdict: 'pass', summary: 'OK', suggestions: [], correctAspects: [] };
     expect(redactReferenceLeaks(verdict, '')).toEqual(verdict);
     expect(redactReferenceLeaks(verdict, null)).toEqual(verdict);
+  });
+
+  // ── v3 grading-context tests (#3090) ──────────────────────────────────────
+
+  it('buildUserMessage INSERTS gradingContext section before reference solution when present', () => {
+    const msg = buildUserMessage({
+      goal: 'Add a localized string field',
+      referenceSolution: 'entity Books { title: localized String; }',
+      submittedCode: 'entity Books { title: String; }',
+      gradingContext: 'This tutorial is about CDS data modelling for SAP BTP.',
+    });
+    expect(msg).toContain('Tutorial grading context');
+    const gcIdx = msg.indexOf('Tutorial grading context');
+    const refIdx = msg.indexOf('Reference solution');
+    expect(gcIdx).toBeGreaterThanOrEqual(0);
+    expect(gcIdx).toBeLessThan(refIdx);
+    expect(msg).toContain('CDS data modelling');
+  });
+
+  it('buildUserMessage positions gradingContext after tutorialSamples and before reference solution', () => {
+    const msg = buildUserMessage({
+      goal: 'G',
+      stepText: 'STEP',
+      tutorialSamples: 'SAMPLE',
+      referenceSolution: 'REF',
+      language: 'javascript',
+      submittedCode: 'USER',
+      gradingContext: 'domain guidance',
+    });
+    const gcIdx = msg.indexOf('Tutorial grading context');
+    const sampleIdx = msg.indexOf("Tutorial's example");
+    const refIdx = msg.indexOf('Reference solution');
+    expect(sampleIdx).toBeLessThan(gcIdx);
+    expect(gcIdx).toBeLessThan(refIdx);
+  });
+
+  it('buildUserMessage absent gradingContext → byte-identical to v2 output (baseline guarantee)', () => {
+    const opts = {
+      goal: 'G',
+      stepText: 'STEP',
+      tutorialSamples: 'SAMPLE',
+      referenceSolution: 'REF',
+      language: 'javascript',
+      submittedCode: 'USER',
+    };
+    const baseline = buildUserMessage(opts);
+    const withUndefined = buildUserMessage({ ...opts, gradingContext: undefined });
+    const withNull = buildUserMessage({ ...opts, gradingContext: null });
+    const withEmpty = buildUserMessage({ ...opts, gradingContext: '' });
+    expect(withUndefined).toBe(baseline);
+    expect(withNull).toBe(baseline);
+    expect(withEmpty).toBe(baseline);
+    expect(baseline).not.toContain('Tutorial grading context');
+  });
+
+  it('system prompt instructs model to weight gradingContext as domain guidance only (v3)', () => {
+    const sys = buildSystemPrompt();
+    expect(sys).toMatch(/tutorial grading context/i);
+    expect(sys).toMatch(/domain guidance/i);
+    expect(sys).toMatch(/never.*quote/i);
   });
 });

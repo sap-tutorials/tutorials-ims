@@ -3,6 +3,7 @@
 // Unit tests for srv/lib/challenge-grade-tool.js (#2441). Mirrors
 // test/unit/validate-answer-tool.test.js — in-memory SQLite + injected
 // callModel/loadAnswer. Flag gate is the flag.challengeWidget ImsConfig row.
+// Task 7 (#3090): extended with ChatSettings.gradingContextEnabled grounding tests.
 
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import path from 'node:path';
@@ -21,8 +22,20 @@ async function setFlag(value) {
   }
 }
 
+async function setChatSettings(overrides = {}) {
+  const { ChatSettings } = cds.entities('com.sap.developers.ims');
+  await DELETE.from(ChatSettings);
+  await INSERT.into(ChatSettings).entries({
+    ID: '00000000-0000-0000-0000-000000000001',
+    enabled: true,
+    ...overrides,
+  });
+}
+
 beforeEach(async () => {
   await setFlag('true'); // enabled by default
+  // Default: gradingContextEnabled = false (grounding off unless test overrides)
+  await setChatSettings({ gradingContextEnabled: false });
 });
 
 const okModel = () => vi.fn().mockResolvedValue({
@@ -113,5 +126,162 @@ describe('dispatchChallengeGrade', () => {
     );
     expect(out.verdict).toBe('fail');
     expect(out.summary).toBe('[redacted]');
+  });
+
+  // ─── Task 7 (#3090): ChatSettings.gradingContextEnabled grounding ──────────
+
+  it('gradingContextEnabled ON + context present → user message contains grading-context section', async () => {
+    await setChatSettings({ gradingContextEnabled: true });
+
+    const callModel = vi.fn().mockResolvedValue({
+      verdict: { verdict: 'pass', summary: 'Great answer' },
+      promptTokens: 100, completionTokens: 20, modelName: 'test-model',
+    });
+    const loadAnswer = vi.fn().mockResolvedValue({
+      nodeId: 'challenge-3-0', prompt: 'What is CAP?', reference: 'Cloud Application Programming Model',
+    });
+    const loadGradingContext = vi.fn().mockResolvedValue(
+      'This tutorial covers SAP CAP fundamentals and OData services.'
+    );
+
+    const out = await dispatchChallengeGrade(
+      { tutorialSlug: 'cap-tutorial', stepNumber: 3, nodeId: 'challenge-3-0', submittedAnswer: 'cloud app programming' },
+      { callModel, loadAnswer, loadGradingContext },
+    );
+
+    expect(out.verdict).toBe('pass');
+    const userArg = callModel.mock.calls[0][0].user;
+    expect(userArg).toContain('Tutorial grading context');
+    expect(userArg).toContain('SAP CAP fundamentals');
+    expect(loadGradingContext).toHaveBeenCalledWith('cap-tutorial');
+  });
+
+  it('gradingContextEnabled OFF → no grading-context section, grade still runs', async () => {
+    // beforeEach sets gradingContextEnabled: false — no override needed
+    const callModel = vi.fn().mockResolvedValue({
+      verdict: { verdict: 'pass', summary: 'Correct' },
+      promptTokens: 80, completionTokens: 30, modelName: 'test-model',
+    });
+    const loadGradingContext = vi.fn().mockResolvedValue('Some context');
+
+    const out = await dispatchChallengeGrade(
+      { tutorialSlug: 'sample', stepNumber: 2, nodeId: 'challenge-2-0', submittedAnswer: 'four' },
+      { callModel, loadAnswer: okLoad(), loadGradingContext },
+    );
+
+    expect(out.verdict).toBe('pass');
+    const userArg = callModel.mock.calls[0][0].user;
+    expect(userArg).not.toContain('Tutorial grading context');
+    // loader must NOT be called when flag is off
+    expect(loadGradingContext).not.toHaveBeenCalled();
+  });
+
+  it('ChatSettings read throws → grade still runs ungrounded (fail-open)', async () => {
+    // Remove the ChatSettings row entirely to simulate absent entity on srv-qa
+    const { ChatSettings } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(ChatSettings);
+
+    const callModel = vi.fn().mockResolvedValue({
+      verdict: { verdict: 'pass', summary: 'Still graded' },
+      promptTokens: 80, completionTokens: 30, modelName: 'test-model',
+    });
+    const loadGradingContext = vi.fn().mockResolvedValue('Some context');
+
+    const out = await dispatchChallengeGrade(
+      { tutorialSlug: 'sample', stepNumber: 2, nodeId: 'challenge-2-0', submittedAnswer: 'four' },
+      { callModel, loadAnswer: okLoad(), loadGradingContext },
+    );
+
+    // Grade must still run
+    expect(out.verdict).toBe('pass');
+    // No grounding section when ChatSettings absent
+    const userArg = callModel.mock.calls[0][0].user;
+    expect(userArg).not.toContain('Tutorial grading context');
+  });
+
+  it('loadGradingContext throws → grade still runs ungrounded (fail-open)', async () => {
+    await setChatSettings({ gradingContextEnabled: true });
+
+    const callModel = vi.fn().mockResolvedValue({
+      verdict: { verdict: 'pass', summary: 'Still graded' },
+      promptTokens: 80, completionTokens: 30, modelName: 'test-model',
+    });
+    const loadGradingContext = vi.fn().mockRejectedValue(new Error('loader boom'));
+
+    const out = await dispatchChallengeGrade(
+      { tutorialSlug: 'sample', stepNumber: 2, nodeId: 'challenge-2-0', submittedAnswer: 'four' },
+      { callModel, loadAnswer: okLoad(), loadGradingContext },
+    );
+
+    // Grade must still run
+    expect(out.verdict).toBe('pass');
+    const userArg = callModel.mock.calls[0][0].user;
+    expect(userArg).not.toContain('Tutorial grading context');
+  });
+
+  it('cds.entities throws during ChatSettings read → catch block fires, grade still runs ungrounded (fail-open)', async () => {
+    // Simulate the srv-qa scenario where cds.entities() throws when called
+    // from the grounding IIFE — this exercises the try/catch block, NOT the
+    // missing-row early-return path (which the test above covers separately).
+    //
+    // cds.entities is a getter on the cds object (read-only via normal assignment).
+    // We use Object.defineProperty to temporarily replace it with a call-count
+    // function: passes through on call #1 (isChallengeGradingEnabled → ImsConfig),
+    // throws on call #2 (grounding IIFE → ChatSettings).
+    const descriptor = Object.getOwnPropertyDescriptor(cds, 'entities')
+      || Object.getOwnPropertyDescriptor(Object.getPrototypeOf(cds), 'entities');
+    const originalGet = descriptor?.get;
+    const originalValue = descriptor?.value ?? cds.entities;
+    let callCount = 0;
+    const fakeEntities = function (...args) {
+      callCount++;
+      if (callCount === 2) throw new Error('model unavailable');
+      return (originalGet ? originalGet.call(cds) : originalValue).call(cds, ...args);
+    };
+    Object.defineProperty(cds, 'entities', { value: fakeEntities, configurable: true, writable: true });
+
+    const callModel = vi.fn().mockResolvedValue({
+      verdict: { verdict: 'pass', summary: 'Still graded despite entity throw' },
+      promptTokens: 80, completionTokens: 30, modelName: 'test-model',
+    });
+    const loadGradingContext = vi.fn().mockResolvedValue('Some context');
+
+    let out;
+    try {
+      out = await dispatchChallengeGrade(
+        { tutorialSlug: 'sample', stepNumber: 2, nodeId: 'challenge-2-0', submittedAnswer: 'four' },
+        { callModel, loadAnswer: okLoad(), loadGradingContext },
+      );
+    } finally {
+      // Restore the original descriptor
+      if (descriptor) {
+        Object.defineProperty(cds, 'entities', descriptor);
+      }
+    }
+
+    // Grade must still run — catch block swallowed the entity throw
+    expect(out.verdict).toBe('pass');
+    expect(callModel).toHaveBeenCalledOnce();
+    // No grounding section — loader was never reached
+    const userArg = callModel.mock.calls[0][0].user;
+    expect(userArg).not.toContain('Tutorial grading context');
+    expect(loadGradingContext).not.toHaveBeenCalled();
+  });
+
+  it('flag.challengeWidget OFF still short-circuits the grade (unchanged behavior)', async () => {
+    await setFlag('false');
+
+    const callModel = vi.fn();
+    const loadGradingContext = vi.fn();
+
+    const out = await dispatchChallengeGrade(
+      { tutorialSlug: 'sample', stepNumber: 2, nodeId: 'challenge-2-0', submittedAnswer: 'x' },
+      { callModel, loadAnswer: okLoad(), loadGradingContext },
+    );
+
+    expect(out).toEqual({ verdict: 'error', errorReason: 'disabled' });
+    expect(callModel).not.toHaveBeenCalled();
+    // loadGradingContext must also not be called when the grade is disabled
+    expect(loadGradingContext).not.toHaveBeenCalled();
   });
 });

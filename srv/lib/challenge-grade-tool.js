@@ -61,16 +61,33 @@ async function isChallengeGradingEnabled() {
  * @param {object}   deps
  * @param {Function} deps.callModel      - async ({ system, user, schema }) => { verdict, ... }.
  * @param {Function} deps.loadAnswer     - async (slug, step, nodeId) => { reference, prompt } | null.
+ * @param {Function} [deps.loadGradingContext] - async (slug) => string|null. Never throws (fail-open).
  * @returns {Promise<object>} `{ verdict, summary, hint? }` or `{ verdict:'error', errorReason }`.
  */
 export async function dispatchChallengeGrade(input, deps) {
   const slug = (input.tutorialSlug || '').toLowerCase();
   const { stepNumber, nodeId, submittedAnswer } = input;
 
-  // 1. Flag check
+  // 1. Flag check (ImsConfig kill switch — fail-open on read error)
   if (!(await isChallengeGradingEnabled())) {
     return { verdict: 'error', errorReason: 'disabled' };
   }
+
+  // 1b. Grading-context grounding: read ChatSettings.gradingContextEnabled (fail-open).
+  // This is a SEPARATE gate from isChallengeGradingEnabled — it never gates the grade;
+  // any read error defaults to no grounding, and the grade still runs.
+  const grounding = await (async () => {
+    try {
+      const { ChatSettings } = cds.entities('com.sap.developers.ims');
+      if (!ChatSettings) return null;
+      const settings = await SELECT.one.from(ChatSettings);
+      if (!settings?.gradingContextEnabled) return null;
+      return await safeCall(deps?.loadGradingContext, slug);
+    } catch (err) {
+      LOG.warn('challenge-grade ChatSettings read error — no grounding', err?.message);
+      return null;
+    }
+  })();
 
   // 2. Load the reference answer
   const answer = await safeCall(deps?.loadAnswer, slug, stepNumber, nodeId);
@@ -85,6 +102,10 @@ export async function dispatchChallengeGrade(input, deps) {
     question: answer.prompt || '',
     correctAnswer: answer.reference,
     submittedAnswer,
+    // [#3090] Tutorial-level domain guidance; undefined → prompt shape unchanged
+    // from v4. grounding is null when flag off, ChatSettings absent, or loader
+    // returned nothing.
+    gradingContext: grounding || undefined,
   });
 
   // 4. Call the model
