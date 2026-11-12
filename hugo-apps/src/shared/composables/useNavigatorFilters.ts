@@ -720,11 +720,20 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   // ─── Pagination-reset watcher (LOAD-BEARING for #195 + this composable) ───
   // Without this, filter changes don't reset to page 1 — the user lands on
   // an empty page after narrowing their filters.
+  //
+  // The flag suppressNextPageFetch coordinates with the currentPage watcher
+  // below: when a filter/query change resets currentPage N→1, useSearch's own
+  // debounce watcher already fetches page 0. Setting the flag prevents the
+  // currentPage watcher from issuing a second identical executeSearch call.
+  let suppressNextPageFetch = false
   watch(
     [searchQuery, () => filters.levels, () => filters.types,
      () => filters.products, () => filters.topics, () => filters.categories,
      () => filters.isNew, () => filters.noLicense],
-    () => { currentPage.value = 1 },
+    () => {
+      if (currentPage.value !== 1) suppressNextPageFetch = true
+      currentPage.value = 1
+    },
     { deep: true },
   )
 
@@ -732,18 +741,18 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   // Fires when the user navigates to a different page while in search mode.
   // currentPage is 1-based; executeSearch is 0-based.
   //
-  // Double-fetch analysis: the reset watcher above sets currentPage = 1 on
-  // query/filter changes. When the page was ALREADY 1 (most common), the value
-  // does not change so this watcher does NOT fire — no double-fetch. When the
-  // page was >1 (user was on page 2, then changed query), the reset fires this
-  // watcher once (page N→1), fetching page 0 — that is correct and desired.
-  // The useSearch internal debounce watcher fires independently on
-  // term/filter changes and does its own page-0 fetch via debouncedSearch();
-  // the two are distinct triggers so both are needed (debounce for fresh
-  // queries, this watcher for "same query, different page").
+  // Exactly one executeSearch fires per user action (5-scenario proof):
+  //   1. New query (page 1): currentPage unchanged → watcher silent; debounce fires ✓
+  //   2. Filter change on page 1: currentPage unchanged → watcher silent; debounce fires ✓
+  //   3. Filter change on page N>1: reset watcher sets suppress=true + currentPage=1;
+  //      this watcher fires (N→1) but consumes the flag and skips; debounce fires ✓
+  //   4. User clicks page 2: no suppress set; currentPage 1→2; this watcher fires → fetch(1) ✓
+  //   5. User clicks page 1 pager button from page N>1: no suppress set (goToPage doesn't
+  //      set it); currentPage N→1; this watcher fires → fetch(0) ✓
   watch(
     currentPage,
     (p) => {
+      if (suppressNextPageFetch) { suppressNextPageFetch = false; return }
       if (searchMode.value && tutorials && !clientSearch) {
         executeSearch(p - 1, pageSize)
       }
