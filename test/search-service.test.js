@@ -23,10 +23,17 @@ describe('SearchService', () => {
       // Description-only match (rank=2): proves the 3-tier rank arithmetic
       // (title=3 > description=2 > tag-only=1) instead of just "title row first".
       { ID: 'search-tdesc',      legacyId: 90021, slug: 'rankprobe-desc-tutorial', title: 'Generic Tutorial Title', description: 'Body mentions rankprobe in passing.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
+      // missionprobe: two tutorial body-only matches to prove the MISSION title-match still ranks first.
+      { ID: 'search-mprobe-tdesc1', legacyId: 90031, slug: 'missionprobe-desc-tut1', title: 'Generic Tutorial Alpha', description: 'This tutorial body mentions missionprobe in passing.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
+      { ID: 'search-mprobe-tdesc2', legacyId: 90032, slug: 'missionprobe-desc-tut2', title: 'Generic Tutorial Beta',  description: 'Another tutorial body also references missionprobe.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
     ]);
 
     await INSERT.into(Missions).entries([
       { ID: 'search-m1', legacyId: 90101, slug: 'full-stack-mission', title: 'Full-Stack CAP Application', description: 'Build end-to-end', primaryTag: 'SAP Cloud Application Programming Model', experienceTag: 'intermediate', averageTimeToComplete: 180, status: 'ACTIVE', published: true },
+      // missionprobe: used to prove type-boost — mission with body-only match must beat
+      // tutorial body-only matches. Without the boost both rank=2 (tied); with boost W=2
+      // the mission reaches 2+2=4 vs tutorial 2+0=2.
+      { ID: 'search-mprobe', legacyId: 90102, slug: 'missionprobe-mission', title: 'A Generic Learning Path', description: 'This learning path body mentions missionprobe in its intro.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 60, status: 'ACTIVE', published: true },
     ]);
 
     await INSERT.into(Groups).entries([
@@ -74,6 +81,7 @@ describe('SearchService', () => {
       { slug: 'tag-only-1' }, { slug: 'tag-only-2' }, { slug: 'tag-only-3' },
       { slug: 'tag-only-4' }, { slug: 'tag-only-5' },
       { slug: 'rankprobe-tutorial' }, { slug: 'rankprobe-desc-tutorial' },
+      { slug: 'missionprobe-desc-tut1' }, { slug: 'missionprobe-desc-tut2' },
     ]);
   });
 
@@ -262,6 +270,28 @@ describe('SearchService', () => {
         expect(slugs).toContain(s);
         expect(slugs.indexOf(s)).toBeGreaterThan(slugs.indexOf('rankprobe-desc-tutorial'));
       }
+    });
+
+    it('boosts MISSION/GROUP type so a mission body-only match ranks above tutorial body-only matches (#3112)', async () => {
+      // search-mprobe (MISSION) has "missionprobe" only in its description → rank = 2 without boost.
+      // search-mprobe-tdesc1/2 (TUTORIALS) also have "missionprobe" only in description → rank = 2.
+      // Without the type boost both rank equally and ordering is non-deterministic.
+      // With boost W=2: mission reaches 2+2=4 while tutorials stay at 2+0=2 → mission first.
+      const { data } = await project.get('/search/SearchableItems?$search=missionprobe');
+      const items = data.value;
+      const missionIdx = items.findIndex(i => i.slug === 'missionprobe-mission');
+      const tutDesc1Idx = items.findIndex(i => i.slug === 'missionprobe-desc-tut1');
+      const tutDesc2Idx = items.findIndex(i => i.slug === 'missionprobe-desc-tut2');
+      expect(missionIdx).toBeGreaterThanOrEqual(0);
+      expect(tutDesc1Idx).toBeGreaterThanOrEqual(0);
+      expect(tutDesc2Idx).toBeGreaterThanOrEqual(0);
+      // Mission (title-match + type-boost) must rank above BOTH tutorial body-only matches.
+      expect(missionIdx).toBeLessThan(tutDesc1Idx);
+      expect(missionIdx).toBeLessThan(tutDesc2Idx);
+      // Verify searchScore reflects the boost: mission score must exceed tutorial desc score.
+      const missionScore  = items[missionIdx].searchScore;
+      const tutDesc1Score = items[tutDesc1Idx].searchScore;
+      expect(missionScore).toBeGreaterThan(tutDesc1Score);
     });
 
     it('does not leak _searchRank via OData response', async () => {

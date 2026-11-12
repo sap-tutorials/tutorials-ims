@@ -203,10 +203,15 @@ function attachSearchRank(query, tokens, kgFragment = '', communityFragment = ''
   // /^[a-z0-9-]+$/ so no quoting drama on the string-concat boundary. The
   // searched-CASE form (not `case slug when 'x'`) is load-bearing on HANA (#1214).
   // #1171: communityFragment is additive, independent of kgFragment. weight 0 => ''.
+  // #3112: type-boost — missions and groups get +2 so a MISSION/GROUP body-only
+  // match (2+2=4) out-ranks a TUTORIAL body-only match (2+0=2), and a MISSION
+  // title match (3+2=5) surfaces above tutorial tail results. A tutorial with a
+  // title match (3) still competes against a mission body-match (4) at close range.
   const rankSQL =
     `(case when (${titleOr}) then 3 else 0 end ` +
     `+ case when (${descOr}) then 2 else 0 end ` +
     `+ case when (${primOr} or ${tagOr}) then 1 else 0 end` +
+    ` + case when taskType in ('MISSION','GROUP') then 2 else 0 end` +
     (kgFragment ? ` ${kgFragment}` : '') +
     (communityFragment ? ` ${communityFragment}` : '') +
     `)`;
