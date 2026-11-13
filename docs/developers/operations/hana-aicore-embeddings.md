@@ -295,3 +295,40 @@ These overlap with features currently served via `@cap-js/ai` /
 `@sap-ai-sdk/orchestration` (semantic search, text-gen, Joule, RPT
 recommendations); consolidation is a future architecture decision, not
 part of this unit.
+
+## Conclusion — #2810 closed as foundation (2026-11-13)
+
+**Decision:** #2810 delivered the HANA↔AI Core foundation and is closed. **No
+further retrofit of existing Node/CAP AI work into the DB layer is planned.**
+
+What shipped and stays:
+- **Phase 1 — the connection:** `TUTORIALS_AICORE` remote source + PSE +
+  `external_privileges_role` grant, live DEV+PROD. **Retained.** Beyond any
+  app use it is exercised by the standard BTP HANA Cloud admin tooling for
+  interactive troubleshooting and expert analysis, so its maintenance cost
+  (incl. the DEV+PROD `hana-ai-core` x509 service keys) is already justified
+  independent of application-level use.
+- **KG journaling:** all Concepts + KG tables on `.hdbmigrationtable` so KG
+  schema changes actually deploy — shipped PROD in 1.44.2.
+
+Why no retrofit (evaluated against a cost / performance / security bar):
+- **Cost** — DB-side generation doesn't remove the steady-state Node cost; it
+  adds a second path to maintain. (Proven by the reverted embedding attempt —
+  Appendix 1.)
+- **Performance** — the one plausible win (`CROSS_ENCODE` in-DB rerank, avoiding
+  candidate-row round-trips) is on a non-hot path, and `@cap-js/ai` already runs
+  server-side near the data. Marginal upside against corpus-wide result-ordering
+  regression risk.
+- **Security** — AI Core traffic is already BTP-internal from the CAP layer;
+  moving the call origin app→DB crosses no new trust boundary.
+
+Retrofits specifically lose because they replace **working, load-bearing paths**
+(e.g. `Concepts.embedding` has 11 live read/write paths) — downside is regressing
+something that works, upside is marginal.
+
+**Forward rule (where the long-term value lives):** the next *net-new* feature
+that needs AI Core should default to **DB-native first, by design** (`VECTOR_EMBEDDING`,
+`AI_TEXT_COMPLETION`, `CROSS_ENCODE`, `AI_TABULAR_PREDICTION` over `TUTORIALS_AICORE`),
+rather than adding another Node/Cloud-SDK path. Greenfield has no incumbent to
+regress, so the benefit is designed in instead of retrofitted. The connection is
+in place and ready for that choice.
