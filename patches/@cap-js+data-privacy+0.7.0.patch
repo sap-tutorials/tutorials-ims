@@ -1,0 +1,124 @@
+diff --git a/node_modules/@cap-js/data-privacy/lib/csn-enhancements/index.js b/node_modules/@cap-js/data-privacy/lib/csn-enhancements/index.js
+index 4208382..0983f9c 100644
+--- a/node_modules/@cap-js/data-privacy/lib/csn-enhancements/index.js
++++ b/node_modules/@cap-js/data-privacy/lib/csn-enhancements/index.js
+@@ -1,4 +1,6 @@
+ const cds = require("@sap/cds");
++const path = require("path");
++const fs = require("fs");
+ const LOG = cds._dpi.log("data-privacy");
+ const enhanceAnnotations = require("./shared/enhanceAnnotations");
+ const { entityValidation } = require("./shared/modelValidations");
+@@ -14,6 +16,47 @@ const {
+ const RETENTION_SERVICE = "sap.ilm.RetentionService";
+ const INFORMATION_SERVICE = "sap.dpp.InformationService";
+ 
++// Aspects defined in the plugin's own db/dpi.cds that the retention exposure relies on.
++const ILM_ASPECTS = ["sap.ilm.blocking", "sap.ilm.destruction"];
++
++/**
++ * Ensure the plugin's own sap.ilm.blocking / sap.ilm.destruction aspects are present in the CSN
++ * before the per-entity exposure runs.
++ *
++ * These aspects live in this package's db/dpi.cds and normally reach the CSN because the DPI
++ * service files `using` them. During an isolated `cds build --production` db-task compilation,
++ * however, only the application's own db model is compiled — the service files are not part of
++ * that CSN — so the aspects are missing and retention exposure would crash (issue #41, Crash A).
++ *
++ * This loads db/dpi.cds from this package and merges ONLY the two aspect definitions into the
++ * CSN. It never imports a service artifact (e.g. sap.ilm.RetentionService) into a db-task CSN.
++ * Idempotent and runs at most once per call; failures are swallowed so the defensive guard in
++ * exposeEntity.js can log a clear warning and skip injection.
++ *
++ * @param {CSN} csn
++ */
++function ensureILMAspects(csn) {
++  if (ILM_ASPECTS.every((a) => csn.definitions[a])) {
++    return; // all aspects already present (normal runtime / all-tasks load)
++  }
++  try {
++    // db/dpi.cds sits two levels up from this file (lib/csn-enhancements/index.js).
++    const dpiPath = path.resolve(__dirname, "..", "..", "db", "dpi.cds");
++    // db/dpi.cds has no `using from`, so compiling its source in isolation is self-contained
++    // and does not pull in any service. cds.compile(<string>) is synchronous, which matches the
++    // synchronous cds.on("loaded") hook that drives enhanceModel.
++    const compiled = cds.compile(fs.readFileSync(dpiPath, "utf8"));
++    for (const aspect of ILM_ASPECTS) {
++      if (!csn.definitions[aspect] && compiled.definitions[aspect]) {
++        csn.definitions[aspect] = compiled.definitions[aspect];
++      }
++    }
++  } catch (e) {
++    // Non-fatal: the defensive guard in addBlockingAspectToBaseEntity will warn and skip.
++    LOG.debug(`Could not load sap.ilm aspects from db/dpi.cds: ${e.message}`);
++  }
++}
++
+ /**
+  * Generates the DPI Information and Retention services
+  * @param {CSN} m
+@@ -34,6 +77,10 @@ module.exports = function enhanceModel(m) {
+ 
+   enhanceAnnotations(m, inferredCSN);
+ 
++  // Ensure the plugin's own sap.ilm.* aspects are available before per-entity exposure.
++  // In an isolated db-task build they are not in the CSN (see ensureILMAspects / issue #41).
++  ensureILMAspects(inferredCSN);
++
+   const DPI_SERVICES = { [RETENTION_SERVICE]: {}, [INFORMATION_SERVICE]: {} };
+ 
+   for (const DPI_SRV in DPI_SERVICES) {
+diff --git a/node_modules/@cap-js/data-privacy/lib/csn-enhancements/retention/enhanceModelWithValueLists.js b/node_modules/@cap-js/data-privacy/lib/csn-enhancements/retention/enhanceModelWithValueLists.js
+index f5bf9f2..0559c9b 100644
+--- a/node_modules/@cap-js/data-privacy/lib/csn-enhancements/retention/enhanceModelWithValueLists.js
++++ b/node_modules/@cap-js/data-privacy/lib/csn-enhancements/retention/enhanceModelWithValueLists.js
+@@ -9,8 +9,22 @@ const { _getRoot, mapCDStoRetentionDataType } = require("../../utils");
+  * @param {CSN} model plain CSN model
+  */
+ module.exports = function enhanceModelWithValueLists(entityName, entity, model) {
++  const retentionService = model.definitions["sap.ilm.RetentionService"];
++  // Defensive backstop (issue #41, Crash C — same family as Crash A): value-help /
++  // SelectionCriteria generation targets the sap.ilm.RetentionService OData surface. During an
++  // isolated `cds build` db-task compilation that service is not part of the CSN, so all three
++  // sub-builders below would dereference an undefined retentionService (handleValueList reads
++  // `o.retentionService.path`) and throw `TypeError: Cannot read properties of undefined
++  // (reading 'path')`. This enhancement is irrelevant to a table-only db-task build, so skip it
++  // cleanly with a clear warning instead of crashing the build.
++  if (!retentionService) {
++    LOG.warn(
++      `Cannot build value-help / selection-criteria for ${entityName}: the sap.ilm.RetentionService is not present in the model. Skipping value-list enhancement. This typically means the RetentionService surface is not in scope during an isolated build task.`
++    );
++    return;
++  }
+   const options = {
+-    retentionService: model.definitions["sap.ilm.RetentionService"],
++    retentionService,
+     entityName,
+     entity,
+     model
+diff --git a/node_modules/@cap-js/data-privacy/lib/csn-enhancements/retention/exposeEntity.js b/node_modules/@cap-js/data-privacy/lib/csn-enhancements/retention/exposeEntity.js
+index 7f63720..4ef94c7 100644
+--- a/node_modules/@cap-js/data-privacy/lib/csn-enhancements/retention/exposeEntity.js
++++ b/node_modules/@cap-js/data-privacy/lib/csn-enhancements/retention/exposeEntity.js
+@@ -56,7 +56,20 @@ module.exports = function exposeRetentionEntity(name, def, exposedEntities, m) {
+     dataSubjectReuseAnnotations &&
+     def["@PersonalData.EntitySemantics"] === "Other" &&
+     def["@ILM.IsRetentionManaged"] === false;
+-  const shouldManageFields = !isReuseDataSubject && !isExternalILMObject;
++  // Defensive backstop (issue #41, Crash A): the sap.ilm.blocking / sap.ilm.destruction aspects
++  // live in the plugin's own db/dpi.cds and normally reach the CSN via the DPI service files.
++  // During an isolated `cds build` db-task compilation those service files are absent, so
++  // index.js (ensureILMAspects) attempts to merge them in first. If that fallback itself failed
++  // the aspects are still missing — skip all blocking/destruction field injection with a clear
++  // warning instead of dereferencing undefined definitions and throwing an opaque TypeError.
++  const aspectsAvailable =
++    !!m.definitions["sap.ilm.blocking"] && !!m.definitions["sap.ilm.destruction"];
++  if (!aspectsAvailable) {
++    LOG.warn(
++      `Cannot add blocking/destruction fields for ${name}: the sap.ilm.blocking / sap.ilm.destruction aspects are not present in the model. Skipping retention field injection. This typically means the plugin's db/dpi.cds could not be loaded during an isolated build task.`
++    );
++  }
++  const shouldManageFields = aspectsAvailable && !isReuseDataSubject && !isExternalILMObject;
+   if (shouldManageFields) {
+     if (!def.query && !def.projection) {
+       addBlockingAspectToBaseEntity(def, m);
