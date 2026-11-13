@@ -45,6 +45,7 @@ const submitted = ref(false);
 const result = ref<'correct' | 'accepted' | 'incorrect' | 'partial' | 'disabled' | null>(null);
 const pending = ref(false);
 const hint = ref('');
+const acknowledged = ref(false);
 
 // Per-question verdict map populated by onSubmit. Each question's submission
 // produces a verdict + optional hint; the template renders ✓ / ✗ / ⚠ next to
@@ -104,7 +105,7 @@ onMounted(() => {
   // author preview UX.
   if (props.isPreview) return;
   const persisted = readPersisted(props.slug, props.stepNumber);
-  if (persisted?.correct) {
+  if (persisted?.outcome === 'pass') {
     submitted.value = true;
     result.value = 'correct';
     // Backfill perQuestionResults so the rendered ✓/✗ shows on persisted-correct
@@ -112,6 +113,13 @@ onMounted(() => {
     for (const q of props.questions) {
       perQuestionResults.value[q.id] = { verdict: 'pass' };
     }
+    emitStepValidated();
+  } else if (persisted?.outcome === 'accepted') {
+    // [#3120] Learner previously clicked "Continue anyway" — rehydrate to
+    // accepted+acknowledged without backfilling per-question pass verdicts.
+    submitted.value = true;
+    result.value = 'accepted';
+    acknowledged.value = true;
     emitStepValidated();
   }
 });
@@ -350,16 +358,17 @@ async function onSubmit() {
     if (allPass) {
       result.value = 'correct';
       hint.value = '';
-      writePersisted(props.slug, props.stepNumber, true);
+      writePersisted(props.slug, props.stepNumber, 'pass');
+      acknowledged.value = false;
       emitStepValidated();
     } else if (allAccepted && anyPartial) {
-      // [#2348] All AI questions pass-or-partial (no fail): accept the step so
-      // the Done button unlocks, but still surface the advisory hint so the
-      // learner sees what they could have added. No "Try Again" — they're done.
+      // [#3120] All AI questions pass-or-partial (no fail): set accepted state
+      // and surface the advisory hint, but do NOT unlock yet — the learner must
+      // explicitly click "Continue anyway". writePersisted + emitStepValidated
+      // are deferred to onContinueAnyway().
       result.value = 'accepted';
       hint.value = firstHint;
-      writePersisted(props.slug, props.stepNumber, true);
-      emitStepValidated();
+      acknowledged.value = false;
     } else if (firstHint) {
       // At least one hard fail, but it carries a hint (v2+ prompt provides
       // these). Use the 'partial' result-state so the hint surfaces in a
@@ -398,6 +407,14 @@ function onTryAgain() {
   perQuestionResults.value = {};
 }
 
+// [#3120] Explicit continue: learner acknowledges the yellow (partial/accepted)
+// outcome and explicitly opts in to unlock the step.
+function onContinueAnyway(): void {
+  writePersisted(props.slug, props.stepNumber, 'accepted');
+  emitStepValidated();
+  acknowledged.value = true;
+}
+
 // [#235] Expose internals for component-level tests in Validation.test.ts.
 // Production callers don't reach into the component instance — these refs +
 // methods are normally only manipulated through the template. Keeping the
@@ -423,6 +440,7 @@ defineExpose({
   pending,
   hint,
   submitted,
+  acknowledged,
   perQuestionResults,
   // `answers` exposed read-only for tests so they can verify the typed
   // answer survives the lock (the template's :value bind on the textarea
@@ -431,6 +449,7 @@ defineExpose({
   // Methods
   onSubmit,
   onTryAgain,
+  onContinueAnyway,
   // Test setter — preserves reactivity that direct vm.answers = ... would lose
   _testSetAnswers,
   _testSetPending,
