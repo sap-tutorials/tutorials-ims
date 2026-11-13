@@ -772,3 +772,137 @@ describe('Validation.vue — #1740 multi-select MCQ', () => {
     expect(getVm(wrapper).result).toBe('incorrect')
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #3120 Yellow UX — editable box, Resubmit, Continue anyway template tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Validation.vue — #3120 Yellow state template', () => {
+  // ── accepted keeps textarea editable ──────────────────────────────────────
+  it('accepted state keeps the textarea editable (no disabled attr)', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({
+      verdict: 'partial', summary: 'Close', hint: 'Think more.',
+    }))
+
+    const wrapper = await submitWithAnswers(
+      [TEXT_AI],
+      { 'q-ai': 'my answer' },
+    )
+
+    expect(getVm(wrapper).result).toBe('accepted')
+    // ui5-textarea is stubbed → <ui5-textarea-stub>.
+    // When result==='accepted' the textarea must NOT have `disabled` attr —
+    // so the learner can edit and resubmit.
+    const textarea = wrapper.find('ui5-textarea-stub')
+    expect(textarea.exists()).toBe(true)
+    expect(textarea.attributes('disabled')).toBeUndefined()
+  })
+
+  // ── accepted shows Resubmit + Continue anyway buttons and warning strip ───
+  it('accepted state shows Resubmit and Continue-anyway buttons and ⚠ strip text', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({
+      verdict: 'partial', summary: 'Close', hint: 'Think more.',
+    }))
+
+    const wrapper = await submitWithAnswers(
+      [TEXT_AI],
+      { 'q-ai': 'my answer' },
+    )
+
+    expect(getVm(wrapper).result).toBe('accepted')
+
+    // Information-design strip is present (ui5-message-strip stubs don't render
+    // slot content with the 'true' stub, so we assert on the design attribute).
+    const strips = wrapper.findAll('ui5-message-strip-stub')
+    const infoStrip = strips.find((s) => s.attributes('design') === 'Information')
+    expect(infoStrip).toBeDefined()
+
+    // Both action buttons present. ui5-button stubs with 'true' don't render
+    // slot text — assert by attribute: Resubmit has type="button", Continue
+    // anyway has design="Emphasized".
+    const buttons = wrapper.findAll('ui5-button-stub')
+    const resubmitBtn = buttons.find((b) => b.attributes('type') === 'button')
+    expect(resubmitBtn).toBeDefined()
+    const continueBtn = buttons.find((b) => b.attributes('design') === 'Emphasized')
+    expect(continueBtn).toBeDefined()
+  })
+
+  // ── after acknowledge: no Continue-anyway, textarea still editable ────────
+  it('after onContinueAnyway: Continue-anyway gone, textarea editable, confirmation shown', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({
+      verdict: 'partial', summary: 'Close', hint: 'Be more specific.',
+    }))
+
+    const wrapper = await submitWithAnswers(
+      [TEXT_AI],
+      { 'q-ai': 'my answer' },
+    )
+
+    expect(getVm(wrapper).result).toBe('accepted')
+    expect(getVm(wrapper).acknowledged).toBe(false)
+
+    await getVm(wrapper).onContinueAnyway()
+    await wrapper.vm.$nextTick()
+
+    expect(getVm(wrapper).acknowledged).toBe(true)
+
+    // "Continue anyway" button must be gone (it has design="Emphasized").
+    // After acknowledge the v-if="!acknowledged" removes it from the DOM.
+    const buttons = wrapper.findAll('ui5-button-stub')
+    const continueBtn = buttons.find((b) => b.attributes('design') === 'Emphasized')
+    expect(continueBtn).toBeUndefined()
+
+    // Textarea still editable (not disabled).
+    const textarea = wrapper.find('ui5-textarea-stub')
+    expect(textarea.attributes('disabled')).toBeUndefined()
+
+    // Positive-design (confirmation) strip is now shown.
+    const strips = wrapper.findAll('ui5-message-strip-stub')
+    const positiveStrip = strips.find((s) => s.attributes('design') === 'Positive')
+    expect(positiveStrip).toBeDefined()
+  })
+
+  // ── correct state still disables the textarea ─────────────────────────────
+  it('correct state still disables the textarea', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({
+      verdict: 'pass', summary: 'Perfect.',
+    }))
+
+    const wrapper = await submitWithAnswers(
+      [TEXT_AI],
+      { 'q-ai': 'perfect answer' },
+    )
+
+    expect(getVm(wrapper).result).toBe('correct')
+    const textarea = wrapper.find('ui5-textarea-stub')
+    expect(textarea.exists()).toBe(true)
+    // On correct, textarea must have a `disabled` attribute present (truthy).
+    // Vue Test Utils stubs render boolean attributes as "true" not "",
+    // so we assert the attribute exists (not undefined).
+    expect(textarea.attributes('disabled')).toBeDefined()
+  })
+
+  // ── onTryAgain resets acknowledged to false ───────────────────────────────
+  it('onTryAgain resets acknowledged to false', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({
+      verdict: 'partial', summary: 'Close', hint: 'Consider X.',
+    }))
+
+    const wrapper = await submitWithAnswers(
+      [TEXT_AI],
+      { 'q-ai': 'rough answer' },
+    )
+
+    expect(getVm(wrapper).result).toBe('accepted')
+
+    // Click Continue anyway to set acknowledged=true.
+    await getVm(wrapper).onContinueAnyway()
+    await wrapper.vm.$nextTick()
+    expect(getVm(wrapper).acknowledged).toBe(true)
+
+    // Try again must reset acknowledged to false.
+    getVm(wrapper).onTryAgain()
+    await wrapper.vm.$nextTick()
+    expect(getVm(wrapper).acknowledged).toBe(false)
+  })
+})

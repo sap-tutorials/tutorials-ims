@@ -403,6 +403,9 @@ function onTryAgain() {
   submitted.value = false;
   result.value = null;
   hint.value = '';
+  // [#3120] Reset acknowledged so that after Continue-anyway → Try-again →
+  // accepted-again the "Continue anyway" button reappears.
+  acknowledged.value = false;
   // Clear per-question results too — the new submit will repopulate them.
   perQuestionResults.value = {};
 }
@@ -487,18 +490,27 @@ defineExpose({
       Correct! Well done.
     </ui5-message-strip>
 
-    <!-- [#2348] Accepted state: all AI questions came back pass-or-partial
-         (no hard fail). The step is unlocked (Done button re-enabled) just
-         like 'correct', but we surface the advisory hint so the learner sees
-         what they could have added. No "Try Again" button — the step is done.
-         {{ hint }} is auto-escaped by Vue; NEVER switch to v-html (see the
-         partial strip's security note below). -->
+    <!-- [#2348][#3120] Accepted state strips. Two states:
+         1. Not yet acknowledged (acknowledged=false): learner sees the warning
+            and must decide — Continue anyway or Resubmit. design=Information
+            so it reads as advisory rather than success.
+         2. Acknowledged (acknowledged=true): learner clicked Continue anyway —
+            step is already unlocked; the settled confirmation tells them they
+            can still refine and resubmit. design=Positive.
+         {{ hint }} is auto-escaped by Vue; NEVER switch to v-html. -->
     <ui5-message-strip
-      v-if="submitted && result === 'accepted'"
+      v-if="submitted && result === 'accepted' && !acknowledged"
+      design="Information"
+      hide-close-button
+    >
+      ⚠ Partially correct — your answer covers the main idea.<template v-if="hint"> One thing to consider: {{ hint }}</template>
+    </ui5-message-strip>
+    <ui5-message-strip
+      v-if="submitted && result === 'accepted' && acknowledged"
       design="Positive"
       hide-close-button
     >
-      Good enough — you've got the main idea.<template v-if="hint"> One thing to consider: {{ hint }}</template>
+      ✓ Counts — you've continued. You can still refine your answer and resubmit.
     </ui5-message-strip>
 
     <!-- Form: always mounted; disabled state controlled per-input by
@@ -555,7 +567,7 @@ defineExpose({
                 :text="opt"
                 v-bind="{
                   ...(isOptionSelected(q.id, opt) ? { checked: true } : {}),
-                  ...(result === 'correct' || result === 'accepted' ? { disabled: true } : {}),
+                  ...(result === 'correct' ? { disabled: true } : {}),
                 }"
                 @change="onCheckboxChange(q.id, opt, $event)"
               />
@@ -575,7 +587,7 @@ defineExpose({
                 :text="opt"
                 v-bind="{
                   ...(isOptionSelected(q.id, opt) ? { checked: true } : {}),
-                  ...(result === 'correct' || result === 'accepted' ? { disabled: true } : {}),
+                  ...(result === 'correct' ? { disabled: true } : {}),
                 }"
                 @change="onRadioChange(q.id, opt)"
               />
@@ -587,13 +599,16 @@ defineExpose({
              that on the locked read-only state the learner sees what they
              wrote. v-bind={disabled: true} on correct locks edits; the
              input handler stays mounted so re-grading flows (partial /
-             incorrect / error) can keep accepting input. -->
+             incorrect / error) can keep accepting input.
+             [#3120] accepted state is intentionally NOT disabled — the
+             learner can refine their answer and resubmit via the Resubmit
+             button. Only correct (permanently locked) disables the textarea. -->
         <ui5-textarea
           v-else
           placeholder="Type your answer…"
           :rows="2"
           :value="answers[q.id] || ''"
-          v-bind="result === 'correct' || result === 'accepted' ? { disabled: true } : {}"
+          v-bind="result === 'correct' ? { disabled: true } : {}"
           @input="onTextInput(q.id, $event)"
         />
 
@@ -715,6 +730,39 @@ defineExpose({
           style="margin-top: 0.5rem;"
         >
           Try Again
+        </ui5-button>
+      </template>
+
+      <!-- [#3120] Accepted-state action buttons. The generic Submit button
+           above is already hidden when result==='accepted' (see the
+           result !== 'correct' && result !== 'accepted' guard at ~:651).
+           This block provides the two affordances:
+           - Resubmit: equivalent to Submit; allows the learner to improve
+             their answer and try again for a 'correct' outcome. type="button"
+             to prevent HTML form default submission (Submit button uses
+             type="Submit"; this must NOT). Disabled while the grader is
+             running so it can't double-POST.
+           - Continue anyway (only before acknowledge): explicit opt-in to
+             unlock the step at 'accepted' quality. Disappears once clicked
+             (acknowledged=true) — replaced by the settled confirmation strip.
+           Both go through v-bind for the disabled attribute following the
+           same UI5 boolean-attr convention as the Submit button above. -->
+      <template v-if="submitted && result === 'accepted'">
+        <ui5-button
+          type="button"
+          @click="onSubmit"
+          v-bind="pending ? { disabled: true } : {}"
+          style="margin-top: 0.5rem;"
+        >
+          Resubmit
+        </ui5-button>
+        <ui5-button
+          v-if="!acknowledged"
+          design="Emphasized"
+          @click="onContinueAnyway"
+          style="margin-top: 0.5rem; margin-left: 0.5rem;"
+        >
+          Continue anyway
         </ui5-button>
       </template>
     </form>
