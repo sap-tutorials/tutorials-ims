@@ -103,36 +103,50 @@ export function gradeAnswers(
 
 const PERSIST_PREFIX = 'tutorial-validation-';
 
+export type PersistedOutcome = 'pass' | 'accepted';
+
 export function persistKey(slug: string, stepNumber: number): string {
   return `${PERSIST_PREFIX}${slug}-${stepNumber}`;
 }
 
 /**
- * Read the persisted "answered correctly" flag for a (slug, step).
+ * Read the persisted outcome for a (slug, step).
  * Tolerant of localStorage failures (private mode, quota); returns null on any error
  * including malformed JSON.
+ *
+ * Back-compat: legacy {correct:true} entries read as {outcome:'pass'}.
  */
-export function readPersisted(slug: string, stepNumber: number): { correct: boolean } | null {
+export function readPersisted(slug: string, stepNumber: number): { outcome: PersistedOutcome } | null {
   try {
     const raw = localStorage.getItem(persistKey(slug, stepNumber));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return parsed?.correct === true ? { correct: true } : null;
+
+    // Legacy back-compat: {correct:true} reads as {outcome:'pass'}
+    if (parsed?.correct === true) {
+      return { outcome: 'pass' };
+    }
+
+    // New shape: {outcome:'pass'|'accepted'}
+    if (parsed?.outcome === 'pass' || parsed?.outcome === 'accepted') {
+      return { outcome: parsed.outcome };
+    }
+
+    return null;
   } catch {
     return null;
   }
 }
 
 /**
- * Write the "answered correctly" flag. Only persists on `correct: true`.
+ * Write the persisted outcome. Stores {outcome, timestamp}.
  * Silent on failure (private mode, quota exceeded, etc).
  */
-export function writePersisted(slug: string, stepNumber: number, correct: boolean): void {
-  if (!correct) return;
+export function writePersisted(slug: string, stepNumber: number, outcome: PersistedOutcome): void {
   try {
     localStorage.setItem(
       persistKey(slug, stepNumber),
-      JSON.stringify({ correct: true, timestamp: Date.now() })
+      JSON.stringify({ outcome, timestamp: Date.now() })
     );
   } catch {
     // private mode or quota exceeded — silent
