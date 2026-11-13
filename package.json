@@ -246,6 +246,9 @@
     "undici": "8.10.2",
     "vue-virtual-scroller": "3.0.5"
   },
+  "overrides": {
+    "@sap/cds-compiler": "7.2.1"
+  },
   "cds": {
     "protocols": {
       "graphql": {
