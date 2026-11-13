@@ -1,0 +1,7 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_external_TechEdSessionSpeakers (
+  ID NVARCHAR(36) NOT NULL,
+  session_ID NVARCHAR(36),
+  speaker_ID NVARCHAR(36),
+  PRIMARY KEY(ID)
+)

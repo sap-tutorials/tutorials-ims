@@ -1,0 +1,28 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_external_Videos (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  slug NVARCHAR(120),
+  title NVARCHAR(400),
+  description NCLOB,
+  url NVARCHAR(500),
+  youtubeVideoId NVARCHAR(20),
+  publishedAt TIMESTAMP,
+  channelTitle NVARCHAR(200),
+  thumbnailUrl NVARCHAR(500),
+  sourceId NVARCHAR(120),
+  contentHash NVARCHAR(64),
+  lastExtractedHash NVARCHAR(64),
+  firstSeenAt TIMESTAMP,
+  lastSeenAt TIMESTAMP,
+  pinUntil TIMESTAMP,
+  viewCount BIGINT,
+  likeCount BIGINT,
+  commentCount BIGINT,
+  statsLastFetchedAt TIMESTAMP,
+  excludeFromHomepage BOOLEAN DEFAULT FALSE,
+  PRIMARY KEY(ID)
+)

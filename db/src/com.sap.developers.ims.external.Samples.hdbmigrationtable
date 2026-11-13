@@ -1,0 +1,24 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_external_Samples (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  slug NVARCHAR(120),
+  title NVARCHAR(255),
+  description NCLOB,
+  url NVARCHAR(500),
+  sourceId NVARCHAR(120),
+  contentHash NVARCHAR(64),
+  lastExtractedHash NVARCHAR(64),
+  firstSeenAt TIMESTAMP,
+  lastSeenAt TIMESTAMP,
+  pinUntil TIMESTAMP,
+  "LANGUAGE" NVARCHAR(40),
+  stars INTEGER,
+  lastCommitAt TIMESTAMP,
+  embedding BLOB,
+  embeddingVec REAL_VECTOR(1536),
+  PRIMARY KEY(ID)
+)

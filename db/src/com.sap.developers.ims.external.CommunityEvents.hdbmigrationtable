@@ -1,0 +1,27 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_external_CommunityEvents (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  slug NVARCHAR(80),
+  eventType NVARCHAR(20),
+  source NVARCHAR(20),
+  title NVARCHAR(500),
+  description NCLOB,
+  url NVARCHAR(1000),
+  sourceId NVARCHAR(200),
+  location NVARCHAR(500),
+  scope NVARCHAR(20),
+  virtualOrInPerson NVARCHAR(20),
+  region NVARCHAR(16),
+  startDate DATE,
+  endDate DATE,
+  contentHash NVARCHAR(64),
+  lastExtractedHash NVARCHAR(64),
+  firstSeenAt TIMESTAMP,
+  lastSeenAt TIMESTAMP,
+  pinUntil TIMESTAMP,
+  PRIMARY KEY(ID)
+)
