@@ -1,0 +1,16 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_external_TechEdTracks (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  sourceId NVARCHAR(200),
+  slug NVARCHAR(200),
+  name NVARCHAR(300),
+  venue NVARCHAR(10),
+  description NCLOB,
+  contentHash NVARCHAR(64),
+  lastSeenAt TIMESTAMP,
+  PRIMARY KEY(ID)
+)

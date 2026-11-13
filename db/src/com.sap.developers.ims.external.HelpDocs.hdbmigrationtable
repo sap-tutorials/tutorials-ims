@@ -1,0 +1,22 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_external_HelpDocs (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  slug NVARCHAR(150),
+  source NVARCHAR(20),
+  title NVARCHAR(255),
+  description NCLOB,
+  url NVARCHAR(500),
+  sourceId NVARCHAR(200),
+  contentHash NVARCHAR(64),
+  lastExtractedHash NVARCHAR(64),
+  firstSeenAt TIMESTAMP,
+  lastSeenAt TIMESTAMP,
+  pinUntil TIMESTAMP,
+  "PRODUCT" NVARCHAR(80),
+  section NVARCHAR(500),
+  PRIMARY KEY(ID)
+)

@@ -1,0 +1,21 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_external_LearningJourneys (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  slug NVARCHAR(80),
+  title NVARCHAR(255),
+  description NVARCHAR(1000),
+  url NVARCHAR(500),
+  sourceId NVARCHAR(120),
+  contentHash NVARCHAR(64),
+  lastExtractedHash NVARCHAR(64),
+  firstSeenAt TIMESTAMP,
+  lastSeenAt TIMESTAMP,
+  pinUntil TIMESTAMP,
+  level NVARCHAR(20),
+  durationHours DECIMAL(5, 2),
+  PRIMARY KEY(ID)
+)

@@ -1,0 +1,14 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_external_RelevanceSeedExemplars (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  label NVARCHAR(20) NOT NULL,
+  "TEXT" NCLOB NOT NULL,
+  embedding REAL_VECTOR(1536),
+  active BOOLEAN DEFAULT TRUE,
+  note NVARCHAR(500),
+  PRIMARY KEY(ID)
+)
