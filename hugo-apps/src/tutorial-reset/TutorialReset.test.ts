@@ -129,17 +129,25 @@ function getVm(wrapper: ReturnType<typeof mount>): VmExposed {
 // ─────────────────────────────────────────────────────────────────────
 
 describe('TutorialReset.vue — mount: getProgress branch', () => {
-  it('hides the reset button when progress is partial (completed < stepCount)', async () => {
-    setStepCount(5);
-    fetchMock.mockResolvedValueOnce(mockFetchResponse({ completedSteps: [1, 2, 3] }));
+  it('shows the reset button when there is partial progress', async () => {
+    setStepCount(3);
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({ completedSteps: [1] }));
 
     const wrapper = await mountReset();
-    expect(getVm(wrapper).showReset).toBe(false);
+    expect(getVm(wrapper).showReset).toBe(true);
 
     // Sanity: getProgress was the only fetch
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toContain('/api/getProgress');
     expect(fetchMock.mock.calls[0][0]).toContain('slug=test-tutorial');
+  });
+
+  it('hides the reset button when there is zero progress', async () => {
+    setStepCount(3);
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({ completedSteps: [] }));
+
+    const wrapper = await mountReset();
+    expect(getVm(wrapper).showReset).toBe(false);
   });
 
   it('shows the reset button when progress is complete (completed === stepCount)', async () => {
