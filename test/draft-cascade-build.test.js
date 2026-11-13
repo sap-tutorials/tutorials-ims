@@ -51,21 +51,32 @@ async function compileAndCollectDraftCascades() {
   const cdsDkBase = cdsDkPkgPath.replace(/[/\\]package\.json$/, '');
 
   // Load @sap/cds from the same tree that cds-dk ships so model loading is
-  // consistent with what the production build uses.
+  // consistent with what the production build uses.  Compiler is resolved first
+  // so both require calls complete before we touch process.env.
   const cdsPkgPath = require.resolve('@sap/cds/package.json', { paths: [cdsDkBase] });
   const cdsBase = cdsPkgPath.replace(/[/\\]package\.json$/, '');
   const cds = require(join(cdsBase, 'lib', 'index.js'));
 
-  // Set production env so the CDS model includes @cap-js/hana artifacts.
-  process.env.CDS_ENV = 'production';
-
-  const csn = await cds.load(['db', 'srv'], { root: PROJECT_ROOT });
-
   // Compiler is resolved from cds-dk's own node_modules (7.2.1).
   const compiler = require(require.resolve('@sap/cds-compiler', { paths: [cdsDkBase] }));
 
-  // Compile to HDI with the cascade constraint generator enabled.
-  const hdi = compiler.to.hdi(csn, { draft_admin_integrity: true, sqlDialect: 'hana' });
+  // Scope CDS_ENV='production' so the model includes @cap-js/hana artifacts.
+  // Restore immediately after the compile to avoid leaking the mutation into
+  // co-running unit tests that share this worker process.
+  const prevCdsEnv = process.env.CDS_ENV;
+  let csn, hdi;
+  try {
+    process.env.CDS_ENV = 'production';
+    csn = await cds.load(['db', 'srv'], { root: PROJECT_ROOT });
+    // Compile to HDI with the cascade constraint generator enabled.
+    hdi = compiler.to.hdi(csn, { draft_admin_integrity: true, sqlDialect: 'hana' });
+  } finally {
+    if (prevCdsEnv === undefined) {
+      delete process.env.CDS_ENV;
+    } else {
+      process.env.CDS_ENV = prevCdsEnv;
+    }
+  }
 
   // Collect .hdbconstraint files whose bodies reference DraftAdministrativeData
   // and contain a CASCADE clause (i.e. the draft FK constraints we are guarding).
