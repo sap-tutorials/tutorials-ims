@@ -1,0 +1,27 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_external_NewsItems (
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  sourceId NVARCHAR(200) NOT NULL,
+  link NVARCHAR(500) NOT NULL,
+  title NVARCHAR(500) NOT NULL,
+  description NCLOB,
+  publishedAt TIMESTAMP,
+  "LANGUAGE" NVARCHAR(10),
+  contentHash NVARCHAR(64),
+  aiVerdict NVARCHAR(20),
+  aiReason NVARCHAR(500),
+  aiVerdictSource NVARCHAR(20),
+  aiConfidence DECIMAL(4, 3),
+  aiVerdictAt TIMESTAMP,
+  aiModel NVARCHAR(100),
+  adminVerdict NVARCHAR(20),
+  adminNote NVARCHAR(500),
+  adminBy NVARCHAR(255),
+  adminAt TIMESTAMP,
+  lastFetchedAt TIMESTAMP,
+  classifyError NVARCHAR(500),
+  PRIMARY KEY(sourceId)
+)

@@ -1,0 +1,24 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_external_BlogPosts (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  slug NVARCHAR(120),
+  title NVARCHAR(400),
+  excerpt NVARCHAR(1000),
+  url NVARCHAR(500),
+  khorosMessageId NVARCHAR(40),
+  postedAt TIMESTAMP,
+  authorLogin NVARCHAR(80),
+  authorName NVARCHAR(200),
+  authorAvatarUrl NVARCHAR(500),
+  sourceId NVARCHAR(120),
+  contentHash NVARCHAR(64),
+  lastExtractedHash NVARCHAR(64),
+  firstSeenAt TIMESTAMP,
+  lastSeenAt TIMESTAMP,
+  pinUntil TIMESTAMP,
+  PRIMARY KEY(ID)
+)

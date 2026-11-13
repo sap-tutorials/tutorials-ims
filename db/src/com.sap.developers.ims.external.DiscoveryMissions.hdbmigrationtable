@@ -1,0 +1,22 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_external_DiscoveryMissions (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  slug NVARCHAR(120),
+  title NVARCHAR(400),
+  description NVARCHAR(2000),
+  url NVARCHAR(500),
+  mcpId NVARCHAR(40),
+  effortLevel INTEGER,
+  categorySlug NVARCHAR(40),
+  sourceId NVARCHAR(120),
+  contentHash NVARCHAR(64),
+  lastExtractedHash NVARCHAR(64),
+  firstSeenAt TIMESTAMP,
+  lastSeenAt TIMESTAMP,
+  pinUntil TIMESTAMP,
+  PRIMARY KEY(ID)
+)
