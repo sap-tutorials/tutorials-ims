@@ -98,7 +98,7 @@ The preflight discovers tables from `SYS.TABLE_COLUMNS` at runtime — it does n
 [draft-integrity-preflight] ⚠ missing: <table-names>
 ```
 **STOP.** The constraints are incomplete or not deployed. Investigate:
-- Is the mtar's `gen/db` module serving the `.hdbconstraint` files? (Re-check Step 1/2.)
+- Is the mtar's `gen/db` module serving the `.hdbconstraint` files? Re-check Step 2 — was the mtar verified to contain 46 `.hdbconstraint` files before deploy?
 - Did the HANA HDI deployment succeed? Check `cf logs <srv-app> --recent`.
 - Confirm `@sap/cds-compiler` version in the deployed build (check package-lock.json on the branch that was built).
 
@@ -174,7 +174,7 @@ These are tested in `test/admin-drafts-discard-reconcile.test.js` under the flag
 
 ## Step 6: Run the Gate Test (Mission Draft Lifecycle)
 
-The gate test `test/admin-drafts-cascade-gate.test.js` verifies that Mission draftEdit + discard leaves zero orphaned child drafts.
+The gate test `test/admin-drafts-cascade-gate.test.js` verifies that Mission draftEdit + discard leaves zero orphaned child drafts. This test runs against local SQLite — it confirms business logic under the flag, not the deployed HANA schema. The Step 3 preflight and Step 5 hook audit cover the HANA side.
 
 ```bash
 npx vitest run test/admin-drafts-cascade-gate.test.js
