@@ -56,12 +56,14 @@ const NS = 'com.sap.developers.ims';
 const RUN_HEX = crypto.randomBytes(4).toString('hex');
 const PREFIX = `dad5-${RUN_HEX}`;
 
-// Fixed UUIDs scoped to this test run (UUID prefix 'dad50001' to avoid collision).
-const USER_ID = `dad50001-2993-0005-${RUN_HEX.slice(0, 4)}-${RUN_HEX}${RUN_HEX}`.slice(0, 36).padEnd(36, '0');
-const TUT_ID  = `dad50002-2993-0005-${RUN_HEX.slice(0, 4)}-${RUN_HEX}${RUN_HEX}`.slice(0, 36).padEnd(36, '0');
-const MISS_ID = `dad50003-2993-0005-${RUN_HEX.slice(0, 4)}-${RUN_HEX}${RUN_HEX}`.slice(0, 36).padEnd(36, '0');
-const CP_ID   = `dad50004-2993-0005-${RUN_HEX.slice(0, 4)}-${RUN_HEX}${RUN_HEX}`.slice(0, 36).padEnd(36, '0');
-const CPI_ID  = `dad50005-2993-0005-${RUN_HEX.slice(0, 4)}-${RUN_HEX}${RUN_HEX}`.slice(0, 36).padEnd(36, '0');
+// Deterministic UUIDs scoped to this test run: 8-4-4-4-12, all hex.
+// RUN_HEX is 8 chars (4 bytes); last segment = RUN_HEX + 4 zero-padding = 12 chars.
+// Each entity discriminator is in the first segment (dad50001…dad50005).
+const USER_ID = `dad50001-2993-0005-${RUN_HEX.slice(0, 4)}-${RUN_HEX}0000`;
+const TUT_ID  = `dad50002-2993-0005-${RUN_HEX.slice(0, 4)}-${RUN_HEX}0000`;
+const MISS_ID = `dad50003-2993-0005-${RUN_HEX.slice(0, 4)}-${RUN_HEX}0000`;
+const CP_ID   = `dad50004-2993-0005-${RUN_HEX.slice(0, 4)}-${RUN_HEX}0000`;
+const CPI_ID  = `dad50005-2993-0005-${RUN_HEX.slice(0, 4)}-${RUN_HEX}0000`;
 
 describe.runIf(isSafeForWrites())('dad deleteStrategy: after(DISCARD) reconcile + zero orphan CPI drafts (#2993 hybrid)', () => {
   let db;
