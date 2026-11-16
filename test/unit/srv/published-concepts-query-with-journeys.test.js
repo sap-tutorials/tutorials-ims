@@ -73,4 +73,36 @@ describe('buildConceptsPayload — learningJourneys field', () => {
     const nj = payload.concepts.find(c => c.slug === 'no-journey')
     expect(nj.learningJourneys).toEqual([])
   })
+
+  // #3135: learningJourneys read had no ORDER BY — same non-deterministic-order
+  // defect as the KG relationship reads, and it feeds the concept body hash.
+  // Insert two journey links in reverse-sorted order; assert ascending-by-slug.
+  it('orders learningJourneys deterministically by journey slug (#3135)', async () => {
+    const { Concepts } = cds.entities('com.sap.developers.ims')
+    const { LearningJourneys, LearningJourneyConceptLinks } =
+      cds.entities('com.sap.developers.ims.external')
+
+    await INSERT.into(Concepts).entries({
+      slug: 'multi-journey', name: 'Multi Journey', description: 'd',
+      status: 'ACTIVE', publishedAt: new Date().toISOString(), publishedBy: 'admin@sap.com',
+    })
+    await INSERT.into(LearningJourneys).entries([
+      { slug: 'zzz-journey', title: 'ZZZ', url: 'https://x/zzz', level: 'a', durationHours: 1 },
+      { slug: 'aaa-journey', title: 'AAA', url: 'https://x/aaa', level: 'a', durationHours: 1 },
+    ])
+    const cRow = await SELECT.one.from(Concepts).columns('ID').where({ slug: 'multi-journey' })
+    const jRows = await SELECT.from(LearningJourneys).columns('ID', 'slug')
+      .where({ slug: { in: ['zzz-journey', 'aaa-journey'] } })
+    const jid = (s) => jRows.find(r => r.slug === s).ID
+    // Insert reverse-sorted on purpose.
+    await INSERT.into(LearningJourneyConceptLinks).entries([
+      { journey_ID: jid('zzz-journey'), concept_ID: cRow.ID, predicate: 'covers', confidence: 0.9 },
+      { journey_ID: jid('aaa-journey'), concept_ID: cRow.ID, predicate: 'covers', confidence: 0.9 },
+    ])
+
+    const payload = await buildConceptsPayload(cds.db)
+    const c = payload.concepts.find(p => p.slug === 'multi-journey')
+    const slugs = c.learningJourneys.map(j => j.slug)
+    expect(slugs).toEqual(['aaa-journey', 'zzz-journey'])
+  })
 })
