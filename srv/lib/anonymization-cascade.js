@@ -138,7 +138,7 @@ async function cascadeNullPersonal(user, step, _db) {
     // Guard: empty candidate list (e.g. sapId + uuid both null) would produce
     // WHERE col IN () which is a SQL syntax error on HANA — skip and warn.
     if (!resolved.values?.length) {
-      LOG.warn(`cascade: no data-subject candidates for ${step.entityName} (user ${user.ID}) — skipping; possible incomplete erasure`);
+      LOG.warn(`cascade: no data-subject candidates for ${step.entityName} (user ${user.ID}) - skipping; possible incomplete erasure`);
       return;
     }
     const update = { [resolved.column]: null };
@@ -160,7 +160,7 @@ async function cascadeDelete(user, step, _db) {
     // Guard: empty candidate list (e.g. sapId + uuid both null) would produce
     // WHERE col IN () which is a SQL syntax error on HANA — skip and warn.
     if (!resolved.values?.length) {
-      LOG.warn(`cascade: no data-subject candidates for ${step.entityName} (user ${user.ID}) — skipping; possible incomplete erasure`);
+      LOG.warn(`cascade: no data-subject candidates for ${step.entityName} (user ${user.ID}) - skipping; possible incomplete erasure`);
       return;
     }
     await DELETE.from(step.entityName).where({ [resolved.column]: { in: resolved.values } });
@@ -182,7 +182,7 @@ async function cascadeAuditOnly(user, step, _db) {
     // Guard: empty candidate list (e.g. sapId + uuid both null) would produce
     // WHERE col IN () which is a SQL syntax error on HANA — skip and warn.
     if (!resolved.values?.length) {
-      LOG.warn(`cascade: no data-subject candidates for ${step.entityName} (user ${user.ID}) — skipping; possible incomplete erasure`);
+      LOG.warn(`cascade: no data-subject candidates for ${step.entityName} (user ${user.ID}) - skipping; possible incomplete erasure`);
       return;
     }
     await UPDATE.entity(step.entityName)

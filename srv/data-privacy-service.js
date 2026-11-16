@@ -113,6 +113,9 @@ export default class DataPrivacyService extends cds.ApplicationService {
 
       // Normal case: SELECT rows projected to personalFields + FK + meta.
       const { column, values } = resolved;
+      if (!values?.length) {
+        LOG.warn(`exportDataSubject: no data-subject candidates for ${entityName} (user ${userId}) - rows omitted, subject not resolvable`);
+      }
       const rows = await this._selectRows(entityName, column, values, personalFields, definitions);
       sections.push({ entity: entityName, count: rows.length, rows });
     }
@@ -172,6 +175,10 @@ export default class DataPrivacyService extends cds.ApplicationService {
     const TABS_ENTITY  = 'com.sap.developers.ims.DeveloperEnvironmentTabs';
     const LINKS_ENTITY = entry.entityName; // com.sap.developers.ims.DeveloperEnvironmentLinks
 
+    // TODO: tabCols and linkCols are hardcoded because DeveloperEnvironmentTabs/Links
+    // currently carry no @PersonalData.IsPotentiallyPersonal fields. MUST be updated
+    // (or switched to the model-driven personalFields projection) if any personal field
+    // is ever annotated on those entities.
     const tabCols = [...new Set(['ID', 'user_ID', 'tabName', 'tabOrder'])];
     const tabRows = await SELECT.from(TABS_ENTITY)
       .columns(tabCols)
