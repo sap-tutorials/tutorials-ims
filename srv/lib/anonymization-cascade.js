@@ -18,6 +18,13 @@ export function _resetPlanForTest() {
   cachedDefs = null;
 }
 
+// Test seam: exposes cascadeDelete for direct invocation in unit tests.
+// Mirrors the _resetPlanForTest convention — underscore prefix signals test-only use.
+// DO NOT call from production code; use executeAnonymizationCascade instead.
+export async function _cascadeDeleteForTest(user, step, db) {
+  return cascadeDelete(user, step, db);
+}
+
 /**
  * Walk model definitions, return cascade plan for every @PersonalData entity.
  * Cached on first call; the same defs object reuses the cache.

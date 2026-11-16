@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import path from 'node:path';
 import cds from '@sap/cds';
-import { _resetPlanForTest, executeAnonymizationCascade } from '../../srv/lib/anonymization-cascade.js';
+import { _resetPlanForTest, getCascadePlan, executeAnonymizationCascade, _cascadeDeleteForTest } from '../../srv/lib/anonymization-cascade.js';
 
 describe('anonymization-cascade: AuthorAiRequests authorId gap', () => {
   beforeAll(async () => {
@@ -207,5 +207,77 @@ describe('anonymization-cascade: AuthorAiRequests authorId gap', () => {
     // Belt-and-braces: the Link must be gone from DB.
     const links = await SELECT.from(DeveloperEnvironmentLinks).where({ ID: linkId });
     expect(links).toHaveLength(0);
+  });
+
+  // Isolation test: invokes cascadeDelete for the DeveloperEnvironmentLinks plan entry
+  // DIRECTLY — no full orchestrator, so the Tabs step never runs and the Composition
+  // never pre-deletes the Link. The Tab is still in DB when the Links step fires, so
+  // parentIds is non-empty and the nested DELETE must actually execute.
+  //
+  // This test FAILS if:
+  //   - resolved.via is wrong (SELECT targets wrong entity -> parentIds = [] -> no DELETE)
+  //   - resolved.column is wrong (DELETE targets wrong column -> Link survives)
+  //   - the nested branch is removed entirely (empty-array guard fires, Link survives)
+  it('test_cascadeDelete_nested_isolation_DeveloperEnvironmentLinks', async () => {
+    const {
+      Users,
+      DeveloperEnvironmentTabs,
+      DeveloperEnvironmentLinks
+    } = cds.entities('com.sap.developers.ims');
+
+    // Clean slate for this test
+    await DELETE.from(DeveloperEnvironmentLinks);
+    await DELETE.from(DeveloperEnvironmentTabs);
+
+    const userId = '44444444-4444-4444-4444-444444444444';
+    const sapId = 'S00CAROL';
+    await INSERT.into(Users).entries({
+      ID: userId,
+      sapId: sapId,
+      firstName: 'Carol',
+      email: 'carol@example.com'
+    });
+
+    // Tab owned by the user — must be in DB when cascadeDelete fires for Links
+    const tabId = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+    await INSERT.into(DeveloperEnvironmentTabs).entries({
+      ID: tabId,
+      user_ID: userId,
+      legacyId: 2
+    });
+
+    // Link pointing at the Tab
+    const linkId = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+    await INSERT.into(DeveloperEnvironmentLinks).entries({
+      ID: linkId,
+      tab_ID: tabId,
+      legacyId: 20
+    });
+
+    // Locate the DeveloperEnvironmentLinks plan entry from the real model
+    const definitions = (cds.model ?? cds.db?.model)?.definitions;
+    const plan = getCascadePlan(definitions);
+    const linksStep = plan.find(
+      e => e.entityName === 'com.sap.developers.ims.DeveloperEnvironmentLinks'
+    );
+    expect(linksStep).toBeDefined();                           // sanity: plan entry exists
+    expect(linksStep.dataSubjectField).toBe('tab_ID');         // resolver returns nested marker on this field
+    expect(linksStep.action).toBe('delete');
+
+    const db = await cds.connect.to('db');
+
+    // Invoke cascadeDelete directly for the Links plan entry.
+    // The Tab is STILL in the DB here — the Tabs step has NOT run.
+    // The nested path must: SELECT DeveloperEnvironmentTabs WHERE user_ID = userId
+    //   -> [tabId] -> DELETE DeveloperEnvironmentLinks WHERE tab_ID IN [tabId]
+    await _cascadeDeleteForTest({ ID: userId, sapId }, linksStep, db);
+
+    // Assert the Link is deleted by THIS call (not by a prior Composition cascade)
+    const linksAfter = await SELECT.from(DeveloperEnvironmentLinks).where({ ID: linkId });
+    expect(linksAfter).toHaveLength(0);
+
+    // The Tab itself must still be in DB (we only ran the Links step, not the Tabs step)
+    const tabsAfter = await SELECT.from(DeveloperEnvironmentTabs).where({ ID: tabId });
+    expect(tabsAfter).toHaveLength(1);
   });
 });
