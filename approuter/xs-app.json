@@ -303,6 +303,13 @@
       "authenticationType": "xsuaa"
     },
     {
+      "source": "^/admin/data-privacy/(.*)$",
+      "target": "/admin/data-privacy/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Admin"
+    },
+    {
       "source": "^/admin/(.*)$",
       "target": "/admin/$1",
       "destination": "srv-api",
