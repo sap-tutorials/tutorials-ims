@@ -158,6 +158,8 @@ When `EXPOSE_CAP_UI=true` is set on the CAP srv app, these are accessible throug
 | `/admin/analytics/` | AnalyticsService — `@analytics.exposed` entity surface + `runSelectQuery` action | XSUAA + `Admin` |
 | `/admin/exports/$metadata` | ExportsService OData metadata | XSUAA + `Admin` |
 | `/admin/exports/` | ExportsService — `exportLegacyData(format)` action | XSUAA + `Admin` |
+| `/admin/data-privacy/$metadata` | DataPrivacyService OData metadata | XSUAA + `Admin` |
+| `/admin/data-privacy/` | DataPrivacyService — `exportDataSubject(userId)` function | XSUAA + `Admin` |
 | `/display/$metadata` | DisplayService OData metadata | XSUAA |
 | `/display/` | DisplayService — read-only data for event dashboards | XSUAA |
 | `/drawings/$metadata` | DrawingService OData metadata | XSUAA + `Admin` |
