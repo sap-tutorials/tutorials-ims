@@ -122,6 +122,7 @@ export async function buildConceptsPayload(db) {
             'tutorial.stepCount as tutorial_stepCount'
           )
           .where({ predicate: 'teaches' })
+          .orderBy('tutorial.slug')
       )).filter(r => idsSet.has(r.concept_ID));
       return groupBy(
         // Defensive: drop orphan rows where the joined Tutorial side is null.
@@ -153,6 +154,7 @@ export async function buildConceptsPayload(db) {
               'target.description as target_description'
             )
             .where({ status: 'ACTIVE' })
+            .orderBy('target.slug')
         ).then(rows => rows.filter(r => idsSet.has(r.source_ID))),
         db.run(
           SELECT.from(ConceptEdges)
@@ -163,6 +165,7 @@ export async function buildConceptsPayload(db) {
               'source.description as source_description'
             )
             .where({ status: 'ACTIVE', predicate: 'requires' })
+            .orderBy('source.slug')
         ).then(rows => rows.filter(r => idsSet.has(r.target_ID))),
       ]);
 
