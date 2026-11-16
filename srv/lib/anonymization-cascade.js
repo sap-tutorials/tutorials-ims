@@ -128,6 +128,12 @@ async function cascadeNullPersonal(user, step, _db) {
     for (const f of step.personalFields) update[f] = null;
     await UPDATE.entity(step.entityName).where({ [resolved.column]: { in: parentIds } }).set(update);
   } else {
+    // Guard: empty candidate list (e.g. sapId + uuid both null) would produce
+    // WHERE col IN () which is a SQL syntax error on HANA — skip and warn.
+    if (!resolved.values?.length) {
+      LOG.warn(`cascade: no data-subject candidates for ${step.entityName} (user ${user.ID}) — skipping; possible incomplete erasure`);
+      return;
+    }
     const update = { [resolved.column]: null };
     for (const f of step.personalFields) update[f] = null;
     await UPDATE.entity(step.entityName).where({ [resolved.column]: { in: resolved.values } }).set(update);
@@ -144,6 +150,12 @@ async function cascadeDelete(user, step, _db) {
     if (!parentIds.length) return;
     await DELETE.from(step.entityName).where({ [resolved.column]: { in: parentIds } });
   } else {
+    // Guard: empty candidate list (e.g. sapId + uuid both null) would produce
+    // WHERE col IN () which is a SQL syntax error on HANA — skip and warn.
+    if (!resolved.values?.length) {
+      LOG.warn(`cascade: no data-subject candidates for ${step.entityName} (user ${user.ID}) — skipping; possible incomplete erasure`);
+      return;
+    }
     await DELETE.from(step.entityName).where({ [resolved.column]: { in: resolved.values } });
   }
 }
@@ -160,6 +172,12 @@ async function cascadeAuditOnly(user, step, _db) {
       .where({ [resolved.column]: { in: parentIds } })
       .set({ createdBy: 'ANONYMIZED', modifiedBy: 'ANONYMIZED' });
   } else {
+    // Guard: empty candidate list (e.g. sapId + uuid both null) would produce
+    // WHERE col IN () which is a SQL syntax error on HANA — skip and warn.
+    if (!resolved.values?.length) {
+      LOG.warn(`cascade: no data-subject candidates for ${step.entityName} (user ${user.ID}) — skipping; possible incomplete erasure`);
+      return;
+    }
     await UPDATE.entity(step.entityName)
       .where({ [resolved.column]: { in: resolved.values } })
       .set({ createdBy: 'ANONYMIZED', modifiedBy: 'ANONYMIZED' });
