@@ -1,4 +1,5 @@
 import cds from '@sap/cds';
+import { resolveSubjectKeys } from './data-subject-resolver.js';
 
 const LOG = cds.log('anonymization-cascade');
 
@@ -116,19 +117,53 @@ export async function executeAnonymizationCascade(user, db) {
 }
 
 async function cascadeNullPersonal(user, step, _db) {
-  const update = { [step.dataSubjectField]: null };
-  for (const f of step.personalFields) update[f] = null;
-  await UPDATE.entity(step.entityName).where({ [step.dataSubjectField]: user.ID }).set(update);
+  const resolved = await resolveSubjectKeys(user, step);
+  if (!resolved) return;
+  if (resolved.nested) {
+    // Nested case: look up parent IDs first, then apply action on child entity.
+    const parentRows = await SELECT.from(resolved.via).columns('ID').where({ user_ID: user.ID });
+    const parentIds = parentRows.map(r => r.ID);
+    if (!parentIds.length) return;
+    const update = { [resolved.column]: null };
+    for (const f of step.personalFields) update[f] = null;
+    await UPDATE.entity(step.entityName).where({ [resolved.column]: { in: parentIds } }).set(update);
+  } else {
+    const update = { [resolved.column]: null };
+    for (const f of step.personalFields) update[f] = null;
+    await UPDATE.entity(step.entityName).where({ [resolved.column]: { in: resolved.values } }).set(update);
+  }
 }
 
 async function cascadeDelete(user, step, _db) {
-  await DELETE.from(step.entityName).where({ [step.dataSubjectField]: user.ID });
+  const resolved = await resolveSubjectKeys(user, step);
+  if (!resolved) return;
+  if (resolved.nested) {
+    // Nested case: look up parent IDs first, then delete child rows.
+    const parentRows = await SELECT.from(resolved.via).columns('ID').where({ user_ID: user.ID });
+    const parentIds = parentRows.map(r => r.ID);
+    if (!parentIds.length) return;
+    await DELETE.from(step.entityName).where({ [resolved.column]: { in: parentIds } });
+  } else {
+    await DELETE.from(step.entityName).where({ [resolved.column]: { in: resolved.values } });
+  }
 }
 
 async function cascadeAuditOnly(user, step, _db) {
-  await UPDATE.entity(step.entityName)
-    .where({ [step.dataSubjectField]: user.ID })
-    .set({ createdBy: 'ANONYMIZED', modifiedBy: 'ANONYMIZED' });
+  const resolved = await resolveSubjectKeys(user, step);
+  if (!resolved) return;
+  if (resolved.nested) {
+    // Nested case: look up parent IDs first, then apply action on child entity.
+    const parentRows = await SELECT.from(resolved.via).columns('ID').where({ user_ID: user.ID });
+    const parentIds = parentRows.map(r => r.ID);
+    if (!parentIds.length) return;
+    await UPDATE.entity(step.entityName)
+      .where({ [resolved.column]: { in: parentIds } })
+      .set({ createdBy: 'ANONYMIZED', modifiedBy: 'ANONYMIZED' });
+  } else {
+    await UPDATE.entity(step.entityName)
+      .where({ [resolved.column]: { in: resolved.values } })
+      .set({ createdBy: 'ANONYMIZED', modifiedBy: 'ANONYMIZED' });
+  }
 }
 
 async function cascadeIdentityReplace(user, step, _db) {

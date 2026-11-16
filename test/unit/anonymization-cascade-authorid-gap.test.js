@@ -20,7 +20,7 @@ describe('anonymization-cascade: AuthorAiRequests authorId gap', () => {
     _resetPlanForTest();
   });
 
-  it('test_cascade_misses_authorId_keyed_rows_today', async () => {
+  it('test_cascade_deletes_authorId_keyed_rows', async () => {
     const { Users, AuthorAiRequests } = cds.entities('com.sap.developers.ims');
 
     // Seed a Users row with ID (UUID) and sapId (XSUAA id)
@@ -35,9 +35,7 @@ describe('anonymization-cascade: AuthorAiRequests authorId gap', () => {
 
     // Seed an AuthorAiRequests row with authorId (XSUAA id, same as sapId),
     // sourceMarkdown content, and NO user_ID FK (null).
-    // This represents the gap: cascade identifies the user by Users.ID (UUID),
-    // but AuthorAiRequests.authorId is keyed to XSUAA id (a String), so the
-    // match will fail and the row will survive.
+    // The cascade must resolve authorId -> sapId and delete the row.
     const reqId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
     await INSERT.into(AuthorAiRequests).entries({
       ID: reqId,
@@ -53,11 +51,59 @@ describe('anonymization-cascade: AuthorAiRequests authorId gap', () => {
       await cds.connect.to('db')
     );
 
-    // Assert: the AuthorAiRequests row STILL EXISTS (documents the gap).
-    // Because the cascade looked for rows with user_ID matching the UUID
-    // (or resolved association FK), it never matched the authorId scalar field.
+    // Assert: the AuthorAiRequests row is DELETED (gap is closed).
+    // The resolver maps authorId -> sapId candidates and the cascade
+    // deletes rows WHERE authorId IN [sapId, uuid].
     const rows = await SELECT.from(AuthorAiRequests).where({ ID: reqId });
-    expect(rows).toHaveLength(1);
-    expect(rows[0].sourceMarkdown).toBe('secret content that should be anonymized');
+    expect(rows).toHaveLength(0);
+  });
+
+  it('test_cascade_deletes_tab_nested_DeveloperEnvironmentLinks', async () => {
+    const {
+      Users,
+      DeveloperEnvironmentTabs,
+      DeveloperEnvironmentLinks
+    } = cds.entities('com.sap.developers.ims');
+
+    // Clean up before this test case (beforeEach only cleans AuthorAiRequests/Users)
+    await DELETE.from(DeveloperEnvironmentLinks);
+    await DELETE.from(DeveloperEnvironmentTabs);
+
+    const userId = '22222222-2222-2222-2222-222222222222';
+    const sapId = 'S00BOB';
+    await INSERT.into(Users).entries({
+      ID: userId,
+      sapId: sapId,
+      firstName: 'Bob',
+      email: 'bob@example.com'
+    });
+
+    // A Tab owned by the user
+    const tabId = 'tttttttt-tttt-tttt-tttt-tttttttttttt';
+    await INSERT.into(DeveloperEnvironmentTabs).entries({
+      ID: tabId,
+      user_ID: userId,
+      legacyId: 1
+    });
+
+    // A Link nested under the Tab
+    const linkId = 'llllllll-llll-llll-llll-llllllllllll';
+    await INSERT.into(DeveloperEnvironmentLinks).entries({
+      ID: linkId,
+      tab_ID: tabId,
+      legacyId: 10
+    });
+
+    // Run cascade for the user
+    await executeAnonymizationCascade(
+      { ID: userId, sapId: sapId },
+      await cds.connect.to('db')
+    );
+
+    // Assert: both the Tab and the Link are deleted
+    const tabs = await SELECT.from(DeveloperEnvironmentTabs).where({ ID: tabId });
+    const links = await SELECT.from(DeveloperEnvironmentLinks).where({ ID: linkId });
+    expect(tabs).toHaveLength(0);
+    expect(links).toHaveLength(0);
   });
 });
