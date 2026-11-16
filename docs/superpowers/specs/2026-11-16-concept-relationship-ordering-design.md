@@ -29,6 +29,16 @@ cap-at-24 compounds it: when a list exceeds 24, order also decides which 24 surv
 Unit tests never caught it because they run on SQLite, which returns rows in stable
 insertion order.
 
+**Completeness (post-review):** `contentHash = sha256(body)` and `body` renders not only
+the three KG relationship lists but also eight phase-4 lists (`learningJourneys`,
+`blogPosts`, `discoveryMissions`, `videos`, `apiDocs`, `samples`, `helpDocs`,
+`communityEvents`). `learningJourneys` had no ordering at all (same defect class); the
+others ordered by non-unique keys with no unique tiebreaker (ties reorder on HANA). All
+are fixed in this PR: `learningJourneys` gets `.orderBy('journey.slug')`; the other reads
+append a unique `slug` as the final sort key; the two Node-side sorts (blogPosts,
+communityEvents) add a `slug` localeCompare tiebreaker. Without this, residual churn would
+remain and the two-rebuild verification would still show nonzero `changed`.
+
 ## Goals
 
 - Relationship tile lists render in a deterministic, stable order across rebuilds, so
