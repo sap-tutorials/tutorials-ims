@@ -466,7 +466,11 @@
       "fuzzy": false
     },
     "fiori": {
-      "draft_admin_integrity": false
+      "draft_admin_integrity": true,
+      "draft_orphan_cleanup": true
+    },
+    "drafts": {
+      "deleteStrategy": "dad"
     },
     "websocket": {
       "kind": "socket.io",
@@ -491,7 +495,8 @@
         "diagram": true
       },
       "fiori": {
-        "draft_admin_integrity": false
+        "draft_admin_integrity": true,
+        "draft_orphan_cleanup": true
       }
     },
     "mcp": {
