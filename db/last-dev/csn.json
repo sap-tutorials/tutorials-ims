@@ -8008,7 +8008,7 @@
     }
   },
   "meta": {
-    "creator": "CDS Compiler v7.0.1",
+    "creator": "CDS Compiler v7.2.1",
     "compilerCsnFlavor": "$internal",
     "flavor": "inferred",
     "sap.changelog.enhanced": true,
