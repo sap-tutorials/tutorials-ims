@@ -129,4 +129,45 @@ describe('buildConceptsPayload', () => {
     expect(got.slug).toBe('mixed-case-concept')           // top-level
     expect(got.teaches[0].slug).toBe('mixed-case-tut')    // nested
   })
+
+  // #3135: concept relationship reads had no ORDER BY. On HANA, row order is
+  // non-deterministic without ORDER BY, so each rebuild rendered the tile lists
+  // (requires/relatedTo/requiredBy/teaches) in a different order → concept body
+  // HTML changed → contentHash changed → ~all 10,615 concepts flagged "changed"
+  // → forced full synchronous re-render → OOM/liveness crash (prod 502).
+  //
+  // SQLite preserves insertion order, so we insert edges in REVERSE-sorted order:
+  // before the fix the payload echoes insertion order (reverse) and this fails;
+  // after .orderBy(<related slug>) the payload is ascending-by-slug and it passes.
+  it('orders relationship lists deterministically by related slug (#3135)', async () => {
+    const { Concepts, ConceptEdges } = cds.entities('com.sap.developers.ims')
+
+    // Source concept with multiple outgoing "requires" + "relatedTo" edges.
+    await INSERT.into(Concepts).entries([
+      { slug: 'order-src', name: 'Order Src', description: 'd', descriptionStatus: 'APPROVED',
+        status: 'ACTIVE', publishedAt: new Date().toISOString(), publishedBy: 'admin@sap.com' },
+      // Targets chosen so insertion order (zzz, mmm, aaa) != sorted order (aaa, mmm, zzz).
+      { slug: 'zzz-target', name: 'ZZZ', status: 'ACTIVE', publishedAt: new Date().toISOString(), publishedBy: 'admin@sap.com' },
+      { slug: 'mmm-target', name: 'MMM', status: 'ACTIVE', publishedAt: new Date().toISOString(), publishedBy: 'admin@sap.com' },
+      { slug: 'aaa-target', name: 'AAA', status: 'ACTIVE', publishedAt: new Date().toISOString(), publishedBy: 'admin@sap.com' },
+    ])
+    const rows = await SELECT.from(Concepts).columns('ID', 'slug')
+      .where({ slug: { in: ['order-src', 'zzz-target', 'mmm-target', 'aaa-target'] } })
+    const id = (s) => rows.find(r => r.slug === s).ID
+
+    // Insert in REVERSE-sorted order on purpose.
+    await INSERT.into(ConceptEdges).entries([
+      { source_ID: id('order-src'), target_ID: id('zzz-target'), predicate: 'requires', status: 'ACTIVE' },
+      { source_ID: id('order-src'), target_ID: id('mmm-target'), predicate: 'requires', status: 'ACTIVE' },
+      { source_ID: id('order-src'), target_ID: id('aaa-target'), predicate: 'requires', status: 'ACTIVE' },
+    ])
+
+    const payload = await buildConceptsPayload(cds.db)
+    const src = payload.concepts.find(c => c.slug === 'order-src')
+    const reqSlugs = src.requires.map(r => r.slug)
+
+    // Deterministic ascending-by-slug order, regardless of insertion/engine order.
+    expect(reqSlugs).toEqual(['aaa-target', 'mmm-target', 'zzz-target'])
+    expect(reqSlugs).toEqual([...reqSlugs].sort())
+  })
 })
