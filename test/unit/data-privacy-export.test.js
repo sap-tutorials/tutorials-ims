@@ -18,7 +18,7 @@
 //     NOT appear in sections and does NOT crash
 //   - unknown userId -> handler rejects with a 404-shaped error
 
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import path from 'node:path';
 import cds from '@sap/cds';
 import { _resetPlanForTest } from '../../srv/lib/anonymization-cascade.js';
@@ -286,5 +286,62 @@ describe('DataPrivacyService.exportDataSubject', () => {
     );
     expect(section.rows.every((r) => r.authorId === SAP_ID)).toBe(true);
     expect(section.rows.some((r) => r.sourceMarkdown === 'Bob private data')).toBe(false);
+  });
+
+  it('_selectRows warns when a declared personalField is not a selectable element', async () => {
+    // Seed a UserMetaData row so the SELECT returns at least one row.
+    const { Users, UserMetaData } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Users).entries({
+      ID: USER_ID, sapId: SAP_ID, uuid: USER_UUID,
+      firstName: 'Alice', email: 'alice@example.com',
+    });
+    await INSERT.into(UserMetaData).entries({
+      ID: 'aabb0001-0000-0000-0000-000000000001',
+      user_ID: USER_ID,
+    });
+
+    // Build a minimal definitions object that represents UserMetaData with a
+    // phantom personal field 'nonExistentField'. We do NOT use the real model
+    // here -- we want to exercise the warn path in isolation.
+    const ENTITY = 'com.sap.developers.ims.UserMetaData';
+    const fakeDefs = {
+      [ENTITY]: {
+        elements: {
+          ID:      {},
+          user_ID: {},
+          // 'nonExistentField' intentionally absent
+        }
+      }
+    };
+
+    // cds.log returns an object whose .warn is a function. Spy on it.
+    // The LOG instance inside the module is bound at module load time to the
+    // 'data-privacy-service' tag. We obtain a reference by asking cds.log for
+    // the same tag -- cds.log caches instances by tag.
+    const logger = cds.log('data-privacy-service');
+    const warnSpy = vi.spyOn(logger, 'warn');
+
+    // Call _selectRows directly on the service instance.
+    const rows = await srv._selectRows(
+      ENTITY,
+      'user_ID',
+      [USER_ID],
+      ['nonExistentField'], // declared personal field that does not exist
+      fakeDefs
+    );
+
+    // warn must have fired mentioning the entity and the missing field.
+    expect(warnSpy).toHaveBeenCalled();
+    const warnMsg = warnSpy.mock.calls[0].join(' ');
+    expect(warnMsg).toMatch(/nonExistentField/);
+    expect(warnMsg).toMatch(/UserMetaData/);
+
+    // The row must still be exported using the real columns that do exist.
+    // With fakeDefs (no ID in elements -- wait, ID IS in fakeDefs), user_ID is
+    // the only included column from the candidates after filtering.
+    // Rows length: 1 (the seeded UserMetaData row).
+    expect(rows.length).toBe(1);
+
+    warnSpy.mockRestore();
   });
 });

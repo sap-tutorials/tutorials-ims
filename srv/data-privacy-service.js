@@ -46,6 +46,7 @@ export default class DataPrivacyService extends cds.ApplicationService {
 
     // -- 1. Look up Users row -----------------------------------------------
     // cds.model can be null in vitest+CDS on Windows; fall back to cds.db.model.
+    // Resolved once here and passed into helpers to avoid repeated lookups.
     const definitions = (cds.model ?? cds.db?.model)?.definitions;
     if (!definitions) {
       return req.reject(500, 'CDS model not available');
@@ -64,18 +65,21 @@ export default class DataPrivacyService extends cds.ApplicationService {
     }
 
     // -- 3. Walk the cascade plan and collect sections ----------------------
+    // Single pass: resolve all subject keys upfront, classify nested parents,
+    // then iterate the resolved map to build sections.
     const plan = getCascadePlan(definitions);
-    const sections = [];
 
-    // Identify entity names that will be output as nested parents (from the
-    // nested marker in the resolver). These must be skipped in the direct loop
-    // to avoid duplicating them -- the nested handler outputs them instead.
+    // Resolve subject keys for every plan entry in one pass, and identify
+    // entity names that will be output as nested parents so they can be skipped
+    // in the direct-section loop.
+    const resolvedMap = new Map(); // entityName -> resolved keys (or null)
     const nestedParents = new Set();
     for (const entry of plan) {
       if (entry.action === 'skip') continue;
       const resolved = await resolveSubjectKeys(user, entry);
+      resolvedMap.set(entry.entityName, resolved);
       if (resolved?.nested && resolved.via) {
-        // resolved.via is the short name; find the fully-qualified entity name.
+        // resolved.via is a short name; find the fully-qualified entity name.
         for (const name of Object.keys(definitions)) {
           if (name.endsWith(`.${resolved.via}`) || name === resolved.via) {
             nestedParents.add(name);
@@ -85,22 +89,20 @@ export default class DataPrivacyService extends cds.ApplicationService {
       }
     }
 
+    const sections = [];
     for (const entry of plan) {
       const { entityName, action, personalFields } = entry;
 
-      // Skip entries with no valid cascade action.
       if (action === 'skip') continue;
 
-      // Skip the Users/DataSubject root entity -- it becomes the subject block
-      // above, not a section.
+      // Skip the Users/DataSubject root entity -- it becomes the subject block.
       if (entry.dataSubjectField === 'ID') continue;
 
       // Skip entities that will be output as nested parents (handled below).
       if (nestedParents.has(entityName)) continue;
 
-      // Resolve the WHERE condition for this entity.
-      const resolved = await resolveSubjectKeys(user, entry);
-      if (!resolved) continue; // resolver returned null -- unresolvable, skip
+      const resolved = resolvedMap.get(entityName);
+      if (!resolved) continue; // unresolvable, skip
 
       // Handle nested marker (DeveloperEnvironmentLinks).
       if (resolved.nested) {
@@ -111,7 +113,7 @@ export default class DataPrivacyService extends cds.ApplicationService {
 
       // Normal case: SELECT rows projected to personalFields + FK + meta.
       const { column, values } = resolved;
-      const rows = await this._selectRows(entityName, column, values, personalFields);
+      const rows = await this._selectRows(entityName, column, values, personalFields, definitions);
       sections.push({ entity: entityName, count: rows.length, rows });
     }
 
@@ -137,11 +139,21 @@ export default class DataPrivacyService extends cds.ApplicationService {
   // Select rows for a direct-FK entity, projected to relevant columns.
   // Filters out columns that do not exist on the entity (some entities use
   // non-standard keys or do not have the 'managed' aspect).
-  async _selectRows(entityName, column, values, personalFields) {
+  //
+  // GDPR safety: if any personalField declared in the model annotation is NOT
+  // present as a selectable element, LOG.warn is emitted so schema drift is
+  // surfaced immediately rather than silently omitting personal data.
+  async _selectRows(entityName, column, values, personalFields, definitions) {
     if (!values || values.length === 0) return [];
-    const definitions = (cds.model ?? cds.db?.model)?.definitions;
     const entityDef = definitions?.[entityName];
     const elements = entityDef?.elements ?? {};
+
+    // Warn on any declared personalField that is missing from the entity elements.
+    const missing = personalFields.filter((f) => !(f in elements));
+    if (missing.length) {
+      LOG.warn(`_selectRows: personalFields not selectable for ${entityName}: ${missing.join(', ')}`);
+    }
+
     // Build projection from columns that actually exist on this entity.
     const candidates = ['ID', column, ...personalFields, ...SECTION_META_COLS];
     const cols = [...new Set(candidates.filter((c) => c in elements))];
