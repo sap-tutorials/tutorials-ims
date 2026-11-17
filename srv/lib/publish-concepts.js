@@ -18,7 +18,7 @@ import { composeShell, createShellLoader } from './chrome-shell.js';
 import { createSessionHelpers } from './content-publish-session.js';
 import { buildConceptsPayload as realBuildConceptsPayload } from './published-concepts-query.js';
 import { computeConceptInputDigest as realComputeConceptInputDigest } from './concept-input-digest.js';
-import { isDeltaSkipCarryForward } from './content-delta-flags.js';
+import { isDeltaSkipCarryForward, isDeltaRead } from './content-delta-flags.js';
 import * as metrics from './metrics.js';
 
 const DEFAULT_NAMESPACE = 'com.sap.developers.ims';
@@ -275,6 +275,54 @@ export async function renderConceptsIntoSession({
 }
 
 /**
+ * Load prior stored `concept-<slug>` → contentHash map for the per-concept delta skip.
+ *
+ * #3135: Under Option B read cutover (`content.delta.read` ON, which goes hand-in-hand
+ * with `content.delta.skipCarryForward`), `ContentFiles` is SPARSE — carry-forward is
+ * skipped, so a given version holds only the slugs freshly written that run. Reading
+ * priorHashes from `ContentFiles @ activeVersion` then misses every carried-forward
+ * concept, so ~all concepts look "changed" on alternating rebuilds → full synchronous
+ * re-render → the OOM/liveness crash in #3135 (the "10247 changed ↔ 8856 skipped"
+ * oscillation observed on DEV). `ContentCurrent` is the Option-B source of truth: one
+ * row per slug, always complete. Read from it when Option-B read is active.
+ *
+ * Legacy path (Option-B read OFF): `ContentFiles @ activeVersion` still carries the full
+ * catalog via carry-forward, so the version-pinned read is correct and unchanged.
+ *
+ * @param {object} args
+ * @param {string} args.namespace  CDS namespace.
+ * @returns {Promise<Object<string,string>>}  Map of `concept-<slug>` → contentHash.
+ */
+export async function loadPriorConceptHashesFor({ namespace = DEFAULT_NAMESPACE } = {}) {
+  const ents = cds.entities(namespace);
+  const toConceptMap = (rows) => {
+    const out = {};
+    for (const r of rows) {
+      if (typeof r.slug === 'string' && r.slug.startsWith('concept-')) {
+        out[r.slug] = r.contentHash;
+      }
+    }
+    return out;
+  };
+
+  // Option B: read the complete per-slug set from the mutable ContentCurrent.
+  if (isDeltaRead() && ents.ContentCurrent) {
+    const rows = await SELECT.from(ents.ContentCurrent).columns('slug', 'contentHash', 'bodyHash');
+    return toConceptMap(rows);
+  }
+
+  // Legacy: version-pinned ContentFiles at the ACTIVE manifest version.
+  const { ContentManifest, ContentFiles } = ents;
+  const [m] = await SELECT.from(ContentManifest).where({ status: 'ACTIVE' }).columns('version');
+  const activeVersion = m?.version ?? null;
+  if (activeVersion === null) return {};
+  const rows = await SELECT.from(ContentFiles)
+    .where({ version: activeVersion })
+    .columns('slug', 'contentHash', 'bodyHash');
+  return toConceptMap(rows);
+}
+
+/**
  * Express handler factory for POST /content/publish/render-concepts. Bound to
  * a namespace; owns getActiveVersion + shellLoader + prior-hash lookup.
  */
@@ -290,22 +338,11 @@ export function createRenderConcepts({ namespace = DEFAULT_NAMESPACE } = {}) {
   const shellLoader = createShellLoader({ namespace, hanaTableName, getActiveVersion });
   const helpers = createSessionHelpers({ namespace });
 
-  // Prior stored hashes for concept-* slugs at the current ACTIVE version, for
-  // delta skip. Also selects bodyHash (Task 2/4) for Level-2 per-concept skip.
+  // Prior stored hashes for concept-* slugs, for the per-concept delta skip.
+  // #3135: delegates to loadPriorConceptHashesFor, which reads ContentCurrent under
+  // Option-B read (ContentFiles is sparse there) and ContentFiles@activeVersion otherwise.
   async function loadPriorConceptHashes() {
-    const activeVersion = await getActiveVersion();
-    if (activeVersion === null) return {};
-    const { ContentFiles } = cds.entities(namespace);
-    const rows = await SELECT.from(ContentFiles)
-      .where({ version: activeVersion })
-      .columns('slug', 'contentHash', 'bodyHash');
-    const out = {};
-    for (const r of rows) {
-      if (typeof r.slug === 'string' && r.slug.startsWith('concept-')) {
-        out[r.slug] = r.contentHash;
-      }
-    }
-    return out;
+    return loadPriorConceptHashesFor({ namespace });
   }
 
   // Load the conceptPhaseToken from the ACTIVE ContentManifest row.
