@@ -48,6 +48,29 @@ import { isSafeForWrites } from './_guard.js';
 
 // Boot the full CAP server (required so after('DISCARD','Missions.drafts') fires).
 // Must be at module level; cds.test resolves before beforeAll runs.
+// Override the hybrid profile's xsuaa auth so basic auth (admin:admin) works against
+// the cds.test('serve') HTTP listener. The hybrid profile is only needed for the HANA
+// db binding; xsuaa auth is irrelevant for in-process tests and has no instance bound
+// (mirrors test/hybrid/migration-mode.test.js).
+process.env.cds_requires_auth_kind = 'mocked';
+// draftEdit triggers the @cap-js/ai RPT-1 recommendation hook (#959), which calls
+// real BTP AI Core via _getToken — that 500s ("reading 'url'") when no aicore
+// service is bound to the test process. The dad/cascade behaviour under test is
+// independent of AI recommendations, so mock AICore for the in-process boot.
+process.env.cds_requires_AICore_kind = 'AICore-mocked';
+// Full cold boot against remote HANA runs all startup seeders (HomepageShelves,
+// JobLocks, config) — each query ~300-600ms over the network — so the 60s hybrid
+// default hookTimeout is not enough. Raise to 120s for the cds.test('serve') boot.
+vi.setConfig({ hookTimeout: 120_000 });
+// This test VERIFIES the dad/cascade behaviour, so it must force those flags ON for
+// the in-process boot regardless of which package.json profile is ambient (the flags
+// live in base cds.fiori on DEV but may be false in a main-based checkout, and CDS_*
+// env-var overrides do NOT reach cds.env.fiori.*). Set them programmatically before
+// cds.test resolves. The matching ON DELETE CASCADE constraints must already exist on
+// the bound HANA schema (preflight asserts 46/46) — this only flips runtime behaviour.
+cds.env.fiori.draft_admin_integrity = true;
+cds.env.fiori.draft_orphan_cleanup = true;
+cds.env.drafts = { ...cds.env.drafts, deleteStrategy: 'dad' };
 const project = cds.test('serve', '--project', '.', '--profile', 'hybrid');
 const adminAuth = { auth: { username: 'admin', password: 'admin' } };
 const NS = 'com.sap.developers.ims';
