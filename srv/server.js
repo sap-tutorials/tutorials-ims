@@ -170,6 +170,15 @@ let embeddingsStatsHandler = (req, res) => res.status(503).json({ error: 'servic
 // handled correctly rather than falling through to AdminService.
 let analyticsOdataRouter = (req, res, next) => res.status(503).json({ error: 'service_starting' });
 
+// Late-bound router for DataPrivacyService at /admin/data-privacy. Same trap as
+// /admin/analytics above: AdminService's OData adapter is mounted at /admin and
+// would otherwise intercept /admin/data-privacy/* requests, returning
+// "Invalid resource path AdminService.data-privacy". By reserving the longer
+// /admin/data-privacy/* prefix here (before cds.serve mounts AdminService),
+// express routes it to this stub first; in 'served' we wire this variable to the
+// real DataPrivacyService OData adapter router (#977).
+let dataPrivacyOdataRouter = (req, res, next) => res.status(503).json({ error: 'service_starting' });
+
 // #805 — Late-bound Express handler for /admin/metrics/live. Same trap as
 // /admin/analytics/* above: AdminService's OData adapter mounts at /admin
 // and would otherwise intercept as "Invalid resource path AdminService.metrics.live".
@@ -1539,6 +1548,13 @@ cds.on('bootstrap', (app) => {
   // passes the request through to the AnalyticsService OData layer registered by CDS.
   app.use('/admin/analytics', (req, res, next) => analyticsOdataRouter(req, res, next));
 
+  // #977 - Reserve /admin/data-privacy/* BEFORE CAP mounts DataPrivacyService.
+  // Same trap/fix as /admin/analytics above: AdminService's OData adapter mounts
+  // at /admin and would otherwise swallow /admin/data-privacy/* as
+  // "Invalid resource path AdminService.data-privacy". Wired to the real adapter
+  // in 'served'.
+  app.use('/admin/data-privacy', (req, res, next) => dataPrivacyOdataRouter(req, res, next));
+
   // Reserve GET /admin/exports/exportLegacyData BEFORE CAP mounts ExportsService at
   // /admin/exports. Without this, AdminService's OData adapter (mounted at /admin)
   // would intercept the path first and return "Invalid resource path". Auth +
@@ -2175,6 +2191,27 @@ cds.on('served', async () => {
     };
   } else {
     cds.log('analytics').warn('AnalyticsService OData adapter not found — /admin/analytics may 404');
+  }
+
+  // #977 - Wire the real DataPrivacyService OData adapter to the stub reserved in
+  // 'bootstrap'. Same CDS-9/CDS-10 adapter-shape handling and context+auth sandwich
+  // as the AnalyticsService wire above.
+  const dataPrivacyDefaultAdapter = cds.services.DataPrivacyService?._adapters?._default;
+  const dataPrivacyAdapter = typeof dataPrivacyDefaultAdapter === 'function'
+    ? dataPrivacyDefaultAdapter                    // CDS 9 shape
+    : dataPrivacyDefaultAdapter?.router;           // CDS 10 shape
+  if (typeof dataPrivacyAdapter === 'function') {
+    dataPrivacyOdataRouter = (req, res, next) => {
+      contextMw(req, res, (err) => {
+        if (err) return next(err);
+        authMw(req, res, (err) => {
+          if (err) return next(err);
+          dataPrivacyAdapter(req, res, next);
+        });
+      });
+    };
+  } else {
+    cds.log('data-privacy').warn('DataPrivacyService OData adapter not found - /admin/data-privacy may 404');
   }
 
   // #805 — Wire the real /admin/metrics/live handler. Same context+auth
