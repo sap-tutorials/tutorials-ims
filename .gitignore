@@ -195,6 +195,7 @@ playwright-report/
 srv/lib/_shared/
 srv-mcp/lib/_shared/
 srv-qa/lib/_shared/
+srv-sage/lib/_shared/
 
 # BTP→BAIP audit run artifacts (export/report/changeset/applied)
 /btp-audit/
