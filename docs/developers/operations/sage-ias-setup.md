@@ -37,6 +37,7 @@ Run **once per space** (DEV and PROD are separate instances, yielding separate `
 ### DEV
 
 ```bash
+cf target -o tutorials-system -s dev
 cf create-service identity application tutorials-sage-identity -c '{
   "oauth2-configuration": {
     "grant-types": [
@@ -77,7 +78,7 @@ cf create-service identity application tutorials-sage-identity -c '{
 
 | Field | Value | Reason |
 |---|---|---|
-| `grant-types` | `authorization_code_pkce_s256`, `refresh_token` | PKCE-only; `client_credentials` intentionally omitted — SAGE is a user-facing client, not M2M |
+| `grant-types` | `authorization_code_pkce_s256`, `refresh_token` | PKCE-only; `client_credentials` intentionally omitted — SAGE is a user-facing client, not M2M. `authorization_code_pkce_s256` is the SAP IAS-specific PKCE grant name (confirmed in `mta-mcp.yaml:64` and [ias-setup.md § M2M](ias-setup.md)); if the broker returns `invalid_grant_type` check that the IAS plan is `application` and not `broker` |
 | `public-client` | `true` | No client secret ever — matches the PKCE contract; XSUAA cannot do this, IAS can |
 | `redirect-uris` | `vscode://sap-tutorials.sage-tutorial-extension/**` | VS Code custom-scheme callback (required for PKCE in-extension) |
 | `redirect-uris` | `http://localhost:*/oauth/callback`, `http://127.0.0.1:*…` | Local dev / test runner loopback |
@@ -106,6 +107,11 @@ cf delete-service-key tutorials-sage-identity sk-read -f
 rm -f sage-sk.json
 ```
 
+> **`sage-sk.json` is transient** — it must be removed immediately after use and never committed (the `rm -f` above covers the happy path). If this block exits early (e.g. `jq` not found, CF error), clean up manually:
+> ```bash
+> cf delete-service-key tutorials-sage-identity sk-read -f && rm -f sage-sk.json
+> ```
+
 The `url` field is the IAS tenant root (e.g. `https://atxgsg7zi.accounts.ondemand.com`).  
 The `clientid` is the OAuth2 client identifier SAGE presents in its PKCE flow.
 
@@ -117,7 +123,7 @@ Record both values:
 | `clientid` (PROD) | `imsAuth.ts` `clientId` field for the stable PROD build of SAGE |
 | `url` (IAS tenant root) | `authUrl` → `<url>/oauth2/authorize`, `tokenUrl` → `<url>/oauth2/token` |
 
-> **Never commit these values to source** — they are runtime config in the extension's `package.json` contributes or environment-specific build constants, not in VCS.
+> **Never commit these values to source** — they are runtime config in the extension's `package.json` contributes or environment-specific build constants, not in VCS. `sage-sk.json` is a transient file; remove it immediately after use.
 
 ---
 
@@ -167,8 +173,18 @@ modules:
     requires:
       - name: tutorials-sage-identity
       - name: tutorials-hana
-      - name: tutorials-xsuaa   # hybrid fallback
+      - name: tutorials-xsuaa   # hybrid fallback — DEV name
 ```
+
+> **PROD XSUAA name differs.** On DEV the XSUAA instance is `tutorials-xsuaa`; on PROD it is `xsuaa-imsprod`. The `mta-sage.yaml` PROD variant (or `.mtaext` override) must reference `xsuaa-imsprod` as the `existing-service` name — using `tutorials-xsuaa` on PROD will fail the deploy with a "service not found" error:
+>
+> ```yaml
+> # deploy/mta-sage-prod.mtaext (or prod resource block)
+> resources:
+>   - name: tutorials-xsuaa
+>     parameters:
+>       service-name: xsuaa-imsprod   # override for PROD space
+> ```
 
 **Deploy the main MTA before the SAGE MTA** on a fresh space — `tutorials-sage-identity` must exist before `mta-sage.yaml` can adopt it. On an existing space the instances are already there; order does not matter.
 
@@ -179,6 +195,7 @@ modules:
 Confirm the IAS metadata endpoint shows `none` as a supported `token_endpoint_auth_method` (the public-client signal):
 
 ```bash
+cf create-service-key tutorials-sage-identity sk-verify
 cf service-key tutorials-sage-identity sk-verify | sed -n '/{/,$p' > sage-sk-v.json
 TENANT_URL=$(jq -r .credentials.url sage-sk-v.json)
 
@@ -190,6 +207,11 @@ curl -s "$TENANT_URL/.well-known/openid-configuration" \
 cf delete-service-key tutorials-sage-identity sk-verify -f
 rm -f sage-sk-v.json
 ```
+
+> **`sage-sk-v.json` is transient** — remove it immediately after use, never commit it. If this block exits early (e.g. `curl` or `jq` not found), clean up manually:
+> ```bash
+> cf delete-service-key tutorials-sage-identity sk-verify -f && rm -f sage-sk-v.json
+> ```
 
 If `none` is absent, the instance was created without `"public-client": true` or the update did not take. Re-run Step 2 (`cf update-service ...`) with the correct config.
 
