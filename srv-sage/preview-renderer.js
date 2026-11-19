@@ -5,8 +5,8 @@
 // parsers.bundle.mjs that srv/ and srv-qa use.
 //
 // Key difference from srv-qa:
-//   - Import resolves to ./lib/_shared/parsers.bundle.mjs (srv-sage bundle layout)
-//     instead of srv-qa's ./lib/parsers.bundle.mjs.
+//   - Import resolves to ./lib/parsers.bundle.mjs (built by prebuild:parsers-bundle
+//     from scripts/parsers/index.ts; same flat path as srv-qa/lib/parsers.bundle.mjs).
 //   - PREVIEW_SITE_PATH_DEFAULT points at ../preview-site/ from this file (same
 //     shared preview-site/ at the mono-repo root — not a separate copy).
 //
@@ -17,21 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 
-// Workspace-first (local dev with @tutorials/parsers), bundle fallback at CF deploy.
-// At CF deploy, `prebuild:parsers-bundle` builds scripts/parsers/index.ts →
-// srv-sage/lib/parsers.bundle.mjs (same script that builds srv-qa/lib/parsers.bundle.mjs).
-let composeTutorial, renderHugoFrontmatter, normalizeVideo;
-try {
-  const parsers = await import('@tutorials/parsers');
-  composeTutorial = parsers.composeTutorial;
-  renderHugoFrontmatter = parsers.renderHugoFrontmatter;
-  normalizeVideo = parsers.normalizeVideo;
-} catch {
-  const bundle = await import('./lib/parsers.bundle.mjs');
-  composeTutorial = bundle.composeTutorial;
-  renderHugoFrontmatter = bundle.renderHugoFrontmatter;
-  normalizeVideo = bundle.normalizeVideo;
-}
+import { composeTutorial, renderHugoFrontmatter, normalizeVideo } from './lib/parsers.bundle.mjs';
 
 const HUGO_TIMEOUT_MS_DEFAULT = 5000;
 const PREVIEW_SITE_PATH_DEFAULT = new URL('../preview-site/', import.meta.url).pathname;

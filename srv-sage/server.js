@@ -52,34 +52,25 @@ cds.on('bootstrap', (app) => {
   // POST /preview/render — same contract as srv-qa's /preview/render.
   // Body: { markdown: string, rulesVr?: string }
   // Response: text/html (rendered tutorial page or errorHtml on parse/render failure).
-  //
-  // Auth gate: CAP's IAS middleware enforces `authenticated-user` before the express
-  // route runs — any request without a valid IAS (or mocked, in dev) token is
-  // rejected with 401/403 by the CAP auth layer. No additional scope check needed here
-  // (srv-sage's AuthorSageService already requires 'authenticated-user'; same identity
-  // assertion applies to this custom express route which sits under the same app).
-  //
-  // Note: unlike srv-qa's /preview/render which uses requireXsuaaScope('Tutorial.Author'),
-  // srv-sage uses IAS auth (kind: 'ias') — authenticated-user is the correct gate
-  // for IAS tokens. XSUAA scope checks would not work here.
-  //
-  // TODO (integration smoke): verify the IAS auth gate on the deployed CF app —
-  // see the INTEGRATION TEST NOTE at the top of this file.
   app.post('/preview/render',
+    // IAS auth guard — placed BEFORE express.json() so an unauthenticated caller's
+    // 50 MB body is never buffered. req.user is set by CAP's IAS middleware when the
+    // token is valid; absent → reject immediately with 401 (fail-closed).
+    // Note: unlike srv-qa's requireXsuaaScope('Tutorial.Author'), srv-sage uses
+    // IAS auth (kind: 'ias') — authenticated-user is the correct gate; XSUAA scope
+    // checks would not work here.
+    // TODO (integration smoke): verify this gate on the deployed CF app — see the
+    // INTEGRATION TEST NOTE at the top of this file.
+    (req, res, next) => {
+      if (!req.user?.id) return res.status(401).json({ error: 'unauthenticated' });
+      next();
+    },
     // #1102: 50 MB body cap accommodates base64-inlined tutorial screenshots
     // (Sage inlines relative image refs before POST so authors can preview
     // without a pre-preview commit). Base64 adds ~33% overhead — a 50 MB
     // request body corresponds to ~37 MB of raw image bytes.
     express.json({ limit: '50mb' }),
     async (req, res) => {
-      // Guard: req.user is set by CAP's IAS auth middleware when authenticated.
-      // If it's absent the request slipped through without auth (should not happen
-      // in production — the CAP middleware rejects unauthenticated requests before
-      // reaching the route handler). Fail closed.
-      if (!req.user || !req.user.id) {
-        return res.status(401).json({ error: 'unauthenticated' });
-      }
-
       const t0 = Date.now();
       let slot;
       try {
