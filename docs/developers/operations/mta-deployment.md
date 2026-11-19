@@ -119,7 +119,7 @@ discovery/routing env (`srv-mcp-url`, `XSUAA_MCP_URL`, `MCP_ISSUER_KIND`) stays 
 
 ### SAGE MTA (`tutorials-sage`)
 
-The SAGE isolated backend (`/sage/*`) ships as a **separate MTA** (`mta-sage.yaml` at
+The SAGE isolated backend (`/author/*` + `/preview/render`) ships as a **separate MTA** (`mta-sage.yaml` at
 repo root, module `tutorials-srv-sage`). It is **not** part of the main MTA archive.
 There is **no orchestrated path** — deploy it by hand:
 
