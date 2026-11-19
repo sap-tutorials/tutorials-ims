@@ -202,3 +202,4 @@ srv-sage/lib/_shared/
 
 # Discovery sync working drafts — local only, never committed.
 .sync-draft/
+srv-sage/lib/parsers.bundle.mjs
