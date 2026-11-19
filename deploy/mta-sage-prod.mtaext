@@ -1,0 +1,25 @@
+_schema-version: 3.3.0
+# PROD extension for the SAGE backend MTA (mta-sage.yaml).
+#
+# tutorials-xsuaa service-name → xsuaa-imsprod. DEV+PROD share one
+# subaccount, so prod's XSUAA instance has a distinct name (xsuaa-imsprod,
+# with xsappname 'tutorials-prod'); it is deployed and OWNED by the main
+# tutorials-ims MTA (see deploy/prod.mtaext). srv-sage adopts it as an
+# existing service for the XSUAA-fallback leg of its hybrid auth. The base
+# mta-sage.yaml hardcodes service-name: tutorials-xsuaa (the DEV name),
+# which does not exist in prod — without this override the SAGE MTA deploy
+# fails to resolve the existing service. We only rename the binding target;
+# we do NOT set config-path here (the main MTA owns + configures
+# xsuaa-imsprod from xs-security-prod.json).
+#
+# Deploy PROD (from origin/main; cf target -s prod FIRST):
+#   git fetch origin && git checkout origin/main
+#   mbt build -f mta-sage.yaml -t mta_archives
+#   cf deploy mta_archives/*.mtar -e deploy/mta-sage-prod.mtaext -f
+ID: tutorials-sage-prod
+extends: tutorials-sage
+
+resources:
+  - name: tutorials-xsuaa
+    parameters:
+      service-name: xsuaa-imsprod

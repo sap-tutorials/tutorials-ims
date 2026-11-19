@@ -4,7 +4,7 @@ Complete deployment procedure for standing up the tutorials-ims stack in a CF sp
 
 ## Architecture
 
-The stack is **two separately-deployed MTAs** sharing one set of service instances:
+The stack is **three separately-deployed MTAs** sharing one set of service instances:
 
 ```text
 tutorials-ims MTA  (.deploy/mta.yaml — the main MTA; OWNS the service instances)
@@ -17,21 +17,29 @@ tutorials-ims MTA  (.deploy/mta.yaml — the main MTA; OWNS the service instance
 tutorials-mcp MTA  (mta-mcp.yaml at repo root — the MCP microservice; ADOPTS the services above)
 └── tutorials-srv-mcp         (type: nodejs — serves ONLY the authenticated /mcp-auth/* surface)
 
-Resources (created/owned by the MAIN MTA; the MCP MTA references them as existing-service):
-├── tutorials-hana         (HDI container — com.sap.xs.hdi-container)
-├── tutorials-xsuaa        (XSUAA application — org.cloudfoundry.managed-service)
-├── tutorials-identity     (IAS — public PKCE client for the MCP app)
-├── tutorials-destination  (Destination lite — org.cloudfoundry.managed-service)
-├── tutorials-credstore    (Credential Store — holds deploy-time secrets)
-├── tutorials-mail         (optional — fails gracefully if plan unavailable)
-├── tutorials-audit-log    (optional)
-└── tutorials-cloud-logging (optional)
+tutorials-sage MTA  (mta-sage.yaml at repo root — the SAGE isolated backend; ADOPTS the services above)
+└── tutorials-srv-sage        (type: nodejs — serves ONLY the SAGE author operations surface)
+
+Resources (created/owned by the MAIN MTA; the MCP and SAGE MTAs reference them as existing-service):
+├── tutorials-hana           (HDI container — com.sap.xs.hdi-container)
+├── tutorials-xsuaa          (XSUAA application — org.cloudfoundry.managed-service)
+├── tutorials-identity       (IAS — public PKCE client for the MCP app)
+├── tutorials-destination    (Destination lite — org.cloudfoundry.managed-service)
+├── tutorials-credstore      (Credential Store — holds deploy-time secrets)
+├── tutorials-mail           (optional — fails gracefully if plan unavailable)
+├── tutorials-audit-log      (optional)
+└── tutorials-cloud-logging  (optional)
+
+Resources (created/owned OUT-OF-BAND; the SAGE MTA references as existing-service):
+└── tutorials-sage-identity  (IAS — dedicated public PKCE client for the SAGE VS Code extension;
+                               provisioned per docs/developers/operations/sage-ias-setup.md)
 ```
 
 The approuter (main MTA) fronts both backends: `/mcp-auth/*` is proxied to the external
 `tutorials-srv-mcp` app via the `srv-mcp-api` destination (`${srv-mcp-url}`), everything else
-to the local `srv-api`. The MCP MTA creates **no** service instances of its own — it declares
-each resource as `org.cloudfoundry.existing-service` and adopts the main MTA's instances.
+to the local `srv-api`. The MCP and SAGE MTAs create **no** service instances of their own — they declare
+each resource as `org.cloudfoundry.existing-service` and adopt the main MTA's instances (plus
+`tutorials-sage-identity` for the SAGE MTA, which is provisioned out-of-band).
 
 ## Prerequisites
 
@@ -108,6 +116,37 @@ instances — it binds the ones the **main MTA owns**. Deploy the main MTA first
 space so those instances exist before the MCP MTA tries to adopt them. The approuter-side
 discovery/routing env (`srv-mcp-url`, `XSUAA_MCP_URL`, `MCP_ISSUER_KIND`) stays in the
 **main** MTA's `deploy/*.mtaext` (the approuter lives in the main MTA).
+
+### SAGE MTA (`tutorials-sage`)
+
+The SAGE isolated backend (`/sage/*`) ships as a **separate MTA** (`mta-sage.yaml` at
+repo root, module `tutorials-srv-sage`). It is **not** part of the main MTA archive.
+There is **no orchestrated path** — deploy it by hand:
+
+```bash
+# From repo root (the descriptor's before-all runs from root, no `cd ..`)
+mbt build -f mta-sage.yaml -t mta_archives
+cf deploy mta_archives/*.mtar -e deploy/mta-sage-dev.mtaext -f    # DEV
+# PROD: cf deploy mta_archives/*.mtar -e deploy/mta-sage-prod.mtaext -f
+```
+
+| Env | SAGE MTA ext | MTA ID (ext) | Notes |
+| --- | --- | --- | --- |
+| dev | `deploy/mta-sage-dev.mtaext` | `tutorials-sage-dev` | No overrides needed — `tutorials-xsuaa` is the DEV XSUAA name |
+| prod | `deploy/mta-sage-prod.mtaext` | `tutorials-sage-prod` | Overrides `tutorials-xsuaa` → `service-name: xsuaa-imsprod` (PROD XSUAA, xsappname `tutorials-prod`) |
+
+**Service adoption:** every `resources:` entry in `mta-sage.yaml` is
+`org.cloudfoundry.existing-service` (`tutorials-sage-identity`, `tutorials-xsuaa`,
+`tutorials-hana`). The SAGE MTA creates no instances — it adopts the ones the **main MTA
+owns**, plus the dedicated IAS instance provisioned by the [sage-ias-setup.md](sage-ias-setup.md)
+runbook. **Deploy the main MTA first** on a fresh space — `tutorials-hana`, `tutorials-xsuaa`,
+and `tutorials-sage-identity` must all exist before `mta-sage.yaml` can adopt them. On an
+existing space the instances are already present; deploy order does not matter.
+
+**Before deploying the SAGE MTA for the first time:** ensure `tutorials-sage-identity` has
+been provisioned out-of-band per [sage-ias-setup.md](sage-ias-setup.md) Step 2. This is a
+dedicated IAS public-client instance (PKCE-only, no `client_credentials`) separate from the
+shared `tutorials-identity` used by the MCP surface.
 
 ## Step 2: Populate Data (First Deploy Only)
 
@@ -217,8 +256,10 @@ curl -s -o /dev/null -w "%{http_code}" "$APPROUTER/tutorials/abap-dev-get-starte
 |------|---------|
 | `.deploy/mta.yaml` | Main MTA (`tutorials-ims`) deployment descriptor |
 | `mta-mcp.yaml` | MCP MTA (`tutorials-mcp`) descriptor — the separate `/mcp-auth/*` app |
+| `mta-sage.yaml` | SAGE MTA (`tutorials-sage`) descriptor — the isolated SAGE author backend |
 | `deploy/dev.mtaext` | Main-MTA DEV extension (debug logging, app name suffix, `srv-mcp-url`) |
 | `deploy/mcp-dev.mtaext` / `deploy/mcp-prod.mtaext` | MCP-MTA env extensions |
+| `deploy/mta-sage-dev.mtaext` / `deploy/mta-sage-prod.mtaext` | SAGE-MTA env extensions |
 | `xs-security.json` | XSUAA scopes, role templates, role collections |
 | `approuter/xs-app.json` | AppRouter route definitions (incl. the `/mcp-auth/*` → `srv-mcp-api` route) |
 | `.cdsrc-private.json` | Local hybrid bindings (gitignored) |
