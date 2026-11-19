@@ -63,6 +63,17 @@
         }
       },
       {
+        "for": "nodejs",
+        "src": "srv-sage",
+        "dest": "srv-sage",
+        "options": {
+          "model": [
+            "srv-sage",
+            "db"
+          ]
+        }
+      },
+      {
         "for": "cds-caching"
       }
     ]
