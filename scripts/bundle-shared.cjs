@@ -228,8 +228,13 @@ for (const t of mcpTargets) {
   console.log('bundled', t.out);
 }
 
-// srv-sage/lib/_shared/ — core only (5 ops: MyOwnedTutorials, Tags,
+// srv-sage/lib/_shared/ — core only (5 author ops: MyOwnedTutorials, Tags,
 // isSlugAvailable, reviewTutorial, snoozeTutorial; no AI/MCP/channels needed).
+// NOTE: parsers.bundle.mjs (for /preview/render) is built by the separate
+// `prebuild:parsers-bundle` npm script (from scripts/parsers/index.ts →
+// srv-sage/lib/parsers.bundle.mjs) — NOT here. It uses `index.ts` as the entry
+// point, not `directives.ts`, so it exports composeTutorial/renderHugoFrontmatter/
+// normalizeVideo. Added Task 5 (preview renderer port).
 const outDirSage = 'srv-sage/lib/_shared';
 fs.mkdirSync(outDirSage, { recursive: true });
 

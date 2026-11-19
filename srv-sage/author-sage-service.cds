@@ -6,10 +6,26 @@ using from '../db/views';
 // AdminService dependency (rebuildContent / AI features excluded by design).
 //
 // Auth: IAS tokens carry no XSUAA scopes — `authenticated-user` is the only
-// viable gate here. Task 5 confirms the final @path against the shipped
-// extension; `'/author'` mirrors the main AuthorService path provisionally.
+// viable gate here.
 //
-// (#task-3 — srv-sage author service model)
+// ACTION PATH ANALYSIS (Task 5 — src/lib/ims/imsApiClient.ts in sage-tutorial-extension):
+//   Reads:
+//     GET /author/MyOwnedTutorials   (line 175 — imsApiClient.getMyTutorials)
+//     GET /author/Tags               (line 155 — imsApiClient.searchTags)
+//   Actions (all bare/unqualified — no "AuthorSageService." prefix):
+//     POST /author/isSlugAvailable   (line 159 — imsApiClient.isSlugAvailable)
+//     POST /author/reviewTutorial    (line 188 — imsApiClient.reviewTutorial)
+//     POST /author/snoozeTutorial    (line 195 — imsApiClient.snoozeTutorial)
+//
+// WHY no @path alias on the actions:
+//   CAP OData4 accepts BOTH the qualified form (AuthorSageService.isSlugAvailable)
+//   AND the bare/unqualified form (isSlugAvailable) for unbound action imports.
+//   The smoke test at test/smoke/author-service.test.js line 62 confirms this
+//   pattern on the production AuthorService (POST /author/generateOsVariants, bare).
+//   In srv-sage's isolated CF deployment only AuthorSageService is served at
+//   /author/, so the bare paths are unambiguous. No @path alias needed.
+//
+// (#task-3 — srv-sage author service model; task-5 — action path confirmed)
 
 @path: '/author'
 @requires: 'authenticated-user'
