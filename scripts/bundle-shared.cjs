@@ -227,3 +227,43 @@ for (const t of mcpTargets) {
   });
   console.log('bundled', t.out);
 }
+
+// srv-sage/lib/_shared/ — core only (5 author ops: MyOwnedTutorials, Tags,
+// isSlugAvailable, reviewTutorial, snoozeTutorial; no AI/MCP/channels needed).
+// NOTE: parsers.bundle.mjs (for /preview/render) is built by the separate
+// `prebuild:parsers-bundle` npm script (from scripts/parsers/index.ts →
+// srv-sage/lib/parsers.bundle.mjs) — NOT here. It uses `index.ts` as the entry
+// point, not `directives.ts`, so it exports composeTutorial/renderHugoFrontmatter/
+// normalizeVideo. Added Task 5 (preview renderer port).
+const outDirSage = 'srv-sage/lib/_shared';
+fs.mkdirSync(outDirSage, { recursive: true });
+
+const sageTargets = [
+  {
+    entry: require.resolve('@tutorials/core'),
+    out: path.join(outDirSage, 'core.bundle.mjs'),
+  },
+];
+
+for (const t of sageTargets) {
+  esbuild.buildSync({
+    entryPoints: [t.entry],
+    outfile: t.out,
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    external: [
+      '@sap/*',
+      '@cap-js/*',
+      '@sap-ai-sdk/*',
+      'node:*',
+      'hdb',
+      '@sap/hana-client',
+      'cheerio',
+    ],
+    banner: {
+      js: "import { createRequire as __cjsBundleRequire } from 'module'; const require = __cjsBundleRequire(import.meta.url);",
+    },
+  });
+  console.log('bundled', t.out);
+}

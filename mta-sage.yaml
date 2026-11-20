@@ -1,0 +1,84 @@
+_schema-version: 3.3.0
+# MTA descriptor for the SAGE isolated backend (tutorials-sage).
+# Deployed SEPARATELY from the main tutorials-ims MTA (.deploy/mta.yaml).
+# This file lives at repo root → path: gen/srv-sage (root-relative, no ../).
+# before-all runs from ROOT (no cd ..) — mbt uses the descriptor's directory as cwd.
+ID: tutorials-sage
+version: 1.0.0
+
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm install
+        # Bundle workspace packages + build parsers bundle for srv-sage.
+        # bundle-shared.cjs writes srv-sage/lib/_shared/core.bundle.mjs.
+        # prebuild:parsers-bundle writes srv-sage/lib/parsers.bundle.mjs
+        # (entry: scripts/parsers/index.ts; exports composeTutorial/renderHugoFrontmatter/normalizeVideo).
+        - bash -c "node scripts/bundle-shared.cjs"
+        - bash -c "npm run prebuild:parsers-bundle"
+        - bash -c "npx cds build --production"
+        # @tutorials/core is a workspace package resolved via esbuild bundle in
+        # gen/srv-sage/srv/lib/_shared/. Remove it from gen/srv-sage/package.json
+        # before mbt packages the module — otherwise `npm install` inside gen/srv-sage
+        # creates a dangling symlink to gen/srv-sage/packages/core that mbt cannot archive.
+        - bash -c "node -e \"const p=require('./gen/srv-sage/package.json'); delete p.dependencies['@tutorials/core']; require('fs').writeFileSync('./gen/srv-sage/package.json', JSON.stringify(p,null,2)+'\n');\""
+
+modules:
+  - name: tutorials-srv-sage
+    type: nodejs
+    path: gen/srv-sage
+    parameters:
+      memory: 512M
+      disk-quota: 512M
+      buildpack: nodejs_buildpack
+      stack: cflinuxfs5
+      instances: 1
+    properties:
+      NODE_ENV: production
+      EXPOSE_CAP_UI: false
+    provides:
+      - name: srv-sage-api
+        properties:
+          srv-url: ${default-url}
+    requires:
+      - name: tutorials-hana
+      - name: tutorials-sage-identity
+      # Hybrid auth: IAS primary (tutorials-sage-identity) + XSUAA fallback.
+      # CAP `auth: {kind:ias, xsuaa:true}` in srv-sage/package.json requires TWO bindings.
+      # NOTE: on DEV the XSUAA instance is tutorials-xsuaa; on PROD it is xsuaa-imsprod.
+      # The PROD mtaext (deploy/mta-sage-prod.mtaext) overrides service-name: xsuaa-imsprod.
+      - name: tutorials-xsuaa
+
+resources:
+  # Dedicated IAS public-client instance for SAGE (tutorials-sage-identity).
+  # Created out-of-band (see docs/developers/operations/sage-ias-setup.md).
+  # Adopted as existing-service so the clientid is STABLE across deploys —
+  # an MTA-managed instance would be recreated with a new clientid on each
+  # rebuild, breaking the clientid baked into the SAGE extension config.
+  # Grant types: authorization_code_pkce_s256 + refresh_token only
+  # (no client_credentials — SAGE is a user-facing VS Code extension, not M2M).
+  # Audience isolation: SAGE tokens (minted for tutorials-sage-identity clientid)
+  # are not accepted by the MCP or main-srv surfaces, and vice versa.
+  - name: tutorials-sage-identity
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: tutorials-sage-identity
+
+  # tutorials-xsuaa is deployed and owned by the main tutorials-ims MTA.
+  # srv-sage adopts it for the XSUAA-fallback leg of hybrid auth
+  # (browser login, platform tokens keep validating via `xsuaa:true`).
+  # DEV: service-name matches the base below (tutorials-xsuaa).
+  # PROD: deploy/mta-sage-prod.mtaext overrides service-name → xsuaa-imsprod.
+  - name: tutorials-xsuaa
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: tutorials-xsuaa
+
+  # tutorials-hana is deployed and owned by the main tutorials-ims MTA.
+  # srv-sage adopts it to bind the same HANA HDI container (read-only author queries
+  # on TutorialMeta, Steps, Tags; no content-store writes from this service).
+  - name: tutorials-hana
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: tutorials-hana
