@@ -41,6 +41,7 @@ cf target -o tutorials-system -s dev
 cf create-service identity application tutorials-sage-identity -c '{
   "oauth2-configuration": {
     "grant-types": [
+      "authorization_code",
       "authorization_code_pkce_s256",
       "refresh_token"
     ],
@@ -61,6 +62,7 @@ cf target -o tutorials-system -s prod
 cf create-service identity application tutorials-sage-identity -c '{
   "oauth2-configuration": {
     "grant-types": [
+      "authorization_code",
       "authorization_code_pkce_s256",
       "refresh_token"
     ],
@@ -78,7 +80,7 @@ cf create-service identity application tutorials-sage-identity -c '{
 
 | Field | Value | Reason |
 |---|---|---|
-| `grant-types` | `authorization_code_pkce_s256`, `refresh_token` | PKCE-only; `client_credentials` intentionally omitted — SAGE is a user-facing client, not M2M. `authorization_code_pkce_s256` is the SAP IAS-specific PKCE grant name (confirmed in `mta-mcp.yaml:64` and [ias-setup.md § M2M](ias-setup.md)); if the broker returns `invalid_grant_type` check that the IAS plan is `application` and not `broker` |
+| `grant-types` | `authorization_code`, `authorization_code_pkce_s256`, `refresh_token` | `client_credentials` intentionally omitted — SAGE is a user-facing client, not M2M. **`authorization_code` (the base grant) MUST be present** alongside `authorization_code_pkce_s256`: the IAS broker rejects `refresh_token` unless at least one base grant type (`authorizationCode`/password/implicit/jwtBearer/saml2Bearer) is also set — a PKCE-only list fails with `400 "Refresh flow can only be set, if at least one grant type is set from…"`. This matches the working `tutorials-identity` config (ias-setup.md §M2M). If the broker returns `invalid_grant_type`, check the IAS plan is `application` not `broker`. |
 | `public-client` | `true` | No client secret ever — matches the PKCE contract; XSUAA cannot do this, IAS can |
 | `redirect-uris` | `vscode://sap-tutorials.sage-tutorial-extension/**` | VS Code custom-scheme callback (required for PKCE in-extension) |
 | `redirect-uris` | `http://localhost:*/oauth/callback`, `http://127.0.0.1:*…` | Local dev / test runner loopback |
@@ -135,6 +137,7 @@ If the instance already exists and you need to add or change redirect URIs (e.g.
 cf update-service tutorials-sage-identity -c '{
   "oauth2-configuration": {
     "grant-types": [
+      "authorization_code",
       "authorization_code_pkce_s256",
       "refresh_token"
     ],
@@ -192,28 +195,17 @@ modules:
 
 ## Step 6 — Verify the instance is a public client
 
-Confirm the IAS metadata endpoint shows `none` as a supported `token_endpoint_auth_method` (the public-client signal):
+Read back the **instance's own `oauth2-configuration`** and confirm `public-client: true` persisted. This is the authoritative per-client check:
 
 ```bash
-cf create-service-key tutorials-sage-identity sk-verify
-cf service-key tutorials-sage-identity sk-verify | sed -n '/{/,$p' > sage-sk-v.json
-TENANT_URL=$(jq -r .credentials.url sage-sk-v.json)
-
-curl -s "$TENANT_URL/.well-known/openid-configuration" \
-  | jq '.token_endpoint_auth_methods_supported'
-# Expected to include "none" — confirms public-client mode
-# XSUAA does NOT include "none" (that's the root cause we're working around)
-
-cf delete-service-key tutorials-sage-identity sk-verify -f
-rm -f sage-sk-v.json
+cf service tutorials-sage-identity --params | sed -n '/{/,$p' \
+  | jq '."oauth2-configuration" | {public_client: .["public-client"], grant_types: .["grant-types"], redirect_uris: .["redirect-uris"]}'
+# Expect: public_client = true, grant_types includes "authorization_code" + "authorization_code_pkce_s256", redirect_uris includes the vscode:// URI
 ```
 
-> **`sage-sk-v.json` is transient** — remove it immediately after use, never commit it. If this block exits early (e.g. `curl` or `jq` not found), clean up manually:
-> ```bash
-> cf delete-service-key tutorials-sage-identity sk-verify -f && rm -f sage-sk-v.json
-> ```
+> **Do NOT rely on the tenant `.well-known/openid-configuration`** for this. That endpoint reports **tenant-wide** capabilities (`token_endpoint_auth_methods_supported` lists `tls_client_auth`, `client_secret_basic`, etc.) and will **not** show `none` even when a specific app is correctly a public client — public-client is a per-application property, not a tenant-wide auth method. An earlier version of this runbook checked the tenant metadata for `none`; that check is wrong and was removed.
 
-If `none` is absent, the instance was created without `"public-client": true` or the update did not take. Re-run Step 2 (`cf update-service ...`) with the correct config.
+If `public-client` is not `true`, re-run Step 2's `cf update-service` with the correct config.
 
 ---
 
