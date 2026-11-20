@@ -222,6 +222,7 @@ export default defineConfig({
           { text: 'Content rollback',          link: '/developers/operations/content-rollback' },
           { text: 'Rotate CONTENT_API_KEY',    link: '/developers/operations/rotate-content-api-key' },
           { text: 'Runtime config',            link: '/developers/operations/runtime-config' },
+          { text: 'SAGE IAS setup',            link: '/developers/operations/sage-ias-setup' },
           { text: 'Scheduler troubleshooting', link: '/developers/operations/scheduler-troubleshooting' },
           { text: 'Secrets tracking',          link: '/developers/operations/secrets-tracking' },
           { text: 'Sign-in SSO re-auth follow-up', link: '/developers/operations/signin-sso-reauth-followup' },
