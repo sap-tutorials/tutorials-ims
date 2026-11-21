@@ -26,6 +26,7 @@ import express from 'express';
 
 import { createSemaphore } from './preview-semaphore.js';
 import { renderPreview, errorHtml } from './preview-renderer.js';
+import { previewIasAuthMiddleware } from './preview-auth-mw.js';
 
 // Process-level safety net. Unhandled promise rejections under Node 22 default
 // to a non-zero exit — a single rejected promise must not take the whole
@@ -53,18 +54,16 @@ cds.on('bootstrap', (app) => {
   // Body: { markdown: string, rulesVr?: string }
   // Response: text/html (rendered tutorial page or errorHtml on parse/render failure).
   app.post('/preview/render',
-    // IAS auth guard — placed BEFORE express.json() so an unauthenticated caller's
-    // 50 MB body is never buffered. req.user is set by CAP's IAS middleware when the
-    // token is valid; absent → reject immediately with 401 (fail-closed).
-    // Note: unlike srv-qa's requireXsuaaScope('Tutorial.Author'), srv-sage uses
-    // IAS auth (kind: 'ias') — authenticated-user is the correct gate; XSUAA scope
-    // checks would not work here.
-    // TODO (integration smoke): verify this gate on the deployed CF app — see the
-    // INTEGRATION TEST NOTE at the top of this file.
-    (req, res, next) => {
-      if (!req.user?.id) return res.status(401).json({ error: 'unauthenticated' });
-      next();
-    },
+    // IAS auth guard — route-scoped IAS bearer validation. This route is mounted
+    // in cds.on('bootstrap') on the raw Express app, OUTSIDE CAP's service-level
+    // auth middleware, so CAP never populates req.user here. The previous
+    // `if (!req.user?.id)` check therefore rejected EVERY request (even with a
+    // valid IAS bearer) — author ops worked because they are CAP services, but
+    // preview 401'd. previewIasAuthMiddleware validates the IAS bearer itself
+    // (CAP ias-auth factory, XSUAA fallback) and fails closed on anonymous.
+    // Placed BEFORE express.json() so an unauthenticated 50 MB body is never
+    // buffered.
+    previewIasAuthMiddleware,
     // #1102: 50 MB body cap accommodates base64-inlined tutorial screenshots
     // (Sage inlines relative image refs before POST so authors can preview
     // without a pre-preview commit). Base64 adds ~33% overhead — a 50 MB
