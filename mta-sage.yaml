@@ -29,8 +29,16 @@ modules:
     type: nodejs
     path: gen/srv-sage
     parameters:
-      memory: 512M
-      disk-quota: 512M
+      # memory/disk raised from 512M/512M: the Hugo preview scaffold copied in
+      # build-parameters includes hugo/static (~248M of site JS/wasm island
+      # assets that preview-site/hugo.toml mounts), which overflowed the 512M
+      # disk-quota at droplet stage-in ("No space left on device", 0/1 crash
+      # loop). 1024M disk holds the scaffold + node_modules + hugo-extended
+      # vendor binary + per-request Hugo output; 1024M memory gives Hugo + CAP +
+      # the 50MB preview-body buffer headroom. (The proven srv-qa preview module
+      # uses 2048M/1024M; srv-sage is preview + author APIs only, so 1024M mem.)
+      memory: 1024M
+      disk-quota: 1024M
       buildpack: nodejs_buildpack
       stack: cflinuxfs5
       instances: 1
