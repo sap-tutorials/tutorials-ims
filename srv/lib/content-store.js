@@ -15,6 +15,7 @@ export const createContentHandlers = mod.createContentHandlers;
 export const contentAuthMiddleware = mod.contentAuthMiddleware;
 export const publishHandler = mod.publishHandler;
 export const serveHandler = mod.serveHandler;
+export const gatedServeHandler = mod.gatedServeHandler;
 export const markdownServeHandler = mod.markdownServeHandler;
 export const hashesHandler = mod.hashesHandler;
 export const sourceHashesHandler = mod.sourceHashesHandler;
