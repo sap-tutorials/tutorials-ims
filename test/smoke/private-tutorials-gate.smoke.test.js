@@ -12,6 +12,26 @@ import { BASE_URL, fetchWithRetry } from './smoke.config.js';
 
 const GATED_SLUG = process.env.SMOKE_GATED_SLUG;
 
+// This deployment's approuter enforces XSUAA by returning a 200 HTML *login
+// interstitial* (the fragmentAfterLogin / locationAfterLogin cookie shim) for
+// an unauthenticated request to a protected route — NOT a 302/401/403. (Same
+// behavior the admin-shell + /me smoke tests document.) So "gated" means: the
+// caller never receives the protected CONTENT. A 200 is acceptable ONLY when
+// the body is that interstitial; a 200 carrying real content is the breach.
+// assertGated accepts 302/401/403, or 200-as-interstitial, and fails on a 200
+// whose body is NOT the interstitial (i.e. content leaked past the gate).
+async function assertGated(url) {
+  const res = await fetchWithRetry(url);
+  if ([302, 401, 403].includes(res.status)) return;
+  const body = res.status === 200 ? await res.text() : '';
+  const isLoginInterstitial = /fragmentAfterLogin|locationAfterLogin/.test(body);
+  expect(
+    isLoginInterstitial,
+    `prerelease route must be scope-gated: got ${res.status} and the body was ` +
+    `NOT the XSUAA login interstitial for ${url} — pre-release content may have leaked`,
+  ).toBe(true);
+}
+
 describe.skipIf(!process.env.SMOKE_BASE_URL)('ROLE_GATED tutorial serve gate (#3099)', () => {
 
   // Guard: a ROLE_GATED slug must be provided; skip gracefully if not.
@@ -19,15 +39,10 @@ describe.skipIf(!process.env.SMOKE_BASE_URL)('ROLE_GATED tutorial serve gate (#3
 
     // ── Gate: /tutorials-prerelease/<slug> without the Tutorial.PreRelease scope ──
     // The approuter route for /tutorials-prerelease/* requires $XSAPPNAME.Tutorial.PreRelease.
-    // An unauthenticated call must be rejected — 401 (not yet authed) or 403 (authed,
-    // wrong scope). The approuter redirects to login (302) for browser flows, so we
-    // also accept 302.
-    it('GET /tutorials-prerelease/<slug> without auth → 401/403/302 (scope gate)', async () => {
-      const url = `${BASE_URL}/tutorials-prerelease/${GATED_SLUG}/`;
-      const res = await fetchWithRetry(url);
-      // approuter scope gate: 401 (no token), 403 (wrong scope), or 302 (login redirect)
-      expect([401, 403, 302], `expected auth rejection, got ${res.status} for ${url}`)
-        .toContain(res.status);
+    // An unauthenticated call must not receive pre-release content — it gets a
+    // 302/401/403, or the 200 XSUAA login interstitial (see assertGated).
+    it('GET /tutorials-prerelease/<slug> without auth → gated (no content leak)', async () => {
+      await assertGated(`${BASE_URL}/tutorials-prerelease/${GATED_SLUG}/`);
     });
 
     // ── Public route: /tutorials/<slug> for a ROLE_GATED tutorial must return 404 ──
@@ -46,10 +61,7 @@ describe.skipIf(!process.env.SMOKE_BASE_URL)('ROLE_GATED tutorial serve gate (#3
   // The /tutorials-prerelease/ prefix must require auth even without a known slug.
   // Test with a non-existent sentinel slug to confirm the route is scope-gated before
   // the backend is reached.
-  it('GET /tutorials-prerelease/__smoke__sentinel without auth → 401/403/302', async () => {
-    const url = `${BASE_URL}/tutorials-prerelease/__smoke__sentinel/`;
-    const res = await fetchWithRetry(url);
-    expect([401, 403, 302], `prerelease route must be scope-gated, got ${res.status}`)
-      .toContain(res.status);
+  it('GET /tutorials-prerelease/__smoke__sentinel without auth → gated (no content leak)', async () => {
+    await assertGated(`${BASE_URL}/tutorials-prerelease/__smoke__sentinel/`);
   });
 });
