@@ -136,9 +136,14 @@ describe.skipIf(!hasBaseUrl())('e2e: navigator search & filter improvements (#31
       const searchInput = page.getByPlaceholder('Search for a tutorial');
       await expect(searchInput, 'main search input not found — check TutorialNavigator.vue').toBeVisible({ timeout: 10_000 });
 
-      // Use a single common word broad enough to reliably match a mission on the
-      // live site (avoids "SAP BTP" matching zero missions if content varies).
-      await searchInput.fill('SAP');
+      // #3112: search 'Device' — the proven reproduction term. Pre-fix (the sel.count
+      // guard in search-service.js bailing on the island's always-$count=true query)
+      // the matching Devtoberfest mission sorts past $top=48 and never renders, while
+      // the lozenge still counts it. Post-fix the filter+rank apply on the count path,
+      // so the mission ranks onto page 1. 'Device' matches a real mission on DEV/PROD;
+      // if an env has none the lozenge reads 0 and the card assertion self-skips (below).
+      // See docs/superpowers/specs/2026-11-21-navigator-search-count-guard-fix-design.md.
+      await searchInput.fill('Device');
       await page.keyboard.press('Enter');
 
       // Wait for the results to update (debounce + fetch).
