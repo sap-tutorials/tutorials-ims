@@ -415,6 +415,8 @@ export interface CatalogTutorialMeta {
   slug: string
   categorySlugs: string[]
   title?: string
+  /** [#3099] Visibility tier from the catalog. 'LISTED' | 'UNLISTED' | 'ROLE_GATED' | undefined */
+  visibility?: string
 }
 
 // Full CodeCheckSpec — used by the publish pipeline. NEVER ship to the
