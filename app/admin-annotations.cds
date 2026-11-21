@@ -644,6 +644,9 @@ annotate AdminService.Tutorials with {
                      ]
                    };
   ownerEmail       @Common.Label: 'Owner Email'                 @Common.FieldControl: #ReadOnly;
+  // #3099 — tutorial visibility (LISTED / UNLISTED / ROLE_GATED). Enum dropdown
+  // from @Common.ValueListWithFixedValues; writable by admins to gate access.
+  visibility       @Common.Label: 'Visibility'                  @Common.ValueListWithFixedValues;
 };
 
 annotate AdminService.TutorialMeta with {
@@ -704,6 +707,7 @@ annotate AdminService.Tutorials with @UI: {
   ]},
   FieldGroup#Lifecycle: { Data: [
     { Value: status },
+    { Value: visibility },
     { Value: deletionReason },
     { Value: redirectTo_ID, Label: 'Redirect To' },
     { Value: redirectUrl, Label: 'Redirect URL (external)' }
