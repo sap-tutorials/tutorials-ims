@@ -34,8 +34,8 @@ function captureHelpers() {
   const calls = [];
   return {
     calls,
-    appendToSession: async ({ sessionId, files }) => {
-      calls.push({ sessionId, files });
+    appendToSession: async ({ sessionId, files, bodyHashes }) => {
+      calls.push({ sessionId, files, bodyHashes });
       return { appended: Object.keys(files).length };
     },
   };
@@ -111,6 +111,47 @@ describe('renderConceptsIntoSession', () => {
     expect(helpers.calls.length).toBe(2);
     expect(Object.keys(helpers.calls[0].files).length).toBe(20);
     expect(Object.keys(helpers.calls[1].files).length).toBe(1);
+  });
+
+  it('interleaves appends with the render loop (does not accumulate the whole corpus)', async () => {
+    // 40 concepts, BATCH_SIZE 20 → exactly 2 append calls, each a full batch.
+    const concepts = Array.from({ length: 40 }, (_, i) => makeConcept(`c${i}`, `Concept ${i}`));
+    const helpers = captureHelpers();
+    const result = await renderConceptsIntoSession({
+      db: {}, sessionId: 's-flush', helpers, priorHashes: {}, shell: SHELL,
+      deps: { buildConceptsPayload: async () => ({ concepts }) },
+    });
+    expect(result.conceptsChanged).toBe(40);
+    expect(helpers.calls.length).toBe(2);
+    expect(Object.keys(helpers.calls[0].files).length).toBe(20);
+    expect(Object.keys(helpers.calls[1].files).length).toBe(20);
+  });
+
+  it('passes bodyHashes aligned to each flushed slice, not the whole corpus', async () => {
+    const concepts = Array.from({ length: 25 }, (_, i) => makeConcept(`c${i}`, `Concept ${i}`));
+    const helpers = captureHelpers();
+    await renderConceptsIntoSession({
+      db: {}, sessionId: 's-bh', helpers, priorHashes: {}, shell: SHELL,
+      deps: { buildConceptsPayload: async () => ({ concepts }) },
+    });
+    for (const call of helpers.calls) {
+      expect(Object.keys(call.bodyHashes ?? {}).sort()).toEqual(Object.keys(call.files).sort());
+    }
+  });
+
+  it('yields to the event loop during a long render', async () => {
+    // A macrotask scheduled before the call resolves mid-render, proving the
+    // loop yields (setImmediate) rather than running one synchronous block.
+    const concepts = Array.from({ length: 120 }, (_, i) => makeConcept(`c${i}`, `Concept ${i}`));
+    const helpers = captureHelpers();
+    let yieldedDuringRender = false;
+    setImmediate(() => { if (helpers.calls.length > 0 && helpers.calls.length < 6) yieldedDuringRender = true; });
+    const result = await renderConceptsIntoSession({
+      db: {}, sessionId: 's-yield', helpers, priorHashes: {}, shell: SHELL,
+      deps: { buildConceptsPayload: async () => ({ concepts }) },
+    });
+    expect(result.conceptsChanged).toBe(120);
+    expect(yieldedDuringRender).toBe(true);
   });
 
   it('returns durationMs and zero-appends cleanly for an empty corpus', async () => {
