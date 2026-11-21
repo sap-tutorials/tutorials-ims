@@ -508,6 +508,14 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     return availableProducts.value.filter(t => t.label.toLowerCase().includes(q))
   })
 
+  // #3112: the SELECTED products as {label, slugs} objects, for the pinned
+  // selected-filter chips rendered above the Software Product list. Derived from
+  // the full availableProducts (not the search-box-filtered subset) so a selected
+  // chip stays visible even while the user types a new product search term.
+  const selectedProducts = computed(() =>
+    availableProducts.value.filter(p => isProductSelected(p.slugs))
+  )
+
   const availableTopics = computed(() => {
     const topicSet = new Set<string>()
     const tuts = tutorials?.value ?? []
@@ -857,6 +865,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     // Facet lists
     availableProducts,
     filteredProducts,
+    selectedProducts,
     availableTopics,
     filteredTopics,
     // useSearch outputs (server-search loading/error states)

@@ -244,21 +244,20 @@ export default class DeveloperService extends cds.ApplicationService {
       }
 
       // Capture the prior tutorial-level completion date BEFORE we update.
+      // null when the tutorial was never completed (partial reset) — already
+      // the correct nullable shape for the return type.
       const priorTutorialRow = liveRows.find(
         r => r.taskType === 'TUTORIAL' && r.status === 'COMPLETED'
       );
       const previousAttemptCompletedAt = priorTutorialRow?.completionDate ?? null;
 
-      // A reset is only valid on a FULLY completed tutorial — it re-opens a done
-      // tutorial for another attempt. Partial progress (some steps done, tutorial
-      // still IN_PROGRESS) has nothing to "re-complete" and must NOT be resettable.
-      // The UI enforces this by only showing the reset button once the tutorial is
-      // completed; the OData action + MCP `reset_tutorial_progress` tool bypassed it
-      // (issue #2446), letting a partial reset supersede in-progress rows without
-      // clearing step status. Guard both paths at the shared handler.
-      if (!priorTutorialRow) {
-        return req.reject(409, 'This tutorial is not completed yet — only completed tutorials can be reset.');
-      }
+      // A reset is valid whenever liveRows.length > 0 (checked above). The prior
+      // 409 guard (issue #2446 fix) required a COMPLETED tutorial-level row, but
+      // that was overly conservative: the handler already supersedes ALL live STEP
+      // + TUTORIAL rows (step 6) and calls rollUpParentsForCompletion(allowDowngrade)
+      // (step 8), so the inconsistent-rollup symptom of #2446 cannot arise. Gate
+      // relaxed in #3120; the replacement regression test checks the rollup
+      // downgrade path directly.
 
       // 4. Determine next attempt number
       const maxAttempt = Math.max(...liveRows.map(r => r.attemptNumber ?? 1));

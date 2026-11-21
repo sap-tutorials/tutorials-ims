@@ -122,6 +122,7 @@ export async function buildConceptsPayload(db) {
             'tutorial.stepCount as tutorial_stepCount'
           )
           .where({ predicate: 'teaches' })
+          .orderBy('tutorial.slug')
       )).filter(r => idsSet.has(r.concept_ID));
       return groupBy(
         // Defensive: drop orphan rows where the joined Tutorial side is null.
@@ -153,6 +154,7 @@ export async function buildConceptsPayload(db) {
               'target.description as target_description'
             )
             .where({ status: 'ACTIVE' })
+            .orderBy('target.slug')
         ).then(rows => rows.filter(r => idsSet.has(r.source_ID))),
         db.run(
           SELECT.from(ConceptEdges)
@@ -163,6 +165,7 @@ export async function buildConceptsPayload(db) {
               'source.description as source_description'
             )
             .where({ status: 'ACTIVE', predicate: 'requires' })
+            .orderBy('source.slug')
         ).then(rows => rows.filter(r => idsSet.has(r.target_ID))),
       ]);
 
@@ -211,6 +214,7 @@ export async function buildConceptsPayload(db) {
             'journey.level as journey_level',
             'journey.durationHours as journey_durationHours'
           )
+          .orderBy('journey.slug')
       )).filter(r => idsSet.has(r.concept_ID));
       return groupBy(
         journeyRows,
@@ -254,7 +258,8 @@ export async function buildConceptsPayload(db) {
         rows.sort((a, b) => {
           const ta = a.postedAt ? new Date(a.postedAt).getTime() : 0;
           const tb = b.postedAt ? new Date(b.postedAt).getTime() : 0;
-          return tb - ta;
+          if (tb !== ta) return tb - ta;
+          return String(a.slug).localeCompare(String(b.slug)); // unique tiebreaker → stable order
         });
         blogPostsByConcept[conceptId] = rows.slice(0, 8);
       }
@@ -277,7 +282,7 @@ export async function buildConceptsPayload(db) {
             'mission.effortLevel as effortLevel',
             'mission.categorySlug as categorySlug',
           )
-          .orderBy('mission.effortLevel asc')
+          .orderBy('mission.effortLevel asc', 'mission.slug asc')
       )).filter(r => idsSet.has(r.concept_ID));
       const groupedMissions = groupBy(missionLinks, 'concept_ID', r => ({
         slug: r.missionSlug,
@@ -311,7 +316,7 @@ export async function buildConceptsPayload(db) {
             'video.channelTitle as channelTitle',
             'video.publishedAt as publishedAt',
           )
-          .orderBy('video.publishedAt desc')
+          .orderBy('video.publishedAt desc', 'video.slug asc')
       )).filter(r => idsSet.has(r.concept_ID));
       const groupedVideos = groupBy(videoLinks, 'concept_ID', r => ({
         slug: r.videoSlug,
@@ -346,7 +351,7 @@ export async function buildConceptsPayload(db) {
             'apiDoc.category as category',
             'apiDoc.apiType as apiType',
           )
-          .orderBy('apiDoc.category asc', 'apiDoc.title asc')
+          .orderBy('apiDoc.category asc', 'apiDoc.title asc', 'apiDoc.slug asc')
       )).filter(r => idsSet.has(r.concept_ID));
       const groupedApiDocs = groupBy(apiDocLinks, 'concept_ID', r => ({
         slug: r.apiDocSlug,
@@ -381,7 +386,7 @@ export async function buildConceptsPayload(db) {
             'sample.stars as stars',
             'sample.lastCommitAt as lastCommitAt',
           )
-          .orderBy('sample.stars desc', 'sample.lastCommitAt desc')
+          .orderBy('sample.stars desc', 'sample.lastCommitAt desc', 'sample.slug asc')
       )).filter(r => idsSet.has(r.concept_ID));
       const groupedSamples = groupBy(sampleLinks, 'concept_ID', r => ({
         slug: r.sampleSlug,
@@ -420,7 +425,7 @@ export async function buildConceptsPayload(db) {
             'helpDoc.url as url',
             'helpDoc.product as product',
           )
-          .orderBy('helpDoc.source asc', 'helpDoc.title asc')
+          .orderBy('helpDoc.source asc', 'helpDoc.title asc', 'helpDoc.slug asc')
       )).filter(r => idsSet.has(r.concept_ID));
       const groupedHelpDocs = groupBy(helpDocLinks, 'concept_ID', r => ({
         slug: r.slug,
@@ -486,7 +491,10 @@ export async function buildConceptsPayload(db) {
         });
       }
       for (const [conceptId, rows] of Object.entries(grouped)) {
-        rows.sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
+        rows.sort((a, b) => {
+          const d = String(a.startDate).localeCompare(String(b.startDate));
+          return d !== 0 ? d : String(a.slug).localeCompare(String(b.slug)); // unique tiebreaker
+        });
         communityEventsByConcept[conceptId] = rows.slice(0, 5);
       }
       return communityEventsByConcept;

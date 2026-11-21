@@ -135,24 +135,32 @@ describe('resetTutorialProgress handler — happy path', () => {
     expect(live[0].progress).toBe(0);
   });
 
-  it('rejects a second reset when the tutorial has not been re-completed (409)', async () => {
+  it('allows a second reset even when the tutorial has not been re-completed (gate relaxed #3120)', async () => {
     cds.context = { user: new cds.User({ id: 'sap-u1' }) };
     const { DeveloperService } = cds.services;
-    // First reset succeeds (seed left a COMPLETED attempt-1). It leaves the
-    // tutorial IN_PROGRESS at attempt 2 — there is nothing COMPLETED to reset,
-    // so a second reset must reject (issue #2446 guard).
-    await DeveloperService.send({ event: 'resetTutorialProgress', data: { slug: 'reset-happy-path' } });
+    // First reset: seed left a COMPLETED attempt-1, 4 rows superseded → attempt 2 IN_PROGRESS.
+    const result1 = await DeveloperService.send({ event: 'resetTutorialProgress', data: { slug: 'reset-happy-path' } });
+    expect(result1.newAttemptNumber).toBe(2);
+
+    // Second reset: attempt-2 IN_PROGRESS TUTORIAL row is live, so liveRows.length > 0.
+    // With the gate relaxed this now resolves (200) and bumps to attempt 3.
     cds.context = { user: new cds.User({ id: 'sap-u1' }) };
-    await expect(
-      DeveloperService.send({ event: 'resetTutorialProgress', data: { slug: 'reset-happy-path' } })
-    ).rejects.toMatchObject({ code: 409 });
+    const result2 = await DeveloperService.send({ event: 'resetTutorialProgress', data: { slug: 'reset-happy-path' } });
+    expect(result2.newAttemptNumber).toBe(3);
+    expect(result2.previousAttemptCompletedAt).toBeNull(); // attempt-2 was never completed
+
+    // Attempt-3 IN_PROGRESS TUTORIAL row must exist.
+    const { TaskRecords } = cds.entities('com.sap.developers.ims');
+    const live = await SELECT.from(TaskRecords).where({ user_ID: 'u1', status: 'IN_PROGRESS' });
+    expect(live).toHaveLength(1);
+    expect(live[0].attemptNumber).toBe(3);
   });
 
-  it('rejects reset of a partially-completed tutorial with 409 (issue #2446)', async () => {
-    // Regression guard for #2446: a user completed only step 1 (tutorial still
-    // IN_PROGRESS) then called reset via the API/MCP. The old handler allowed it
-    // — superseding the live step row WITHOUT clearing step status, leaving the
-    // schedule/points view inconsistent. Reset must require a COMPLETED tutorial.
+  it('resets a partially-completed tutorial (200, supersedes partial progress) (#3120 gate relaxed)', async () => {
+    // Was the #2446 regression guard (rejected with 409). Now relaxed: a partial reset
+    // supersedes the live STEP + TUTORIAL rows and creates a fresh attempt.
+    // The #2446 actual symptom (stale parent rollup / phantom points) is covered by
+    // the new rollup regression test below.
     const { Users, Tutorials, Steps, TaskRecords } = cds.entities('com.sap.developers.ims');
     await DELETE.from(TaskRecords).where({ user_ID: 'u1' });
     await DELETE.from(Steps).where({ tutorial_ID: 't1' });
@@ -177,14 +185,98 @@ describe('resetTutorialProgress handler — happy path', () => {
 
     cds.context = { user: new cds.User({ id: 'sap-u1' }) };
     const { DeveloperService } = cds.services;
-    await expect(
-      DeveloperService.send({ event: 'resetTutorialProgress', data: { slug: 'partial-tut' } })
-    ).rejects.toMatchObject({ code: 409 });
+    // Now resolves: 2 live rows get superseded, fresh attempt-2 IN_PROGRESS TUTORIAL inserted.
+    const result = await DeveloperService.send({
+      event: 'resetTutorialProgress',
+      data: { slug: 'partial-tut' },
+    });
+    expect(result.newAttemptNumber).toBe(2);
+    expect(result.supersededRecordCount).toBe(2);
+    expect(result.previousAttemptCompletedAt).toBeNull(); // partial attempt was never completed
 
-    // The partial progress must be untouched — no row superseded.
+    // Both live rows must now be SUPERSEDED.
     const rows = await SELECT.from(TaskRecords).where({ user_ID: 'u1' });
-    expect(rows.every(r => r.status !== 'SUPERSEDED')).toBe(true);
-    expect(rows.find(r => r.taskType === 'STEP').status).toBe('COMPLETED');
+    const superseded = rows.filter(r => r.status === 'SUPERSEDED');
+    expect(superseded).toHaveLength(2);
+
+    // A fresh attempt-2 IN_PROGRESS TUTORIAL row must exist.
+    const live = rows.filter(r => r.status === 'IN_PROGRESS');
+    expect(live).toHaveLength(1);
+    expect(live[0].taskType).toBe('TUTORIAL');
+    expect(live[0].attemptNumber).toBe(2);
+    expect(live[0].progress).toBe(0);
+  });
+
+  it('partial reset clears parent rollup + no phantom points (replacement #2446 regression guard)', async () => {
+    // Reproduces #2446's actual symptom: completing one step of a tutorial that belongs to
+    // a GROUP caused the GROUP to roll up to COMPLETED (phantom points). A subsequent partial
+    // reset must downgrade the parent via rollUpParentsForCompletion(allowDowngrade:true).
+    //
+    // Setup: tutorial → group (via GroupPathItems). The group is pre-seeded as COMPLETED
+    // (simulating the #2446 state: one-step tutorial completed → group rolled to COMPLETED).
+    // After the partial reset, getProgress returns completedSteps:[] AND the group TaskRecord
+    // must NOT be COMPLETED (rollUpParentsForCompletion downgraded it).
+    const { Users, Tutorials, Steps, Groups, GroupPathItems, TaskRecords } = cds.entities('com.sap.developers.ims');
+
+    // Clean up all entities in FK order (children → parents).
+    await DELETE.from(TaskRecords).where({ user_ID: 'u-2446' });
+    await DELETE.from(GroupPathItems).where({ group_ID: 'g-2446' });
+    await DELETE.from(Steps).where({ tutorial_ID: 't-2446' });
+    await DELETE.from(Tutorials).where({ ID: 't-2446' });
+    await DELETE.from(Groups).where({ ID: 'g-2446' });
+    await DELETE.from(Users).where({ ID: 'u-2446' });
+
+    await INSERT.into(Users).entries({ ID: 'u-2446', uuid: 'u-2446', sapId: 'sap-u2446', legacyId: 8001 });
+    await INSERT.into(Groups).entries({ ID: 'g-2446', slug: 'group-2446', title: 'Group 2446', legacyId: 9001 });
+    await INSERT.into(Tutorials).entries({
+      ID: 't-2446', slug: 'tut-2446', title: 'Tutorial 2446', legacyId: 6001, stepCount: 2,
+    });
+    await INSERT.into(Steps).entries([
+      { ID: 'sg1', tutorial_ID: 't-2446', stepOrder: 1, legacyId: 6101, title: 'Step 1' },
+      { ID: 'sg2', tutorial_ID: 't-2446', stepOrder: 2, legacyId: 6102, title: 'Step 2' },
+    ]);
+    // Wire tutorial to the group.
+    await INSERT.into(GroupPathItems).entries({
+      ID: 'gpi-2446', group_ID: 'g-2446', tutorial_ID: 't-2446', itemOrder: 1, legacyId: 9101,
+    });
+
+    const now = new Date().toISOString();
+    // Partial progress: step 1 done, tutorial IN_PROGRESS (never completed).
+    // The group TaskRecord is COMPLETED — simulating the pre-#2446-fix state where
+    // completing a single step caused a full group rollup.
+    await INSERT.into(TaskRecords).entries([
+      { ID: 'tr-2446-s1', user_ID: 'u-2446', taskLegacyId: 6101, taskType: 'STEP',
+        status: 'COMPLETED', progress: 100, completionDate: now, attemptNumber: 1, legacyId: 8101 },
+      { ID: 'tr-2446-tut', user_ID: 'u-2446', taskLegacyId: 6001, taskType: 'TUTORIAL',
+        status: 'IN_PROGRESS', progress: 50, attemptNumber: 1, legacyId: 8102 },
+      { ID: 'tr-2446-grp', user_ID: 'u-2446', taskLegacyId: 9001, taskType: 'GROUP',
+        status: 'COMPLETED', progress: 100, completionDate: now, attemptNumber: 1, legacyId: 8103 },
+    ]);
+
+    cds.context = { user: new cds.User({ id: 'sap-u2446' }) };
+    const { DeveloperService } = cds.services;
+    // Partial reset must succeed (gate relaxed).
+    const result = await DeveloperService.send({
+      event: 'resetTutorialProgress',
+      data: { slug: 'tut-2446' },
+    });
+    expect(result.newAttemptNumber).toBe(2);
+    expect(result.previousAttemptCompletedAt).toBeNull();
+
+    // Assert: getProgress returns empty completedSteps — fresh attempt reads nothing.
+    cds.context = { user: new cds.User({ id: 'sap-u2446' }) };
+    const progress = await DeveloperService.send({
+      event: 'getProgress',
+      data: { slug: 'tut-2446' },
+    });
+    expect(progress.completedSteps).toEqual([]);
+
+    // Assert: parent GROUP TaskRecord is NOT COMPLETED — rollUpParentsForCompletion
+    // with allowDowngrade:true downgraded it. This is the core #2446 symptom check:
+    // a partial reset must not leave stale/phantom completion records on parents.
+    const grpRow = await SELECT.one.from(TaskRecords).where({ user_ID: 'u-2446', taskType: 'GROUP' });
+    expect(grpRow).toBeDefined();
+    expect(grpRow.status).not.toBe('COMPLETED');
   });
 
   it('rejects unknown slug with 404', async () => {

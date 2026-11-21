@@ -1,0 +1,14 @@
+_schema-version: 3.3.0
+# DEV extension for the SAGE backend MTA (mta-sage.yaml).
+# No parameter overrides needed for DEV — tutorials-xsuaa is the correct
+# XSUAA instance name in the dev space. This file exists as a parallel to
+# mcp-dev.mtaext so the deploy command is symmetric:
+#   mbt build -f mta-sage.yaml -t mta_archives
+#   cf deploy mta_archives/*.mtar -e deploy/mta-sage-dev.mtaext -f
+#
+# Deploy DEV (from origin/DEV; cf target -s dev FIRST):
+#   git fetch origin && git checkout origin/DEV
+#   mbt build -f mta-sage.yaml -t mta_archives
+#   cf deploy mta_archives/*.mtar -e deploy/mta-sage-dev.mtaext -f
+ID: tutorials-sage-dev
+extends: tutorials-sage

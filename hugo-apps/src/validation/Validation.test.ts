@@ -149,9 +149,11 @@ interface VmExposed {
   pending: boolean
   hint: string
   submitted: boolean
+  acknowledged: boolean
   perQuestionResults: Record<string, { verdict: string; hint?: string; summary?: string; errorReason?: string }>
   onSubmit: () => Promise<void>
   onTryAgain: () => void
+  onContinueAnyway: () => void
   _testSetAnswers: (next: Record<string, string | string[]>) => void
 }
 
@@ -235,7 +237,7 @@ describe('Validation.vue — #235 component flow', () => {
     )
 
     expect(getVm(wrapper).result).toBe('correct')
-    expect(localStorageStore['tutorial-validation-persist-test-7']).toContain('"correct":true')
+    expect(localStorageStore['tutorial-validation-persist-test-7']).toContain('"outcome":"pass"')
     expect(eventSpy).toHaveBeenCalledTimes(1)
     expect((eventSpy.mock.calls[0][0] as CustomEvent).detail).toEqual({ stepNumber: 7 })
 
@@ -355,7 +357,7 @@ describe('Validation.vue — #235 component flow', () => {
   // Test 4: pass + partial → result=accepted (#2348: partial unlocks the step)
   // ─────────────────────────────────────────────────────────────────────────
 
-  it('AI Q1 pass + AI Q2 partial-with-hint → result=accepted, hint shown, step-validated fired (#2348)', async () => {
+  it('AI Q1 pass + AI Q2 partial-with-hint → result=accepted, hint shown, step NOT yet validated (#3120)', async () => {
     fetchMock
       .mockResolvedValueOnce(mockFetchResponse({ verdict: 'pass', summary: 'OK' }))
       .mockResolvedValueOnce(mockFetchResponse({
@@ -370,11 +372,17 @@ describe('Validation.vue — #235 component flow', () => {
       { 'q-ai': 'a1', 'q-ai-2': 'a2' }
     )
 
-    // #2348: pass-or-partial with no fail is now ACCEPTED — the step unlocks
-    // and the advisory hint is surfaced, rather than blocking on 'partial'.
+    // #3120: pass-or-partial no longer auto-unlocks — learner must click "Continue anyway"
     expect(getVm(wrapper).result).toBe('accepted')
     expect(getVm(wrapper).hint).toBe('Consider edge cases.')
+    expect(eventSpy).not.toHaveBeenCalled()
+
+    // After calling onContinueAnyway(), the step validates and acknowledged flips true
+    await getVm(wrapper).onContinueAnyway()
+    await wrapper.vm.$nextTick()
     expect(eventSpy).toHaveBeenCalledTimes(1)
+    expect(getVm(wrapper).acknowledged).toBe(true)
+
     document.removeEventListener('step-validated', eventSpy)
   })
 
@@ -383,21 +391,25 @@ describe('Validation.vue — #235 component flow', () => {
   // regardless of whether a hint came back)
   // ─────────────────────────────────────────────────────────────────────────
 
-  it('AI Q partial with empty hint → result=accepted, empty hint (#2348)', async () => {
+  it('AI Q partial with empty hint → result=accepted, empty hint, step NOT yet validated (#3120)', async () => {
     fetchMock.mockResolvedValueOnce(mockFetchResponse({
       verdict: 'partial', summary: 'Close', hint: '',
     }))
+
+    const eventSpy = vi.fn()
+    document.addEventListener('step-validated', eventSpy)
 
     const wrapper = await submitWithAnswers(
       [TEXT_AI],
       { 'q-ai': 'something' }
     )
 
-    // Partial is an accepting verdict now — even with no hint, the step
-    // unlocks. The accepted strip renders "Good enough…" without the
-    // "one thing to consider" clause (guarded by v-if="hint").
+    // #3120: accepted no longer auto-fires step-validated — learner must click Continue anyway
     expect(getVm(wrapper).result).toBe('accepted')
     expect(getVm(wrapper).hint).toBe('')
+    expect(eventSpy).not.toHaveBeenCalled()
+
+    document.removeEventListener('step-validated', eventSpy)
   })
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -507,7 +519,7 @@ describe('Validation.vue — #235 component flow', () => {
     //    verified manually in DEV per PR #602 verification table.)
   })
 
-  it('accepted (single partial): unlocks step + persists, answer preserved (#2348)', async () => {
+  it('accepted (single partial): result=accepted, answer preserved, step NOT yet validated (#3120)', async () => {
     fetchMock.mockResolvedValueOnce(mockFetchResponse({
       verdict: 'partial', summary: 'Close but missing X', hint: 'Think about X',
     }))
@@ -521,17 +533,78 @@ describe('Validation.vue — #235 component flow', () => {
       { slug: 'partial-test', stepNumber: 1 },
     )
 
-    // #2348: a single partial now ACCEPTS the step (unlocks progression) and
-    // fires step-validated so the Done button re-enables. Advisory hint shown.
+    // #3120: accepted no longer auto-fires — learner must click Continue anyway.
+    // Advisory hint is still shown.
     expect(getVm(wrapper).result).toBe('accepted')
     expect(getVm(wrapper).hint).toBe('Think about X')
-    expect(eventSpy).toHaveBeenCalledTimes(1)
-    // Answer preserved (the textarea is never unmounted). NOTE: we assert on
-    // the answers ref, not a stub .exists() finder — happy-dom's stub-sibling
-    // rendering is unreliable (see the 'correct' test's note above).
+    expect(eventSpy).not.toHaveBeenCalled()
+    // Answer preserved (the textarea is never unmounted).
     const answersMap = (wrapper.vm as unknown as VmExposed & { answers: Record<string, string> }).answers
     expect(answersMap['q-ai']).toBe('rough answer')
     document.removeEventListener('step-validated', eventSpy)
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // #3120: Continue anyway persists accepted outcome in localStorage
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Continue anyway persists accepted outcome in localStorage (#3120)', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({
+      verdict: 'partial', summary: 'Close', hint: 'Consider more detail.',
+    }))
+
+    const wrapper = await submitWithAnswers(
+      [TEXT_AI],
+      { 'q-ai': 'partial answer' },
+      { slug: 'persist-accepted', stepNumber: 3 },
+    )
+
+    expect(getVm(wrapper).result).toBe('accepted')
+    // Before clicking Continue anyway — nothing persisted yet
+    expect(localStorageStore['tutorial-validation-persist-accepted-3']).toBeUndefined()
+
+    await getVm(wrapper).onContinueAnyway()
+    await wrapper.vm.$nextTick()
+
+    expect(localStorageStore['tutorial-validation-persist-accepted-3']).toContain('"outcome":"accepted"')
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // #3120: Resubmit after accepted can still reach correct
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('Resubmit after accepted can reach correct (#3120)', async () => {
+    // First submit: partial → accepted (no persist yet)
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({
+      verdict: 'partial', summary: 'Close', hint: 'Be more specific.',
+    }))
+
+    const wrapper = await mountValidation([TEXT_AI], { slug: 'resubmit-test', stepNumber: 2 })
+    const vm = getVm(wrapper)
+    vm._testSetAnswers({ 'q-ai': 'rough answer' })
+    await wrapper.vm.$nextTick()
+    await vm.onSubmit()
+    await flushPromises()
+
+    expect(vm.result).toBe('accepted')
+    // Not persisted yet — learner hasn't clicked Continue anyway
+    expect(localStorageStore['tutorial-validation-resubmit-test-2']).toBeUndefined()
+
+    // Learner tries again with a better answer
+    vm.onTryAgain()
+    await wrapper.vm.$nextTick()
+
+    // Second submit: pass → correct
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({
+      verdict: 'pass', summary: 'Perfect.',
+    }))
+    vm._testSetAnswers({ 'q-ai': 'better answer' })
+    await wrapper.vm.$nextTick()
+    await vm.onSubmit()
+    await flushPromises()
+
+    expect(vm.result).toBe('correct')
+    expect(localStorageStore['tutorial-validation-resubmit-test-2']).toContain('"outcome":"pass"')
   })
 })
 
@@ -697,5 +770,139 @@ describe('Validation.vue — #1740 multi-select MCQ', () => {
       { slug: 'multi-test', stepNumber: 6 }
     )
     expect(getVm(wrapper).result).toBe('incorrect')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #3120 Yellow UX — editable box, Resubmit, Continue anyway template tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Validation.vue — #3120 Yellow state template', () => {
+  // ── accepted keeps textarea editable ──────────────────────────────────────
+  it('accepted state keeps the textarea editable (no disabled attr)', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({
+      verdict: 'partial', summary: 'Close', hint: 'Think more.',
+    }))
+
+    const wrapper = await submitWithAnswers(
+      [TEXT_AI],
+      { 'q-ai': 'my answer' },
+    )
+
+    expect(getVm(wrapper).result).toBe('accepted')
+    // ui5-textarea is stubbed → <ui5-textarea-stub>.
+    // When result==='accepted' the textarea must NOT have `disabled` attr —
+    // so the learner can edit and resubmit.
+    const textarea = wrapper.find('ui5-textarea-stub')
+    expect(textarea.exists()).toBe(true)
+    expect(textarea.attributes('disabled')).toBeUndefined()
+  })
+
+  // ── accepted shows Resubmit + Continue anyway buttons and warning strip ───
+  it('accepted state shows Resubmit and Continue-anyway buttons and ⚠ strip text', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({
+      verdict: 'partial', summary: 'Close', hint: 'Think more.',
+    }))
+
+    const wrapper = await submitWithAnswers(
+      [TEXT_AI],
+      { 'q-ai': 'my answer' },
+    )
+
+    expect(getVm(wrapper).result).toBe('accepted')
+
+    // Information-design strip is present (ui5-message-strip stubs don't render
+    // slot content with the 'true' stub, so we assert on the design attribute).
+    const strips = wrapper.findAll('ui5-message-strip-stub')
+    const infoStrip = strips.find((s) => s.attributes('design') === 'Information')
+    expect(infoStrip).toBeDefined()
+
+    // Both action buttons present. ui5-button stubs with 'true' don't render
+    // slot text — assert by attribute: Resubmit has type="button", Continue
+    // anyway has design="Emphasized".
+    const buttons = wrapper.findAll('ui5-button-stub')
+    const resubmitBtn = buttons.find((b) => b.attributes('type') === 'button')
+    expect(resubmitBtn).toBeDefined()
+    const continueBtn = buttons.find((b) => b.attributes('design') === 'Emphasized')
+    expect(continueBtn).toBeDefined()
+  })
+
+  // ── after acknowledge: no Continue-anyway, textarea still editable ────────
+  it('after onContinueAnyway: Continue-anyway gone, textarea editable, confirmation shown', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({
+      verdict: 'partial', summary: 'Close', hint: 'Be more specific.',
+    }))
+
+    const wrapper = await submitWithAnswers(
+      [TEXT_AI],
+      { 'q-ai': 'my answer' },
+    )
+
+    expect(getVm(wrapper).result).toBe('accepted')
+    expect(getVm(wrapper).acknowledged).toBe(false)
+
+    await getVm(wrapper).onContinueAnyway()
+    await wrapper.vm.$nextTick()
+
+    expect(getVm(wrapper).acknowledged).toBe(true)
+
+    // "Continue anyway" button must be gone (it has design="Emphasized").
+    // After acknowledge the v-if="!acknowledged" removes it from the DOM.
+    const buttons = wrapper.findAll('ui5-button-stub')
+    const continueBtn = buttons.find((b) => b.attributes('design') === 'Emphasized')
+    expect(continueBtn).toBeUndefined()
+
+    // Textarea still editable (not disabled).
+    const textarea = wrapper.find('ui5-textarea-stub')
+    expect(textarea.attributes('disabled')).toBeUndefined()
+
+    // Positive-design (confirmation) strip is now shown.
+    const strips = wrapper.findAll('ui5-message-strip-stub')
+    const positiveStrip = strips.find((s) => s.attributes('design') === 'Positive')
+    expect(positiveStrip).toBeDefined()
+  })
+
+  // ── correct state still disables the textarea ─────────────────────────────
+  it('correct state still disables the textarea', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({
+      verdict: 'pass', summary: 'Perfect.',
+    }))
+
+    const wrapper = await submitWithAnswers(
+      [TEXT_AI],
+      { 'q-ai': 'perfect answer' },
+    )
+
+    expect(getVm(wrapper).result).toBe('correct')
+    const textarea = wrapper.find('ui5-textarea-stub')
+    expect(textarea.exists()).toBe(true)
+    // On correct, textarea must have a `disabled` attribute present (truthy).
+    // Vue Test Utils stubs render boolean attributes as "true" not "",
+    // so we assert the attribute exists (not undefined).
+    expect(textarea.attributes('disabled')).toBeDefined()
+  })
+
+  // ── onTryAgain resets acknowledged to false ───────────────────────────────
+  it('onTryAgain resets acknowledged to false', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({
+      verdict: 'partial', summary: 'Close', hint: 'Consider X.',
+    }))
+
+    const wrapper = await submitWithAnswers(
+      [TEXT_AI],
+      { 'q-ai': 'rough answer' },
+    )
+
+    expect(getVm(wrapper).result).toBe('accepted')
+
+    // Click Continue anyway to set acknowledged=true.
+    await getVm(wrapper).onContinueAnyway()
+    await wrapper.vm.$nextTick()
+    expect(getVm(wrapper).acknowledged).toBe(true)
+
+    // Try again must reset acknowledged to false.
+    getVm(wrapper).onTryAgain()
+    await wrapper.vm.$nextTick()
+    expect(getVm(wrapper).acknowledged).toBe(false)
   })
 })

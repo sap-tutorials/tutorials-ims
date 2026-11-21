@@ -9,10 +9,9 @@ interface Props {
 
 const props = defineProps<Props>();
 
-// Whether to surface the reset button. We only show it AFTER the learner has
-// completed every step of the tutorial — for partial-progress, "Reset" would
-// imply nuking work they may not have intended to lose. The dataset.stepCount
-// attribute is emitted on <html> by the Hugo tutorial layout (Task 21).
+// Whether to surface the reset button. We show it whenever the learner has
+// ANY progress (completedCount > 0) so they can reset at any point, not only
+// at full completion. The backend gate was relaxed in Task 4 (#3120).
 const showReset = ref(false);
 
 // Dialog open state — drives an imperative `.open` property write on the
@@ -70,12 +69,6 @@ onMounted(async () => {
   const el = getDialogEl();
   if (el) el.open = false;
 
-  // Read step-count from <html data-step-count="N"> (Task 21 emits this).
-  // If the attribute is missing or malformed, default to a large number so
-  // we never wrongly surface the reset button on incomplete progress.
-  const stepCount = Number(document.documentElement.dataset.stepCount ?? '999');
-  if (!Number.isFinite(stepCount) || stepCount <= 0) return;
-
   try {
     const res = await fetch(`/api/getProgress?slug=${encodeURIComponent(props.slug)}`, {
       credentials: 'include',
@@ -84,7 +77,7 @@ onMounted(async () => {
     const data = await res.json();
     const completed: unknown = data?.completedSteps;
     const completedCount = Array.isArray(completed) ? completed.length : 0;
-    if (completedCount >= stepCount) {
+    if (completedCount > 0) {
       showReset.value = true;
     }
   } catch {
@@ -196,7 +189,7 @@ defineExpose({
       @close="closeDialog"
     >
       <p class="tutorial-reset__body">
-        This will clear your completion record for this tutorial and
+        This will clear all your progress for this tutorial and
         you'll start again from step 1. Your other tutorials are unaffected.
       </p>
       <div slot="footer" class="tutorial-reset__footer">

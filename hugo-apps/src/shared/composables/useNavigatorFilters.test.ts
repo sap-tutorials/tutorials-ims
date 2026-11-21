@@ -77,6 +77,27 @@ describe('useNavigatorFilters', () => {
     expect(f.hasActiveFilters.value).toBe(false)
   })
 
+  // #3112: pinned selected-filter chips need the SELECTED subset of availableProducts
+  // (as { label, slugs } objects, so the chip shows the human label and removes by slug).
+  it('selectedProducts returns only the currently-selected products as {label, slugs}', async () => {
+    const allCards = ref(cards)
+    // availableProducts is built from `tutorials` (same as production), so provide them.
+    const tutorials = ref<TutorialEntry[]>([
+      { slug: 'ba', title: 'Build Apps tut', description: '', time: 10, level: 'beginner', stepCount: 1, primaryTag: '', displayTags: ['SAP Build Apps'], displayTagSlugs: ['software-product>sap-build-apps'] },
+      { slug: 'cap', title: 'CAP tut', description: '', time: 10, level: 'beginner', stepCount: 1, primaryTag: '', displayTags: ['SAP CAP'], displayTagSlugs: ['software-product>sap-cloud-application-programming-model'] },
+    ])
+    const f = useNavigatorFilters({ allCards, tutorials, syncURL: false })
+    expect(f.selectedProducts.value).toEqual([])
+    f.filters.products = ['software-product>sap-build-apps']
+    await nextTick()
+    const picked = f.selectedProducts.value
+    expect(picked.length).toBe(1)
+    expect(picked[0].slugs).toContain('software-product>sap-build-apps')
+    expect(picked[0].label).toBe('SAP Build Apps')
+    // A product that is NOT selected must not appear.
+    expect(picked.some(p => p.slugs.includes('software-product>sap-cloud-application-programming-model'))).toBe(false)
+  })
+
   it('sort=recent orders by createdAt desc when enableSort=true and items have createdAt', async () => {
     const dated: CardItem[] = [
       { ...cards[0], id: 'old', createdAt: '2024-01-01T00:00:00Z' },

@@ -199,32 +199,53 @@ describe('validation grading.ts', () => {
     vi.unstubAllGlobals();
   });
 
-  it('readPersisted: returns { correct: true } for a valid entry', () => {
-    const ls = { getItem: vi.fn(() => JSON.stringify({ correct: true, timestamp: 123 })) };
-    vi.stubGlobal('localStorage', ls);
-    expect(readPersisted('foo', 1)).toEqual({ correct: true });
-    vi.unstubAllGlobals();
-  });
-
   // ── writePersisted ──────────────────────────────────────────────
 
-  it('writePersisted: writes JSON when correct=true', () => {
-    const ls = { setItem: vi.fn() };
+  it('writePersisted stores {outcome} shape', () => {
+    const store = {};
+    const ls = { setItem: (k, v) => { store[k] = v; } };
     vi.stubGlobal('localStorage', ls);
-    writePersisted('foo', 1, true);
-    expect(ls.setItem).toHaveBeenCalledTimes(1);
-    expect(ls.setItem).toHaveBeenCalledWith(
-      'tutorial-validation-foo-1',
-      expect.stringMatching(/^\{"correct":true,"timestamp":\d+\}$/)
-    );
+    writePersisted('slug', 2, 'accepted');
+    expect(JSON.parse(store['tutorial-validation-slug-2']).outcome).toBe('accepted');
     vi.unstubAllGlobals();
   });
 
-  it('writePersisted: does NOT write when correct=false', () => {
-    const ls = { setItem: vi.fn() };
+  it('writePersisted pass stores outcome pass', () => {
+    const store = {};
+    const ls = { setItem: (k, v) => { store[k] = v; } };
     vi.stubGlobal('localStorage', ls);
-    writePersisted('foo', 1, false);
-    expect(ls.setItem).not.toHaveBeenCalled();
+    writePersisted('slug', 1, 'pass');
+    expect(JSON.parse(store['tutorial-validation-slug-1']).outcome).toBe('pass');
+    vi.unstubAllGlobals();
+  });
+
+  it('readPersisted returns the stored outcome', () => {
+    const store = {};
+    const ls = {
+      setItem: (k, v) => { store[k] = v; },
+      getItem: (k) => store[k] || null
+    };
+    vi.stubGlobal('localStorage', ls);
+    writePersisted('slug', 3, 'accepted');
+    expect(readPersisted('slug', 3)).toEqual({ outcome: 'accepted' });
+    vi.unstubAllGlobals();
+  });
+
+  it('readPersisted reads legacy {correct:true} as outcome pass', () => {
+    const store = { 'tutorial-validation-slug-9': JSON.stringify({ correct: true, timestamp: 1 }) };
+    const ls = { getItem: (k) => store[k] || null };
+    vi.stubGlobal('localStorage', ls);
+    expect(readPersisted('slug', 9)).toEqual({ outcome: 'pass' });
+    vi.unstubAllGlobals();
+  });
+
+  it('readPersisted returns null on malformed / missing / throwing storage', () => {
+    const store = {};
+    const ls = { getItem: (k) => store[k] || null };
+    vi.stubGlobal('localStorage', ls);
+    expect(readPersisted('slug', 404)).toBeNull();
+    store['tutorial-validation-slug-5'] = 'not json';
+    expect(readPersisted('slug', 5)).toBeNull();
     vi.unstubAllGlobals();
   });
 
@@ -233,7 +254,7 @@ describe('validation grading.ts', () => {
       setItem: vi.fn(() => { throw new Error('quota exceeded'); })
     };
     vi.stubGlobal('localStorage', ls);
-    expect(() => writePersisted('foo', 1, true)).not.toThrow();
+    expect(() => writePersisted('foo', 1, 'pass')).not.toThrow();
     vi.unstubAllGlobals();
   });
 

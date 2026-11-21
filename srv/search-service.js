@@ -278,9 +278,17 @@ export default class SearchService extends cds.ApplicationService {
     // same turn) pay the embed cost once.
     this.before('READ', SearchableItems, async (req) => {
       const sel = req.query?.SELECT;
-      // MANDATORY count guard — ranking is meaningless on COUNT(*) round-trips,
-      // and adding _searchRank to a count projection can change semantics.
-      if (!sel || sel.count) return;
+      // #3112: apply the word-boundary filter + rank on EVERY read, including when
+      // sel.count is truthy. CAP dispatches $count=true as a SINGLE read (this query
+      // renders the cards) and derives the count by cloning the already-processed
+      // query — it keeps .where and drops orderBy/limit, so the count reflects our
+      // filter and the clone never carries the rank orderBy. The island ALWAYS sends
+      // $count=true, so the old `|| sel.count` bail suppressed the filter + rank on the
+      // live cards query (missions buried; count = CAP default-$search set, not ours).
+      // attachSearchRank self-bails when there is no explicit projection (sel.columns
+      // absent), which covers pure COUNT(*) round-trips and internal srv.run callers —
+      // so no _searchRank column is ever pushed onto a projection-less count query.
+      if (!sel) return;
       const search = sel.search;
       if (!Array.isArray(search) || !search.length) return;
       const phrase = search.map((e) => e?.val ?? '').join(' ').trim();

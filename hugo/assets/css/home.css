@@ -248,6 +248,40 @@
   height: 2rem;
   font-size: 0.8125rem;
 }
+/* #3112: pinned selected-filter chips — sit ABOVE the capped .filter-list scroll box
+   so a selection stays visible even after scrolling the list. Chip click clears that
+   one filter. The in-list partitionSelected float is kept (selection still floats to
+   the top inside the list too); these chips are additive. */
+.tutorial-navigator .filter-selected-pins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.625rem;
+}
+.tutorial-navigator .filter-pin {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  cursor: pointer;
+  background: var(--sapButton_Selected_Background, rgba(0, 100, 217, 0.08));
+  border: 1px solid var(--sapButton_Selected_BorderColor, #0064d9);
+  color: var(--sapButton_Selected_TextColor, #0064d9);
+  border-radius: var(--sapButton_BorderCornerRadius, 0.5rem);
+}
+.tutorial-navigator .filter-pin:hover {
+  background: var(--sapButton_Hover_Background, #e2eaf0);
+}
+.tutorial-navigator .filter-pin:focus-visible {
+  outline: var(--sapContent_FocusWidth, 1px) dotted var(--sapContent_FocusColor, #0064d9);
+  outline-offset: 1px;
+}
+.tutorial-navigator .filter-pin__remove {
+  font-size: 0.875rem;
+  line-height: 1;
+}
 .tutorial-navigator .filter-list {
   display: flex;
   flex-direction: column;

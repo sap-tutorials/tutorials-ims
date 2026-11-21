@@ -177,6 +177,12 @@ jobs:
           # (catalog content is the same; QA channel only differs in tutorial
           # source repos via ONLY_CONTRIBUTION_REPOS=true).
           CAP_BASE_URL: ${{ secrets.CAP_SRV_URL_DEV }}
+          # Enable `::include` snippet resolution from repo `_snippets/` dirs.
+          # fetchSnippets() (scripts/parsers/github.ts) returns an empty map when
+          # this is unset, making every repo-snippet `::include` throw
+          # directive/include-not-found at compose time — now fatal (38c13118b).
+          # Mirror rebuild-content.yml so QA composes identically to prod.
+          SNIPPETS_ENABLED_REPOS: meta-tutorials
           TUTORIAL_SLUG: ${{ github.event.client_payload.slug || inputs.slug }}
           # Multi-slug (N-tutorial push) companion to TUTORIAL_SLUG. The notify
           # template emits a validated comma-separated client_payload.slugs when
