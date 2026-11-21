@@ -109,7 +109,7 @@ describe('resolveSubjectKeys', () => {
     expect(result).not.toBeNull();
     expect(result.column).toBe('tab_ID');
     expect(result.nested).toBe(true);
-    expect(result.via).toBe('DeveloperEnvironmentTabs');
+    expect(result.via).toBe('com.sap.developers.ims.DeveloperEnvironmentTabs');
     // values should be null (caller must resolve the parent Tabs first)
     expect(result.values).toBeNull();
   });

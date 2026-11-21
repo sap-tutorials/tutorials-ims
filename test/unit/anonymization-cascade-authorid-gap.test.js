@@ -199,8 +199,12 @@ describe('anonymization-cascade: AuthorAiRequests authorId gap', () => {
     // never runs AND this intermediate SELECT never runs either.
     // If `resolved.via` were changed to a wrong entity, a different SELECT
     // would appear instead — both cases cause this assertion to fail.
+    // capturedRuns stores JSON.stringify(cqn), so it holds the fully-qualified
+    // CDS name `com.sap.developers.ims.DeveloperEnvironmentTabs` (dotted) — NOT
+    // the bare "DeveloperEnvironmentTabs", which would collide with the
+    // AdminService projection and 500 through the served context (#977 CI bug).
     const nestedSelectFired = capturedRuns.some(
-      s => s.includes('"DeveloperEnvironmentTabs"') && s.includes('user_ID') && s.includes(userId)
+      s => s.includes('com.sap.developers.ims.DeveloperEnvironmentTabs') && s.includes('user_ID') && s.includes(userId)
     );
     expect(nestedSelectFired).toBe(true);
 
