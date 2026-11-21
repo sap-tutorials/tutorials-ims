@@ -92,6 +92,15 @@ const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
     'DEV-first) and fail-open. Not a QA-channel surface: srv-qa serves tutorials behind ' +
     'requireAuthorScope (author-draft preview) and the Skill bundle is meaningful only for ' +
     'published content. Mirror of the /provenance allowlist rationale.',
+  'GET /content/tutorials-prerelease/*slug':
+    'Pre-release hard-gate serve mount (#3099) — the prod-channel route for ROLE_GATED ' +
+    'tutorials, reached via the approuter /tutorials-prerelease/* route gated by the ' +
+    '$XSAPPNAME.Tutorial.PreRelease XSUAA scope (a prod-only scope; QA has no PreRelease ' +
+    'role/route). It mounts the shared serveHandler with { gated: true } so ROLE_GATED ' +
+    'tutorials serve here while the public /content/tutorials/*slug route 404s them. srv-qa ' +
+    'already serves /content/tutorials/*slug entirely behind requireAuthorScope (author-draft ' +
+    'preview), so pre-release gating has no QA equivalent. Re-evaluate if the QA channel ever ' +
+    'gains a pre-release preview surface.',
   'POST /content/code-check-specs':
     'AI code-check (#171) — gated behind ChatSettings.codeCheckEnabled feature flag; ' +
     'not yet wired for QA author-preview. Re-evaluate when credstore-backed ChatSettings ' +
