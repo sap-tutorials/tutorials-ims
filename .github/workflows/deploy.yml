@@ -197,12 +197,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN || github.token }}
           NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
           CAP_BASE_URL: ${{ steps.cap-url.outputs.url }}
+          # Enable `::include` snippet resolution (fetchSnippets gate). Unset =>
+          # empty map => repo-snippet `::include` throws include-not-found, now
+          # fatal (38c13118b). Mirror rebuild-content.yml. See deploy.yml below.
+          SNIPPETS_ENABLED_REPOS: meta-tutorials
 
       - name: Prefetch QA tutorials (warms .tutorial-cache-qa)
         run: npm run fetch-tutorials -- --target hugo --channel qa
         env:
           GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN || github.token }}
           CAP_BASE_URL: ${{ steps.cap-url.outputs.url }}
+          SNIPPETS_ENABLED_REPOS: meta-tutorials
 
       # [#797] Hugo safeHTML XSS-guard. Sweeps hugo/layouts/**/*.{html,xml,xsl}
       # for unmarked `| safeHTML` / `| safeHTMLAttr` / `printf "<...%s"` usages
@@ -270,6 +275,11 @@ jobs:
           # "TypeError: fetch failed" since no local CAP runs in CI. The
           # build is target-aware so qa fetches its own QA-channel catalog.
           CAP_BASE_URL: ${{ steps.cap-url.outputs.url }}
+          # mta.yaml's before-all re-runs the composing fetch-tutorials during
+          # `mbt build`, so the snippet gate must be set here too — otherwise
+          # repo-snippet `::include` throws include-not-found (now fatal) inside
+          # the MTA build even though the prefetch steps above resolved it.
+          SNIPPETS_ENABLED_REPOS: meta-tutorials
           # APPROUTER_URL for asset-hash-retention (Task 5): allows mta.yaml's
           # before-all retention step to fetch the currently-deployed approuter's
           # _retained-assets.json and carry hashed bundles forward. Maps per-env

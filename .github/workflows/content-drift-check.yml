@@ -166,6 +166,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.TUTORIALS_GITHUB_TOKEN }}
           CAP_BASE_URL: ${{ steps.env.outputs.srv_url }}
+          # Enable `::include` snippet resolution from repo `_snippets/` dirs.
+          # fetchSnippets() (scripts/parsers/github.ts) is gated by this var and
+          # returns an empty map when unset — which makes every repo-snippet
+          # `::include` throw directive/include-not-found at compose time. Since
+          # compose errors are now fatal (commit 38c13118b), the drift job's
+          # Fetch step hard-fails before verify.log is ever written, surfacing as
+          # a false "drift" alarm (e.g. directive-content-reuse's
+          # ::include[btp-trial-setup]). Must mirror rebuild-content.yml so the
+          # composed source matches what the gated rebuild publishes.
+          SNIPPETS_ENABLED_REPOS: meta-tutorials
 
       # The CLI's --verify-only path under PR #591 hashes
       # `.tutorial-cache/<slug>.md` (or `.tutorial-cache-qa/<slug>.md`) directly
