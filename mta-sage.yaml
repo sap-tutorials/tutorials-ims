@@ -34,6 +34,25 @@ modules:
       buildpack: nodejs_buildpack
       stack: cflinuxfs5
       instances: 1
+    build-parameters:
+      # Stage the Hugo preview scaffold into the module so /preview/render can
+      # render. preview-renderer.js spawns `hugo --source ./preview-site`, and
+      # preview-site/hugo.toml mounts ../hugo/{layouts,static,assets,data,i18n}
+      # RELATIVE to preview-site/ — so BOTH preview-site/ and hugo/* must sit as
+      # siblings inside gen/srv-sage/ at runtime. Without this the container has
+      # no scaffold and Hugo exits 1 with no stdout/stderr ("render_error",
+      # empty <pre>). Mirrors the tutorials-srv-qa module's build-parameters in
+      # .deploy/mta.yaml, which is the proven working preview path. Commands run
+      # from the module path (gen/srv-sage), so the repo root is ../../.
+      builder: custom
+      commands:
+        - mkdir -p hugo
+        - cp -r ../../preview-site ./preview-site
+        - cp -r ../../hugo/layouts ./hugo/layouts
+        - cp -r ../../hugo/static  ./hugo/static
+        - cp -r ../../hugo/assets  ./hugo/assets
+        - cp -r ../../hugo/data    ./hugo/data
+        - cp -r ../../hugo/i18n    ./hugo/i18n
     properties:
       NODE_ENV: production
       EXPOSE_CAP_UI: false
