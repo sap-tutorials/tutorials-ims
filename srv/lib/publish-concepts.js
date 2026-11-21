@@ -23,6 +23,11 @@ import * as metrics from './metrics.js';
 
 const DEFAULT_NAMESPACE = 'com.sap.developers.ims';
 const BATCH_SIZE = 20;
+// #3138: yield to the event loop every N concepts during a full render so the
+// 10s /health/ready liveness probe stays answerable (a synchronous ~90s render
+// over the ~10.6k-concept corpus otherwise starves the loop → CF marks the
+// instance CRASHED → 502 to the publish client).
+const YIELD_EVERY = 50;
 const MAX_ERROR_RATE = 0.05; // >5% of concepts erroring aborts the phase
 
 // buildConceptsPayload emits concept-to-concept refs (requires/requiredBy/
@@ -89,15 +94,6 @@ function stripMarkdown(s) {
  */
 export function computeConceptBodyHash(body, meta) {
   return createHash('sha256').update(`${body}\u0000${JSON.stringify(meta)}`, 'utf-8').digest('hex');
-}
-
-// Helper to extract a subset of an object by keys.
-function pick(obj, keys) {
-  const result = {};
-  for (const k of keys) {
-    if (k in obj) result[k] = obj[k];
-  }
-  return result;
 }
 
 /**
@@ -214,12 +210,28 @@ export async function renderConceptsIntoSession({
   const concepts = payload?.concepts || [];
   const conceptsSeen = concepts.length;
 
-  // Render + delta-filter into a flat file map first, so we can enforce the
-  // error threshold before writing anything.
-  const changedFiles = {}; // slug → base64(gzip(full doc))
-  const bodyHashes = {}; // slug → sha256(body + NUL + meta)
+  // #3138: single-pass render-and-flush. Render each concept, delta-filter, and
+  // flush each BATCH_SIZE-sized slice into the session AS it fills — so peak heap
+  // is bounded to one batch of gzipped BLOBs rather than the whole changed corpus.
+  // Yield to the event loop every YIELD_EVERY concepts so /health/ready stays live.
+  //
+  // The 5%-error-rate guard still fires AFTER the loop (before returning counts);
+  // on breach we throw and the handler leaves the session for the caller to abort,
+  // so any batches already appended to the uncommitted session are discarded.
+  let pendingFiles = {};       // slug → base64(gzip(full doc)) for the current slice
+  let pendingBodyHashes = {};  // slug → sha256(body + NUL + meta) for the current slice
+  let conceptsChanged = 0;
   let conceptsSkipped = 0;
   let conceptsErrored = 0;
+  let processed = 0;
+
+  const flush = async () => {
+    const files = pendingFiles;
+    const bodyHashes = pendingBodyHashes;
+    pendingFiles = {};
+    pendingBodyHashes = {};
+    await helpers.appendToSession({ sessionId, files, bodyHashes });
+  };
 
   for (const raw of concepts) {
     const key = `concept-${raw.slug}`;
@@ -236,15 +248,18 @@ export async function renderConceptsIntoSession({
       const contentHash = createHash('sha256').update(fullDoc, 'utf-8').digest('hex');
       if (priorHashes[key] === contentHash) {
         conceptsSkipped++;
-        continue;
+      } else {
+        pendingFiles[key] = gzipSync(Buffer.from(fullDoc, 'utf-8')).toString('base64');
+        pendingBodyHashes[key] = bodyHash;
+        conceptsChanged++;
+        if (Object.keys(pendingFiles).length >= BATCH_SIZE) await flush();
       }
-      changedFiles[key] = gzipSync(Buffer.from(fullDoc, 'utf-8')).toString('base64');
-      bodyHashes[key] = bodyHash;
     } catch (err) {
       conceptsErrored++;
       metrics.counter('concept_render_error');
       console.error(`[render-concepts] concept "${raw.slug}" render failed — carrying forward prior BLOB: ${err.message}`);
     }
+    if (++processed % YIELD_EVERY === 0) await new Promise(r => setImmediate(r));
   }
 
   // Corrupt-run guard: if a large fraction of concepts errored, abort so the
@@ -253,17 +268,10 @@ export async function renderConceptsIntoSession({
     throw new Error(`render-concepts: error rate too high (${conceptsErrored}/${conceptsSeen}) — aborting phase`);
   }
 
-  // Append in batches of BATCH_SIZE.
-  const keys = Object.keys(changedFiles);
-  for (let i = 0; i < keys.length; i += BATCH_SIZE) {
-    const slice = keys.slice(i, i + BATCH_SIZE);
-    const files = {};
-    for (const k of slice) files[k] = changedFiles[k];
-    await helpers.appendToSession({ sessionId, files, bodyHashes: pick(bodyHashes, slice) });
-  }
+  // Flush the final partial slice.
+  if (Object.keys(pendingFiles).length > 0) await flush();
 
   const durationMs = Date.now() - started;
-  const conceptsChanged = keys.length;
   metrics.observe('concept_render_ms', durationMs);
   metrics.counter('concepts_rendered_total', conceptsChanged);
   metrics.counter('concepts_skipped_total', conceptsSkipped);
