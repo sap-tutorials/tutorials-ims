@@ -36,7 +36,7 @@ import { computeRecommendations } from './parsers/recommendations.js'
 import { computeCanonicalNav, type NavContainer } from './parsers/nav-owner.js'
 import { humanizeTag, cleanPrerequisites } from './parsers/frontmatter-utils.js'
 import type { TagLabelRegistry } from './parsers/frontmatter-utils.js'
-import { renderHugoFrontmatter } from './parsers/render-frontmatter.js'
+import { renderHugoFrontmatter, isPrivateVisibility } from './parsers/render-frontmatter.js'
 import { normalizeVideo } from './parsers/video.js'
 import { extractGithubLoginFromProfile } from './parsers/github-login-from-profile.js'
 import type { CatalogTutorialMeta, CategoryMeta, Mission, MissionHierarchy, HierarchyGroup, StandaloneGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
@@ -653,6 +653,7 @@ export function writeHugoPage(
   syncGroups?: import('./parsers/types.js').TutorialFrontmatter['syncGroups'],
   testedWith?: import('./parsers/types.js').TutorialFrontmatter['testedWith'],
   requires?: import('./parsers/types.js').TutorialFrontmatter['requires'],
+  visibility?: string,
 ): void {
   const content = renderHugoFrontmatter({
     slug,
@@ -683,6 +684,7 @@ export function writeHugoPage(
     syncGroups,
     testedWith,
     requires,
+    private: isPrivateVisibility(visibility),
   })
 
   mkdirSync(outputDir, { recursive: true })
@@ -1296,6 +1298,17 @@ async function main() {
   // NB: uses the STATIC EXPECTED_DIRECTIVE_NAMES, NOT the live registry — if a
   // directive fails to register, its name is absent from getRegistry() and the
   // guard would be blind to the very failure it exists to catch.
+  // [#3099] Build a slug→visibility map from the cached CAP catalog so each
+  // writeHugoPage call can emit `private: true` for UNLISTED / ROLE_GATED
+  // tutorials. loadCapCache() is already called above (fingerprint step) so
+  // this is a cheap disk read with no extra network. Fail-open: an empty map
+  // means no tutorials get the private flag, which is the safe default.
+  const cachedVisibility = loadCapCache()?.tutorialMetas ?? []
+  const visibilityBySlug = new Map<string, string>()
+  for (const m of cachedVisibility) {
+    if (m.visibility) visibilityBySlug.set(m.slug.toLowerCase(), m.visibility)
+  }
+
   const unexpandedDirectiveHits: Array<{ slug: string; tokens: string[] }> = []
 
   // A compose-time DirectiveParseError (e.g. ::include of a snippet that didn't
@@ -1740,6 +1753,9 @@ async function main() {
           composed.syncGroups,
           composed.testedWith,
           composed.requires,
+          // [#3099] Pass visibility so writeHugoPage emits `private: true` for
+          // UNLISTED / ROLE_GATED tutorials (sitemap suppression).
+          visibilityBySlug.get(t.slug.toLowerCase()),
         )
         authorRows.push({
           authorProfile: frontmatter.author_profile ?? '',

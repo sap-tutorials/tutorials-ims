@@ -847,6 +847,14 @@ cds.on('bootstrap', (app) => {
   app.get('/content/tutorials/:slug/provenance', provenanceHandler);
   app.get('/content/tutorials/:slug/skill', skillBundleHandler);
   app.get('/content/tutorials/*slug', serveHandler);
+  // Gated mount for ROLE_GATED (pre-release) tutorials (#3099).
+  // Approuter route ^/tutorials-prerelease/(.*)$ (Task 5) rewrites to
+  // /content/tutorials-prerelease/$1 and requires the Tutorial.PreRelease scope
+  // (XSUAA-enforced). CAP serves it here with gated=true so ROLE_GATED slugs
+  // bypass the public 404 gate and are served — but are never cached publicly.
+  // The `gated` flag is passed via closure from this server-side mount, NOT via
+  // any client-settable header, so it cannot be spoofed.
+  app.get('/content/tutorials-prerelease/*slug', (req, res) => serveHandler(req, res, { gated: true }));
   // Legacy AEM `.model.json` compatibility for SAP Discovery Center (#DC cards).
   // Approuter maps ^/tutorials/<slug>.model.json$ → here. See srv/lib/model-json.js.
   app.get('/content/tutorial-model/*slug', modelJsonHandler);

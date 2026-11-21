@@ -830,6 +830,14 @@
           "length": 36,
           "@odata.foreignKey4": "author",
           "@cds.persistence.name": "AUTHOR_ID"
+        },
+        "visibility": {
+          "type": "cds.String",
+          "length": 50,
+          "default": {
+            "val": "LISTED"
+          },
+          "@cds.persistence.name": "VISIBILITY"
         }
       },
       "$tableConstraints": {

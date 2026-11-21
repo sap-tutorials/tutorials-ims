@@ -118,6 +118,24 @@ export interface RenderHugoFrontmatterArgs {
    * When non-empty, emitted as a YAML list in frontmatter.
    */
   requires?: string[]
+  /**
+   * [#3099] When true, Hugo's sitemap template excludes this page via
+   * `.Params.private`. Set for UNLISTED and ROLE_GATED tutorials.
+   * Absent/false for LISTED and visibility-unset tutorials.
+   */
+  private?: boolean
+}
+
+/**
+ * [#3099] Returns true when a catalog visibility value indicates the tutorial
+ * should be excluded from the sitemap (UNLISTED or ROLE_GATED). Returns false
+ * for LISTED and for null/undefined (visibility not set = public by default).
+ *
+ * This is a pure function so it can be unit-tested independently of the full
+ * Hugo page rendering pipeline.
+ */
+export function isPrivateVisibility(visibility: string | null | undefined): boolean {
+  return visibility === 'UNLISTED' || visibility === 'ROLE_GATED'
 }
 
 export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
@@ -157,6 +175,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     syncGroups,
     testedWith,
     requires,
+    private: isPrivate,
   } = args
 
   const cleanTags = tags.map(t => t.replace(/\\/g, ''))
@@ -273,6 +292,10 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
   }
   if (testedWith && Object.keys(testedWith).length > 0) fm.testedWith = testedWith
   if (requires && requires.length > 0) fm.requires = requires
+  // [#3099] Sitemap suppression: private:true excludes this page from Hugo's
+  // sitemap.xml (template gates on `not .Params.private`). Only emitted when
+  // true; absent for LISTED / visibility-unset tutorials.
+  if (isPrivate) fm.private = true
 
   const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
 

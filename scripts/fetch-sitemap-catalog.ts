@@ -1,5 +1,6 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { isPrivateVisibility } from './parsers/render-frontmatter.js';
 
 // Fetches the CAP catalog (GET /build/catalog) and flattens missions +
 // their ordered tutorial lists into a Hugo data file consumed by the
@@ -18,7 +19,20 @@ const OUT_PATH = join('hugo', 'data', 'sitemap_catalog.json');
 interface HierGroup { tutorialSlugs?: string[] }
 interface Hierarchy { missionImsId: number; tutorialSlugs?: string[]; groups?: HierGroup[] }
 interface Mission { imsId: number; slug: string; title: string; description: string; level: string; time: number }
-interface Tutorial { slug: string; title: string }
+interface Tutorial { slug: string; title: string; visibility?: string }
+
+/**
+ * [#3099] Build the set of slugs that are publicly LISTED (safe for sitemap).
+ * Treats LISTED, null, undefined, and missing visibility as allowed.
+ * Excludes UNLISTED and ROLE_GATED.
+ */
+export function buildListedSlugSet(tutorials: Tutorial[]): Set<string> {
+  return new Set(
+    tutorials
+      .filter(t => !isPrivateVisibility(t.visibility))
+      .map(t => t.slug),
+  );
+}
 
 async function main() {
   const payload: {
@@ -33,10 +47,13 @@ async function main() {
     const catalog = await res.json() as {
       missions?: Mission[];
       hierarchies?: Hierarchy[];
-      tutorials?: Tutorial[];
+      tutorials?: Tutorial[]; // carries visibility per tutorial [#3099]
     };
 
-    const titleBySlug = new Map((catalog.tutorials ?? []).map(t => [t.slug, t.title || t.slug]));
+    const catalogTutorials = catalog.tutorials ?? [];
+    const titleBySlug = new Map(catalogTutorials.map(t => [t.slug, t.title || t.slug]));
+    // [#3099] Only LISTED (or unset) slugs may appear in the public sitemap.md.
+    const listedSlugSet = buildListedSlugSet(catalogTutorials);
     const hierByMission = new Map((catalog.hierarchies ?? []).map(h => [h.missionImsId, h]));
 
     payload.missions = (catalog.missions ?? []).map(m => {
@@ -53,7 +70,10 @@ async function main() {
         description: m.description || '',
         level: m.level || '',
         time: m.time || 0,
-        tutorials: orderedSlugs.map(slug => ({ slug, title: titleBySlug.get(slug) || slug })),
+        // Filter out non-LISTED slugs before building the tutorial list.
+        tutorials: orderedSlugs
+          .filter(slug => listedSlugSet.has(slug))
+          .map(slug => ({ slug, title: titleBySlug.get(slug) || slug })),
       };
     });
   } catch (err: any) {

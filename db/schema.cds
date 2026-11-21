@@ -21,6 +21,7 @@ type TaskType        : String(20)  enum { TUTORIAL; GROUP; CHECKPOINT; PUZZLE; P
 type EventType       : String(20)  enum { DEVTOBERFEST; TECHED; CODEJAM; CHALLENGE; OTHER; }
 type AttendanceMode  : String(20)  enum { VIRTUAL; IN_PERSON; HYBRID; } // #2370
 
+type Visibility       : String(50) enum { LISTED; UNLISTED; ROLE_GATED; }
 type LinkHealthStatus : String(8) enum { UNKNOWN; OK; SLOW; BROKEN; };
 
 // Per-row URL reachability, written by the url-health-check job (#2787).
@@ -70,6 +71,7 @@ entity Tutorials : TaskBase, LinkHealth {
   categories                : Composition of many TutorialCategories on categories.tutorial = $self;
   variables                 : Composition of many TutorialVariables on variables.tutorial = $self;
   author                    : Association to Users;
+  visibility                : Visibility default 'LISTED';
 }
 
 @assert.unique.slug: [slug]

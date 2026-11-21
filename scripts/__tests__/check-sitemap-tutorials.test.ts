@@ -14,6 +14,7 @@ import { describe, it, expect } from 'vitest';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { countTutorialLocs } = require('../check-sitemap-tutorials.cjs');
 import { countTutorialLocs as countTutorialLocsTs } from '../seed-sitemap-from-deployed';
+import { buildListedSlugSet } from '../fetch-sitemap-catalog.js';
 
 const urlset = (locs: string[]) =>
   `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
@@ -70,3 +71,52 @@ for (const [name, count] of impls) {
     });
   });
 }
+
+// ── [#3099] buildListedSlugSet — visibility filter for sitemap-catalog ──────
+//
+// Regression tests: UNLISTED and ROLE_GATED slugs MUST NOT appear in the
+// sitemap_catalog payload that fetch-sitemap-catalog.ts produces.
+
+describe('buildListedSlugSet (#3099)', () => {
+  it('includes LISTED slugs', () => {
+    const set = buildListedSlugSet([{ slug: 'listed-slug', title: 'T', visibility: 'LISTED' }]);
+    expect(set.has('listed-slug')).toBe(true);
+  });
+
+  it('excludes UNLISTED slugs', () => {
+    const set = buildListedSlugSet([{ slug: 'unlisted-slug', title: 'T', visibility: 'UNLISTED' }]);
+    expect(set.has('unlisted-slug')).toBe(false);
+  });
+
+  it('excludes ROLE_GATED slugs', () => {
+    const set = buildListedSlugSet([{ slug: 'gated-slug', title: 'T', visibility: 'ROLE_GATED' }]);
+    expect(set.has('gated-slug')).toBe(false);
+  });
+
+  it('includes slugs with no visibility (null/undefined/missing — public by default)', () => {
+    const set = buildListedSlugSet([
+      { slug: 'no-vis', title: 'T' },
+    ]);
+    expect(set.has('no-vis')).toBe(true);
+  });
+
+  it('filters mixed-visibility catalog correctly', () => {
+    const tutorials = [
+      { slug: 'pub-a', title: 'A', visibility: 'LISTED' },
+      { slug: 'unlisted-b', title: 'B', visibility: 'UNLISTED' },
+      { slug: 'gated-c', title: 'C', visibility: 'ROLE_GATED' },
+      { slug: 'pub-d', title: 'D' },                 // no visibility — allowed
+      { slug: 'pub-e', title: 'E', visibility: undefined },
+    ];
+    const set = buildListedSlugSet(tutorials);
+    expect(set.has('pub-a')).toBe(true);
+    expect(set.has('unlisted-b')).toBe(false);
+    expect(set.has('gated-c')).toBe(false);
+    expect(set.has('pub-d')).toBe(true);
+    expect(set.has('pub-e')).toBe(true);
+  });
+
+  it('returns empty set for empty input', () => {
+    expect(buildListedSlugSet([]).size).toBe(0);
+  });
+});
