@@ -110,7 +110,8 @@ view SearchableItems as
        inner join ims.Tags as tg on tg.ID = tt.tag.ID
        where tt.tutorial.ID = t.ID
     ) as tagBag : String(5000)
-  } where t.status is null or t.status = 'ACTIVE'
+  } where (t.status is null or t.status = 'ACTIVE')
+    and (t.visibility = 'LISTED' or t.visibility is null)
   UNION ALL
   SELECT from ims.Missions as m {
     m.ID, m.legacyId, m.title, m.description, m.slug,
