@@ -130,14 +130,37 @@ function buildIasAuthMiddleware() {
   // Wrap CAP's ias-auth middleware so that after it runs we REQUIRE a
   // non-anonymous user — CAP's middleware populates cds.context.user but does
   // not itself 401 on anonymous for a raw route. Fail closed.
+  //
+  // CRITICAL: CAP's ias_auth sets `cds.context.user` (ias-auth.js:72). On a CAP
+  // service route that works because CAP's own context middleware
+  // (@sap/cds/lib/srv/middlewares/cds-context.js) ran first and established
+  // cds.context via `cds._with(EventContext.for({id,http:{req,res}}), next)`.
+  // THIS route is mounted in cds.on('bootstrap') on the RAW Express app,
+  // outside that middleware — so cds.context is undefined and ias_auth throws
+  // "Cannot set properties of undefined (setting 'user')" → caught → 401 for a
+  // VALID token. (/author/* worked only because those are CAP service routes
+  // that get context; the a2a reference mw documents the same "MUST run after
+  // contextMw" requirement.) Fix: establish a cds.context ourselves, exactly as
+  // cds-context.js does, then run iasMw INSIDE it so line 72 has a context.
+  // cds._with is AsyncLocalStorage.run, so the context spans iasMw's async
+  // continuation (the `await createSecurityContext` before line 72).
+  const { EventContext } = cds;
   return (req, res, next) => {
-    iasMw(req, res, (err) => {
-      if (err) return res.status(401).json({ error: 'unauthenticated' });
-      const user = cds.context?.user || req.user;
-      if (!user || !user.id || user.id === 'anonymous' || user._is_anonymous) {
-        return res.status(401).json({ error: 'unauthenticated' });
-      }
-      next();
+    const id =
+      req.headers['x-correlation-id'] ||
+      req.headers['x-request-id'] ||
+      req.headers['x-vcap-request-id'] ||
+      cds.utils.uuid();
+    const ctx = EventContext.for({ id, http: { req, res } });
+    cds._with(ctx, () => {
+      iasMw(req, res, (err) => {
+        if (err) return res.status(401).json({ error: 'unauthenticated' });
+        const user = cds.context?.user || req.user;
+        if (!user || !user.id || user.id === 'anonymous' || user._is_anonymous) {
+          return res.status(401).json({ error: 'unauthenticated' });
+        }
+        next();
+      });
     });
   };
 }
