@@ -38,14 +38,18 @@ entity BranchSpecs : shared.BranchSpecsAspect {}
 entity RepoCatalog : shared.RepoCatalogAspect {}
 
 // Minimal Tutorials entity required by the content-store serve handler
-// for status-aware lookup (soft-delete / redirect). QA only needs status
-// and redirectTo so we don't replicate the full prod schema here.
+// for status-aware lookup (soft-delete / redirect) and the visibility gate.
+// QA only needs status, redirectTo, and visibility so we don't replicate the
+// full prod schema here. `visibility` must exist because the shared serve
+// handler's status SELECT reads it unconditionally (#3099); QA has no
+// pre-release channel, so QA tutorials are always LISTED (the default).
 @cds.autoexpose: false
 entity Tutorials : managed {
   key ID                    : UUID;
   slug                      : String(255);
   title                     : String(500);
   status                    : String(20) default 'ACTIVE';
+  visibility                : String(50) default 'LISTED';
   redirectTo                : Association to Tutorials;
   redirectUrl               : String(1000);
 }
