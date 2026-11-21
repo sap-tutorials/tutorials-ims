@@ -191,7 +191,7 @@ const {
   totalPages, displayedItems, displayedCounts,
   hasActiveFilters, paginatorPages, goToPage, clearFilters, toggleFilter,
   toggleProduct, isProductSelected,
-  filteredProducts, filteredTopics,
+  filteredProducts, filteredTopics, selectedProducts,
   searchMode, isSubThreshold, isSearching,
   sort: composableSort,
 } = useNavigatorFilters({
@@ -401,6 +401,19 @@ onMounted(async () => {
                 class="fd-input fd-input-group__input"
               />
             </div>
+            <div v-if="filters.topics.length" class="filter-selected-pins" aria-label="Selected topics">
+              <button
+                v-for="topic in filters.topics"
+                :key="'pin-' + topic"
+                type="button"
+                class="filter-pin"
+                @click="toggleFilter(filters.topics, topic)"
+              >
+                <span class="filter-pin__label">{{ topic }}</span>
+                <span class="filter-pin__remove" aria-hidden="true">×</span>
+                <span class="visually-hidden">Remove filter {{ topic }}</span>
+              </button>
+            </div>
             <div class="filter-list">
               <label v-for="topic in orderedTopics" :key="topic" class="filter-option">
                 <input type="checkbox" :checked="filters.topics.includes(topic)" @change="toggleFilter(filters.topics, topic)" class="filter-checkbox" />
@@ -419,6 +432,19 @@ onMounted(async () => {
                 class="fd-input fd-input-group__input"
               />
             </div>
+            <div v-if="selectedProducts.length" class="filter-selected-pins" aria-label="Selected products">
+              <button
+                v-for="product in selectedProducts"
+                :key="'pin-' + product.label"
+                type="button"
+                class="filter-pin"
+                @click="toggleProduct(product.slugs)"
+              >
+                <span class="filter-pin__label">{{ product.label }}</span>
+                <span class="filter-pin__remove" aria-hidden="true">×</span>
+                <span class="visually-hidden">Remove filter {{ product.label }}</span>
+              </button>
+            </div>
             <div class="filter-list">
               <label v-for="product in orderedProducts" :key="product.label" class="filter-option">
                 <input type="checkbox"
@@ -432,6 +458,19 @@ onMounted(async () => {
 
           <div class="filter-column">
             <h3 class="filter-title">Experience</h3>
+            <div v-if="filters.levels.length" class="filter-selected-pins" aria-label="Selected experience levels">
+              <button
+                v-for="level in filters.levels"
+                :key="'pin-' + level"
+                type="button"
+                class="filter-pin"
+                @click="toggleFilter(filters.levels, level)"
+              >
+                <span class="filter-pin__label">{{ capitalizeLevel(level) }}</span>
+                <span class="filter-pin__remove" aria-hidden="true">×</span>
+                <span class="visually-hidden">Remove filter {{ capitalizeLevel(level) }}</span>
+              </button>
+            </div>
             <div class="filter-list filter-list--static">
               <label v-for="level in orderedLevels" :key="level" class="filter-option">
                 <input type="checkbox" :checked="filters.levels.includes(level)" @change="toggleFilter(filters.levels, level)" class="filter-checkbox" />
@@ -442,6 +481,19 @@ onMounted(async () => {
 
           <div class="filter-column">
             <h3 class="filter-title">Type</h3>
+            <div v-if="filters.types.length" class="filter-selected-pins" aria-label="Selected types">
+              <button
+                v-for="type in filters.types"
+                :key="'pin-' + type"
+                type="button"
+                class="filter-pin"
+                @click="toggleFilter(filters.types, type)"
+              >
+                <span class="filter-pin__label">{{ type.charAt(0).toUpperCase() + type.slice(1) }}</span>
+                <span class="filter-pin__remove" aria-hidden="true">×</span>
+                <span class="visually-hidden">Remove filter {{ type }}</span>
+              </button>
+            </div>
             <div class="filter-list filter-list--static">
               <label v-for="type in orderedTypes" :key="type" class="filter-option">
                 <input type="checkbox" :checked="filters.types.includes(type)" @change="toggleFilter(filters.types, type)" class="filter-checkbox" />

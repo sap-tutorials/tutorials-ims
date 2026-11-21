@@ -185,6 +185,44 @@ describe('SearchService', () => {
         expect(item.bodyText).toBeUndefined();
       }
     });
+
+    // #3112: the before('READ') hook bailed on $count=true (sel.count guard), and
+    // the navigator ALWAYS sends $count=true — so the word-boundary filter + rank
+    // never ran on the live cards query. Missions got buried / the count was wrong.
+    // These pin the guard split: filter always, rank only when not a count projection.
+    it('$search + $count=true returns the word-boundary-filtered count and ranks the rows', async () => {
+      // Pre-fix (sel.count guard bails): rows come back in raw UNION order with searchScore
+      // undefined on EVERY row — the actual production failure. Post-fix: the word-boundary
+      // filter + rank apply on the $count path, so searchScore is populated and the rows are
+      // ordered by it. (cap-getting-started and full-stack-mission both score 5 here — a tie —
+      // so cap-vs-mission ordering is NOT asserted; the populated-score + descending-order
+      // checks below are the tie-break-independent proof that rank ran.)
+      const { data } = await project.get('/search/SearchableItems?$search=CAP&$count=true&$top=48');
+      const slugs = data.value.map(i => i.slug);
+      expect(data['@odata.count']).toBeGreaterThan(0);
+      expect(slugs).toContain('cap-getting-started');
+      expect(slugs).toContain('full-stack-mission');
+      expect(slugs).not.toContain('hana-cloud-setup'); // no CAP word → filter really ran
+      // Rank applied on the $count path (pre-fix these were all undefined): every row has a
+      // positive score, and scores are non-increasing (ordered by _searchRank DESC).
+      const scores = data.value.map(i => i.searchScore);
+      expect(scores.every(s => typeof s === 'number' && s > 0)).toBe(true);
+      for (let i = 1; i < scores.length; i++) expect(scores[i]).toBeLessThanOrEqual(scores[i - 1]);
+    });
+
+    it('$search + $count=true ranks a matching MISSION ahead of tutorial body-only matches', async () => {
+      // missionprobe fixtures: mission body-match (2 desc + 2 type-boost = 4) must out-rank
+      // the two tutorial body-only matches (2). Pre-fix the hook bailed → raw order, mission not #0.
+      const { data } = await project.get('/search/SearchableItems?$search=missionprobe&$count=true&$top=48');
+      const idx = data.value.findIndex(i => i.slug === 'missionprobe-mission');
+      expect(idx).toBe(0);
+      expect(data.value[0].searchScore).toBeGreaterThanOrEqual(4);
+    });
+
+    it('plain $count=true with no $search is unaffected (full corpus count)', async () => {
+      const { data } = await project.get('/search/SearchableItems?$count=true');
+      expect(data['@odata.count']).toBeGreaterThanOrEqual(5);
+    });
   });
 
   describe('Tags', () => {
