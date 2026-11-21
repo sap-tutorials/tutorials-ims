@@ -170,7 +170,7 @@ describe.skipIf(!hasBaseUrl())('e2e: navigator search & filter improvements (#31
           `mission lozenge shows ${missionsAfterCount} but no a[href*="/tutorials/mission-"] card visible`,
         ).toBeVisible({ timeout: 5_000 });
       }
-      // missionsAfterCount === 0 → search returned no missions for "SAP" on this env;
+      // missionsAfterCount === 0 → search returned no missions for "Device" on this env;
       // the lozenge/card consistency invariant cannot be violated — no assertion needed.
     } finally {
       await context.close();
