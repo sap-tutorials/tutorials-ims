@@ -22,6 +22,7 @@ export const sourceHashesHandler = mod.sourceHashesHandler;
 export const excludedSlugsHandler = mod.excludedSlugsHandler;
 export const getTutorialSource = mod.getTutorialSource;
 export const navHandler = mod.navHandler;
+export const preReleaseNavHandler = mod.preReleaseNavHandler;
 export const rollbackHandler = mod.rollbackHandler;
 export const orphanPurgeHandler = mod.orphanPurgeHandler;
 export const beginHandler = mod.beginHandler;

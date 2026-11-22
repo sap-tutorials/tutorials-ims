@@ -1762,36 +1762,46 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
   // --- GET /content/nav ---
 
-  async function navHandlerFallback(req, res, activeVersion) {
-    const { ContentFiles, ContentCurrent, Tutorials, Steps, TutorialTags, Tags } = cds.entities(namespace);
+  /**
+   * buildNavTutorials — shared assembly helper used by both navHandlerFallback
+   * (public cold-start path) and preReleaseNavHandler (gated live path).
+   *
+   * @param {Set<string>} slugSet   — slugs to include (from ContentCurrent / ContentFiles)
+   * @param {object[]}    contentRows — raw rows from ContentCurrent/ContentFiles (slug, sizeBytes)
+   * @param {{ visibilityFilter?: 'ROLE_GATED' | 'public' }} opts
+   *   visibilityFilter === 'ROLE_GATED' → keep only ROLE_GATED tutorials (the gated feed).
+   *   otherwise (default / 'public')    → keep LISTED-or-null, EXCLUDE ROLE_GATED.
+   *   INACTIVE tutorials are always excluded regardless of filter.
+   *
+   * HANA packet-cap constraint: Tutorials is fetched UNBOUNDED and filtered in
+   * Node — never use `.where({slug:{in:[...]}})` with a large slug array here.
+   * See memory note: cqn-where-in-hana-packet-cap.md (#1063, #1103).
+   */
+  async function buildNavTutorials(slugSet, contentRows, { visibilityFilter } = {}) {
+    const { Tutorials, Steps, TutorialTags, Tags } = cds.entities(namespace);
+    const isGatedFilter = visibilityFilter === 'ROLE_GATED';
 
-    // Option B: enumerate ContentCurrent (no version) when the read flag is on —
-    // correct once fully seeded (task 4.3). Metadata-only, plain CQL on both DBs.
-    const contentRows = (isDeltaRead() && ContentCurrent)
-      ? await SELECT.from(ContentCurrent).columns('slug', 'sizeBytes')
-      : await SELECT.from(ContentFiles).where({ version: activeVersion }).columns('slug', 'sizeBytes');
-
-    const slugs = contentRows.filter(r =>
-      r.slug !== '__nav__' && r.slug !== '__404__' && r.slug !== '__shell__'
-    ).map(r => r.slug);
-    if (slugs.length === 0) {
-      res.setHeader('Cache-Control', 'public, max-age=60');
-      return res.json({ version: activeVersion, count: 0, tutorials: [] });
-    }
-
-    const sizeMap = Object.fromEntries(contentRows.map(r => [r.slug, r.sizeBytes]));
-
-    // Fetch tutorial metadata for published slugs (excluding INACTIVE — soft-deleted).
-    // On a full publish `slugs` is ~7,315 entries; a `.where({slug:{in:slugs}})`
-    // here would send one bound param per slug and blow HANA's packet cap
-    // (memory note: cqn-where-in-hana-packet-cap.md; same class as #1063 and
-    // #1103). Fetch Tutorials unbounded (~7,315 rows × ~8 short cols ≪ 5 MB)
-    // and filter into `slugSet` in Node. Single fetch also lets us classify
-    // ACTIVE vs INACTIVE in Node instead of running the second IN-query below.
-    const slugSet = new Set(slugs);
+    // Fetch Tutorials unbounded — see HANA packet-cap note above.
+    // Add `visibility` column so we can filter ROLE_GATED here in Node.
     const allTutRows = await SELECT.from(Tutorials)
-      .columns('ID', 'slug', 'title', 'description', 'primaryTag', 'experienceTag', 'averageTimeToComplete', 'status');
-    const tutRows = allTutRows.filter(t => slugSet.has(t.slug) && t.status !== 'INACTIVE');
+      .columns('ID', 'slug', 'title', 'description', 'primaryTag', 'experienceTag', 'averageTimeToComplete', 'status', 'visibility');
+
+    // Filter by slugSet, INACTIVE, and visibility in one pass.
+    const tutRows = allTutRows.filter(t => {
+      if (!slugSet.has(t.slug)) return false;
+      if (t.status === 'INACTIVE') return false;
+      if (isGatedFilter) {
+        // Gated feed: keep only ROLE_GATED tutorials.
+        return t.visibility === 'ROLE_GATED';
+      } else {
+        // Public feed: keep LISTED-or-null, exclude ROLE_GATED.
+        // Defense-in-depth: hardens the cold-start fallback which previously had
+        // no visibility filter. The hot path (baked __nav__ blob) already excludes
+        // ROLE_GATED at build time — this change is a safety net for the fallback only.
+        return t.visibility !== 'ROLE_GATED';
+      }
+    });
+
     const inactiveSlugs = new Set(
       allTutRows.filter(t => slugSet.has(t.slug) && t.status === 'INACTIVE').map(t => t.slug)
     );
@@ -1850,10 +1860,12 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       }
     }
 
+    // Build result: iterate contentRows so order mirrors publish order.
     const tutorials = contentRows
       .filter(r =>
         r.slug !== '__nav__' && r.slug !== '__404__' &&
-        r.slug !== '__shell__' && !inactiveSlugs.has(r.slug)
+        r.slug !== '__shell__' && !inactiveSlugs.has(r.slug) &&
+        tutMap[r.slug]  // only slugs that passed the visibility filter
       )
       .map(r => {
         const meta = tutMap[r.slug];
@@ -1871,8 +1883,86 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         };
       });
 
+    return tutorials;
+  }
+
+  async function navHandlerFallback(req, res, activeVersion) {
+    const { ContentFiles, ContentCurrent } = cds.entities(namespace);
+
+    // Option B: enumerate ContentCurrent (no version) when the read flag is on —
+    // correct once fully seeded (task 4.3). Metadata-only, plain CQL on both DBs.
+    const contentRows = (isDeltaRead() && ContentCurrent)
+      ? await SELECT.from(ContentCurrent).columns('slug', 'sizeBytes')
+      : await SELECT.from(ContentFiles).where({ version: activeVersion }).columns('slug', 'sizeBytes');
+
+    const slugs = contentRows.filter(r =>
+      r.slug !== '__nav__' && r.slug !== '__404__' && r.slug !== '__shell__'
+    ).map(r => r.slug);
+    if (slugs.length === 0) {
+      res.setHeader('Cache-Control', 'public, max-age=60');
+      return res.json({ version: activeVersion, count: 0, tutorials: [] });
+    }
+
+    const slugSet = new Set(slugs);
+    // Public path: visibilityFilter defaults to 'public' — excludes ROLE_GATED.
+    // This hardens the cold-start fallback; the hot path (baked __nav__) already
+    // excludes ROLE_GATED at build time so this only affects the fallback.
+    const tutorials = await buildNavTutorials(slugSet, contentRows, { visibilityFilter: 'public' });
+
     res.setHeader('Cache-Control', 'public, max-age=60');
     res.json({ version: activeVersion, count: tutorials.length, tutorials });
+  }
+
+  // --- GET /content/tutorials-prerelease/_nav (gated live feed) ---
+
+  /**
+   * preReleaseNavHandler — live gated nav feed for ROLE_GATED tutorials.
+   *
+   * Mounted at GET /content/tutorials-prerelease/_nav (server.js, near line 850).
+   * Requires the Tutorial.PreRelease scope (XSUAA-enforced by the approuter route
+   * that maps ^/tutorials-prerelease/(.*)$ to /content/tutorials-prerelease/$1).
+   *
+   * Returns { version, count, tutorials } where each tutorial is the same shape
+   * as navHandlerFallback items. Cache-Control is ALWAYS private, no-store (gated
+   * content — must NOT be cached by shared/CDN caches).
+   *
+   * Does NOT read or write the shared slug-keyed in-process `cache` (the #3099
+   * cache-leak rule — ROLE_GATED bytes must never enter the shared cache).
+   */
+  async function preReleaseNavHandler(req, res) {
+    const { ContentFiles, ContentCurrent } = cds.entities(namespace);
+
+    try {
+      const activeVersion = await getActiveVersion();
+
+      // Enumerate ContentCurrent slugs (Option B read path) or fall back to
+      // ContentFiles — same logic as navHandlerFallback; reuses the same read.
+      const contentRows = (isDeltaRead() && ContentCurrent)
+        ? await SELECT.from(ContentCurrent).columns('slug', 'sizeBytes')
+        : (activeVersion !== null
+          ? await SELECT.from(ContentFiles).where({ version: activeVersion }).columns('slug', 'sizeBytes')
+          : []);
+
+      const slugs = contentRows.filter(r =>
+        r.slug !== '__nav__' && r.slug !== '__404__' && r.slug !== '__shell__'
+      ).map(r => r.slug);
+
+      if (slugs.length === 0) {
+        res.setHeader('Cache-Control', 'private, no-store');
+        return res.json({ version: activeVersion, count: 0, tutorials: [] });
+      }
+
+      const slugSet = new Set(slugs);
+      // Gated feed: visibilityFilter 'ROLE_GATED' — returns ONLY ROLE_GATED tutorials.
+      // Does NOT use the shared slug-keyed `cache` (cache-leak rule #3099).
+      const tutorials = await buildNavTutorials(slugSet, contentRows, { visibilityFilter: 'ROLE_GATED' });
+
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.json({ version: activeVersion, count: tutorials.length, tutorials });
+    } catch (err) {
+      console.error('[content/prerelease-nav]', err instanceof Error ? err.message : String(err));
+      res.status(500).json({ error: 'Pre-release navigation catalog failed' });
+    }
   }
 
   async function navHandler(req, res) {
@@ -2378,6 +2468,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     excludedSlugsHandler,
     getTutorialSource,
     navHandler,
+    preReleaseNavHandler,
     rollbackHandler,
     orphanPurgeHandler,
     beginHandler,
@@ -2415,6 +2506,7 @@ export const commitHandler = _defaults.commitHandler;
 export const abortHandler = _defaults.abortHandler;
 export const pipelineLogFailureHandler = _defaults.pipelineLogFailureHandler;
 export const quarantineIngestHandler = _defaults.quarantineIngestHandler;
+export const preReleaseNavHandler = _defaults.preReleaseNavHandler;
 export const pageServeHandler = _defaults.pageServeHandler;
 export const authorServeHandler = _defaults.authorServeHandler;
 export const advocateServeHandler = _defaults.advocateServeHandler;
