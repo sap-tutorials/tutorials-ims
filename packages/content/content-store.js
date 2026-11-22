@@ -1806,6 +1806,15 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       allTutRows.filter(t => slugSet.has(t.slug) && t.status === 'INACTIVE').map(t => t.slug)
     );
 
+    // Public-feed exclusion set: slugs whose Tutorials row is ROLE_GATED. Used to
+    // drop gated tutorials from the public feed WITHOUT dropping content slugs that
+    // simply have no Tutorials row yet (e.g. published-but-not-yet-indexed, or the
+    // metadata-light fallback path). Pre-#3168 the fallback required no Tutorials
+    // join at all; requiring tutMap[r.slug] here regressed those slugs to invisible.
+    const gatedSlugs = new Set(
+      allTutRows.filter(t => slugSet.has(t.slug) && t.visibility === 'ROLE_GATED').map(t => t.slug)
+    );
+
     const tutMap = Object.fromEntries(tutRows.map(t => [t.slug, t]));
     const tutIds = tutRows.map(t => t.ID).filter(Boolean);
     const tutIdSet = new Set(tutIds);
@@ -1862,11 +1871,19 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
     // Build result: iterate contentRows so order mirrors publish order.
     const tutorials = contentRows
-      .filter(r =>
-        r.slug !== '__nav__' && r.slug !== '__404__' &&
-        r.slug !== '__shell__' && !inactiveSlugs.has(r.slug) &&
-        tutMap[r.slug]  // only slugs that passed the visibility filter
-      )
+      .filter(r => {
+        if (r.slug === '__nav__' || r.slug === '__404__' || r.slug === '__shell__') return false;
+        if (inactiveSlugs.has(r.slug)) return false;
+        if (isGatedFilter) {
+          // Gated feed: only slugs with a ROLE_GATED Tutorials row (tutMap holds
+          // exactly those for this filter).
+          return Boolean(tutMap[r.slug]);
+        }
+        // Public feed: keep every content slug EXCEPT those whose Tutorials row is
+        // ROLE_GATED. Slugs with no Tutorials row fall through as public (metadata
+        // defaults below) — restores the pre-#3168 fallback behavior.
+        return !gatedSlugs.has(r.slug);
+      })
       .map(r => {
         const meta = tutMap[r.slug];
         return {
