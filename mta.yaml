@@ -91,6 +91,10 @@ build-parameters:
         - mkdir -p approuter/static/qa
         - cp -r hugo/public-qa/. approuter/static/qa/
         - rm -rf approuter/static/qa/tutorials
+        - npm run build:prerelease
+        - mkdir -p approuter/static/prerelease
+        - cp -r hugo/public-prerelease/. approuter/static/prerelease/
+        - rm -rf approuter/static/prerelease/tutorials
         - npx tsx scripts/highlight-cds.ts
         # display-app install + build moved to the parallel block at the top
         # of before-all (runs alongside cds build + hugo-apps install).

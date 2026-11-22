@@ -71,6 +71,13 @@ const SRV_QA_SERVER = join(REPO_ROOT, 'srv-qa', 'server.js');
  * Format: 'METHOD /path'
  */
 const ALLOWLIST_ONLY_ON_SRV: Record<string, string> = {
+  'GET /content/tutorials-prerelease/_nav':
+    'Pre-release navigator nav feed (#3168) — lists ROLE_GATED tutorials behind the ' +
+    'Tutorial.PreRelease XSUAA scope. Pre-release reuses srv-api + the main model; srv-qa is the ' +
+    'separate Tutorial.Author QA author-preview channel and has no pre-release concept or scope, ' +
+    'so there is no QA consumer. The route is scope-gated at the approuter ' +
+    '(^/content/tutorials-prerelease/(.*)$) and fail-closed in the handler ({gated:true} mount flag). ' +
+    'Re-evaluate only if pre-release content is ever surfaced on the QA channel.',
   'GET /content/manifest/snippet-deps':
     'Snippet-deps manifest (content-reuse ::include) — a build-pipeline surface read by the ' +
     'rebuild-content workflow to expand _snippets/ changes to affected tutorial slugs. It serves ' +

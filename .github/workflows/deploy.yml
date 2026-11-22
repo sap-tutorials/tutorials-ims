@@ -136,7 +136,7 @@ jobs:
       # Cache .tutorial-cache/ across runs so fetch-tutorials does not re-pull
       # ~1400 tutorials from GitHub on every CI run. Without this, mbt's 10-min
       # per-command timeout fires during the QA-channel fetch (the second of
-      # two fetches in the build sequence). Mirrors rebuild-content.yml's
+      # three fetches in the build sequence). Mirrors rebuild-content.yml's
       # caching pattern.
       # Cache key is keyed to the fetcher implementation (scripts/fetch-tutorials.ts
       # + scripts/parsers/), NOT to deploy.yml. Workflow file edits don't change
@@ -180,13 +180,13 @@ jobs:
 
       # Prefetch tutorials OUTSIDE the mbt before-all phase. mbt enforces a
       # 10-minute timeout for the entire before-all sequence; cold-cache CI
-      # runs do TWO ~6-min full fetches (prod + QA) which blow past 10 min.
+      # runs do THREE ~6-min full fetches (prod + QA + prerelease) which blow past 10 min.
       # Doing the fetches as separate workflow steps removes them from mbt's
       # cap, AND populates the actions/cache@v4 directories for any future
       # mbt invocation in the same job (mbt's own fetch step then hits a
       # warm cache and finishes in seconds).
       #
-      # Both fetches run sequentially since they share the GitHub API rate
+      # All fetches run sequentially since they share the GitHub API rate
       # limit budget; in parallel they'd compete for tokens. Each is gated
       # by `if: failure()` is NOT used — we WANT a hard failure if discovery
       # breaks (otherwise mbt would re-fetch anyway and surface the same
@@ -204,6 +204,13 @@ jobs:
 
       - name: Prefetch QA tutorials (warms .tutorial-cache-qa)
         run: npm run fetch-tutorials -- --target hugo --channel qa
+        env:
+          GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN || github.token }}
+          CAP_BASE_URL: ${{ steps.cap-url.outputs.url }}
+          SNIPPETS_ENABLED_REPOS: meta-tutorials
+
+      - name: Prefetch prerelease tutorials (warms .tutorial-cache-prerelease)
+        run: npm run fetch-tutorials -- --target hugo --channel prerelease
         env:
           GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN || github.token }}
           CAP_BASE_URL: ${{ steps.cap-url.outputs.url }}

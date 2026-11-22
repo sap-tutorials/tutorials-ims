@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findForbiddenMarkers, checkQaIndex } from '../verify-qa-build';
+import { findForbiddenMarkers, checkQaIndex, checkPrereleaseIndex } from '../verify-qa-build';
 
 describe('verify-qa-build', () => {
   it('flags forbidden markers in QA output', () => {
@@ -49,5 +49,57 @@ describe('checkQaIndex', () => {
     const problems = checkQaIndex(html);
     expect(problems.length).toBeGreaterThan(0);
     expect(problems.some(p => /grid|browse/i.test(p))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkPrereleaseIndex — mirrors checkQaIndex tests for prerelease markers
+// ---------------------------------------------------------------------------
+const PRERELEASE_NAVIGATOR =
+  `<div id="tutorial-navigator" data-nav-base="/tutorials-prerelease" data-href-base="/tutorials-prerelease" data-client-search="true"></div>`;
+const PRERELEASE_NAVIGATOR_NO_NAV_BASE =
+  `<div id="tutorial-navigator" data-client-search="true"></div>`;
+const PRERELEASE_NAVIGATOR_NO_CLIENT_SEARCH =
+  `<div id="tutorial-navigator" data-nav-base="/tutorials-prerelease" data-href-base="/tutorials-prerelease"></div>`;
+
+const goodPrereleaseHtml = `<html><body>${PRERELEASE_NAVIGATOR}${BROWSE_SCRIPT_WITH_DATA}</body></html>`;
+
+describe('checkPrereleaseIndex', () => {
+  it('(a) returns [] for a fully valid prerelease index', () => {
+    expect(checkPrereleaseIndex(goodPrereleaseHtml)).toEqual([]);
+  });
+
+  it('(b) returns a problem when data-nav-base="/tutorials-prerelease" is missing', () => {
+    const html = `<html><body>${PRERELEASE_NAVIGATOR_NO_NAV_BASE}${BROWSE_SCRIPT_WITH_DATA}</body></html>`;
+    const problems = checkPrereleaseIndex(html);
+    expect(problems.length).toBeGreaterThan(0);
+    expect(problems.some(p => /nav-base/i.test(p))).toBe(true);
+  });
+
+  it('(c) returns a problem when data-client-search="true" is missing', () => {
+    const html = `<html><body>${PRERELEASE_NAVIGATOR_NO_CLIENT_SEARCH}${BROWSE_SCRIPT_WITH_DATA}</body></html>`;
+    const problems = checkPrereleaseIndex(html);
+    expect(problems.length).toBeGreaterThan(0);
+    expect(problems.some(p => /client-search/i.test(p))).toBe(true);
+  });
+
+  it('(d) does NOT require data-search-base (prerelease uses client-side search)', () => {
+    // The key difference from QA: prerelease must NOT have data-search-base as a requirement
+    expect(checkPrereleaseIndex(goodPrereleaseHtml)).toEqual([]);
+  });
+
+  it('(e) returns a problem when #browse-data all array is empty', () => {
+    const html = `<html><body>${PRERELEASE_NAVIGATOR}${BROWSE_SCRIPT_EMPTY}</body></html>`;
+    const problems = checkPrereleaseIndex(html);
+    expect(problems.length).toBeGreaterThan(0);
+    expect(problems.some(p => /grid|browse/i.test(p))).toBe(true);
+  });
+
+  it('(f) a valid QA index fails checkPrereleaseIndex (different markers)', () => {
+    // QA has data-search-base="/qa-search" and data-nav-base="/tutorials-qa"
+    // These should fail the prerelease check
+    const qaHtml = `<html><body>${NAVIGATOR_WITH_ATTR}${BROWSE_SCRIPT_WITH_DATA}</body></html>`;
+    const problems = checkPrereleaseIndex(qaHtml);
+    expect(problems.some(p => /tutorials-prerelease/i.test(p))).toBe(true);
   });
 });

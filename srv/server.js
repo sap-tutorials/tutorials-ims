@@ -32,7 +32,7 @@ import { decideHandler } from './lib/branch/decide.js';
 import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
-import { contentAuthMiddleware, publishHandler, serveHandler, markdownServeHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, excludedSlugsHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler, quarantineIngestHandler, snippetDepsHandler } from './lib/content-store.js';
+import { contentAuthMiddleware, publishHandler, serveHandler, markdownServeHandler, pageServeHandler, authorServeHandler, advocateServeHandler, hashesHandler, sourceHashesHandler, excludedSlugsHandler, navHandler, preReleaseNavHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, pipelineLogFailureHandler, quarantineIngestHandler, snippetDepsHandler } from './lib/content-store.js';
 import { imageSourceHandler } from './lib/image-source-handler.js';
 import { imageIngestHandler } from './lib/image-ingest-handler.js';
 import { attachmentSourceHandler } from './lib/attachment-source-handler.js';
@@ -854,6 +854,11 @@ cds.on('bootstrap', (app) => {
   // bypass the public 404 gate and are served — but are never cached publicly.
   // The `gated` flag is passed via closure from this server-side mount, NOT via
   // any client-settable header, so it cannot be spoofed.
+  //
+  // _nav route: live gated nav feed — lists ONLY ROLE_GATED tutorials (#3168).
+  // Registered BEFORE the *slug wildcard so `_nav` is not swallowed as a slug.
+  // Cache-Control: private, no-store (never cached by shared/CDN caches).
+  app.get('/content/tutorials-prerelease/_nav', (req, res) => preReleaseNavHandler(req, res, { gated: true }));
   app.get('/content/tutorials-prerelease/*slug', (req, res) => serveHandler(req, res, { gated: true }));
   // Legacy AEM `.model.json` compatibility for SAP Discovery Center (#DC cards).
   // Approuter maps ^/tutorials/<slug>.model.json$ → here. See srv/lib/model-json.js.

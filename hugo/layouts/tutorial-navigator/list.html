@@ -27,7 +27,7 @@
 {{- end -}}
 
 <article class="home">
-  {{ if not site.Params.qa }}
+  {{ if and (not site.Params.qa) (not site.Params.prerelease) }}
   <div class="browse-pill-wrapper">
     <a class="browse-pill" href="/browse/">
       <span class="browse-pill__icon" aria-hidden="true">✨</span>
@@ -38,7 +38,13 @@
 
   <section aria-labelledby="search-tutorials" id="navigator-section" class="home-navigator">
     <h1 id="search-tutorials" class="visually-hidden">Search and filter SAP developer tutorials</h1>
-    <div id="tutorial-navigator"{{ if site.Params.qa }} data-search-base="/qa-search" data-nav-base="/tutorials-qa" data-href-base="/tutorials-qa" data-client-search="true"{{ end }}>
+    {{- if site.Params.prerelease }}
+    <p class="fd-object-status fd-object-status--indication-2" style="margin-bottom:0.75rem">
+      <i class="sap-icon--status-in-process fd-object-status__icon" aria-hidden="true"></i>
+      <span class="fd-object-status__text">Pre-release tutorials — gated content, not publicly listed</span>
+    </p>
+    {{- end }}
+    <div id="tutorial-navigator"{{ if site.Params.qa }} data-search-base="/qa-search" data-nav-base="/tutorials-qa" data-href-base="/tutorials-qa" data-client-search="true"{{ else if site.Params.prerelease }} data-nav-base="/tutorials-prerelease" data-href-base="/tutorials-prerelease" data-client-search="true"{{ end }}>
       {{- /* SSR chrome + card grid (option 1a). TutorialNavigator.vue mounts on
              #tutorial-navigator and re-renders its full template tree on mount,
              REPLACING everything below. Previously only the card grid was SSR'd,
@@ -176,7 +182,7 @@
          homepage-style discovery sections below (hero, featured, recent, topics)
          and render only the navigator island above. Prod /tutorial-navigator/
          keeps the full page. Mirrors the browse-pill QA gate above. */ -}}
-  {{ if not site.Params.qa }}
+  {{ if and (not site.Params.qa) (not site.Params.prerelease) }}
   <section class="home-hero">
     <h2>Build on SAP — hands-on tutorials for developers</h2>
     <p class="lede">{{ .Site.Params.heroDescription }}</p>
@@ -196,6 +202,7 @@
     {{- $ids := first 6 $featured -}}
     {{- $hrefBase := "/tutorials" -}}
     {{- if site.Params.qa }}{{- $hrefBase = "/tutorials-qa" -}}{{- end -}}
+    {{- if site.Params.prerelease }}{{- $hrefBase = "/tutorials-prerelease" -}}{{- end -}}
     <div id="featured-rail" class="mission-grid navigator-grid"
          data-href-base="{{ $hrefBase }}"
          data-source="{{ if gt (len $ids) 0 }}curated{{ else }}fallback{{ end }}">
