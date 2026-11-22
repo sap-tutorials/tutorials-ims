@@ -2,10 +2,11 @@
 
 When a CAP 10 scheduled job stops firing without any error surfacing, it's almost always an outbox wedge: a `cds.outbox.Messages` row stuck at `status='processing'` blocks the framework from firing subsequent ticks for that jobName.
 
-> **Three distinct "stuck job" failure modes.** Diagnose which before acting — they live in different tables and have different fixes.
+> **Four distinct "stuck job" failure modes.** Diagnose which before acting — they live in different tables/columns and have different fixes.
 > 1. **Outbox wedge** (blocks future ticks for ONE job) — a `cds.outbox.Messages` row stuck at `status='processing'`. Fix: Force-unwedge (deletes the one row).
 > 2. **Orphaned `PipelineLog` row** — a job shows **RUNNING forever** on the health board while still rescheduling normally; left by a process death mid-run (deploy/crash). See [Orphaned RUNNING PipelineLog rows](#orphaned-running-pipelinelog-rows-1293). Fix: boot reconciler / Force-close.
 > 3. **Queue-processor stall** (**ALL** jobs overdue at once) — the shared CronService queue stops draining and high-frequency job rows drop out of the outbox entirely. A plain unwedge/delete does **NOT** fix this. See [All jobs overdue — queue-processor stall](#all-jobs-overdue--queue-processor-stall). Fix: **rolling `cf restart` of `tutorials-srv`**.
+> 4. **Dead-lettered rows** (#3171) — a job's `cds.outbox.Messages` row burned all retries and sits at **`attempts = maxAttempts` (10) with `status = NULL`**. CAP never retries a dead-lettered row, and a plain **rolling restart does NOT clear it** (`CronService.init()`'s `.every().as()` UPSERT advances the next-fire `timestamp` but **preserves `attempts`**). Typical cause: the durable outbox processor ran on an instance before `CronService` was wired (boot-crash window). See [All jobs overdue — dead-letter reset](#automatic-recovery--dead-letter-reset-3171). Fix (auto since #3171): the self-heal resets `attempts=0, lastError=NULL`; manual: the SQL in that section.
 
 ## When to use this
 
@@ -212,7 +213,43 @@ timeout: 180
 
 
 
-If the `SchedulerStallDetected` alert fires but the board **still** shows all jobs overdue after a couple of self-heal ticks (reaper + re-seed + `cds.flush()` all ran and none cleared it), fall back to the manual rolling restart below.
+### Automatic recovery — dead-letter reset (#3171)
+
+The reaper (#2782/#2814), re-seeder (#2827), and `cds.flush()` (#2975) all assume the row, once present and non-`processing`, is **retryable**. There is a fourth mode where the row is present, `status=NULL` (so it looks like a healthy pending tick), and yet CAP will **never** fire it: a row **dead-lettered at `attempts = maxAttempts`** (CAP's `cds.requires.queue.maxAttempts` default is **10**, not overridden here).
+
+- **How it happens.** CAP's durable HANA outbox processor can pick up a `cron.<job>` tick on an instance whose `CronService` is **not yet in the in-process registry** — e.g. a boot-crash window / not-yet-wired instance. Each tick then throws `No service 'com.sap.developers.ims.CronService' found` (`@sap/cds` queue processing). That is a **failed attempt**, not a crash: CAP increments `attempts` and writes `lastError`, no process exit. After `maxAttempts` failures the row is **dead-lettered** — left at `attempts=10, status=NULL`, with **no further retry ever**. The job silently stops firing.
+  - **Observed on PROD 2026-11-22:** the 2026-11-21 1.44.4 deploy had a boot-crash window; during it **12 job rows** (`metrics-rollup`, `kg-ondemand-drain`, `publish-stuck-manifest-watchdog`, `community-blogs-fetch`, `concept-embedding-backfill`, `embedding-reconciliation`, `fetch-learning-journeys`, `freshness-corpus-embedding`, `metrics-snapshots-retention`, `pipeline-log-gc`, `reconcile-completions`, `url-health-check`) burned all 10 retries (clustered `LASTATTEMPTTIMESTAMP` at 02:17/03:17/04:17 UTC) and ended at `attempts=10, status=NULL`. Both canaries were among them → `SchedulerStallDetected` fired from both instances every ~10 min (the 20+ alerts).
+- **Why the other three passes miss it.** The reaper only deletes `status='processing'` rows (a dead-lettered row is `status=NULL` → skipped). The re-seeder only re-seeds jobs with **zero** `target='queue'` rows (the dead-lettered job still has its poisoned row → counts as present → no-op). `cds.flush()` drains *ready* rows but will not re-run one already at `attempts=maxAttempts`.
+- **Why a rolling restart is INSUFFICIENT.** `CronService.init()`'s `schedule().every().as()` is a deterministic-ID UPSERT that advances the row's `timestamp` (next fire) but **preserves `attempts`**. Verified live in the incident: after restarting instance #0, the 12 rows' fire times advanced but `attempts` stayed 10 and the canaries still did not execute.
+- **What it does.** Since #3171, the same ~10-min self-heal tick (and a boot sweep in `CronService.init()`, parity with the reaper) runs `resetDeadLetteredScheduledJobRows()` (`srv/lib/scheduler-reaper.js`): for every `target='queue'` row whose `task` is a **registered** job and whose `attempts >= maxAttempts` and `status !== 'processing'`, it `UPDATE`s `attempts=0, lastError=null` — leaving `status` (already NULL → eligible) and `timestamp` (the next-fire) untouched. This is exactly CAP's documented dead-letter recovery. The reset runs **before** the tick's `cds.flush()`, so a freshly-reset row drains on the same tick. Recovery lands within ≤ one self-heal interval (~10 min), no restart.
+- **Conservative — registered jobs only.** The `task ∈ jobSchedules` guard is what never touches the `TASK=null` `SecurityEvent` audit rows (they also sit in this table) and leaves any retired/unknown job's poisoned row alone. A `status='processing'` row is skipped too — that is the reaper's territory (an in-flight claim CAP still owns); never double-handle it.
+- **Fail-open throughout.** A missing outbox entity, a faulting SELECT, or a single row's UPDATE throwing never aborts the pass, never kills the timer, and never fails a scheduled tick. Overridable via `SCHEDULER_MAX_ATTEMPTS` if the queue config ever changes.
+
+**Recognise it** — the tell is a **bimodal `attempts`** distribution (most rows at 0, a cluster at exactly 10) with those rows at `status=NULL`:
+
+```sql
+-- bimodal 0 / 10 → dead-letter mode. A healthy fleet is all 0.
+SELECT ATTEMPTS, COUNT(*) FROM CDS_OUTBOX_MESSAGES
+  WHERE TARGET='queue' GROUP BY ATTEMPTS ORDER BY ATTEMPTS;
+
+-- the dead-lettered rows themselves
+SELECT TASK, ATTEMPTS, STATUS, TO_VARCHAR(LASTATTEMPTTIMESTAMP), LASTERROR
+  FROM CDS_OUTBOX_MESSAGES
+  WHERE TARGET='queue' AND ATTEMPTS>=10 ORDER BY TASK;
+```
+
+**Manual reset** (the auto-recovery does this; use only if you need to force it before the next tick). **A plain rolling restart does NOT clear this mode** (it preserves `attempts`):
+
+```sql
+UPDATE CDS_OUTBOX_MESSAGES SET ATTEMPTS=0, LASTERROR=NULL
+  WHERE TARGET='queue' AND ATTEMPTS>=10;   -- the dead-lettered rows
+```
+
+Then a `cds.flush()` (or wait one self-heal tick) drains them. `status` is already NULL (eligible), so it does not need touching.
+
+> **Investigation note — the boot-crash window itself (#3171 item 3, open).** The `/health/ready` gate + MTA `health-check-type: http` keys (#2975) ARE in the deployed 1.44.4 build, yet instances still crash-looped `/health/ready` on 11-21 (CF events 12:51/22:54/23:35 EST). Working hypothesis: cold-HANA init exceeded `health-check-invocation-timeout: 10` / `timeout: 180` during a rough deploy, so green never reached `markSchedulerReady()` while the durable outbox kept dead-lettering on the not-yet-wired instance. **Before changing the timeouts**, capture next time: the `tutorials-srv` boot log timing from process start → `CronService wired …` → `markSchedulerReady()`, the HANA connection-pool warm-up duration, and whether `/health/ready` returned 503 vs. timed out. Only raise `invocation-timeout`/`timeout` with a reproduction showing init legitimately needs longer — otherwise the dead-letter auto-reset above already bounds the blast radius.
+
+If the `SchedulerStallDetected` alert fires but the board **still** shows all jobs overdue after a couple of self-heal ticks (reaper + re-seed + dead-letter reset + `cds.flush()` all ran and none cleared it), fall back to the manual rolling restart below. The alert body names this tick's self-heal actions (reset / reaped / re-seeded counts) — **if it reports dead-lettered rows reset, recheck the next tick before restarting** (the reset needs one `cds.flush()`/tick to drain, and a restart would not have helped anyway).
 
 ### Self-heal liveness — do NOT read it off a `JobLastRun` row (#2983)
 
@@ -272,6 +309,7 @@ The earlier candidate hardening ("have `forceClose` also re-arm the affected out
 - Issue: [#2762](https://github.com/sap-tutorials/tutorials-ims/issues/2762) — post-boot scheduler-stall self-check + auto rolling-restart (blue-green stall); **superseded by #2782** (the self-restart didn't durably recover)
 - Issue: [#2782](https://github.com/sap-tutorials/tutorials-ims/issues/2782) — outbox tombstone reaper: durable fix for the NULL-`lastAttemptTimestamp` `processing` row CAP's lease can't reclaim
 - Issue: [#2814](https://github.com/sap-tutorials/tutorials-ims/issues/2814) — reaper PipelineLog cross-check: fast-recovers HANA-HA-failover tombstones (no app restart) via the RUNNING-row signal, bypassing the 60-min floor for jobs that aren't actually in-flight
+- Issue: [#3171](https://github.com/sap-tutorials/tutorials-ims/issues/3171) — dead-letter reset: auto-recovers `attempts=maxAttempts, status=NULL` scheduled-job rows CAP will never retry (PROD stall 2026-11-22); a plain rolling restart preserves `attempts` and does not clear it
 - Code: `srv/jobs/scheduler.js:runWithLock` — belt-and-suspenders
 - Code: `srv/lib/scheduler-wedge.js` — helpers (`deleteStuckOutboxRow`, `loadStuckOutboxTargets`)
 - Code: `srv/lib/pipeline-log-reconciler.js` — orphaned-row reconciler (`reconcileOrphanedRunningJobs`, `forceCloseRunningPipelineLog`)

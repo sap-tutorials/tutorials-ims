@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import cds from '@sap/cds';
 
-import { reapTombstonedOutboxRows, reseedMissingSuccessorRows } from '../../srv/lib/scheduler-reaper.js';
+import { reapTombstonedOutboxRows, reseedMissingSuccessorRows, resetDeadLetteredScheduledJobRows } from '../../srv/lib/scheduler-reaper.js';
 
 const HYBRID = process.env.ALLOW_HYBRID_WRITES === '1';
 const maybeDescribe = HYBRID ? describe : describe.skip;
@@ -181,5 +181,54 @@ maybeDescribe('scheduler tombstone reaper recovery (hybrid)', () => {
 
     expect(reseeded).toBe(0);
     expect(reseedJob).not.toHaveBeenCalled();
+  });
+
+  // ─── #3171: dead-letter reset (real cds.outbox.Messages UPDATE round-trip) ───
+
+  it('#3171 resets a dead-lettered row (attempts=maxAttempts, status=NULL) back to attempts=0, lastError=NULL', async () => {
+    // The 2026-11-22 incident shape: a registered job's row burned all retries
+    // while CronService was unavailable. CAP left it at attempts=10, status=NULL
+    // and will never retry it. The real UPDATE must set attempts=0 + clear
+    // lastError (this also proves the camelCase→HANA column mapping).
+    const jobName = 'test-reaper-deadletter';
+    const nextFireIso = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    await db.run(INSERT.into(outbox.Messages).entries({
+      target: 'queue',
+      task: jobName,
+      status: null,
+      attempts: 10,
+      lastError: 'No service \'CronService\' found',
+      timestamp: nextFireIso,
+    }));
+
+    const schedules = new Map([[jobName, '*/5 * * * *']]);
+    const { inspected, reset } = await resetDeadLetteredScheduledJobRows(schedules);
+    expect(inspected).toBeGreaterThanOrEqual(1);
+    expect(reset).toBeGreaterThanOrEqual(1);
+
+    const rows = await db.run(
+      SELECT.from(outbox.Messages).columns('attempts', 'lastError', 'status').where({ target: 'queue', task: jobName })
+    );
+    expect(rows.length).toBe(1);
+    expect(Number(rows[0].attempts)).toBe(0);
+    expect(rows[0].lastError == null).toBe(true);
+    // status is intentionally left as-is (already NULL → eligible for drain).
+    expect(rows[0].status == null).toBe(true);
+  });
+
+  it('#3171 does NOT reset a healthy row (attempts below maxAttempts)', async () => {
+    const jobName = 'test-reaper-deadletter-healthy';
+    const nextFireIso = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    await db.run(INSERT.into(outbox.Messages).entries({
+      target: 'queue', task: jobName, status: null, attempts: 2, timestamp: nextFireIso,
+    }));
+
+    const schedules = new Map([[jobName, '*/5 * * * *']]);
+    await resetDeadLetteredScheduledJobRows(schedules);
+
+    const rows = await db.run(
+      SELECT.from(outbox.Messages).columns('attempts').where({ target: 'queue', task: jobName })
+    );
+    expect(Number(rows[0].attempts)).toBe(2); // untouched
   });
 });
