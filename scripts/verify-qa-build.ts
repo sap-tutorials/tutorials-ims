@@ -107,9 +107,18 @@ export function findUnhashedIslandRefs(html: string, islands: string[]): string[
   });
 }
 
-// Shared helper: verify #browse-data script tag is present and non-empty.
-// Returns problem strings (empty = OK). Used by both QA and prerelease checks.
-function checkBrowseDataTag(html: string, channelLabel: string): string[] {
+// Shared helper: verify #browse-data script tag is present and (unless
+// allowEmpty) non-empty. Returns problem strings (empty = OK). Used by both
+// QA and prerelease checks.
+//
+// allowEmpty (prerelease, #3168): a prerelease channel legitimately has ZERO
+// cards until an author marks a tutorial visibility=ROLE_GATED, so an empty
+// `all` array is a valid steady state — the gated navigator simply renders an
+// empty grid. The script tag must still be present with parseable JSON carrying
+// an `all` ARRAY (a missing tag / malformed JSON / non-array `all` is still a
+// real build break — browse.json never emitted). QA keeps allowEmpty=false:
+// an empty QA grid means the contribution fetch failed and is a hard error.
+function checkBrowseDataTag(html: string, channelLabel: string, allowEmpty = false): string[] {
   const problems: string[] = [];
   const browseMatch = html.match(/<script\b[^>]*id=["']?browse-data["']?[^>]*>([\s\S]*?)<\/script>/i);
   if (!browseMatch) {
@@ -122,7 +131,9 @@ function checkBrowseDataTag(html: string, channelLabel: string): string[] {
       browseJson = {};
     }
     const all = (browseJson as Record<string, unknown>).all;
-    if (!Array.isArray(all) || all.length === 0) {
+    if (!Array.isArray(all)) {
+      problems.push(`#browse-data grid is malformed — data-${channelLabel}/browse.json has no "all" array`);
+    } else if (all.length === 0 && !allowEmpty) {
       problems.push(`#browse-data grid is empty — data-${channelLabel}/browse.json was not emitted`);
     }
   }
@@ -178,7 +189,8 @@ export function checkQaIndex(html: string): string[] {
 //   1. #tutorial-navigator carries data-nav-base="/tutorials-prerelease" and
 //      data-client-search="true" (and does NOT carry data-search-base, since
 //      prerelease uses client-side search only — no server search endpoint exists).
-//   2. <script id="browse-data"> exists and its JSON has a non-empty `all` array
+//   2. <script id="browse-data"> exists with a valid `all` array (may be EMPTY —
+//      a prerelease channel has zero cards until a tutorial is marked ROLE_GATED).
 //   3. [#3168] the homepage-style discovery sections are ABSENT — same as QA.
 export function checkPrereleaseIndex(html: string): string[] {
   const problems: string[] = [];
@@ -193,8 +205,8 @@ export function checkPrereleaseIndex(html: string): string[] {
     problems.push('#tutorial-navigator is missing data-client-search="true"');
   }
 
-  // 2. #browse-data grid populated
-  problems.push(...checkBrowseDataTag(html, 'prerelease'));
+  // 2. #browse-data grid present + valid, but may be empty (allowEmpty) — see #3168.
+  problems.push(...checkBrowseDataTag(html, 'prerelease', true));
 
   // 3. Homepage-style sections must NOT leak onto the prerelease navigator (#3168).
   problems.push(...checkNoHomeSections(html, 'prerelease'));
