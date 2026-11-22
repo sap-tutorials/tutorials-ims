@@ -88,11 +88,21 @@ describe('checkPrereleaseIndex', () => {
     expect(checkPrereleaseIndex(goodPrereleaseHtml)).toEqual([]);
   });
 
-  it('(e) returns a problem when #browse-data all array is empty', () => {
+  it('(e) ALLOWS an empty #browse-data all array (prerelease has zero cards until a tutorial is ROLE_GATED, #3168)', () => {
     const html = `<html><body>${PRERELEASE_NAVIGATOR}${BROWSE_SCRIPT_EMPTY}</body></html>`;
+    expect(checkPrereleaseIndex(html)).toEqual([]);
+  });
+
+  it('(e2) still flags a missing #browse-data script tag (empty is OK, absent is not)', () => {
+    const html = `<html><body>${PRERELEASE_NAVIGATOR}</body></html>`;
     const problems = checkPrereleaseIndex(html);
-    expect(problems.length).toBeGreaterThan(0);
-    expect(problems.some(p => /grid|browse/i.test(p))).toBe(true);
+    expect(problems.some(p => /browse-data|grid/i.test(p))).toBe(true);
+  });
+
+  it('(e3) still flags a malformed #browse-data with no "all" array', () => {
+    const html = `<html><body>${PRERELEASE_NAVIGATOR}<script id="browse-data" type="application/json">{"notAll":1}</script></body></html>`;
+    const problems = checkPrereleaseIndex(html);
+    expect(problems.some(p => /malformed|all/i.test(p))).toBe(true);
   });
 
   it('(f) a valid QA index fails checkPrereleaseIndex (different markers)', () => {
