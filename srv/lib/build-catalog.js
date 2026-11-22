@@ -22,7 +22,7 @@ export async function buildCatalogHandler(req, res) {
     const paths = await SELECT.from(CompletionPaths).orderBy`mission_ID, coalesce(pathOrder, 999999), name`;
     const items = await SELECT.from(CompletionPathItems).orderBy('itemOrder');
     const tutorials = await SELECT.from(Tutorials)
-      .columns('ID', 'legacyId', 'slug', 'title', 'description')
+      .columns('ID', 'legacyId', 'slug', 'title', 'description', 'visibility')
       .where(`status = 'ACTIVE' or status is null`);
     const featuredRows = await SELECT.from(FeaturedTasks)
       .orderBy('featuredOrder')
@@ -206,6 +206,7 @@ export async function buildCatalogHandler(req, res) {
       slug: t.slug,
       title: t.title || '',
       description: t.description || '',
+      visibility: t.visibility,
       categorySlugs: categorySlugsFor(t.ID, tutorialAssign, 'tutorial_ID', catByID),
     }));
 

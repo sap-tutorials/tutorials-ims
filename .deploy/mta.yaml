@@ -10,7 +10,7 @@ ID: tutorials-ims
 # Bump this on each release you deploy — it's the version shown by `cf mtas`
 # and in the mtar filename (tutorials-ims_<version>.mtar). Deploy is manual:
 # `cd .deploy && mbt build && cf deploy mta_archives/tutorials-ims_<version>.mtar -e ../deploy/<env>.mtaext -f`.
-version: 1.44.4
+version: 1.45.0
 
 # Top-level parameters (overridable per-env via deploy/<env>.mtaext).
 parameters:
@@ -259,7 +259,7 @@ modules:
         # Wipe each static dir BEFORE cp'ing fresh content. Hugo public, qa, admin-ui,
         # analytics-ui, scanner-ui all need this; everything not under static/ here
         # (e.g. node_modules, package.json) is preserved.
-        - rm -rf static/admin-ui static/analytics-ui static/scanner-ui static/explore-ui static/channel-atlas-ui static/data-inspector-ui static/qa
+        - rm -rf static/admin-ui static/analytics-ui static/scanner-ui static/explore-ui static/channel-atlas-ui static/data-inspector-ui static/qa static/prerelease
         # CAP-sourced Hugo sections (concepts, developer-advocates, browse) are
         # generated at build time from /build/* endpoints. Because `cp -r` is
         # union (see comment above), a build against a backend with FEWER rows
@@ -274,6 +274,9 @@ modules:
         - mkdir -p static/qa
         - cp -r ../hugo/public-qa/. static/qa/
         - rm -rf static/qa/tutorials
+        - mkdir -p static/prerelease
+        - cp -r ../hugo/public-prerelease/. static/prerelease/
+        - rm -rf static/prerelease/tutorials
         - npm --prefix ../app/admin-shell install
         - npm --prefix ../app/admin-shell run build
         - mkdir -p static/admin-ui

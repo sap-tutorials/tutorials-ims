@@ -80,7 +80,7 @@ export async function fetchBuildCatalog(baseUrl: string): Promise<{
     hierarchies: MissionHierarchy[]
     standaloneGroups?: StandaloneGroup[]
     categories?: CategoryMeta[]
-    tutorials?: Array<{ slug: string; title?: string; categorySlugs?: string[] }>
+    tutorials?: Array<{ slug: string; title?: string; categorySlugs?: string[]; visibility?: string }>
     featured?: BrowseFeaturedEntry[]
   }
   const tutorialMetas: CatalogTutorialMeta[] = (data.tutorials ?? []).map(t => ({
@@ -90,6 +90,9 @@ export async function fetchBuildCatalog(baseUrl: string): Promise<{
     // :tutorial / ::requires links with it even on slug-targeted rebuilds (where
     // the referenced tutorial's own <slug>.md is not fetched into CACHE_DIR).
     ...(typeof t.title === 'string' && t.title ? { title: t.title } : {}),
+    // [#3099] Carry visibility tier so fetch-tutorials can emit `private: true`
+    // in Hugo front-matter for UNLISTED / ROLE_GATED tutorials.
+    ...(typeof t.visibility === 'string' && t.visibility ? { visibility: t.visibility } : {}),
   }))
   return {
     missions: data.missions,

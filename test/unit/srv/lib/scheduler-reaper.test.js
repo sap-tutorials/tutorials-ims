@@ -24,7 +24,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import cds from '@sap/cds';
 
-import { reapTombstonedOutboxRows, reseedMissingSuccessorRows, armSchedulerSelfHeal } from '../../../../srv/lib/scheduler-reaper.js';
+import { reapTombstonedOutboxRows, reseedMissingSuccessorRows, resetDeadLetteredScheduledJobRows, armSchedulerSelfHeal } from '../../../../srv/lib/scheduler-reaper.js';
 
 // Fixed "now" far past any fixture timestamp so the 60-min stale floor fires.
 const NOW = new Date('2026-10-14T18:00:00.000Z');
@@ -555,6 +555,190 @@ describe('scheduler-reaper — reseedMissingSuccessorRows (#2827 missing success
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────
+// #3171: resetDeadLetteredScheduledJobRows — the FOURTH stall mode.
+//
+// A scheduled-job outbox row dead-lettered at attempts=maxAttempts (CAP default
+// 10) with status=NULL is never retried by CAP and is revived by none of the
+// reap/reseed/flush passes. CAP's documented recovery is to reset attempts=0 +
+// clear lastError, which this pass does — scoped to REGISTERED-job target='queue'
+// rows only (never the TASK=null SecurityEvent audit rows), and never a
+// 'processing' row (reaper territory).
+//
+// Reuses mockOutbox; UPDATE builders reach db.run as q.UPDATE.
+// ─────────────────────────────────────────────────────────────────────
+describe('scheduler-reaper — resetDeadLetteredScheduledJobRows (#3171 dead-letter)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (_savedSelect !== undefined) {
+      if (_savedSelect) Object.defineProperty(globalThis, 'SELECT', _savedSelect);
+      else delete globalThis.SELECT;
+      _savedSelect = undefined;
+    }
+  });
+
+  const DL = 10; // default maxAttempts
+
+  it('resets a dead-lettered row (attempts=10, status=NULL, registered job) — the incident row', async () => {
+    const runSpy = mockOutbox([
+      { ID: 'dl-1', target: 'queue', task: 'metrics-rollup', status: null, attempts: DL, timestamp: STALE_TS },
+    ]);
+    const schedules = new Map([['metrics-rollup', '*/5 * * * *']]);
+    const { inspected, reset } = await resetDeadLetteredScheduledJobRows(schedules);
+    expect(inspected).toBe(1);
+    expect(reset).toBe(1);
+    const updates = runSpy.mock.calls.filter(([q]) => q && q.UPDATE);
+    expect(updates.length).toBe(1);
+    const cqn = JSON.stringify(updates[0][0].UPDATE);
+    expect(cqn).toContain('dl-1');          // keyed on the row ID
+    // attempts reset to 0 and lastError cleared in the set payload.
+    const setData = updates[0][0].UPDATE.data ?? updates[0][0].UPDATE.with;
+    expect(setData).toMatchObject({ attempts: 0, lastError: null });
+  });
+
+  it('does NOT reset a row below maxAttempts (still has retries left)', async () => {
+    const runSpy = mockOutbox([
+      { ID: 'r-live', target: 'queue', task: 'metrics-rollup', status: null, attempts: DL - 1, timestamp: STALE_TS },
+    ]);
+    const schedules = new Map([['metrics-rollup', '*/5 * * * *']]);
+    const { inspected, reset } = await resetDeadLetteredScheduledJobRows(schedules);
+    expect(inspected).toBe(0);
+    expect(reset).toBe(0);
+    expect(runSpy.mock.calls.filter(([q]) => q && q.UPDATE).length).toBe(0);
+  });
+
+  it('does NOT reset a status=processing row even at attempts=maxAttempts (reaper territory)', async () => {
+    const runSpy = mockOutbox([
+      { ID: 'proc', target: 'queue', task: 'metrics-rollup', status: 'processing', attempts: DL, timestamp: STALE_TS },
+    ]);
+    const schedules = new Map([['metrics-rollup', '*/5 * * * *']]);
+    const { inspected, reset } = await resetDeadLetteredScheduledJobRows(schedules);
+    expect(inspected).toBe(0);
+    expect(reset).toBe(0);
+    expect(runSpy.mock.calls.filter(([q]) => q && q.UPDATE).length).toBe(0);
+  });
+
+  it('does NOT reset a row whose task is NOT a registered job (retired/unknown job)', async () => {
+    const runSpy = mockOutbox([
+      { ID: 'unk', target: 'queue', task: 'retired-job', status: null, attempts: DL, timestamp: STALE_TS },
+    ]);
+    const schedules = new Map([['metrics-rollup', '*/5 * * * *']]);
+    const { inspected, reset } = await resetDeadLetteredScheduledJobRows(schedules);
+    expect(inspected).toBe(0);
+    expect(reset).toBe(0);
+    expect(runSpy.mock.calls.filter(([q]) => q && q.UPDATE).length).toBe(0);
+  });
+
+  it('does NOT reset a TASK=null audit row (SecurityEvent) at attempts=maxAttempts', async () => {
+    const runSpy = mockOutbox([
+      { ID: 'audit', target: 'queue', task: null, status: null, attempts: DL, timestamp: STALE_TS },
+    ]);
+    const schedules = new Map([['metrics-rollup', '*/5 * * * *']]);
+    const { inspected, reset } = await resetDeadLetteredScheduledJobRows(schedules);
+    expect(inspected).toBe(0);
+    expect(reset).toBe(0);
+  });
+
+  it('does NOT reset a non-queue target row', async () => {
+    const runSpy = mockOutbox([
+      { ID: 'evt', target: 'TutorialProgressService', task: 'metrics-rollup', status: null, attempts: DL, timestamp: STALE_TS },
+    ]);
+    const schedules = new Map([['metrics-rollup', '*/5 * * * *']]);
+    const { inspected, reset } = await resetDeadLetteredScheduledJobRows(schedules);
+    expect(inspected).toBe(0);
+    expect(reset).toBe(0);
+  });
+
+  it('resets multiple dead-lettered rows and leaves healthy/non-eligible ones in one pass', async () => {
+    const runSpy = mockOutbox([
+      { ID: 'a', target: 'queue', task: 'metrics-rollup', status: null, attempts: DL, timestamp: STALE_TS },
+      { ID: 'b', target: 'queue', task: 'kg-ondemand-drain', status: null, attempts: DL, timestamp: STALE_TS },
+      { ID: 'c', target: 'queue', task: 'community-blogs-fetch', status: null, attempts: 0, timestamp: STALE_TS }, // healthy
+      { ID: 'd', target: 'queue', task: 'retired', status: null, attempts: DL, timestamp: STALE_TS },              // unregistered
+    ]);
+    const schedules = new Map([
+      ['metrics-rollup', '*/5 * * * *'],
+      ['kg-ondemand-drain', '*/2 * * * *'],
+      ['community-blogs-fetch', '17,47 * * * *'],
+    ]);
+    const { inspected, reset } = await resetDeadLetteredScheduledJobRows(schedules);
+    expect(inspected).toBe(2);
+    expect(reset).toBe(2);
+    const ids = runSpy.mock.calls.filter(([q]) => q && q.UPDATE).map(([q]) => JSON.stringify(q.UPDATE));
+    expect(ids.some(s => s.includes('"a"'))).toBe(true);
+    expect(ids.some(s => s.includes('"b"'))).toBe(true);
+    expect(ids.some(s => s.includes('"c"'))).toBe(false);
+    expect(ids.some(s => s.includes('"d"'))).toBe(false);
+  });
+
+  it('honours a SCHEDULER_MAX_ATTEMPTS override', async () => {
+    const runSpy = mockOutbox([
+      { ID: 'at5', target: 'queue', task: 'metrics-rollup', status: null, attempts: 5, timestamp: STALE_TS },
+    ]);
+    const schedules = new Map([['metrics-rollup', '*/5 * * * *']]);
+    const { reset } = await resetDeadLetteredScheduledJobRows(schedules, { env: { SCHEDULER_MAX_ATTEMPTS: '5' } });
+    expect(reset).toBe(1);
+  });
+
+  it('tolerates uppercase column names (HANA casing)', async () => {
+    const runSpy = mockOutbox([
+      { ID: 'up', TARGET: 'queue', TASK: 'metrics-rollup', STATUS: null, ATTEMPTS: DL, TIMESTAMP: STALE_TS },
+    ]);
+    const schedules = new Map([['metrics-rollup', '*/5 * * * *']]);
+    const { reset } = await resetDeadLetteredScheduledJobRows(schedules);
+    expect(reset).toBe(1);
+  });
+
+  it('fail-open: no-op when jobSchedules is empty', async () => {
+    const runSpy = mockOutbox([
+      { ID: 'x', target: 'queue', task: 'metrics-rollup', status: null, attempts: DL, timestamp: STALE_TS },
+    ]);
+    const { inspected, reset } = await resetDeadLetteredScheduledJobRows(new Map());
+    expect(inspected).toBe(0);
+    expect(reset).toBe(0);
+  });
+
+  it('fail-open: returns zeros when cds.outbox.Messages is missing', async () => {
+    Object.defineProperty(cds, 'entities', { get: () => () => ({}), configurable: true });
+    const { inspected, reset } = await resetDeadLetteredScheduledJobRows(new Map([['metrics-rollup', '*/5 * * * *']]));
+    expect(inspected).toBe(0);
+    expect(reset).toBe(0);
+  });
+
+  it('fail-open: returns zeros when the queue SELECT throws', async () => {
+    Object.defineProperty(cds, 'entities', {
+      get: () => () => ({ Messages: { name: 'cds.outbox.Messages' } }),
+      configurable: true,
+    });
+    const fakeDb = { run: vi.fn().mockRejectedValue(new Error('DB down')) };
+    Object.defineProperty(cds, 'connect', { value: { to: vi.fn().mockResolvedValue(fakeDb) }, configurable: true });
+    const { inspected, reset } = await resetDeadLetteredScheduledJobRows(new Map([['metrics-rollup', '*/5 * * * *']]));
+    expect(inspected).toBe(0);
+    expect(reset).toBe(0);
+  });
+
+  it('a single UPDATE throwing does not abort the whole pass (per-row fail-open)', async () => {
+    Object.defineProperty(cds, 'entities', {
+      get: () => () => ({ Messages: { name: 'cds.outbox.Messages' } }),
+      configurable: true,
+    });
+    const rows = [
+      { ID: 'u1', target: 'queue', task: 'metrics-rollup', status: null, attempts: DL, timestamp: STALE_TS },
+      { ID: 'u2', target: 'queue', task: 'kg-ondemand-drain', status: null, attempts: DL, timestamp: STALE_TS },
+    ];
+    let n = 0;
+    const run = vi.fn(async (q) => {
+      if (q && q.UPDATE) { n++; if (n === 1) throw new Error('transient update fault'); return 1; }
+      return rows;
+    });
+    Object.defineProperty(cds, 'connect', { value: { to: vi.fn().mockResolvedValue({ run }) }, configurable: true });
+    const schedules = new Map([['metrics-rollup', '*/5 * * * *'], ['kg-ondemand-drain', '*/2 * * * *']]);
+    const { inspected, reset } = await resetDeadLetteredScheduledJobRows(schedules);
+    expect(inspected).toBe(2);
+    expect(reset).toBe(1); // first threw, second succeeded; pass survived
+  });
+});
+
 describe('scheduler-reaper — armSchedulerSelfHeal (periodic timer wiring)', () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
@@ -660,6 +844,88 @@ describe('scheduler-reaper — armSchedulerSelfHeal (periodic timer wiring)', ()
     });
     await tickFn();
     expect(flush).toHaveBeenCalledTimes(1);
+  });
+
+  it('#3171 each tick runs the dead-letter reset against jobSchedules', async () => {
+    let tickFn;
+    const setIntervalFn = vi.fn().mockImplementation((fn) => { tickFn = fn; return { unref() {} }; });
+    const schedules = new Map([['metrics-rollup', '*/5 * * * *']]);
+    const resetDeadLetter = vi.fn().mockResolvedValue({ inspected: 0, reset: 0 });
+    armSchedulerSelfHeal({
+      env: enabledEnv, setIntervalFn, jobSchedules: schedules,
+      reap: vi.fn().mockResolvedValue({ inspected: 0, reaped: 0 }),
+      resetDeadLetter, flush: vi.fn().mockResolvedValue(undefined),
+      loadRows: async () => [], raiseAlert: vi.fn(),
+    });
+    await tickFn();
+    expect(resetDeadLetter).toHaveBeenCalledTimes(1);
+    expect(resetDeadLetter.mock.calls[0][0]).toBe(schedules);
+  });
+
+  it('#3171 a tick where the dead-letter reset throws still runs the canary check (fail-open, timer survives)', async () => {
+    let tickFn;
+    const setIntervalFn = vi.fn().mockImplementation((fn) => { tickFn = fn; return { unref() {} }; });
+    const stale = new Date(Date.now() - 30 * 60_000).toISOString();
+    const raiseAlert = vi.fn().mockResolvedValue(undefined);
+    armSchedulerSelfHeal({
+      env: enabledEnv, setIntervalFn, jobSchedules: new Map(),
+      reap: vi.fn().mockResolvedValue({ inspected: 0, reaped: 0 }),
+      resetDeadLetter: vi.fn().mockRejectedValue(new Error('reset blew up')),
+      flush: vi.fn().mockResolvedValue(undefined),
+      loadRows: async () => [
+        { jobName: 'metrics-rollup', lastSuccessAt: stale },
+        { jobName: 'kg-ondemand-drain', lastSuccessAt: stale },
+      ],
+      raiseAlert,
+    });
+    await expect(tickFn()).resolves.toBeUndefined();
+    expect(raiseAlert).toHaveBeenCalledTimes(1);
+  });
+
+  it('#3171 the canary alert body reports the dead-letter reset count when reset>0 and canaries stale', async () => {
+    let tickFn;
+    const setIntervalFn = vi.fn().mockImplementation((fn) => { tickFn = fn; return { unref() {} }; });
+    const stale = new Date(Date.now() - 30 * 60_000).toISOString();
+    const raiseAlert = vi.fn().mockResolvedValue(undefined);
+    armSchedulerSelfHeal({
+      env: enabledEnv, setIntervalFn, jobSchedules: new Map(),
+      reap: vi.fn().mockResolvedValue({ inspected: 0, reaped: 0 }),
+      resetDeadLetter: vi.fn().mockResolvedValue({ inspected: 3, reset: 3 }),
+      flush: vi.fn().mockResolvedValue(undefined),
+      loadRows: async () => [
+        { jobName: 'metrics-rollup', lastSuccessAt: stale },
+        { jobName: 'kg-ondemand-drain', lastSuccessAt: stale },
+      ],
+      raiseAlert,
+    });
+    await tickFn();
+    expect(raiseAlert).toHaveBeenCalledTimes(1);
+    const body = raiseAlert.mock.calls[0][0].body;
+    expect(body).toContain('reset 3 dead-lettered row(s)');
+    expect(body).toContain('#3171');
+    expect(body).toContain('a plain rolling restart does NOT clear dead-letter');
+  });
+
+  it('#3171 the alert body omits the dead-letter guidance when reset=0 (other mode)', async () => {
+    let tickFn;
+    const setIntervalFn = vi.fn().mockImplementation((fn) => { tickFn = fn; return { unref() {} }; });
+    const stale = new Date(Date.now() - 30 * 60_000).toISOString();
+    const raiseAlert = vi.fn().mockResolvedValue(undefined);
+    armSchedulerSelfHeal({
+      env: enabledEnv, setIntervalFn, jobSchedules: new Map(),
+      reap: vi.fn().mockResolvedValue({ inspected: 0, reaped: 0 }),
+      resetDeadLetter: vi.fn().mockResolvedValue({ inspected: 0, reset: 0 }),
+      flush: vi.fn().mockResolvedValue(undefined),
+      loadRows: async () => [
+        { jobName: 'metrics-rollup', lastSuccessAt: stale },
+        { jobName: 'kg-ondemand-drain', lastSuccessAt: stale },
+      ],
+      raiseAlert,
+    });
+    await tickFn();
+    const body = raiseAlert.mock.calls[0][0].body;
+    expect(body).toContain('reset 0 dead-lettered row(s)');
+    expect(body).not.toContain('a plain rolling restart does NOT clear dead-letter');
   });
 
   it('#2975 a tick where flush throws still runs the canary check (fail-open, timer survives)', async () => {

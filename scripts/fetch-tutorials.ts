@@ -36,7 +36,7 @@ import { computeRecommendations } from './parsers/recommendations.js'
 import { computeCanonicalNav, type NavContainer } from './parsers/nav-owner.js'
 import { humanizeTag, cleanPrerequisites } from './parsers/frontmatter-utils.js'
 import type { TagLabelRegistry } from './parsers/frontmatter-utils.js'
-import { renderHugoFrontmatter } from './parsers/render-frontmatter.js'
+import { renderHugoFrontmatter, isPrivateVisibility } from './parsers/render-frontmatter.js'
 import { normalizeVideo } from './parsers/video.js'
 import { extractGithubLoginFromProfile } from './parsers/github-login-from-profile.js'
 import type { CatalogTutorialMeta, CategoryMeta, Mission, MissionHierarchy, HierarchyGroup, StandaloneGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
@@ -76,26 +76,26 @@ const CONCURRENCY = 5
 // tutorials in one fetch run; logged at the end as a one-line summary.
 const globalCallStats: ExpandStats = { calls: 0, hits: 0, errors: 0 }
 
-export type Channel = 'prod' | 'qa'
+export type Channel = 'prod' | 'qa' | 'prerelease'
 
 export function parseChannel(argv: string[] = process.argv): Channel {
   const idx = argv.indexOf('--channel')
   if (idx === -1) return 'prod'
   const v = argv[idx + 1]
-  if (v !== 'prod' && v !== 'qa') throw new Error(`Unknown channel: ${v}`)
+  if (v !== 'prod' && v !== 'qa' && v !== 'prerelease') throw new Error(`Unknown channel: ${v}`)
   return v
 }
 
 export function getQaCacheDir(channel: Channel): string {
-  return channel === 'qa'
-    ? join(__dirname, '..', '.tutorial-cache-qa')
-    : join(__dirname, '..', '.tutorial-cache')
+  if (channel === 'qa') return join(__dirname, '..', '.tutorial-cache-qa')
+  if (channel === 'prerelease') return join(__dirname, '..', '.tutorial-cache-prerelease')
+  return join(__dirname, '..', '.tutorial-cache')
 }
 
 export function getHugoContentDir(channel: Channel): string {
-  return channel === 'qa'
-    ? join(__dirname, '..', 'hugo', 'content-qa')
-    : join(__dirname, '..', 'hugo', 'content')
+  if (channel === 'qa') return join(__dirname, '..', 'hugo', 'content-qa')
+  if (channel === 'prerelease') return join(__dirname, '..', 'hugo', 'content-prerelease')
+  return join(__dirname, '..', 'hugo', 'content')
 }
 
 /**
@@ -186,6 +186,63 @@ export function qaNavigatorPageMarkdown(): string {
   return qaHomeIndexMarkdown()
 }
 
+/**
+ * Front matter for the prerelease site's root `_index.md`.
+ *
+ * Mirrors `qaHomeIndexMarkdown` exactly, but uses `params.prerelease` (set by
+ * `hugo.prerelease.toml`) instead of `params.qa` to gate nav affordances
+ * (data-search-base="/prerelease-search", etc.) in the layouts.
+ * The prerelease channel shows ROLE_GATED tutorials only — the navigator IS
+ * the root, same as QA.
+ */
+export function prereleaseHomeIndexMarkdown(): string {
+  return [
+    '---',
+    'title: "[Prerelease] Tutorial navigator"',
+    'description: "Prerelease preview — browse ROLE_GATED tutorials not yet publicly listed."',
+    'type: "tutorial-navigator"',
+    'layout: "list"',
+    '---',
+    '',
+  ].join('\n')
+}
+
+/**
+ * Front matter for the prerelease site's dedicated `/tutorial-navigator/` section
+ * (`content-prerelease/tutorial-navigator/_index.md`).
+ *
+ * Mirrors the QA pattern (#1675): emitted at `public-prerelease/tutorial-navigator/index.html`,
+ * published as `page-tutorial-navigator` BLOB to `tutorials-hana-prerelease`.
+ * Byte-identical to `prereleaseHomeIndexMarkdown` (same navigator layout + prerelease markers).
+ */
+export function prereleaseNavigatorPageMarkdown(): string {
+  return prereleaseHomeIndexMarkdown()
+}
+
+/**
+ * Visibility predicate for channel-based filtering.
+ *
+ * - prerelease: only ROLE_GATED tutorials are included (they are not publicly
+ *   listed and are exclusively for the prerelease gated surface).
+ * - prod: ROLE_GATED tutorials are excluded (they must not appear on the public
+ *   site — mirrors the semantic search exclusion from Task 1 of #3168).
+ * - qa: all tutorials pass (QA filters by repo, not by visibility).
+ *
+ * `undefined`/`null` visibility is treated as LISTED (the default for openly
+ * published tutorials) — it passes the prod filter and fails the prerelease one.
+ *
+ * @param visibility — the tutorial's CAP catalog `visibility` field value
+ * @param channel — the active build channel
+ */
+export function keepForChannel(visibility: string | undefined, channel: Channel): boolean {
+  const v = visibility ?? ''
+  if (channel === 'prerelease') return v === 'ROLE_GATED'
+  if (channel === 'prod') return v !== 'ROLE_GATED'
+  // qa: no visibility-based filter — QA scope is determined by the -Contribution
+  // repo discovery (ONLY_CONTRIBUTION_REPOS), not by visibility flags.
+  return true
+}
+
 
 /**
  * Prune stale `<slug>.md` files from `cacheDir` — any whose slug is NOT in
@@ -246,7 +303,10 @@ export function getOutputDir(target: BuildTarget, channel: Channel = 'prod'): st
 
 export function getNavJsonDir(target: BuildTarget, channel: Channel = 'prod'): string {
   if (target === 'hugo') {
-    const staticDir = channel === 'qa' ? 'static-qa' : 'static'
+    const staticDir =
+      channel === 'qa' ? 'static-qa' :
+      channel === 'prerelease' ? 'static-prerelease' :
+      'static'
     return join(__dirname, '..', 'hugo', staticDir, 'tutorials')
   }
   return join(__dirname, '..', 'site', 'tutorials')
@@ -653,6 +713,7 @@ export function writeHugoPage(
   syncGroups?: import('./parsers/types.js').TutorialFrontmatter['syncGroups'],
   testedWith?: import('./parsers/types.js').TutorialFrontmatter['testedWith'],
   requires?: import('./parsers/types.js').TutorialFrontmatter['requires'],
+  visibility?: string,
 ): void {
   const content = renderHugoFrontmatter({
     slug,
@@ -683,6 +744,7 @@ export function writeHugoPage(
     syncGroups,
     testedWith,
     requires,
+    private: isPrivateVisibility(visibility),
   })
 
   mkdirSync(outputDir, { recursive: true })
@@ -883,6 +945,21 @@ async function main() {
     mkdirSync(qaNavDir, { recursive: true })
     writeFileSync(join(qaNavDir, '_index.md'), qaNavigatorPageMarkdown(), 'utf-8')
     console.log('  [channel] wrote content-qa/tutorial-navigator/_index.md (page-tutorial-navigator)\n')
+  }
+
+  // Prerelease channel: same no-homepage pattern as QA — the navigator IS the
+  // root. Mirrors QA's _index.md + tutorial-navigator/ section pattern so the
+  // same navigator layout resolves, using site.Params.prerelease for gating.
+  if (target === 'hugo' && channel === 'prerelease') {
+    const prereleaseRoot = getHugoContentDir(channel)
+    mkdirSync(prereleaseRoot, { recursive: true })
+    writeFileSync(join(prereleaseRoot, '_index.md'), prereleaseHomeIndexMarkdown(), 'utf-8')
+    console.log('  [channel] wrote content-prerelease/_index.md (navigator layout as prerelease root)\n')
+
+    const prereleaseNavDir = join(prereleaseRoot, 'tutorial-navigator')
+    mkdirSync(prereleaseNavDir, { recursive: true })
+    writeFileSync(join(prereleaseNavDir, '_index.md'), prereleaseNavigatorPageMarkdown(), 'utf-8')
+    console.log('  [channel] wrote content-prerelease/tutorial-navigator/_index.md (page-tutorial-navigator)\n')
   }
 
   let allTutorials: DiscoveredTutorial[]
@@ -1148,12 +1225,13 @@ async function main() {
     currentFingerprint: decisionFingerprint,
     currentPipelineToken,
     sidecarPipelineToken: restoredSidecar?.pipelineToken,
-    // QA is an author-preview channel that rebuilds rarely, so its cached feed
-    // fingerprint is almost always stale vs prod's frequently-republished
-    // catalog — which would force a ~10-min full regen for a single-slug
-    // preview. Allow reuse of cached non-target pages despite feed drift on QA
-    // (the target slug is always regenerated). Prod keeps strict freshness.
-    allowFeedDrift: channel === 'qa',
+    // QA and prerelease are author-preview channels that rebuild rarely, so
+    // their cached feed fingerprints are almost always stale vs prod's
+    // frequently-republished catalog — which would force a ~10-min full regen
+    // for a single-slug preview. Allow reuse of cached non-target pages despite
+    // feed drift on QA/prerelease (the target slug is always regenerated).
+    // Prod keeps strict freshness.
+    allowFeedDrift: channel === 'qa' || channel === 'prerelease',
   })
   const reuseNavBySlug = restoredSidecar ? navEntriesBySlug(restoredSidecar) : new Map<string, Record<string, unknown>>()
   const reuseAuthorRowsBySlug = new Map<string, AuthorTutorialRow[]>()
@@ -1296,6 +1374,38 @@ async function main() {
   // NB: uses the STATIC EXPECTED_DIRECTIVE_NAMES, NOT the live registry — if a
   // directive fails to register, its name is absent from getRegistry() and the
   // guard would be blind to the very failure it exists to catch.
+  // [#3099] Build a slug→visibility map from the cached CAP catalog so each
+  // writeHugoPage call can emit `private: true` for UNLISTED / ROLE_GATED
+  // tutorials. loadCapCache() is already called above (fingerprint step) so
+  // this is a cheap disk read with no extra network. Fail-open: an empty map
+  // means no tutorials get the private flag, which is the safe default.
+  const cachedVisibility = loadCapCache()?.tutorialMetas ?? []
+  const visibilityBySlug = new Map<string, string>()
+  for (const m of cachedVisibility) {
+    if (m.visibility) visibilityBySlug.set(m.slug.toLowerCase(), m.visibility)
+  }
+
+  // [#3168] Channel visibility filter. Applied after the discovery baseline so
+  // the prod/HANA catalog upload above still sees the full set.
+  // - prerelease: keep only ROLE_GATED (gated surface, not publicly listed).
+  // - prod: exclude ROLE_GATED (must not appear on the public site; mirrors the
+  //   semantic search exclusion from Task 1 of #3168).
+  // - qa: no-op (QA scopes by -Contribution repo discovery, not visibility).
+  //
+  // Fail-open: if visibilityBySlug is empty (cold cache, no catalog yet) every
+  // tutorial passes keepForChannel because visibility is undefined → treated as
+  // LISTED. That means prod ships normally and prerelease ships empty — both are
+  // safe defaults while the catalog warms up.
+  if (channel !== 'qa') {
+    const before = allTutorials.length
+    allTutorials = allTutorials.filter(t =>
+      keepForChannel(visibilityBySlug.get(t.slug.toLowerCase()), channel)
+    )
+    if (allTutorials.length !== before) {
+      console.log(`[channel=${channel}] visibility filter: ${allTutorials.length} of ${before} tutorials kept`)
+    }
+  }
+
   const unexpandedDirectiveHits: Array<{ slug: string; tokens: string[] }> = []
 
   // A compose-time DirectiveParseError (e.g. ::include of a snippet that didn't
@@ -1740,6 +1850,9 @@ async function main() {
           composed.syncGroups,
           composed.testedWith,
           composed.requires,
+          // [#3099] Pass visibility so writeHugoPage emits `private: true` for
+          // UNLISTED / ROLE_GATED tutorials (sitemap suppression).
+          visibilityBySlug.get(t.slug.toLowerCase()),
         )
         authorRows.push({
           authorProfile: frontmatter.author_profile ?? '',
@@ -2075,7 +2188,10 @@ async function main() {
     try {
       const roster = await fetchAdvocateRoster()
       const advocates = advocateLoginToSlug(roster)
-      const dataDir = join(__dirname, '..', 'hugo', channel === 'qa' ? 'data-qa' : 'data')
+      const dataDir = join(__dirname, '..', 'hugo',
+        channel === 'qa' ? 'data-qa' :
+        channel === 'prerelease' ? 'data-prerelease' :
+        'data')
       // Active/published catalog slugs (lowercase) — same ACTIVE-only set the
       // navigator/browse use (status='ACTIVE' or null, srv/lib/build-catalog.js).
       // Excludes INACTIVE/soft-deleted tutorials + stale-cache slugs from the
@@ -2087,7 +2203,7 @@ async function main() {
       // cannot rebuild authorRows — can re-hydrate it from the deployed
       // approuter and avoid wiping /authors/* (scripts/seed-authors-from-deployed.ts).
       const publishFile =
-        channel === 'qa'
+        channel === 'qa' || channel === 'prerelease'
           ? undefined
           : join(__dirname, '..', 'hugo', 'static', 'author_index.json')
       // Issue #2354: conference sessions per author (fail-open — empty map on
@@ -2311,9 +2427,14 @@ async function main() {
 // ──────────────────────────────────────────────────────────────────────────
 
 // Channel-aware browse.json target. Prod → hugo/data/browse.json (Hugo default
-// dataDir); QA → hugo/data-qa/browse.json (hugo.qa.toml sets dataDir="data-qa").
+// dataDir); QA → hugo/data-qa/browse.json (hugo.qa.toml sets dataDir="data-qa");
+// prerelease → hugo/data-prerelease/browse.json (hugo.prerelease.toml sets dataDir="data-prerelease").
 export function browseDataFile(channel: Channel): string {
-  const dir = join(__dirname, '..', 'hugo', channel === 'qa' ? 'data-qa' : 'data')
+  const dataSubDir =
+    channel === 'qa' ? 'data-qa' :
+    channel === 'prerelease' ? 'data-prerelease' :
+    'data'
+  const dir = join(__dirname, '..', 'hugo', dataSubDir)
   return join(dir, 'browse.json')
 }
 
@@ -2648,7 +2769,10 @@ function writeBrowseData(
   const tutorialMetaMap = new Map<string, CatalogTutorialMeta>(
     tutorialMetas.map(m => [m.slug, m]),
   )
-  const all: BrowseCardItem[] = buildAllCards(tuts, missions, hierarchies, standaloneGroups, tutorialMetaMap, channel === 'qa' ? '/tutorials-qa' : '/tutorials')
+  const all: BrowseCardItem[] = buildAllCards(tuts, missions, hierarchies, standaloneGroups, tutorialMetaMap,
+    channel === 'qa' ? '/tutorials-qa' :
+    channel === 'prerelease' ? '/tutorials-prerelease' :
+    '/tutorials')
 
   // Featured: prefer admin-curated FeaturedTasks (top 10 missions ordered by
   // featuredOrder); fall back to the regex-sieved catalog-order picker
@@ -2684,9 +2808,10 @@ const isMainModule = process.argv[1] && (
 )
 if (isMainModule) {
   const channelForExport = parseChannel(process.argv)
-  const dimensionsPath = channelForExport === 'qa'
-    ? join(__dirname, '..', 'hugo', 'data-qa', 'image_dimensions.json')
-    : join(__dirname, '..', 'hugo', 'data', 'image_dimensions.json')
+  const dimensionsPath =
+    channelForExport === 'qa' ? join(__dirname, '..', 'hugo', 'data-qa', 'image_dimensions.json') :
+    channelForExport === 'prerelease' ? join(__dirname, '..', 'hugo', 'data-prerelease', 'image_dimensions.json') :
+    join(__dirname, '..', 'hugo', 'data', 'image_dimensions.json')
   main()
     .then(() => {
       flushDimensionsCache()

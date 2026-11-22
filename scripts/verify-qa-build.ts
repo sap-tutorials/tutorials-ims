@@ -107,6 +107,57 @@ export function findUnhashedIslandRefs(html: string, islands: string[]): string[
   });
 }
 
+// Shared helper: verify #browse-data script tag is present and (unless
+// allowEmpty) non-empty. Returns problem strings (empty = OK). Used by both
+// QA and prerelease checks.
+//
+// allowEmpty (prerelease, #3168): a prerelease channel legitimately has ZERO
+// cards until an author marks a tutorial visibility=ROLE_GATED, so an empty
+// `all` array is a valid steady state — the gated navigator simply renders an
+// empty grid. The script tag must still be present with parseable JSON carrying
+// an `all` ARRAY (a missing tag / malformed JSON / non-array `all` is still a
+// real build break — browse.json never emitted). QA keeps allowEmpty=false:
+// an empty QA grid means the contribution fetch failed and is a hard error.
+function checkBrowseDataTag(html: string, channelLabel: string, allowEmpty = false): string[] {
+  const problems: string[] = [];
+  const browseMatch = html.match(/<script\b[^>]*id=["']?browse-data["']?[^>]*>([\s\S]*?)<\/script>/i);
+  if (!browseMatch) {
+    problems.push(`#browse-data script tag is absent — data-${channelLabel}/browse.json was not emitted`);
+  } else {
+    let browseJson: unknown;
+    try {
+      browseJson = JSON.parse(browseMatch[1]);
+    } catch {
+      browseJson = {};
+    }
+    const all = (browseJson as Record<string, unknown>).all;
+    if (!Array.isArray(all)) {
+      problems.push(`#browse-data grid is malformed — data-${channelLabel}/browse.json has no "all" array`);
+    } else if (all.length === 0 && !allowEmpty) {
+      problems.push(`#browse-data grid is empty — data-${channelLabel}/browse.json was not emitted`);
+    }
+  }
+  return problems;
+}
+
+// Shared helper: verify the homepage-style discovery sections are absent.
+// Both QA and prerelease suppress hero/featured/recent/topics.
+function checkNoHomeSections(html: string, channelLabel: string): string[] {
+  const problems: string[] = [];
+  const FORBIDDEN_HOME_SECTIONS: Array<[RegExp, string]> = [
+    [/class=["']?[^"'>]*\bhome-hero\b/, 'home-hero'],
+    [/id=["']?featured-missions["']?/, 'featured-missions'],
+    [/id=["']?recent-tutorials["']?/, 'recent-tutorials'],
+    [/id=["']?browse-by-topic["']?/, 'browse-by-topic'],
+  ];
+  for (const [re, name] of FORBIDDEN_HOME_SECTIONS) {
+    if (re.test(html)) {
+      problems.push(`homepage section "${name}" is present — ${channelLabel} navigator must be search/filter only (#1675)`);
+    }
+  }
+  return problems;
+}
+
 // Inspect the QA index.html string for required QA-specific signals.
 // Returns an array of human-readable problem strings; empty means OK.
 // Checks:
@@ -124,37 +175,41 @@ export function checkQaIndex(html: string): string[] {
   }
 
   // 2. #browse-data grid populated
-  const browseMatch = html.match(/<script\b[^>]*id=["']?browse-data["']?[^>]*>([\s\S]*?)<\/script>/i);
-  if (!browseMatch) {
-    problems.push('#browse-data script tag is absent — data-qa/browse.json was not emitted');
-  } else {
-    let browseJson: unknown;
-    try {
-      browseJson = JSON.parse(browseMatch[1]);
-    } catch {
-      browseJson = {};
-    }
-    const all = (browseJson as Record<string, unknown>).all;
-    if (!Array.isArray(all) || all.length === 0) {
-      problems.push('#browse-data grid is empty — data-qa/browse.json was not emitted');
-    }
-  }
+  problems.push(...checkBrowseDataTag(html, 'qa'));
 
   // 3. Homepage-style sections must NOT leak onto the QA navigator (#1675).
-  // Quote-agnostic (Hugo --minify drops attribute quotes). These are the exact
-  // markers of the four sections gated behind `not site.Params.qa` in
-  // layouts/tutorial-navigator/list.html.
-  const FORBIDDEN_HOME_SECTIONS: Array<[RegExp, string]> = [
-    [/class=["']?[^"'>]*\bhome-hero\b/, 'home-hero'],
-    [/id=["']?featured-missions["']?/, 'featured-missions'],
-    [/id=["']?recent-tutorials["']?/, 'recent-tutorials'],
-    [/id=["']?browse-by-topic["']?/, 'browse-by-topic'],
-  ];
-  for (const [re, name] of FORBIDDEN_HOME_SECTIONS) {
-    if (re.test(html)) {
-      problems.push(`homepage section "${name}" is present — QA navigator must be search/filter only (#1675)`);
-    }
+  problems.push(...checkNoHomeSections(html, 'QA'));
+
+  return problems;
+}
+
+// Inspect the prerelease index.html string for required prerelease-specific signals.
+// Returns an array of human-readable problem strings; empty means OK.
+// Checks:
+//   1. #tutorial-navigator carries data-nav-base="/tutorials-prerelease" and
+//      data-client-search="true" (and does NOT carry data-search-base, since
+//      prerelease uses client-side search only — no server search endpoint exists).
+//   2. <script id="browse-data"> exists with a valid `all` array (may be EMPTY —
+//      a prerelease channel has zero cards until a tutorial is marked ROLE_GATED).
+//   3. [#3168] the homepage-style discovery sections are ABSENT — same as QA.
+export function checkPrereleaseIndex(html: string): string[] {
+  const problems: string[] = [];
+
+  // 1a. data-nav-base="/tutorials-prerelease" on the navigator mount
+  if (!/id=["']?tutorial-navigator["']?[^>]*data-nav-base=["']?\/tutorials-prerelease/.test(html)) {
+    problems.push('#tutorial-navigator is missing data-nav-base="/tutorials-prerelease"');
   }
+
+  // 1b. data-client-search="true" on the navigator mount (client-side search, no server endpoint)
+  if (!/id=["']?tutorial-navigator["']?[^>]*data-client-search=["']?true/.test(html)) {
+    problems.push('#tutorial-navigator is missing data-client-search="true"');
+  }
+
+  // 2. #browse-data grid present + valid, but may be empty (allowEmpty) — see #3168.
+  problems.push(...checkBrowseDataTag(html, 'prerelease', true));
+
+  // 3. Homepage-style sections must NOT leak onto the prerelease navigator (#3168).
+  problems.push(...checkNoHomeSections(html, 'prerelease'));
 
   return problems;
 }
@@ -176,16 +231,23 @@ function main() {
     process.exit(1);
   }
 
-  // [#1629] Load the island manifest QA used (synced into data-qa by build:qa,
-  // via scripts/sync-island-manifest-qa.cjs). Its absence means the sync never
-  // ran, so every fingerprinted island fell back to an unhashed 404 path.
-  const manifestPath = join('hugo', 'data-qa', 'island_manifest.json');
+  // Detect channel from the public dir name: a path containing "prerelease"
+  // means we're verifying a prerelease build; everything else is QA.
+  const isPrerelease = root.includes('prerelease');
+  const channelLabel = isPrerelease ? 'prerelease' : 'qa';
+  const dataDir = isPrerelease ? 'data-prerelease' : 'data-qa';
+
+  // [#1629] Load the island manifest the channel used (synced into data-<channel>
+  // by build:<channel>, via scripts/sync-island-manifest-qa.cjs). Its absence
+  // means the sync never ran, so every fingerprinted island fell back to an
+  // unhashed 404 path.
+  const manifestPath = join('hugo', dataDir, 'island_manifest.json');
   let fingerprinted: string[] = [];
   let manifestProblem = '';
   if (!existsSync(manifestPath)) {
     manifestProblem =
-      `island manifest not found at ${manifestPath} — QA baked unhashed island paths ` +
-      '(run `npm run build:island-manifest` before `build:qa`; #1629)';
+      `island manifest not found at ${manifestPath} — ${channelLabel} baked unhashed island paths ` +
+      `(run \`npm run build:island-manifest\` before \`build:${channelLabel}\`; #1629)`;
   } else {
     try {
       fingerprinted = fingerprintedIslands(
@@ -217,7 +279,7 @@ function main() {
         console.error(
           `[verify-qa-build] ${f} references unhashed island bundles (404 risk): ${unhashed
             .map(n => `/js/${n}.js`)
-            .join(', ')} — island manifest not applied to QA build (#1629)`,
+            .join(', ')} — island manifest not applied to ${channelLabel} build (#1629)`,
         );
         bad++;
       }
@@ -227,30 +289,29 @@ function main() {
     console.log(`[verify-qa-build] clean — no forbidden markers in ${root}`);
   }
 
-  // Check QA-specific signals in index.html (data-search-base + browse-data grid)
+  // Check channel-specific signals in index.html
+  const checkIndex = isPrerelease ? checkPrereleaseIndex : checkQaIndex;
   const indexPath = join(root, 'index.html');
   if (existsSync(indexPath)) {
     const indexHtml = readFileSync(indexPath, 'utf-8');
-    for (const problem of checkQaIndex(indexHtml)) {
+    for (const problem of checkIndex(indexHtml)) {
       console.error(`[verify-qa-build] index.html: ${problem}`);
       bad++;
     }
   }
 
-  // [#1675] The dedicated `/tutorial-navigator/` section must be emitted so
-  // `publish-content:qa` can upload it as the `page-tutorial-navigator` BLOB
-  // that srv-qa serves at `/tutorial-navigator-qa/`. It reuses the navigator
-  // layout, so it carries the same QA markers as the root (checkQaIndex).
+  // [#1675/#3168] The dedicated `/tutorial-navigator/` section must be emitted so
+  // `publish-content:<channel>` can upload it as the `page-tutorial-navigator` BLOB.
   const navPath = join(root, 'tutorial-navigator', 'index.html');
   if (!existsSync(navPath)) {
     console.error(
-      '[verify-qa-build] tutorial-navigator/index.html is absent — QA navigator page ' +
-        'not generated (content-qa/tutorial-navigator/_index.md missing; #1675)',
+      `[verify-qa-build] tutorial-navigator/index.html is absent — ${channelLabel} navigator page ` +
+        `not generated (content-${channelLabel}/tutorial-navigator/_index.md missing; #1675)`,
     );
     bad++;
   } else {
     const navHtml = readFileSync(navPath, 'utf-8');
-    for (const problem of checkQaIndex(navHtml)) {
+    for (const problem of checkIndex(navHtml)) {
       console.error(`[verify-qa-build] tutorial-navigator/index.html: ${problem}`);
       bad++;
     }

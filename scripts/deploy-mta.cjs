@@ -585,6 +585,31 @@ async function main() {
     ok('QA channel built (hugo/public-qa) — mbt will copy it into static/qa');
   }
 
+  // ---- Step 2.8: Build prerelease channel (fetch-tutorials:prerelease + build:prerelease) ----
+  // Mirrors Step 2.7 (QA). The prerelease shell is served from static/prerelease,
+  // which .deploy/mta.yaml's approuter builder COPIES from hugo/public-prerelease
+  // during mbt build. build:all never builds prerelease, so without this step
+  // mbt copies a stale/empty hugo/public-prerelease and the deploy ships a broken
+  // /tutorials-prerelease/ (same failure mode as QA before Step 2.7 was added).
+  // MUST run BEFORE mbt (Step 3).
+  step('2.8', 'Build prerelease channel (fetch-tutorials:prerelease + build:prerelease)');
+  if (args.skipBuild) {
+    warn('--skip-build: skipping the prerelease build too (reusing the existing mtar).');
+  } else if (args.dryRun) {
+    warn('dry-run: would run `npm run fetch-tutorials:prerelease` then `npm run build:prerelease`');
+  } else {
+    const preEnv = { ...process.env, CAP_BASE_URL: cfg.capBaseUrl };
+    if (!preEnv.GITHUB_TOKEN && preEnv.NODE_AUTH_TOKEN) preEnv.GITHUB_TOKEN = preEnv.NODE_AUTH_TOKEN;
+    if (sh('npm', ['run', 'fetch-tutorials:prerelease'], { env: preEnv }) !== 0) {
+      die(1, 'Prerelease fetch failed (`npm run fetch-tutorials:prerelease`). Ensure a GitHub token is exported\n' +
+             '             (NODE_AUTH_TOKEN or GITHUB_TOKEN); otherwise static/prerelease ships empty (/tutorials-prerelease/ 404).');
+    }
+    if (sh('npm', ['run', 'build:prerelease']) !== 0) {
+      die(1, '`npm run build:prerelease` failed — static/prerelease would ship empty (/tutorials-prerelease/ 404).');
+    }
+    ok('Prerelease channel built (hugo/public-prerelease) — mbt will copy it into static/prerelease');
+  }
+
   // ---- Step 3: mbt build (+ fresh-mtar verify) -------------------------
   step(3, 'Package MTA (mbt build)');
   if (args.skipBuild) {

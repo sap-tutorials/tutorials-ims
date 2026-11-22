@@ -169,6 +169,8 @@ async function searchTutorials({ db, qVec, model, topK }) {
       // #2631: gate on Tutorials.status so soft-deleted (INACTIVE) tutorials —
       // whose embeddings survive the delete — never surface. Mirrors the public
       // predicate used by SearchableItems and the homepage shelves.
+      // #3168: also gate on Tutorials.visibility to exclude ROLE_GATED tutorials
+      // from public anonymous search (the semantic_search endpoint).
       const sql = `
         SELECT TOP ${topK}
           e."STEPNUMBER", e."STEPTEXT",
@@ -178,6 +180,7 @@ async function searchTutorials({ db, qVec, model, topK }) {
         JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t."ID" = e."TUTORIAL_ID"
         WHERE e."EMBEDDINGMODEL" = ?
           AND (t."STATUS" IS NULL OR t."STATUS" = 'ACTIVE')
+          AND (t."VISIBILITY" IS NULL OR t."VISIBILITY" <> 'ROLE_GATED')
         ORDER BY "score" DESC`;
       const rows = await db.run(sql, [hanaVecStr(qVec), model]);
       results = (rows || []).map((r) => shapeTutorial(
@@ -185,14 +188,16 @@ async function searchTutorials({ db, qVec, model, topK }) {
         r.STEPNUMBER ?? r.stepNumber, r.STEPTEXT ?? r.stepText, r.score ?? r.SCORE));
     } else {
       // SQLite: fetch model rows + tutorial index, rank in JS. The tutorial
-      // index is pre-filtered to ACTIVE/null so INACTIVE rows drop out of tMap.
+      // index is pre-filtered to ACTIVE/null and non-ROLE_GATED so INACTIVE and
+      // ROLE_GATED rows drop out of tMap.
       const { TutorialEmbedding, Tutorials } = cds.entities('com.sap.developers.ims');
       const rows = await SELECT.from(TutorialEmbedding)
         .columns('tutorial_ID', 'stepNumber', 'stepText', 'embedding')
         .where({ embeddingModel: model });
       const tIndex = await SELECT.from(Tutorials)
         .columns('ID', 'slug', 'title')
-        .where(`status is null or status = 'ACTIVE'`);
+        .where(`status is null or status = 'ACTIVE'`)
+        .where(`visibility is null or visibility <> 'ROLE_GATED'`);
       const tMap = new Map(tIndex.map((t) => [t.ID, t]));
       results = (rows || []).map((r) => {
         const v = decodeF32(r.embedding);

@@ -36,6 +36,10 @@
       "description": "QA channel author preview (unpublished tutorials at /tutorials-qa/*)"
     },
     {
+      "name": "$XSAPPNAME.Tutorial.PreRelease",
+      "description": "Pre-release channel access (unreleased-feature tutorials at /tutorials-prerelease/*)"
+    },
+    {
       "name": "$XSAPPNAME.KnowledgeGraph.Admin",
       "description": "Knowledge graph admin: merge/veto concepts, run raw SPARQL"
     },
@@ -126,6 +130,14 @@
       ]
     },
     {
+      "name": "TutorialPreRelease",
+      "description": "Pre-release channel access (preview unreleased-feature tutorials)",
+      "scope-references": [
+        "$XSAPPNAME.Tutorial.PreRelease",
+        "$XSAPPNAME.Everyone"
+      ]
+    },
+    {
       "name": "Everyone",
       "description": "Baseline",
       "scope-references": [
@@ -192,6 +204,14 @@
       "description": "Author preview access to tutorials-qa channel (gates /tutorials-qa/*)",
       "role-template-references": [
         "$XSAPPNAME.TutorialAuthor",
+        "$XSAPPNAME.Everyone"
+      ]
+    },
+    {
+      "name": "Tutorials PreRelease",
+      "description": "Pre-release channel access (gates /tutorials-prerelease/*; unreleased-feature tutorials)",
+      "role-template-references": [
+        "$XSAPPNAME.TutorialPreRelease",
         "$XSAPPNAME.Everyone"
       ]
     },

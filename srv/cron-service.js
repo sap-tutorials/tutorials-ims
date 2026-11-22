@@ -16,7 +16,7 @@ import {
   runJobByName,
 } from './jobs/scheduler.js';
 import { reconcileOrphanedRunningJobs } from './lib/pipeline-log-reconciler.js';
-import { reapTombstonedOutboxRows, armSchedulerSelfHeal } from './lib/scheduler-reaper.js';
+import { reapTombstonedOutboxRows, resetDeadLetteredScheduledJobRows, armSchedulerSelfHeal } from './lib/scheduler-reaper.js';
 import { markSchedulerReady } from './lib/scheduler-ready.js';
 
 const LOG = cds.log('cron-service');
@@ -83,6 +83,21 @@ export default class CronService extends cds.ApplicationService {
           if (reaped > 0) LOG.warn(`boot reap cleared ${reaped} outbox tombstone(s) of ${inspected} processing row(s) (#2782)`);
         })
         .catch(err => LOG.warn(`boot reap failed: ${err.message ?? err}`));
+    });
+
+    // (a2) #3171: boot-time dead-letter reset. A row dead-lettered at
+    //      attempts=maxAttempts (status=NULL) survives restarts — the
+    //      init().every().as() UPSERT advances `timestamp` but PRESERVES
+    //      `attempts`, so a freshly-rebooted (now-wired) instance would still
+    //      never retry it until the first periodic self-heal tick. Clearing it
+    //      at boot (parity with the reaper boot sweep) recovers it immediately.
+    //      Only resets registered-job rows; fail-open.
+    setImmediate(() => {
+      resetDeadLetteredScheduledJobRows(jobSchedules)
+        .then(({ reset, inspected }) => {
+          if (reset > 0) LOG.warn(`boot dead-letter reset cleared ${reset} of ${inspected} dead-lettered scheduled-job row(s) (#3171)`);
+        })
+        .catch(err => LOG.warn(`boot dead-letter reset failed: ${err.message ?? err}`));
     });
 
     // (b) Periodic self-heal: every ~10 min, re-reap (a tombstone can be

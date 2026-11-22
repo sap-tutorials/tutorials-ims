@@ -1,0 +1,66 @@
+# hugo.prerelease.toml — sibling of hugo/hugo.toml, used by `npm run build:prerelease`
+# Prerelease Hugo config: reads from hugo/content-prerelease/, writes to hugo/public-prerelease/.
+# Stripped of prod-only output formats (RSS, sitemap, robots, llms*) — prerelease is internal-only.
+# Shows ROLE_GATED tutorials only — the navigator IS the root, same as QA.
+# Invocation: cd hugo && hugo --config ../hugo.prerelease.toml --minify
+
+baseURL = "/tutorials-prerelease/"
+languageCode = "en-us"
+title = "[Prerelease] SAP Tutorials Preview"
+contentDir = "content-prerelease"
+dataDir   = "data-prerelease"
+staticDir = "static-prerelease"
+publishDir = "public-prerelease"
+
+# Prerelease is internal-only — suppress sitemap. Taxonomy/term pages stay enabled
+# because the home template references .Site.Taxonomies; we override their
+# outputs below to drop RSS feeds.
+disableKinds = ["sitemap"]
+
+# Defense-in-depth: even if future tasks ever generate non-tutorial pages under
+# content-prerelease/, never render mission/group/me/search shells on prerelease.
+ignoreFiles = ["^(missions|groups|me|search)/.*$"]
+
+[params]
+  prerelease = true
+  prereleaseBannerText = "Prerelease preview — ROLE_GATED tutorials not yet publicly listed."
+
+[build]
+  writeStats = true
+
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true
+    [markup.goldmark.parser]
+      [markup.goldmark.parser.attribute]
+        block = true
+        title = true
+    [markup.goldmark.extensions]
+      [markup.goldmark.extensions.passthrough]
+        enable = true
+        [markup.goldmark.extensions.passthrough.delimiters]
+          block = [['$$', '$$']]
+          inline = [['$', '$']]
+  [markup.highlight]
+    noClasses = false
+    codeFences = true
+    guessSyntax = false
+    lineNos = false
+    tabWidth = 2
+
+# U1 Object Page floorplan as the default tutorial layout — mirrors prod cascade
+# so prerelease pages render with the same visual fidelity. Path matches the content
+# location (content-prerelease/tutorials/**), which Hugo resolves before applying baseURL.
+[[cascade]]
+  layout = "u1-object-page"
+  [cascade._target]
+    path = "/tutorials/**"
+    kind = "page"
+
+[outputs]
+  home = ["HTML"]
+  section = ["HTML"]
+  page = ["HTML"]
+  taxonomy = ["HTML"]
+  term = ["HTML"]

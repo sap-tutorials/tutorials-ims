@@ -15,7 +15,7 @@
  * The resolver cannot produce tab IDs without a DB query, so it returns a
  * nested marker instead of resolved values:
  *
- *   { column: 'tab_ID', values: null, nested: true, via: 'DeveloperEnvironmentTabs' }
+ *   { column: 'tab_ID', values: null, nested: true, via: 'com.sap.developers.ims.DeveloperEnvironmentTabs' }
  *
  * Task-4 (export handler) and Task-5 (anonymization cascade fix) MUST check
  * for `result.nested === true` and:
@@ -75,12 +75,21 @@ export async function resolveSubjectKeys(user, planEntry) {
 
   // DeveloperEnvironmentLinks — linked via parent DeveloperEnvironmentTabs (tab_ID)
   // Cannot resolve without a DB query; return a nested marker for the caller to handle.
+  //
+  // `via` MUST be the fully-qualified CDS name, not the bare "DeveloperEnvironmentTabs".
+  // The cascade runs inside the AdminService request context (the GDPR actions are
+  // bound to that served service), where a bare "DeveloperEnvironmentTabs" resolves to
+  // the AdminService *projection* and CAP emits literal `SELECT ID FROM
+  // DeveloperEnvironmentTabs` — a table that does not exist (the physical table is
+  // `com_sap_developers_ims_DeveloperEnvironmentTabs`), producing a 500
+  // "no such table: DeveloperEnvironmentTabs". Qualifying the name forces resolution
+  // to the db-layer entity and the correct namespaced table.
   if (dataSubjectField === 'tab_ID') {
     return {
       column: 'tab_ID',
       values: null,
       nested: true,
-      via: 'DeveloperEnvironmentTabs'
+      via: 'com.sap.developers.ims.DeveloperEnvironmentTabs'
     };
   }
 
