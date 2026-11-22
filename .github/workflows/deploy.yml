@@ -209,6 +209,13 @@ jobs:
           CAP_BASE_URL: ${{ steps.cap-url.outputs.url }}
           SNIPPETS_ENABLED_REPOS: meta-tutorials
 
+      - name: Prefetch prerelease tutorials (warms .tutorial-cache-prerelease)
+        run: npm run fetch-tutorials -- --target hugo --channel prerelease
+        env:
+          GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN || github.token }}
+          CAP_BASE_URL: ${{ steps.cap-url.outputs.url }}
+          SNIPPETS_ENABLED_REPOS: meta-tutorials
+
       # [#797] Hugo safeHTML XSS-guard. Sweeps hugo/layouts/**/*.{html,xml,xsl}
       # for unmarked `| safeHTML` / `| safeHTMLAttr` / `printf "<...%s"` usages
       # and fails CI if any occurrence lacks a `<!-- security-reviewed: <reason> -->`
