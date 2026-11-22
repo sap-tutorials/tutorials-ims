@@ -5,6 +5,7 @@ import {
   getHugoContentDir,
   getNavJsonDir,
   browseDataFile,
+  keepForChannel,
 } from '../fetch-tutorials'
 
 describe('prerelease channel — parseChannel', () => {
@@ -61,5 +62,98 @@ describe('prerelease channel — dir helpers', () => {
   })
   it('browseDataFile still maps prod to hugo/data/browse.json', () => {
     expect(browseDataFile('prod').replace(/\\/g, '/')).toMatch(/hugo\/data\/browse\.json$/)
+  })
+})
+
+// ── Item B: keepForChannel visibility predicate (#3168) ────────────────────
+//
+// CRUCIAL-CORRECTNESS: prerelease must never include LISTED tutorials, and
+// prod must never include ROLE_GATED tutorials. These tests pin that invariant
+// directly on the extracted pure predicate so a future refactor of main() can't
+// silently break the filter without a red test.
+//
+// TDD evidence: tests were written against the keepForChannel export before the
+// implementation was added to fetch-tutorials.ts; the test suite went red
+// (import of keepForChannel failed with "is not a function") until the helper
+// was exported.
+describe('keepForChannel — ROLE_GATED visibility filter', () => {
+  // ── prerelease: ONLY ROLE_GATED pass ──────────────────────────────────────
+  it('prerelease keeps ROLE_GATED', () => {
+    expect(keepForChannel('ROLE_GATED', 'prerelease')).toBe(true)
+  })
+  it('prerelease drops LISTED', () => {
+    expect(keepForChannel('LISTED', 'prerelease')).toBe(false)
+  })
+  it('prerelease drops undefined visibility (treated as LISTED)', () => {
+    expect(keepForChannel(undefined, 'prerelease')).toBe(false)
+  })
+  it('prerelease drops empty-string visibility (treated as LISTED)', () => {
+    expect(keepForChannel('', 'prerelease')).toBe(false)
+  })
+  it('prerelease drops UNLISTED', () => {
+    expect(keepForChannel('UNLISTED', 'prerelease')).toBe(false)
+  })
+
+  // ── prod: ROLE_GATED is excluded, everything else passes ─────────────────
+  it('prod keeps LISTED', () => {
+    expect(keepForChannel('LISTED', 'prod')).toBe(true)
+  })
+  it('prod keeps undefined visibility (treated as LISTED)', () => {
+    expect(keepForChannel(undefined, 'prod')).toBe(true)
+  })
+  it('prod keeps empty-string visibility (treated as LISTED)', () => {
+    expect(keepForChannel('', 'prod')).toBe(true)
+  })
+  it('prod keeps UNLISTED', () => {
+    // UNLISTED tutorials are suppressed via sitemap/private flag in Hugo
+    // frontmatter, but they DO appear in the prod fetch (not gated content).
+    expect(keepForChannel('UNLISTED', 'prod')).toBe(true)
+  })
+  it('prod drops ROLE_GATED', () => {
+    expect(keepForChannel('ROLE_GATED', 'prod')).toBe(false)
+  })
+
+  // ── qa: no visibility filter — all pass regardless ────────────────────────
+  it('qa passes ROLE_GATED (repo-scoped filtering, not visibility)', () => {
+    expect(keepForChannel('ROLE_GATED', 'qa')).toBe(true)
+  })
+  it('qa passes LISTED', () => {
+    expect(keepForChannel('LISTED', 'qa')).toBe(true)
+  })
+  it('qa passes undefined visibility', () => {
+    expect(keepForChannel(undefined, 'qa')).toBe(true)
+  })
+
+  // ── mixed-catalog scenario: simulate a real catalog mix ──────────────────
+  it('filters a mixed catalog correctly for prerelease channel', () => {
+    const catalog = [
+      { slug: 'tut-role-gated', visibility: 'ROLE_GATED' },
+      { slug: 'tut-listed', visibility: 'LISTED' },
+      { slug: 'tut-no-vis', visibility: undefined },
+      { slug: 'tut-unlisted', visibility: 'UNLISTED' },
+    ]
+    const kept = catalog.filter(t => keepForChannel(t.visibility, 'prerelease'))
+    expect(kept.map(t => t.slug)).toEqual(['tut-role-gated'])
+  })
+
+  it('filters a mixed catalog correctly for prod channel', () => {
+    const catalog = [
+      { slug: 'tut-role-gated', visibility: 'ROLE_GATED' },
+      { slug: 'tut-listed', visibility: 'LISTED' },
+      { slug: 'tut-no-vis', visibility: undefined },
+      { slug: 'tut-unlisted', visibility: 'UNLISTED' },
+    ]
+    const kept = catalog.filter(t => keepForChannel(t.visibility, 'prod'))
+    expect(kept.map(t => t.slug)).toEqual(['tut-listed', 'tut-no-vis', 'tut-unlisted'])
+  })
+
+  it('filters a mixed catalog correctly for qa channel (all pass)', () => {
+    const catalog = [
+      { slug: 'tut-role-gated', visibility: 'ROLE_GATED' },
+      { slug: 'tut-listed', visibility: 'LISTED' },
+      { slug: 'tut-no-vis', visibility: undefined },
+    ]
+    const kept = catalog.filter(t => keepForChannel(t.visibility, 'qa'))
+    expect(kept).toHaveLength(3)
   })
 })

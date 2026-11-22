@@ -219,6 +219,30 @@ export function prereleaseNavigatorPageMarkdown(): string {
   return prereleaseHomeIndexMarkdown()
 }
 
+/**
+ * Visibility predicate for channel-based filtering.
+ *
+ * - prerelease: only ROLE_GATED tutorials are included (they are not publicly
+ *   listed and are exclusively for the prerelease gated surface).
+ * - prod: ROLE_GATED tutorials are excluded (they must not appear on the public
+ *   site — mirrors the semantic search exclusion from Task 1 of #3168).
+ * - qa: all tutorials pass (QA filters by repo, not by visibility).
+ *
+ * `undefined`/`null` visibility is treated as LISTED (the default for openly
+ * published tutorials) — it passes the prod filter and fails the prerelease one.
+ *
+ * @param visibility — the tutorial's CAP catalog `visibility` field value
+ * @param channel — the active build channel
+ */
+export function keepForChannel(visibility: string | undefined, channel: Channel): boolean {
+  const v = visibility ?? ''
+  if (channel === 'prerelease') return v === 'ROLE_GATED'
+  if (channel === 'prod') return v !== 'ROLE_GATED'
+  // qa: no visibility-based filter — QA scope is determined by the -Contribution
+  // repo discovery (ONLY_CONTRIBUTION_REPOS), not by visibility flags.
+  return true
+}
+
 
 /**
  * Prune stale `<slug>.md` files from `cacheDir` — any whose slug is NOT in
@@ -1361,18 +1385,25 @@ async function main() {
     if (m.visibility) visibilityBySlug.set(m.slug.toLowerCase(), m.visibility)
   }
 
-  // [#3168] Prerelease channel: keep only ROLE_GATED tutorials. The visibility
-  // map is built from the cached /build/catalog payload (loadCapCache above).
-  // Fail-open: if the map is empty (no catalog cached yet) we let all tutorials
-  // through so the build doesn't hard-fail on a cold cache; the resulting
-  // empty-ish prerelease channel is correct behavior when no ROLE_GATED
-  // tutorials exist in the catalog.
-  if (channel === 'prerelease') {
+  // [#3168] Channel visibility filter. Applied after the discovery baseline so
+  // the prod/HANA catalog upload above still sees the full set.
+  // - prerelease: keep only ROLE_GATED (gated surface, not publicly listed).
+  // - prod: exclude ROLE_GATED (must not appear on the public site; mirrors the
+  //   semantic search exclusion from Task 1 of #3168).
+  // - qa: no-op (QA scopes by -Contribution repo discovery, not visibility).
+  //
+  // Fail-open: if visibilityBySlug is empty (cold cache, no catalog yet) every
+  // tutorial passes keepForChannel because visibility is undefined → treated as
+  // LISTED. That means prod ships normally and prerelease ships empty — both are
+  // safe defaults while the catalog warms up.
+  if (channel !== 'qa') {
     const before = allTutorials.length
     allTutorials = allTutorials.filter(t =>
-      visibilityBySlug.get(t.slug.toLowerCase()) === 'ROLE_GATED'
+      keepForChannel(visibilityBySlug.get(t.slug.toLowerCase()), channel)
     )
-    console.log(`[channel=prerelease] filtered to ROLE_GATED tutorials: ${allTutorials.length} of ${before}`)
+    if (allTutorials.length !== before) {
+      console.log(`[channel=${channel}] visibility filter: ${allTutorials.length} of ${before} tutorials kept`)
+    }
   }
 
   const unexpandedDirectiveHits: Array<{ slug: string; tokens: string[] }> = []
