@@ -320,6 +320,138 @@ export async function reseedMissingSuccessorRows(jobSchedules, reseedJob) {
   return { checked, reseeded };
 }
 
+/**
+ * #3171: reset dead-lettered scheduled-job outbox rows — the FOURTH stall mode
+ * none of reap/reseed/flush covers.
+ *
+ * ─────────────────────────────────────────────────────────────────────
+ * Root cause (PROD incident 2026-11-22)
+ * ─────────────────────────────────────────────────────────────────────
+ * The durable HANA outbox processor can run on an instance whose CronService is
+ * not yet in the in-process registry (a boot-crash window / not-yet-wired
+ * instance). Each `cron.<job>` tick then throws `No service 'CronService' found`
+ * (@sap/cds queue processing). This is a FAILED attempt, not a crash: CAP
+ * increments `attempts` and writes `lastError`. After `maxAttempts` (CAP default
+ * 10) the row is DEAD-LETTERED — left at `attempts = maxAttempts` with
+ * `status = NULL`. CAP never retries a dead-lettered row, so the job silently
+ * stops firing.
+ *
+ * Why the other three passes miss it:
+ *   - reapTombstonedOutboxRows only deletes status='processing' rows; a dead-
+ *     lettered row is status=NULL → skipped.
+ *   - reseedMissingSuccessorRows only re-seeds jobs with ZERO target='queue'
+ *     rows; the dead-lettered job still HAS its (poisoned) row → counts as
+ *     present → no-op.
+ *   - cds.flush() drains READY rows but will not re-run a row already at
+ *     attempts=maxAttempts.
+ *   - A rolling restart is INSUFFICIENT: CronService.init()'s `.every().as()` is
+ *     a deterministic-ID UPSERT that advances `timestamp` (next fire) but
+ *     PRESERVES `attempts` (verified live in the incident).
+ *
+ * ─────────────────────────────────────────────────────────────────────
+ * What this does
+ * ─────────────────────────────────────────────────────────────────────
+ * CAP's documented dead-letter recovery: lower `attempts`, clear `lastError`.
+ * For every target='queue' row whose `task` is a REGISTERED job (in
+ * jobSchedules) and whose `attempts >= maxAttempts`, UPDATE attempts=0,
+ * lastError=null — leaving `status` (already NULL → eligible) and `timestamp`
+ * (the next-fire the init UPSERT set) untouched. The next cds.flush()/healthy
+ * tick then drains it.
+ *
+ * Guards, mirroring the sibling passes:
+ *   - target='queue' only — never touch persistent-outbox emitted-event rows.
+ *   - task must be a non-empty REGISTERED job name — this is the guard that
+ *     never touches the TASK=null SecurityEvent audit rows AND leaves any
+ *     unrelated/retired poisoned row alone (conservative: only revive jobs we
+ *     actively schedule).
+ *   - status !== 'processing' — a processing row is the reaper's territory;
+ *     never double-handle (a processing row at attempts=maxAttempts would be an
+ *     in-flight retry CAP still owns).
+ *
+ * Fail-open throughout, matching reapTombstonedOutboxRows: a missing entity, a
+ * faulting SELECT, or a single row's UPDATE throwing never aborts the pass and
+ * never fails a scheduled tick.
+ *
+ * @param {Map<string,string>} jobSchedules  jobName → cron. Only rows whose task
+ *   is a key here are candidates (registered-job guard).
+ * @param {object} [opts]
+ * @param {number} [opts.maxAttempts]  dead-letter threshold (default from env
+ *   SCHEDULER_MAX_ATTEMPTS, else CAP's default of 10).
+ * @param {Record<string,string|undefined>} [opts.env=process.env]
+ * @returns {Promise<{inspected:number, reset:number}>}
+ *   inspected = queue rows examined; reset = rows actually UPDATEd.
+ */
+export async function resetDeadLetteredScheduledJobRows(jobSchedules, opts = {}) {
+  let inspected = 0;
+  let reset = 0;
+  if (!(jobSchedules instanceof Map) || jobSchedules.size === 0) return { inspected, reset };
+  const maxAttempts = Number.isFinite(opts.maxAttempts) && opts.maxAttempts > 0
+    ? opts.maxAttempts
+    : maxAttemptsFromEnv(opts.env ?? process.env);
+  try {
+    const outbox = cds.entities('cds.outbox');
+    if (!outbox?.Messages) return { inspected, reset };
+    const db = await cds.connect.to('db');
+    const rows = await db.run(SELECT.from(outbox.Messages));
+
+    for (const row of rows ?? []) {
+      // Scheduler queue only — never persistent-outbox emitted-event rows.
+      const target = row.target ?? row.TARGET;
+      if (target !== 'queue') continue;
+
+      // Registered-job guard: a non-empty task that we actively schedule. This
+      // skips the TASK=null SecurityEvent audit rows and any retired/unknown
+      // job's poisoned row.
+      const task = row.task ?? row.TASK;
+      if (typeof task !== 'string' || task.length === 0) continue;
+      if (!jobSchedules.has(task)) continue;
+
+      // A dead-lettered row is status=NULL. A 'processing' row is the reaper's
+      // territory (an in-flight claim CAP still owns) — never reset it.
+      const status = row.status ?? row.STATUS;
+      if (status === 'processing') continue;
+
+      // attempts >= maxAttempts. A null/NaN attempts is treated as 0.
+      const rawAttempts = row.attempts ?? row.ATTEMPTS;
+      const attempts = Number(rawAttempts);
+      if (!Number.isFinite(attempts) || attempts < maxAttempts) continue;
+
+      const id = row.ID ?? row.id;
+      if (id == null) continue;
+
+      inspected++;
+
+      // Reset per CAP's documented dead-letter recovery. Per-row try/catch so
+      // one failing UPDATE doesn't abort the whole sweep.
+      try {
+        await db.run(
+          UPDATE(outbox.Messages).set({ attempts: 0, lastError: null }).where({ ID: id })
+        );
+        reset++;
+        LOG.warn(
+          `reset dead-lettered scheduled-job row for '${task}' (ID ${id}, attempts ${attempts} → 0, ` +
+          `status=${status ?? 'NULL'}) — CAP would never retry it (dead-letter stall, #3171)`
+        );
+      } catch (err) {
+        LOG.warn(`dead-letter reset UPDATE for job '${task}' (ID ${id}) failed: ${err.message ?? err}`);
+      }
+    }
+  } catch (err) {
+    LOG.warn(`resetDeadLetteredScheduledJobRows failed (treating as no-op): ${err.message ?? err}`);
+  }
+  return { inspected, reset };
+}
+
+// CAP's `cds.requires.queue.maxAttempts` default is 10 (not overridden in
+// package.json). A row at attempts >= this is dead-lettered. Overridable via
+// SCHEDULER_MAX_ATTEMPTS to stay in lock-step if the queue config ever changes.
+export const _DEFAULT_MAX_ATTEMPTS = 10;
+
+function maxAttemptsFromEnv(env = process.env) {
+  const v = Number.parseInt(env.SCHEDULER_MAX_ATTEMPTS, 10);
+  return Number.isFinite(v) && v > 0 ? v : _DEFAULT_MAX_ATTEMPTS;
+}
+
 // Default self-heal interval: 10 min. Long enough that the reaper's SELECT over
 // cds.outbox.Messages (~54 rows) is negligible load; short enough that a
 // tombstone created AFTER an instance booted (so its own boot sweep missed it)
@@ -391,6 +523,11 @@ export function armSchedulerSelfHeal(opts = {}) {
   const reap = opts.reap ?? reapTombstonedOutboxRows;
   const reseed = opts.reseed ?? reseedMissingSuccessorRows;
   const reseedJob = opts.reseedJob; // #2827: no default — only wired when a service handle exists
+  // #3171: reset dead-lettered (attempts=maxAttempts, status=NULL) scheduled-job
+  // rows CAP will never retry. Needs only jobSchedules (registered-job guard),
+  // so it runs unconditionally on the periodic path like the reaper — no service
+  // handle required (unlike the #2827 re-seed). Injectable for tests.
+  const resetDeadLetter = opts.resetDeadLetter ?? resetDeadLetteredScheduledJobRows;
   // #2975: documented cds.flush() forces the outbox runner to process ready
   // messages immediately. CAP 10.2's in-memory runner does one boot flush then
   // relies on an event-driven re-trigger chain; when that chain doesn't re-arm
@@ -408,10 +545,17 @@ export function armSchedulerSelfHeal(opts = {}) {
   });
 
   const tick = async () => {
+    // Recovery counts for THIS tick — surfaced in the canary alert body so
+    // operators can tell which stall mode was active (#3171 item 2).
+    let reapedCount = 0;
+    let reseededCount = 0;
+    let resetCount = 0;
+
     // 1. Reap tombstones (primary recovery). Fail-open — never let a reap
     //    fault skip the canary check or throw out of the timer.
     try {
       const { inspected, reaped } = await reap(jobSchedules, new Date());
+      reapedCount = reaped;
       if (reaped > 0) {
         LOG.warn(`scheduler self-heal reaped ${reaped} outbox tombstone(s) (inspected ${inspected} processing row(s))`);
       }
@@ -428,12 +572,28 @@ export function armSchedulerSelfHeal(opts = {}) {
     if (typeof reseedJob === 'function') {
       try {
         const { checked, reseeded } = await reseed(jobSchedules, reseedJob);
+        reseededCount = reseeded;
         if (reseeded > 0) {
           LOG.warn(`scheduler self-heal re-seeded ${reseeded} job(s) with a missing successor row (checked ${checked} registered job(s)) (#2827)`);
         }
       } catch (err) {
         LOG.warn(`scheduler self-heal re-seed tick failed (ignored): ${err.message ?? err}`);
       }
+    }
+
+    // 1d. #3171: reset dead-lettered scheduled-job rows (attempts=maxAttempts,
+    //     status=NULL) CAP will never retry — the fourth stall mode none of
+    //     reap/reseed/flush covers. Runs BEFORE flush so a freshly-reset row is
+    //     eligible for this same tick's drain. Fail-open — never skip flush /
+    //     the canary check.
+    try {
+      const { inspected, reset } = await resetDeadLetter(jobSchedules, { env });
+      resetCount = reset;
+      if (reset > 0) {
+        LOG.warn(`scheduler self-heal reset ${reset} dead-lettered scheduled-job row(s) (inspected ${inspected}) (#3171)`);
+      }
+    } catch (err) {
+      LOG.warn(`scheduler self-heal dead-letter reset tick failed (ignored): ${err.message ?? err}`);
     }
 
     // 1c. #2975: force an outbox drain via the documented cds.flush(). The
@@ -460,6 +620,17 @@ export function armSchedulerSelfHeal(opts = {}) {
       if (verdict.stalled) {
         const instanceIndex = env.CF_INSTANCE_INDEX ?? '?';
         LOG.error(`#2782 scheduler stall signal on instance ${instanceIndex}: ${verdict.reason} — raising ALERT (reaper is primary recovery; no self-exit)`);
+        // #3171 item 2: name the self-heal actions THIS tick took so operators
+        // can tell the dead-letter mode apart from the tombstone/missing-row
+        // modes and pick the right fix (a dead-lettered row needs an attempts
+        // reset, which a plain rolling restart does NOT provide).
+        const actionsLine =
+          `This tick's self-heal actions: reset ${resetCount} dead-lettered row(s) ` +
+          `(attempts≥max, status=NULL — #3171), reaped ${reapedCount} tombstone(s) (#2782/#2814), ` +
+          `re-seeded ${reseededCount} missing-successor row(s) (#2827). ` +
+          (resetCount > 0
+            ? `A dead-lettered reset takes one cds.flush()/tick to drain — RECHECK next tick before restarting; a plain rolling restart does NOT clear dead-letter (it preserves attempts). `
+            : '');
         await raiseAlert({
           eventType: 'SchedulerStallDetected',
           severity: 'ERROR',
@@ -468,7 +639,9 @@ export function armSchedulerSelfHeal(opts = {}) {
           body:
             `Both high-frequency canary jobs (${CANARY_JOBS.join(', ')}) are stale past the ${Math.round(graceMs / 60000)}m grace ` +
             `on instance ${instanceIndex} (${verdict.reason}). The outbox-tombstone reaper runs on this same tick and clears the ` +
-            `NULL-lastAttemptTimestamp rows CAP's lease cannot reclaim. If the board STILL shows all jobs overdue after a couple of ` +
+            `NULL-lastAttemptTimestamp rows CAP's lease cannot reclaim. ` +
+            actionsLine +
+            `If the board STILL shows all jobs overdue after a couple of ` +
             `reaper ticks, do a rolling restart of BOTH instances. ` +
             `Runbook: docs/developers/operations/scheduler-troubleshooting.md § "All jobs overdue — queue-processor stall".`,
           resource: { resourceName: 'cron-service-queue', resourceType: 'scheduler' },
