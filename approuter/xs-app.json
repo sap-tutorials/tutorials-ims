@@ -673,6 +673,27 @@
       "scope": "$XSAPPNAME.Tutorial.Author"
     },
     {
+      "source": "^/tutorials-prerelease/_nav\\.json$",
+      "target": "/content/tutorials-prerelease/_nav",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Tutorial.PreRelease"
+    },
+    {
+      "source": "^/tutorials-prerelease/?$",
+      "target": "/prerelease/index.html",
+      "localDir": "static",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Tutorial.PreRelease"
+    },
+    {
+      "source": "^/tutorials-prerelease/((?:css|js|img|fonts|vendor)/.*)$",
+      "target": "/$1",
+      "localDir": "static",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Tutorial.PreRelease"
+    },
+    {
       "source": "^/tutorials-prerelease/(.*)$",
       "target": "/content/tutorials-prerelease/$1",
       "destination": "srv-api",
