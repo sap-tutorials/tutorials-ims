@@ -1929,7 +1929,16 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
    * Does NOT read or write the shared slug-keyed in-process `cache` (the #3099
    * cache-leak rule — ROLE_GATED bytes must never enter the shared cache).
    */
-  async function preReleaseNavHandler(req, res) {
+  async function preReleaseNavHandler(req, res, { gated = false } = {}) {
+    // Fail-closed guard (C1 fix): the approuter scopes this mount, but if any
+    // un-gated request ever reaches this handler (misconfigured route, test call,
+    // future refactor), we MUST NOT return ROLE_GATED tutorial metadata.
+    // The `gated` flag is set ONLY by the server-side mount closure in server.js —
+    // it is never read from a request header or param and cannot be spoofed by a client.
+    if (gated !== true) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
     const { ContentFiles, ContentCurrent } = cds.entities(namespace);
 
     try {

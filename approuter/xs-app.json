@@ -568,6 +568,13 @@
       "authenticationType": "xsuaa"
     },
     {
+      "source": "^/content/tutorials-prerelease/(.*)$",
+      "target": "/content/tutorials-prerelease/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Tutorial.PreRelease"
+    },
+    {
       "source": "^/content/(.*)$",
       "target": "/content/$1",
       "destination": "srv-api",

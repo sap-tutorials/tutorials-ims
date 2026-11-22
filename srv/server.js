@@ -858,7 +858,7 @@ cds.on('bootstrap', (app) => {
   // _nav route: live gated nav feed — lists ONLY ROLE_GATED tutorials (#3168).
   // Registered BEFORE the *slug wildcard so `_nav` is not swallowed as a slug.
   // Cache-Control: private, no-store (never cached by shared/CDN caches).
-  app.get('/content/tutorials-prerelease/_nav', (req, res) => preReleaseNavHandler(req, res));
+  app.get('/content/tutorials-prerelease/_nav', (req, res) => preReleaseNavHandler(req, res, { gated: true }));
   app.get('/content/tutorials-prerelease/*slug', (req, res) => serveHandler(req, res, { gated: true }));
   // Legacy AEM `.model.json` compatibility for SAP Discovery Center (#DC cards).
   // Approuter maps ^/tutorials/<slug>.model.json$ → here. See srv/lib/model-json.js.

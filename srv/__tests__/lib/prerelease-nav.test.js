@@ -106,7 +106,7 @@ describe('preRelease nav feed', () => {
     await seedTutorial('gated-b', { visibility: 'ROLE_GATED' });
 
     const res = mockRes();
-    await preReleaseNavHandler(mockReq(), res);
+    await preReleaseNavHandler(mockReq(), res, { gated: true });
 
     expect(res._status).toBe(200);
     const slugs = res.body.tutorials.map(t => t.slug);
@@ -161,10 +161,40 @@ describe('preRelease nav feed', () => {
     await seedTutorial('gated-inactive', { visibility: 'ROLE_GATED', status: 'INACTIVE' });
 
     const res = mockRes();
-    await preReleaseNavHandler(mockReq(), res);
+    await preReleaseNavHandler(mockReq(), res, { gated: true });
 
     const slugs = res.body.tutorials.map(t => t.slug);
     expect(slugs).toContain('gated-active');
     expect(slugs).not.toContain('gated-inactive');
+  });
+
+  // C1 fix: fail-closed guard — the handler must refuse when gated !== true,
+  // so a misconfigured approuter route that forwards anonymously cannot leak
+  // ROLE_GATED tutorial metadata.
+  it('returns 404 and no tutorial data when called without gated:true flag', async () => {
+    // Seed a ROLE_GATED tutorial that the handler MUST NOT reveal.
+    await seedTutorial('secret-gated', { visibility: 'ROLE_GATED' });
+
+    const res = mockRes();
+    // Call WITHOUT passing { gated: true } — simulates an un-gated forward.
+    await preReleaseNavHandler(mockReq(), res);
+
+    expect(res._status).toBe(404);
+    // Must not emit any tutorial data at all.
+    expect(res.body).not.toHaveProperty('tutorials');
+    expect(res.body).not.toHaveProperty('count');
+  });
+
+  it('returns ROLE_GATED listing when called with gated:true flag', async () => {
+    // Same scenario but with the trusted server-side flag set.
+    await seedTutorial('secret-gated', { visibility: 'ROLE_GATED' });
+
+    const res = mockRes();
+    await preReleaseNavHandler(mockReq(), res, { gated: true });
+
+    expect(res._status).toBe(200);
+    const slugs = res.body.tutorials.map(t => t.slug);
+    expect(slugs).toContain('secret-gated');
+    expect(res.headers['Cache-Control']).toBe('private, no-store');
   });
 });
